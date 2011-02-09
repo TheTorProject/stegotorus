@@ -18,3 +18,7 @@ Makefile.in
 /install-sh
 /missing
 /stamp-h1
+/libobfsproxy.a
+/obfsproxy
+/unittests
+
