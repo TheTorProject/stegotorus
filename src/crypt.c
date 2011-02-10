@@ -109,7 +109,7 @@ digest_getdigest(digest_t *d, uchar *buf, size_t len)
 {
   uchar tmp[32];
   int n = 32;
-  SHA256_Final(&d->ctx, tmp);
+  SHA256_Final(tmp, &d->ctx);
   if (len < 32)
     n = len;
   memcpy(buf, tmp, n);

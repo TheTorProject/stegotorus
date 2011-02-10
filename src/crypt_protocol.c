@@ -44,7 +44,7 @@ struct protocol_state_t {
   /** Random seed the other side generated for this stream */
   uchar responder_seed[OBFUSCATE_SEED_LENGTH];
   /** Shared secret seed value. */
-  uchar secret_seed[OBFUSCATE_SEED_LENGTH];
+  uchar secret_seed[SHARED_SECRET_LENGTH];
   /** True iff we opened this connection */
   int we_are_initiator;
 
@@ -87,7 +87,7 @@ derive_key(protocol_state_t *state, const char *keytype)
   if (seed_nonzero(state->responder_seed))
     digest_update(c, state->responder_seed, OBFUSCATE_SEED_LENGTH);
   if (seed_nonzero(state->secret_seed))
-    digest_update(c, state->secret_seed, OBFUSCATE_SEED_LENGTH);
+    digest_update(c, state->secret_seed, SHARED_SECRET_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
   cryptstate = crypt_new(buf, sizeof(buf));
@@ -156,6 +156,16 @@ protocol_state_new(int initiator)
   return state;
 }
 
+/** Set the shared secret to be used with this protocol state. */
+void
+protocol_state_set_shared_secret(protocol_state_t *state,
+                                 const char *secret, size_t secretlen)
+{
+  if (secretlen > SHARED_SECRET_LENGTH)
+    secretlen = SHARED_SECRET_LENGTH;
+  memcpy(state->secret_seed, secret, secretlen);
+}
+
 /**
    Write the initial protocol setup and padding message for 'state' to
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
@@ -177,7 +187,7 @@ proto_send_initial_mesage(protocol_state_t *state, struct evbuffer *buf)
   if (random_bytes((uchar*)&plength, 4) < 0)
     return -1;
   plength %= OBFUSCATE_MAX_PADDING;
-  send_plength = htonl(send_plength);
+  send_plength = htonl(plength);
 
   if (state->we_are_initiator)
     seed = state->initiator_seed;

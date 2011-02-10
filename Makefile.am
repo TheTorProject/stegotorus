@@ -9,7 +9,9 @@ noinst_PROGRAMS = unittests
 
 libobfsproxy_a_SOURCES = \
 	src/crypt.c \
-	src/crypt_protocol.c
+	src/crypt_protocol.c \
+	src/network.c \
+	src/util.c
 
 obfsproxy_SOURCES = \
 	src/main.c
@@ -25,6 +27,8 @@ unittests_LDADD = @libevent_LIBS@ @openssl_LIBS@ libobfsproxy.a
 noinst_HEADERS = \
 	src/crypt_protocol.h \
 	src/crypt.h \
+	src/network.h \
+	src/util.h \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h
 
