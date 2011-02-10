@@ -15,8 +15,6 @@ Still to implement for minimal function:
     - Make sure bogus handshake gets rejected
   - Client-side: Socks support
   - Server-side: connect to a local port
-  - bufferevent code to call the functions in crypt_protocol.h
-  - listener code to handle new sockets
   - the main function
 
 Later:
