@@ -70,7 +70,7 @@ main(int argc, const char **argv)
   /* figure out what place to connect to as a client/server. */
   /* XXXX when we add socks support, clients will not have a fixed "target"
    * XXXX address but will instead connect to a client-selected address. */
-  if (resolve_address_port(argv[3], 1, 0, &ss_target, &sl_target, NULL < 0))
+  if (resolve_address_port(argv[3], 1, 0, &ss_target, &sl_target, NULL) < 0)
     usage();
 
   /* Initialize crypto */
