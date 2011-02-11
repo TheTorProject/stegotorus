@@ -28,9 +28,12 @@ resolve_address_port(const char *address,
 
   if ((cp = strchr(a, ':'))) {
     portstr = cp+1;
-    cp = '\0';
-  } else {
+    *cp = '\0';
+  } else if (default_port) {
     portstr = default_port;
+  } else {
+    fprintf(stderr, "Error in address %s: port required.\n", address);
+    goto done;
   }
 
   memset(&ai_hints, 0, sizeof(ai_hints));
@@ -43,8 +46,8 @@ resolve_address_port(const char *address,
     ai_hints.ai_flags |= EVUTIL_AI_NUMERICHOST;
 
   if ((ai_res = evutil_getaddrinfo(a, portstr, &ai_hints, &ai))) {
-    fprintf(stderr, "Error resolving %s: %s\n",
-            address, evutil_gai_strerror(ai_res));
+    fprintf(stderr, "Error resolving %s (%s) (%s): %s\n",
+            address,  a, portstr, evutil_gai_strerror(ai_res));
     goto done;
   }
   if (ai == NULL) {

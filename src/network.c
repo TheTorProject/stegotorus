@@ -7,6 +7,7 @@
 
 #include "crypt_protocol.h"
 #include "network.h"
+#include "util.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -42,8 +43,8 @@ static void simple_listener_cb(struct evconnlistener *evcl,
 static void conn_free(conn_t *conn);
 
 static void close_conn_on_flush(struct bufferevent *bev, void *arg);
-static void input_read_cb(struct bufferevent *bev, void *arg);
-static void output_read_cb(struct bufferevent *bev, void *arg);
+static void plaintext_read_cb(struct bufferevent *bev, void *arg);
+static void encrypted_read_cb(struct bufferevent *bev, void *arg);
 static void input_event_cb(struct bufferevent *bev, short what, void *arg);
 static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 
@@ -102,8 +103,12 @@ simple_listener_cb(struct evconnlistener *evcl,
   listener_t *lsn = arg;
   struct event_base *base;
   conn_t *conn = calloc(1, sizeof(conn_t));
+  bufferevent_data_cb input_read_cb, output_read_cb;
+  struct bufferevent **encrypted;
   if (!conn)
     goto err;
+
+  dbg(("Got a connection\n"));
 
   conn->mode = lsn->mode;
 
@@ -126,9 +131,18 @@ simple_listener_cb(struct evconnlistener *evcl,
     goto err;
   fd = -1; /* prevent double-close */
 
+  if (lsn->mode == LSN_SIMPLE_SERVER) {
+    input_read_cb = encrypted_read_cb;
+    output_read_cb = plaintext_read_cb;
+    encrypted = &conn->input;
+  } else {
+    input_read_cb = plaintext_read_cb;
+    output_read_cb = encrypted_read_cb;
+    encrypted = &conn->output;
+  }
+
   bufferevent_setcb(conn->input,
                     input_read_cb, NULL, input_event_cb, conn);
-  /* No reading or writing yet. */
   bufferevent_disable(conn->input, EV_READ|EV_WRITE);
 
   /* New bufferevent to connect to target address. */
@@ -142,7 +156,7 @@ simple_listener_cb(struct evconnlistener *evcl,
 
   /* Queue output */
   if (proto_send_initial_message(conn->state,
-                                 bufferevent_get_output(conn->output))<0)
+                                 bufferevent_get_output(*encrypted))<0)
     goto err;
 
   /* Launch the connect attempt. */
@@ -151,6 +165,8 @@ simple_listener_cb(struct evconnlistener *evcl,
                                  lsn->target_address_len)<0)
     goto err;
   bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+
+  dbg(("Launched connection\n"));
 
   return;
  err:
@@ -163,7 +179,14 @@ simple_listener_cb(struct evconnlistener *evcl,
 static void
 conn_free(conn_t *conn)
 {
-  /*XXXX*/
+  if (conn->state)
+    protocol_state_free(conn->state);
+  if (conn->input)
+    bufferevent_free(conn->input);
+  if (conn->output)
+    bufferevent_free(conn->output);
+  memset(conn, 0x99, sizeof(conn_t));
+  free(conn);
 }
 
 static void
@@ -176,23 +199,29 @@ close_conn_on_flush(struct bufferevent *bev, void *arg)
 }
 
 static void
-input_read_cb(struct bufferevent *bev, void *arg)
+plaintext_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
-  assert(bev == conn->input);
+  struct bufferevent *other;
+  other = (bev == conn->input) ? conn->output : conn->input;
+
+  dbg(("Got data on plaintext side\n"));
   if (proto_send(conn->state,
-                 bufferevent_get_input(conn->input),
-                 bufferevent_get_output(conn->output)) < 0)
+                 bufferevent_get_input(bev),
+                 bufferevent_get_output(other)) < 0)
     conn_free(conn);
 }
 static void
-output_read_cb(struct bufferevent *bev, void *arg)
+encrypted_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
-  assert(bev == conn->output);
+  struct bufferevent *other;
+  other = (bev == conn->input) ? conn->output : conn->input;
+
+  dbg(("Got data on encrypted side\n"));
   if (proto_recv(conn->state,
-                 bufferevent_get_input(conn->output),
-                 bufferevent_get_output(conn->input)) < 0)
+                 bufferevent_get_input(bev),
+                 bufferevent_get_output(other)) < 0)
     conn_free(conn);
 }
 
@@ -200,6 +229,8 @@ static void
 error_or_eof(conn_t *conn,
              struct bufferevent *bev_err, struct bufferevent *bev_flush)
 {
+  dbg(("error_or_eof\n"));
+
   if (conn->flushing || ! conn->is_open ||
       0 == evbuffer_get_length(bufferevent_get_output(bev_flush))) {
     conn_free(conn);
@@ -242,6 +273,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
   if (what & BEV_EVENT_CONNECTED) {
     /* woo, we're connected.  Now the input buffer can start reading. */
     conn->is_open = 1;
+    dbg(("Connection done\n"));
     bufferevent_enable(conn->input, EV_READ|EV_WRITE);
   }
   /* XXX we don't expect any other events */

@@ -8,12 +8,14 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include <openssl/rand.h>
 #include <event2/buffer.h>
 
 #include "crypt.h"
 #include "crypt_protocol.h"
+#include "util.h"
 
 /* from brl's obfuscated-ssh standard. */
 //#define OBFUSCATE_MAGIC_VALUE        0x0BF5CA7E
@@ -131,6 +133,7 @@ protocol_state_new(int initiator)
 
   if (!state)
     return NULL;
+  state->state = ST_WAIT_FOR_KEY;
   state->we_are_initiator = initiator;
   if (initiator) {
     send_pad_type = INITIATOR_PAD_TYPE;
@@ -171,7 +174,7 @@ protocol_state_set_shared_secret(protocol_state_t *state,
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
  */
 int
-proto_send_initial_mesage(protocol_state_t *state, struct evbuffer *buf)
+proto_send_initial_message(protocol_state_t *state, struct evbuffer *buf)
 {
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE), plength, send_plength;
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
@@ -225,6 +228,7 @@ crypt_and_transmit(crypt_t *crypto,
       return 0;
     stream_crypt(crypto, data, n);
     evbuffer_add(dest, data, n);
+    dbg(("Processed %d bytes.", n));
   }
 }
 
@@ -344,6 +348,7 @@ proto_recv(protocol_state_t *state, struct evbuffer *source,
 
     /* Fall through here: if there is padding data waiting on the buffer, pull
        it off immediately. */
+    dbg(("Received key, expecting %d bytes of padding\n", plength));
   }
 
   /* If we're still looking for padding, start pulling off bytes and
@@ -357,11 +362,15 @@ proto_recv(protocol_state_t *state, struct evbuffer *source,
       n = evbuffer_get_length(source);
     evbuffer_drain(source, n);
     state->padding_left_to_read -= n;
+    dbg(("Received %d bytes of padding; %d left to read\n", n,
+         state->padding_left_to_read));
   }
 
   /* Okay; now we're definitely open.  Process whatever data we have. */
   state->state = ST_OPEN;
 
+  dbg(("Processing %d bytes data onto destination buffer\n",
+       (int) evbuffer_get_length(source)));
   return crypt_and_transmit(state->recv_crypto, source, dest);
 }
 
