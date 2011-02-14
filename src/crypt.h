@@ -45,4 +45,18 @@ void crypt_free(crypt_t *);
 /** Set b to contain n random bytes. */
 int random_bytes(uchar *b, size_t n);
 
+#ifdef CRYPT_PRIVATE
+/* ==========
+   These definitions are not part of the crypt interface.
+   They're exposed here so that the unit tests can use them.
+   ==========
+*/
+struct crypt_t {
+  AES_KEY key;
+  uchar ivec[AES_BLOCK_SIZE];
+  uchar ecount_buf[AES_BLOCK_SIZE];
+  unsigned int pos;
+};
+#endif
+
 #endif

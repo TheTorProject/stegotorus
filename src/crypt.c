@@ -6,7 +6,6 @@
 */
 
 #include "config.h"
-#include "crypt.h"
 
 #include <assert.h>
 #include <string.h>
@@ -25,6 +24,9 @@
 #include <openssl/aes.h>
 #include <openssl/rand.h>
 #include <openssl/err.h>
+
+#define CRYPT_PRIVATE
+#include "crypt.h"
 
 #if OPENSSL_VERSION_NUMBER >= 0x0090800f
 #define USE_OPENSSL_RANDPOLL 1
@@ -153,13 +155,6 @@ digest_free(digest_t *d)
   free(d);
 }
 
-struct crypt_t {
-  AES_KEY key;
-  uchar ivec[AES_BLOCK_SIZE];
-  uchar ecount_buf[AES_BLOCK_SIZE];
-  unsigned int pos;
-};
-
 /* =====
    Stream crypto
    ===== */
@@ -185,7 +180,6 @@ crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
   assert(ivlen == sizeof(key->ivec));
   memcpy(key->ivec, iv, ivlen);
 }
-
 void
 stream_crypt(crypt_t *key, uchar *buf, size_t len)
 {

@@ -11,12 +11,15 @@
 #include "tinytest.h"
 #include "tinytest_macros.h"
 
-#include "../crypt_protocol.h"
-
 #include <event2/buffer.h>
 #include <openssl/aes.h>
 
+
+#define CRYPT_PROTOCOL_PRIVATE
+#define CRYPT_PRIVATE
 #include "../crypt.h"
+#include "../util.h"
+#include "../crypt_protocol.h"
 
 /* Make sure we can successfully set up a protocol state */
 static void
@@ -34,53 +37,6 @@ test_proto_setup(void *data)
     protocol_state_free(proto2);
 
 }
-
-#define OBFUSCATE_MAGIC_VALUE        0x2BF5CA7E
-#define OBFUSCATE_SEED_LENGTH        16
-#define OBFUSCATE_MAX_PADDING        8192
-#define OBFUSCATE_ZERO_SEED "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-
-  struct protocol_state_t {
-    /** Current protocol state.  We start out waiting for key information.  Then
-        we have a key and wait for padding to arrive.  Finally, we are sending
-        and receiving bytes on the connection.
-    */
-    enum {
-      ST_WAIT_FOR_KEY,
-      ST_WAIT_FOR_PADDING,
-      ST_OPEN,
-    } state;
-    /** Random seed we generated for this stream */
-    uchar initiator_seed[OBFUSCATE_SEED_LENGTH];
-    /** Random seed the other side generated for this stream */
-    uchar responder_seed[OBFUSCATE_SEED_LENGTH];
-    /** Shared secret seed value. */
-    uchar secret_seed[SHARED_SECRET_LENGTH];
-    /** True iff we opened this connection */
-    int we_are_initiator;
-
-    /** key used to encrypt outgoing data */
-    crypt_t *send_crypto;
-    /** key used to encrypt outgoing padding */
-    crypt_t *send_padding_crypto;
-    /** key used to decrypt incoming data */
-    crypt_t *recv_crypto;
-    /** key used to decrypt incoming padding */
-    crypt_t *recv_padding_crypto;
-
-    /** Buffer full of data we'll send once the handshake is done. */
-    struct evbuffer *pending_data_to_send;
-
-    /** Number of padding bytes to read before we get to real data */
-    int padding_left_to_read;
-  };
-
-struct crypt_t {
-  AES_KEY key;
-  uchar ivec[AES_BLOCK_SIZE];
-  uchar ecount_buf[AES_BLOCK_SIZE];
-  unsigned int pos;
-};
 
 static void
 test_proto_handshake(void *data) {
