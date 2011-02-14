@@ -35,6 +35,8 @@ void digest_free(digest_t *);
 /** Return a new stream cipher state taking key and IV from the data provided.
  * The data length must be exactly 32 */
 crypt_t *crypt_new(const uchar *, size_t);
+void crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen);
+
 /** Encrypt n bytes of data in the buffer b, in place. */
 void stream_crypt(crypt_t *, uchar *b, size_t n);
 /** Clear and free a stream cipher state. */
@@ -42,5 +44,19 @@ void crypt_free(crypt_t *);
 
 /** Set b to contain n random bytes. */
 int random_bytes(uchar *b, size_t n);
+
+#ifdef CRYPT_PRIVATE
+/* ==========
+   These definitions are not part of the crypt interface.
+   They're exposed here so that the unit tests can use them.
+   ==========
+*/
+struct crypt_t {
+  AES_KEY key;
+  uchar ivec[AES_BLOCK_SIZE];
+  uchar ecount_buf[AES_BLOCK_SIZE];
+  unsigned int pos;
+};
+#endif
 
 #endif
