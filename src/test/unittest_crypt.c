@@ -27,7 +27,7 @@ test_crypt_hashvec(void *data)
 {
   digest_t *d;
   uchar output[32];
-  
+
   /* First SHA256 test vector:
      Test for '\x00' */
   d = digest_new();
@@ -37,7 +37,7 @@ test_crypt_hashvec(void *data)
                           "\xe3\xb0\xc4\x42\x98\xfc\x1c\x14\x9a\xfb\xf4\xc8"
                           "\x99\x6f\xb9\x24\x27\xae\x41\xe4\x64\x9b\x93\x4c"
                           "\xa4\x95\x99\x1b\x78\x52\xb8\x55", 32));
-  
+
   /* Second SHA256 test vector:
      Test for the 256-bit entry of:
      http://csrc.nist.gov/groups/STM/cavp/#03 */
@@ -51,7 +51,7 @@ test_crypt_hashvec(void *data)
                           "\x56\x05\x9e\x8c\xb3\xc2\x97\x8b\x19\x82\x08\xbf"
                           "\x5c\xa1\xe1\xea\x56\x59\xb7\x37\xa5\x06\x32\x4b"
                           "\x7c\xec\x75\xb5\xeb\xaf\x05\x7d", 32));
-  
+
   /* Third SHA test vector:
      Test for the 1304-bit entry of:
      http://csrc.nist.gov/groups/STM/cavp/#03 */
@@ -74,7 +74,7 @@ test_crypt_hashvec(void *data)
                           "\xc9\x07\x18\x04\x43\xde\xe3\xcb\xcc\xb4\xc3\x13"
                           "\x28\xe6\x25\x15\x85\x27\xa5\x93\xb8\x78\xde\x1b"
                           "\x8e\x4b\xa3\x7f\x1d\x69\xfb\x66", 32));
-    
+
   /* XXX Try doing init, update, update, output. */
   /* XXX add a base16-decode function so we can implement a tt_mem_op or
      something */
@@ -95,7 +95,7 @@ test_crypt_aes1(void *data)
   uchar key[16] = "\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c";
   uchar iv[16] = "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff";
   uchar vec[16] = "\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a";
-  
+
   crypt_t *crypt;
 
   crypt = crypt_new(key, sizeof(key));
@@ -113,32 +113,32 @@ test_crypt_aes1(void *data)
   if (crypt)
     crypt_free(crypt);
 }
-  
+
 static void
-  test_crypt_aes2(void *data)
+test_crypt_aes2(void *data)
 {
   /* Trying stream_crypt() */
   uchar key1[16] = "aesunittest1_key";
   uchar key2[16] = "aesunittest2_key";
-  
+
   uchar res1[16] = "aestest1_message";
   uchar res2[16] = "aestest2_message";
-  
+
   crypt_t *crypt1;
-  crypt_t *crypt2;  
-  
+  crypt_t *crypt2;
+
   crypt1 = crypt_new(key1, sizeof(key1));
-  crypt2 = crypt_new(key2, sizeof(key2));  
-  
+  crypt2 = crypt_new(key2, sizeof(key2));
+
   stream_crypt(crypt1, res1, 16);
-  stream_crypt(crypt2, res2, 16);  
-  
+  stream_crypt(crypt2, res2, 16);
+
   tt_int_op(0, !=, memcmp(res1, res2, 16));
-  
+
  end:
   if (crypt1)
     crypt_free(crypt1);
-  
+
   if (crypt2)
     crypt_free(crypt2);
 }
@@ -149,26 +149,26 @@ test_crypt_rng(void *data)
   /* Not really easy to unit test openssl's RNG, me thinks.
      An entropy test wouldn't really help either.
      I guess I'll just copy Tor's unit test methodology here :3 */
-  
+
   uchar data1[100],data2[100];
-  
+
   tt_int_op(0, ==, random_bytes(data1, 100));
-  tt_int_op(0, ==, random_bytes(data2, 100));  
-  
+  tt_int_op(0, ==, random_bytes(data2, 100));
+
   tt_int_op(0, !=, memcmp(data1, data2, 100));
-  
+
  end:
   ;
-}    
+}
 
- 
+
 #define T(name, flags) \
   { #name, test_crypt_##name, (flags), NULL, NULL }
 
 struct testcase_t crypt_tests[] = {
   T(hashvec, 0),
   T(aes1,0),
-  T(aes2,0),  
+  T(aes2,0),
   T(rng,0),
   END_OF_TESTCASES
 };
