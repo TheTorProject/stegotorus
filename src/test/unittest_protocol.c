@@ -343,10 +343,15 @@ test_proto_wrong_handshake_magic(void *data)
     evbuffer_free(dummy_buffer);
 }
 
+#if 0
 /*
   Erroneous handshake test:
   Normal plength field but actual padding larger than
   OBFUSCATE_MAX_PADDING.
+
+  XXXX This won't actually fail.  If we send extra padding, it gets treated as
+  part of the message.  Decrypting it will give odd results, but this protocol
+  doesn't actually get you integrity.
 */
 static void
 test_proto_wrong_handshake_padding(void *data)
@@ -399,6 +404,7 @@ test_proto_wrong_handshake_padding(void *data)
   if (dummy_buffer)
     evbuffer_free(dummy_buffer);
 }
+#endif
 
 /* Erroneous handshake test:
    plength field larger than OBFUSCATE_MAX_PADDING
@@ -463,7 +469,9 @@ struct testcase_t protocol_tests[] = {
   T(transfer, 0),
   T(splitted_handshake, 0),
   T(wrong_handshake_magic, 0),
+#if 0
   T(wrong_handshake_padding, 0),
+#endif
   T(wrong_handshake_plength, 0),
   END_OF_TESTCASES
 };
