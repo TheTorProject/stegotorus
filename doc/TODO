@@ -17,6 +17,13 @@ Still to implement for minimal function:
 
 Later:
 
-  - Drop the openssl dependency
+  - Refactor how the network code calls the protocol code so that protocols
+    are pluggable.
+    - Instead of having the listener constructor take a shared secret, have
+      it take a "protocol state factory".
+    - Use the standard C function-pointer trick to turn "protocol state" into 
+      
+
+  - Drop the openssl dependency (?)
   - some way to set a shared secret or two or three
-  - Implement the xxx-pluggable-transport thing for Tor.
+  - Make it obey the xxx-pluggable-transport spec in Tor.

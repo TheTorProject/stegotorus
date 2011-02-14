@@ -180,6 +180,13 @@ crypt_new(const uchar *key, size_t keylen)
   return k;
 }
 void
+crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
+{
+  assert(ivlen == sizeof(key->ivec));
+  memcpy(key->ivec, iv, ivlen);
+}
+
+void
 stream_crypt(crypt_t *key, uchar *buf, size_t len)
 {
   AES_ctr128_encrypt(buf, buf, /* XXX make sure this is okay to do. */

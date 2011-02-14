@@ -35,6 +35,8 @@ void digest_free(digest_t *);
 /** Return a new stream cipher state taking key and IV from the data provided.
  * The data length must be exactly 32 */
 crypt_t *crypt_new(const uchar *, size_t);
+void crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen);
+
 /** Encrypt n bytes of data in the buffer b, in place. */
 void stream_crypt(crypt_t *, uchar *b, size_t n);
 /** Clear and free a stream cipher state. */

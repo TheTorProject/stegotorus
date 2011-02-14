@@ -75,7 +75,7 @@ test_crypt_hashvec(void *data)
                           "\x28\xe6\x25\x15\x85\x27\xa5\x93\xb8\x78\xde\x1b"
                           "\x8e\x4b\xa3\x7f\x1d\x69\xfb\x66", 32));
     
-  /* XXX try more test vectors */
+  /* XXX Try doing init, update, update, output. */
   /* XXX add a base16-decode function so we can implement a tt_mem_op or
      something */
 
@@ -97,18 +97,18 @@ test_crypt_aes1(void *data)
   uchar vec[16] = "\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a";
   
   crypt_t *crypt;
-  
+
   crypt = crypt_new(key, sizeof(key));
-  
-  AES_ctr128_encrypt(vec, vec,
-                  16,
-                  &crypt->key, iv, crypt->ecount_buf,
-                  &crypt->pos);
-  
+  crypt_set_iv(crypt, iv, sizeof(iv));
+  stream_crypt(crypt, vec, sizeof(vec));
+
   tt_int_op(0, ==, memcmp(vec,
                           "\x87\x4d\x61\x91\xb6\x20\xe3\x26\x1b\xef\x68\x64\x99\x0d"
                           "\xb6\xce", 16));
-  
+
+  /* XXX test longer streams too; the failure modes for stream crypto are not
+   * visible in a single block. */
+
  end:
   if (crypt)
     crypt_free(crypt);
