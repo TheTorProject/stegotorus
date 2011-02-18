@@ -8,8 +8,8 @@
 #include <stdio.h>
 
 #include "network.h"
-
 #include "socks.h"
+#include "crypt.h"
 
 #include <event2/buffer.h>
 #include <event2/event.h>
@@ -34,7 +34,8 @@
    "Method Negotiation Packet" is handled by: socks5_handle_auth()
    "Method Negotiation Reply" is done by: socks5_do_auth()
    "Client request" is handled by: socks5_handle_request()
-   "Server reply" is handled by: socks5_do_request() 
+   "Server reply" is handled by: socks5_do_connect(), since we only
+   support CONNECT commands anyway.
    
    XXX: Do we actually need FQDN support? 
    It's a lot of implementation trouble for nothing, since our bridges
@@ -44,7 +45,7 @@
 static int socks5_handle_auth(struct evbuffer *source, conn_t *conn);
 static int socks5_handle_request(struct evbuffer *source, conn_t *conn);
 static int socks5_do_auth(conn_t *conn);
-static int socks5_do_request(struct addrinfo *server, conn_t *conn);
+static int socks5_do_connect(char* destaddr, char *port, conn_t *conn);
 
 socks_state_t *
 socks_state_new(void)
@@ -95,11 +96,15 @@ socks5_handle_request(struct evbuffer *source, conn_t* conn)
   
   /** XXX: Maybe we should reject high values of buflength? */
   uchar *p = malloc(buflength); 
+  if (!p)
+    return -1;
+    
   
   /* We only need the socks5_req and an extra byte to get
      the addrlen in an FQDN request. "Conveniently" this is
      sizeof(req) since we have already removed the version byte.*/
-  evbuffer_copyout(source, p, sizeof(req));
+  if (evbuffer_copyout(source, p, sizeof(req)) < 0)
+    goto err;
   memcpy(&req.cmd, p, sizeof(req));  
   
   if (req.cmd != SOCKS5_CMD_CONNECT || req.rsv != 0x00) {
@@ -153,52 +158,26 @@ socks5_handle_request(struct evbuffer *source, conn_t* conn)
   if (req.atyp == SOCKS5_ATYP_FQDN)
     if (addrlen >= NI_MAXHOST)
       goto err;
-  
 
   char ntop[INET_ADDRSTRLEN];      
-  if (req.atyp == SOCKS5_ATYP_IPV4) {
-    if (inet_ntop(af, destaddr, ntop, sizeof(ntop)) == NULL)
-      return -1;
+  if (req.atyp == SOCKS5_ATYP_IPV4) { 
+    /* XXX the inet_ntop() arguments seems to work, but it feels
+       a bit awkward */
+    if (inet_ntop(af, destaddr, destaddr, sizeof(ntop)) == NULL)
+      goto err;
   }
-    
-  struct addrinfo hints;
-  struct addrinfo *servinfo;
   
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_INET;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE;
-  
-  int res;
   char strport[NI_MAXSERV];
-  /* XXX cast !!! */
   snprintf(strport, sizeof(strport), "%u", ntohs(destport));
-  if (req.atyp == SOCKS5_ATYP_FQDN) {
-    /* XXX cast */
-    res = getaddrinfo((char*)destaddr, strport, &hints, &servinfo);
-  }
-  else {
-    assert(req.atyp == SOCKS5_ATYP_IPV4);
-    res = getaddrinfo(ntop, strport, &hints, &servinfo);
-  }
-  if (res != 0) {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+  if (socks5_do_connect(destaddr, strport, conn) <0)
     goto err;
-  }
   
   free(p);
-  
-  /* Seems like that was a real packet! Prepare a reply to the
-     client and actually make the connection. */
-  if (socks5_do_request(servinfo, conn) > 0) {
-    conn->socks_state->state = ST_OPEN;
-    return 1;
-  } else /* fail. */
-    printf("socks: socks5_do_request() failed!\n");
+  return 1;
   
  err:
-  if (p)
-    free(p);
+  assert(p);
+  free(p);
   
   return -1;
 }  
@@ -211,7 +190,7 @@ socks5_handle_request(struct evbuffer *source, conn_t* conn)
    Server Reply (Server -> Client)   
 */
 static int
-socks5_do_request(struct addrinfo *server, conn_t *conn)
+socks5_do_connect(char* destaddr, char *port, conn_t *conn)
 {
   /* SOCKS Reply (Client -> Server) */
   struct {
@@ -223,16 +202,33 @@ socks5_do_request(struct addrinfo *server, conn_t *conn)
     u_int16_t destport;       /* Dest port */
   } socks5_repl; 
   unsigned int status;
+  int res;
   
-  if (bufferevent_socket_connect(conn->output,
-                                 server->ai_addr,
-                                 (int) server->ai_addrlen)<0)
-    status = SOCKS5_REP_FAIL; /* connect failed. */
-  else
-    status = SOCKS5_REP_SUCCESS; /* connect succeeded. */
-    
-  bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+  struct addrinfo hints;
+  struct addrinfo *servinfo;
   
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_PASSIVE;
+  
+  res = getaddrinfo(destaddr, port, &hints, &servinfo);
+  if (res == 0) { /* Everything is going fine. Connect. */
+    if (bufferevent_socket_connect(conn->output,
+                                   servinfo->ai_addr,
+                                   (int) servinfo->ai_addrlen)<0)
+      status = SOCKS5_REP_FAIL; /* connect failed. */
+    else { /* connect succeeded. */
+      status = SOCKS5_REP_SUCCESS; 
+      bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+    }
+  } else { /* error in getaddrinfo() */
+    status = SOCKS5_REP_FAIL;
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+  }
+
+  /* We either failed or succeded.
+     Either way, we should send something back to the client */
   socks5_repl.version = SOCKS5_VERSION;
   socks5_repl.rep = status;
   socks5_repl.rsv = 0;
@@ -243,8 +239,10 @@ socks5_do_request(struct addrinfo *server, conn_t *conn)
   evbuffer_add(bufferevent_get_output(conn->input),
                &socks5_repl, sizeof(socks5_repl));
   
-  if (status == SOCKS5_REP_SUCCESS)
+  if (status == SOCKS5_REP_SUCCESS) {
+    conn->socks_state->state = ST_OPEN; /* SOCKS phase is done now. */
     return 1;
+  }
   else
     return -1;
 }
@@ -277,7 +275,8 @@ socks5_handle_auth(struct evbuffer *source, conn_t *conn) {
     printf("malloc failed!\n");
     goto err;
   }
-  evbuffer_remove(source, p, nmethods);
+  if (evbuffer_remove(source, p, nmethods) < 0)
+    assert(0);
   
   for (found_noauth=0, i=0; i<nmethods ; i++) {
     if (p[i] == SOCKS5_METHOD_NOAUTH) {
@@ -291,18 +290,17 @@ socks5_handle_auth(struct evbuffer *source, conn_t *conn) {
     goto err;
   }
   
-  if (p)
-    free(p);
-      
   /* Since we made it 'till here, we should also reply! */
-  if (socks5_do_auth(conn)) {  /* SOCKS auth/negotiation is done! */
-    conn->socks_state->state = ST_NEGOTIATION_DONE;
-    return 1;
-  }
+  if (socks5_do_auth(conn) < 0)  /* SOCKS auth/negotiation failed! */
+    goto err;
+  
+  conn->socks_state->state = ST_NEGOTIATION_DONE;
+  free(p);
+  return 1;
   
  err: 
-  if (p)
-    free(p);
+  assert(p);
+  free(p);
   
   return -1;
 }
@@ -338,7 +336,7 @@ int
 handle_socks(struct evbuffer *input, struct evbuffer *output, void *arg)
 {
   if (evbuffer_get_length(input) < MIN_SOCKS_PACKET) {
-    printf("socks: The packet is too small.\n");
+    printf("socks: Packet is too small.\n");
     return -1;
   }
   
@@ -350,13 +348,10 @@ handle_socks(struct evbuffer *input, struct evbuffer *output, void *arg)
   
   switch(version) {
   case SOCKS5_VERSION:
-    if (conn->socks_state->state == ST_WAITING) {/* We don't know this connection. */
-      if (socks5_handle_auth(input,conn) < 0) /* Let's authenticate. */
-        return -1;
-    }
+    if (conn->socks_state->state == ST_WAITING) /* We don't know this connection. */
+      return socks5_handle_auth(input,conn); /* Let's authenticate. */
     else /* We know this connection. */
-      if (socks5_handle_request(input, conn) < 0) /* Let's see what it wants */
-        return -1;
+      return socks5_handle_request(input, conn); /* Let's see what it wants */
     break;
   default: /* Yep, rejecting SOCKS4. We are that badass */
     printf("socks: Nice packet! Now beat it!\n");
