@@ -8,6 +8,7 @@
 #include "crypt_protocol.h"
 #include "network.h"
 #include "util.h"
+#include "socks.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -18,6 +19,9 @@
 #include <event2/listener.h>
 #include <event2/event.h>
 
+#include <errno.h>
+#include <event2/util.h>
+
 struct listener_t {
   struct evconnlistener *listener;
   struct sockaddr_storage target_address;
@@ -27,16 +31,6 @@ struct listener_t {
   unsigned int have_shared_secret : 1;
 };
 
-typedef struct conn_t {
-  protocol_state_t *state;
-  int mode;
-  struct bufferevent *input;
-  struct bufferevent *output;
-  unsigned int flushing : 1;
-  unsigned int is_open : 1;
-} conn_t;
-
-
 static void simple_listener_cb(struct evconnlistener *evcl,
    evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
 
@@ -44,6 +38,7 @@ static void conn_free(conn_t *conn);
 
 static void close_conn_on_flush(struct bufferevent *bev, void *arg);
 static void plaintext_read_cb(struct bufferevent *bev, void *arg);
+static void socks_read_cb(struct bufferevent *bev, void *arg);
 static void encrypted_read_cb(struct bufferevent *bev, void *arg);
 static void input_event_cb(struct bufferevent *bev, short what, void *arg);
 static void output_event_cb(struct bufferevent *bev, short what, void *arg);
@@ -103,25 +98,26 @@ simple_listener_cb(struct evconnlistener *evcl,
   listener_t *lsn = arg;
   struct event_base *base;
   conn_t *conn = calloc(1, sizeof(conn_t));
-  bufferevent_data_cb input_read_cb, output_read_cb;
-  struct bufferevent **encrypted;
   if (!conn)
     goto err;
 
   dbg(("Got a connection\n"));
 
   conn->mode = lsn->mode;
-
-  /* Construct protocol state. */
-  conn->state = protocol_state_new(lsn->mode != LSN_SIMPLE_SERVER);
-  if (!conn->state)
-    goto err;
-  if (lsn->have_shared_secret) {
-    protocol_state_set_shared_secret(conn->state,
-                                     lsn->shared_secret,
-                                     sizeof(lsn->shared_secret));
+  
+  if (conn->mode == LSN_SIMPLE_SERVER) {
+    conn->proto_state = protocol_state_new(lsn->mode != LSN_SIMPLE_SERVER);
+    if (!conn->proto_state)
+      goto err;
   }
 
+  if (conn->mode == LSN_SIMPLE_CLIENT) {  
+    /* Construct SOCKS state. */
+    conn->socks_state = socks_state_new();
+    if (!conn->socks_state)
+      goto err;
+  }
+  
   /* New bufferevent to wrap socket we received. */
   base = evconnlistener_get_base(lsn->listener);
   conn->input = bufferevent_socket_new(base,
@@ -131,56 +127,56 @@ simple_listener_cb(struct evconnlistener *evcl,
     goto err;
   fd = -1; /* prevent double-close */
 
-  if (lsn->mode == LSN_SIMPLE_SERVER) {
-    input_read_cb = encrypted_read_cb;
-    output_read_cb = plaintext_read_cb;
-    encrypted = &conn->input;
-  } else {
-    input_read_cb = plaintext_read_cb;
-    output_read_cb = encrypted_read_cb;
-    encrypted = &conn->output;
-  }
+  if (conn->mode == LSN_SIMPLE_SERVER)
+    bufferevent_setcb(conn->input,
+                      encrypted_read_cb, NULL, input_event_cb, conn);
+  else
+    bufferevent_setcb(conn->input,
+                      socks_read_cb, NULL, input_event_cb, conn);
+  
+  bufferevent_enable(conn->input, EV_READ|EV_WRITE);  
 
-  bufferevent_setcb(conn->input,
-                    input_read_cb, NULL, input_event_cb, conn);
-  bufferevent_disable(conn->input, EV_READ|EV_WRITE);
-
-  /* New bufferevent to connect to target address. */
   conn->output = bufferevent_socket_new(base,
                                         -1,
                                         BEV_OPT_CLOSE_ON_FREE);
   if (!conn->output)
     goto err;
-  bufferevent_setcb(conn->output,
-                    output_read_cb, NULL, output_event_cb, conn);
-
+  
+  if (conn->mode == LSN_SIMPLE_SERVER)
+    bufferevent_setcb(conn->output,
+                      plaintext_read_cb, NULL, output_event_cb, conn);
+  else
+    bufferevent_setcb(conn->output,
+                      encrypted_read_cb, NULL, output_event_cb, conn);
+    
   /* Queue output */
-  if (proto_send_initial_message(conn->state,
-                                 bufferevent_get_output(*encrypted))<0)
+  if (conn->mode == LSN_SIMPLE_SERVER) {  
+    if (proto_send_initial_message(conn->proto_state,
+                                   bufferevent_get_output(conn->input))<0)
     goto err;
-
-  /* Launch the connect attempt. */
-  if (bufferevent_socket_connect(conn->output,
-                                 (struct sockaddr *) &lsn->target_address,
-                                 lsn->target_address_len)<0)
-    goto err;
-  bufferevent_enable(conn->output, EV_READ|EV_WRITE);
-
-  dbg(("Launched connection\n"));
+    
+    /* Launch the connect attempt. */
+    if (bufferevent_socket_connect(conn->output,
+                                   (struct sockaddr *) &lsn->target_address,
+                                   lsn->target_address_len)<0)
+      goto err;
+    
+    bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+  }
 
   return;
  err:
   if (conn)
     conn_free(conn);
-  if (fd >= 0);
-  evutil_closesocket(fd);
+  if (fd >= 0) /* XXX Was that a bug? */
+    evutil_closesocket(fd);
 }
 
 static void
 conn_free(conn_t *conn)
 {
-  if (conn->state)
-    protocol_state_free(conn->state);
+  if (conn->proto_state)
+    protocol_state_free(conn->proto_state);
   if (conn->input)
     bufferevent_free(conn->input);
   if (conn->output)
@@ -198,6 +194,49 @@ close_conn_on_flush(struct bufferevent *bev, void *arg)
     conn_free(conn);
 }
 
+/** This is only used in the input bufferevent of clients. */
+static void
+socks_read_cb(struct bufferevent *bev, void *arg) {
+  conn_t *conn = arg;
+  struct bufferevent *other;
+  other = (bev == conn->input) ? conn->output : conn->input;
+
+  dbg(("Got data on the socks side (%d) \n", conn->socks_state->state));
+  
+  if (bev == conn->input &&
+      conn->socks_state->state != ST_OPEN) { /* SOCKS data */
+    if (handle_socks(bufferevent_get_input(bev),
+                     bufferevent_get_output(bev), conn) < 0)
+      conn_free(conn);
+  } else { /* pipe it over */
+    assert(conn->proto_state);
+    
+    if (proto_send(conn->proto_state,
+                   bufferevent_get_input(bev),
+                   bufferevent_get_output(other)) < 0)
+      conn_free(conn);
+  }
+}
+
+int
+set_up_protocol(conn_t *conn)
+{
+  /* Construct protocol state. */
+  conn->proto_state = protocol_state_new(1);
+  if (!conn->proto_state)
+    return -1;
+  
+  /* Queue output */
+  if (proto_send_initial_message(conn->proto_state,
+                                 bufferevent_get_output(conn->output))<0)
+    return -1;
+
+  bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+  
+  return 1;
+}
+  
+  
 static void
 plaintext_read_cb(struct bufferevent *bev, void *arg)
 {
@@ -206,11 +245,12 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
   other = (bev == conn->input) ? conn->output : conn->input;
 
   dbg(("Got data on plaintext side\n"));
-  if (proto_send(conn->state,
+  if (proto_send(conn->proto_state,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
     conn_free(conn);
 }
+
 static void
 encrypted_read_cb(struct bufferevent *bev, void *arg)
 {
@@ -219,7 +259,7 @@ encrypted_read_cb(struct bufferevent *bev, void *arg)
   other = (bev == conn->input) ? conn->output : conn->input;
 
   dbg(("Got data on encrypted side\n"));
-  if (proto_recv(conn->state,
+  if (proto_recv(conn->proto_state,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
     conn_free(conn);

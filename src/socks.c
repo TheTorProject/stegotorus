@@ -215,16 +215,14 @@ socks5_do_connect(char* addr, char *port, struct evbuffer *reply_dest,
   hints.ai_flags = AI_PASSIVE;
   
   res = getaddrinfo(addr, port, &hints, &servinfo);
-  /* XXX: The stuff below will be moved to a sets_up_proxying() function */
-  if (res == 0) { /* Everything is going fine. Connect. */
+  if (res == 0) {/* Everything is going fine. Try to connect. */
     if (bufferevent_socket_connect(output,
                                    servinfo->ai_addr,
                                    (int) servinfo->ai_addrlen)<0)
       status = SOCKS5_REP_FAIL; /* connect failed. */
-    else { /* connect succeeded. */
+    else /* connect succeeded. */
       status = SOCKS5_REP_SUCCESS; 
-      bufferevent_enable(output, EV_READ|EV_WRITE);
-    }
+      bufferevent_enable(output, EV_READ|EV_WRITE);      
   } else { /* error in getaddrinfo() */
     status = SOCKS5_REP_FAIL;
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
@@ -300,7 +298,7 @@ socks5_handle_negotiation(struct evbuffer *source,
   
   free(p);
   
-  /* Success! */
+  /* Success! Set socks state. */
   state->state = ST_NEGOTIATION_DONE;    
   return 1;
   
@@ -362,9 +360,12 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest, void *arg)
       /* We don't know this connection. We have to do method negotiation. */
       return socks5_handle_negotiation(source,dest,conn->socks_state); 
     else /* We know this connection. Let's see what it wants. */
-      return socks5_handle_request(source,dest,conn->output,conn->socks_state);
+      if (socks5_handle_request(source,dest,conn->output,conn->socks_state))
+        if (set_up_protocol(conn) < 0) /* Request was legit and got granted.
+                                          Set up the crypto protocol now. */
+          return -1;
     break;
-  default: /* Yep, rejecting SOCKS4. We are that badass */
+  default:
     printf("socks: Nice packet! Now beat it!\n");
     return -1;
   }  
