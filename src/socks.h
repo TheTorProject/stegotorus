@@ -1,12 +1,15 @@
 #ifndef SOCKS_H
 #define SOCKS_H
 
+#include <netdb.h>
+
 typedef struct socks_state_t socks_state_t;
 struct evbuffer;
 
 int handle_socks(struct evbuffer *source, 
                  struct evbuffer *dest, void *arg);
 socks_state_t *socks_state_new(void);
+void socks_state_free(socks_state_t *s);
 
 #define SOCKS5_VERSION         0x05
 
@@ -42,6 +45,12 @@ struct socks_state_t {
     ST_NEGOTIATION_DONE,
     ST_OPEN,
   } state;
+};
+
+
+struct parsereq {
+  char addr[255+1];
+  char port[NI_MAXSERV];
 };
 
 #endif

@@ -33,7 +33,7 @@
                
    "Method Negotiation Packet" is handled by: socks5_handle_negotiation()
    "Method Negotiation Reply" is done by: socks5_do_auth()
-   "Client request" is handled by: socks5_handle_request()
+   "Client request" is handled by: socks5_validate_request()
    "Server reply" is handled by: socks5_do_connect(), since we only
    support CONNECT commands anyway.
    
@@ -44,10 +44,9 @@
 
 static int socks5_handle_negotiation(struct evbuffer *source,
                                      struct evbuffer *dest, struct socks_state_t *state);
-static int socks5_handle_request(struct evbuffer *source, struct evbuffer *dest, 
-                                 struct bufferevent *output, struct socks_state_t *state);
+static int socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq);
 static int socks5_do_auth(struct evbuffer *dest);
-static int socks5_do_connect(char* addr, char *port, struct evbuffer *reply_dest,
+static int socks5_do_connect(struct parsereq parsereq, struct evbuffer *reply_dest,
                              struct bufferevent *output, struct socks_state_t *state);
 
 socks_state_t *
@@ -60,8 +59,13 @@ socks_state_new(void)
   
   return state;
 }
-  
 
+void
+socks_state_free(socks_state_t *s)
+{
+  memset(s,0x0b, sizeof(socks_state_t));
+  free(s);
+}
 /**
    This function handles connection requests by authenticated SOCKS
    clients.
@@ -79,10 +83,10 @@ socks_state_new(void)
    Client Request (Client -> Server)
 */
 static int
-socks5_handle_request(struct evbuffer *source, struct evbuffer *dest,
-                      struct bufferevent *output, struct socks_state_t *state) 
+socks5_handle_request(struct evbuffer *source,struct parsereq *parsereq)
 {
-  /** max FQDN size is 255. */ 
+  /** XXX: max FQDN size is 255. */ 
+  /* #define MAXFQDN */
   char destaddr[255+1]; /* Dest address */
   u_int16_t destport;    /* Dest port */
   
@@ -128,7 +132,7 @@ socks5_handle_request(struct evbuffer *source, struct evbuffer *dest,
     addrlen = p[SIZEOF_SOCKS5_STATIC_REQ-1];
     af = -1;
     /* as above, but we also have the addrlen field byte */
-    minsize++;
+    minsize = SIZEOF_SOCKS5_STATIC_REQ - 1 + 1 + addrlen + 2;    
     break;
   default:
     printf("socks: Not supported. Go away.\n");
@@ -149,19 +153,23 @@ socks5_handle_request(struct evbuffer *source, struct evbuffer *dest,
     if (evbuffer_drain(source, 1) == -1)
       goto err;
   
-  evbuffer_remove(source, (char *)&destaddr, addrlen);
-  evbuffer_remove(source, (char *)&destport, 2);
+  if (evbuffer_remove(source, (char *)&destaddr, addrlen) != addrlen)
+    assert(0);
+  
+  if (evbuffer_remove(source, (char *)&destport, 2) != 2)
+    assert(0);
+  
   destaddr[addrlen] = '\0';
   
   /* OpenSSH does this check here. I don't know why.
      addrlen is uchar casted to uint, which means it
      can't be over 255. And in any case the overflow
      would have already happened. XXX */
-  #define NI_MAXHOST 1025
+#define NI_MAXHOST 1025
   if (p[2] == SOCKS5_ATYP_FQDN)
     if (addrlen >= NI_MAXHOST)
       goto err;
-
+  
   char ntop[INET_ADDRSTRLEN];      
   if (p[2] == SOCKS5_ATYP_IPV4) { 
     /* XXX the inet_ntop() arguments seems to work, but it feels
@@ -170,11 +178,9 @@ socks5_handle_request(struct evbuffer *source, struct evbuffer *dest,
       goto err;
   }
   
-  char strport[NI_MAXSERV];
-  snprintf(strport, sizeof(strport), "%u", ntohs(destport));
-  /* This request actually made sense! Let's connect! */
-  if (socks5_do_connect(destaddr, strport, dest, output, state) <0)
-    goto err;
+  /* XXX FIX! NI_MAXSERV: I don't even remember where I found this!! */
+  snprintf(parsereq->port, NI_MAXSERV, "%u", ntohs(destport));
+  strncpy(parsereq->addr, destaddr, 255+1);
   
   free(p);
   return 1;
@@ -194,10 +200,10 @@ socks5_handle_request(struct evbuffer *source, struct evbuffer *dest,
    
    Server Reply (Server -> Client):
    | version | rep | rsv | atyp | destaddr | destport
-       1b       1b    1b    1b       4b         2b
+   1b       1b    1b    1b       4b         2b
 */
 static int
-socks5_do_connect(char* addr, char *port, struct evbuffer *reply_dest, 
+socks5_do_connect(struct parsereq parsereq, struct evbuffer *reply_dest, 
                   struct bufferevent *output, struct socks_state_t *state)
 {
   /* This is the buffer that contains our reply to the client. */
@@ -214,7 +220,7 @@ socks5_do_connect(char* addr, char *port, struct evbuffer *reply_dest,
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
   
-  res = getaddrinfo(addr, port, &hints, &servinfo);
+  res = getaddrinfo(parsereq.addr, parsereq.port, &hints, &servinfo);
   if (res == 0) {/* Everything is going fine. Try to connect. */
     if (bufferevent_socket_connect(output,
                                    servinfo->ai_addr,
@@ -222,7 +228,7 @@ socks5_do_connect(char* addr, char *port, struct evbuffer *reply_dest,
       status = SOCKS5_REP_FAIL; /* connect failed. */
     else /* connect succeeded. */
       status = SOCKS5_REP_SUCCESS; 
-      bufferevent_enable(output, EV_READ|EV_WRITE);      
+    bufferevent_enable(output, EV_READ|EV_WRITE);      
   } else { /* error in getaddrinfo() */
     status = SOCKS5_REP_FAIL;
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
@@ -266,12 +272,13 @@ socks5_handle_negotiation(struct evbuffer *source,
   
   evbuffer_remove(source, &nmethods, 1);
   
-  if (evbuffer_get_length(source) < nmethods) {
+  if (evbuffer_get_length(source) != nmethods) {
     printf("socks: nmethods is lying!\n");
     return -1;
   }
   
   uchar *p;
+  /* XXX user controlled malloc(). range should be: 0x00-0xff */
   p = malloc(nmethods);
   if (!p) {
     printf("malloc failed!\n");
@@ -292,14 +299,8 @@ socks5_handle_negotiation(struct evbuffer *source,
     goto err;
   }
   
-  /* Since we made it 'till here, we should also reply! */
-  if (socks5_do_auth(dest) < 0)  /* SOCKS auth/negotiation failed! */
-    goto err;
-  
+  /* Packet is legit. Rejoice! */
   free(p);
-  
-  /* Success! Set socks state. */
-  state->state = ST_NEGOTIATION_DONE;    
   return 1;
   
  err: 
@@ -356,20 +357,29 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest, void *arg)
   
   switch(version) {
   case SOCKS5_VERSION:
-    if (conn->socks_state->state == ST_WAITING) 
+    if (conn->socks_state->state == ST_WAITING) {
       /* We don't know this connection. We have to do method negotiation. */
-      return socks5_handle_negotiation(source,dest,conn->socks_state); 
-    else /* We know this connection. Let's see what it wants. */
-      if (socks5_handle_request(source,dest,conn->output,conn->socks_state))
-        if (set_up_protocol(conn) < 0) /* Request was legit and got granted.
-                                          Set up the crypto protocol now. */
-          return -1;
+      if (socks5_handle_negotiation(source,dest,conn->socks_state) == 1) {
+        if (socks5_do_auth(dest) == 1) { /* success */
+          conn->socks_state->state = ST_NEGOTIATION_DONE;
+          return 1; /* success */
+        }
+      }
+    } else { /* We know this connection. Let's see what it wants. */
+      struct parsereq parsereq;
+      if (socks5_handle_request(source,&parsereq) == 1)
+          /* This request actually made sense! Let's connect! */
+          if (socks5_do_connect(parsereq, dest, conn->output,conn->socks_state) == 1)
+            if (set_up_protocol(conn) == 1) /* Request was legit and got granted.
+                                              Set up the crypto protocol now. */
+              return 1;
+    }
     break;
   default:
     printf("socks: Nice packet! Now beat it!\n");
-    return -1;
+    break;
   }  
-  
-  return 1;
+    
+  return -1;
 }
 

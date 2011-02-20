@@ -168,7 +168,7 @@ simple_listener_cb(struct evconnlistener *evcl,
  err:
   if (conn)
     conn_free(conn);
-  if (fd >= 0) /* XXX Was that a bug? */
+  if (fd >= 0)
     evutil_closesocket(fd);
 }
 
@@ -177,6 +177,8 @@ conn_free(conn_t *conn)
 {
   if (conn->proto_state)
     protocol_state_free(conn->proto_state);
+  if (conn->socks_state)
+    socks_state_free(conn->socks_state);
   if (conn->input)
     bufferevent_free(conn->input);
   if (conn->output)

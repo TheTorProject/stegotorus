@@ -31,7 +31,7 @@ listener_t *listener_new(
                          const char *shared_secret, size_t shared_secret_len);
 void listener_free(listener_t *listener);
 
-/* XXX #define PRIVATE trick? */
+/* XXX #define PRIVATE trickery? */
 typedef struct conn_t {
   struct socks_state_t *socks_state;
   struct protocol_state_t *proto_state;

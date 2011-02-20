@@ -100,6 +100,7 @@ main(int argc, const char **argv)
   /* run the event loop */
   event_base_dispatch(base);
 
+  /* XXX If the port is taken, this crashes!  */
   listener_free(listener);
 
   return 0;
