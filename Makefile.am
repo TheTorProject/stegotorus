@@ -23,7 +23,8 @@ unittests_SOURCES = \
 	src/test/tinytest.c \
 	src/test/unittest.c \
 	src/test/unittest_protocol.c \
-	src/test/unittest_crypt.c
+	src/test/unittest_crypt.c \
+	src/test/unittest_socks.c
 unittests_LDADD = @libevent_LIBS@ @openssl_LIBS@ libobfsproxy.a
 
 noinst_HEADERS = \
