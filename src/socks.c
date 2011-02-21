@@ -48,7 +48,7 @@
 */
 
 static int socks5_do_auth(struct evbuffer *dest);
-static int socks5_do_connect(struct parsereq parsereq, struct evbuffer *reply_dest,
+static int socks5_do_connect(const struct parsereq *parsereq, struct evbuffer *reply_dest,
                              struct bufferevent *output, struct socks_state_t *state);
 
 socks_state_t *
@@ -85,7 +85,7 @@ socks_state_free(socks_state_t *s)
    Client Request (Client -> Server)
 */
 int
-socks5_handle_request(struct evbuffer *source,struct parsereq *parsereq)
+socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
 {
   /** XXX: max FQDN size is 255. */ 
   /* #define MAXFQDN */
@@ -95,63 +95,61 @@ socks5_handle_request(struct evbuffer *source,struct parsereq *parsereq)
   /* buflength is without the version byte. */
   unsigned int buflength = evbuffer_get_length(source);
   
-  /* Remember, version byte of request was already extracted */
-  if (buflength < SIZEOF_SOCKS5_STATIC_REQ) {
+  if (buflength < SIZEOF_SOCKS5_STATIC_REQ+1) {
     printf("socks: request packet is too small (1).\n");
-    return -1;
+    return 0;
   }
-  
-  /** XXX: Maybe we should reject high values of buflength? */
-  uchar *p = malloc(buflength); 
-  if (!p)
-    return -1;
-    
+
   /* We only need the socks5_req and an extra byte to get
-     the addrlen in an FQDN request. "Conveniently" this is
-     SIZEOF_SOCKS5_STATIC_REQ since we have already removed
-     the version byte.*/
-  if (evbuffer_copyout(source, p, SIZEOF_SOCKS5_STATIC_REQ) < 0)
+     the addrlen in an FQDN request.
+  */
+  uchar p[SIZEOF_SOCKS5_STATIC_REQ+1];
+  if (evbuffer_copyout(source, p, SIZEOF_SOCKS5_STATIC_REQ+1) < 0)
     goto err;
   
-  /* p[0] = Command field
-     p[1] = Reserved field */
-  if (p[0] != SOCKS5_CMD_CONNECT || p[1] != 0x00) {
+  /* p[0] = Version
+     p[1] = Command field
+     p[2] = Reserved field */
+  if (p[0] != SOCKS5_VERSION || p[1] != SOCKS5_CMD_CONNECT || p[2] != 0x00) {
     printf("socks: Only CONNECT supported. Sowwy!\n"); 
     goto err;
   }
   
   unsigned int addrlen,af,minsize;
-  /* p[2] is Address type field */
-  switch(p[2]) {
+  /* p[3] is Address type field */
+  switch(p[3]) {
   case SOCKS5_ATYP_IPV4:
     addrlen = 4;
     af = AF_INET;
     /* minimum packet size:
        socks5_req - <version byte> + addrlen + port */
-    minsize = SIZEOF_SOCKS5_STATIC_REQ - 1 + addrlen + 2;
+    break;
+  case SOCKS5_ATYP_IPV6:
+    addrlen = 16;
+    af = AF_INET6;
     break;
   case SOCKS5_ATYP_FQDN:  /* Do we actually need FQDN support? */
-    addrlen = p[SIZEOF_SOCKS5_STATIC_REQ-1];
+    addrlen = p[4];
     af = -1;
     /* as above, but we also have the addrlen field byte */
-    minsize = SIZEOF_SOCKS5_STATIC_REQ - 1 + 1 + addrlen + 2;    
     break;
   default:
-    printf("socks: Not supported. Go away.\n");
+    printf("socks: Address type not supported. Go away.\n");
     goto err;
   }
-  
+
+  minsize = SIZEOF_SOCKS5_STATIC_REQ + addrlen + 2;
   if (buflength < minsize) {
     printf("socks: request packet too small %d:%d (2)\n", buflength, minsize);
-    goto err;
+    return 0;
   }
   
   /* Drain data from the buffer to get to the good part, the actual
      address and port. */
-  if (evbuffer_drain(source, SIZEOF_SOCKS5_STATIC_REQ-1) == -1)
+  if (evbuffer_drain(source, SIZEOF_SOCKS5_STATIC_REQ) == -1)
     goto err;
   /* If it is an FQDN request, drain the addrlen byte as well. */
-  if (p[2] == SOCKS5_ATYP_FQDN)
+  if (af == -1)
     if (evbuffer_drain(source, 1) == -1)
       goto err;
   
@@ -181,8 +179,9 @@ socks5_handle_request(struct evbuffer *source,struct parsereq *parsereq)
   }
   
   /* XXX FIX! NI_MAXSERV: I don't even remember where I found this!! */
-  snprintf(parsereq->port, NI_MAXSERV, "%u", ntohs(destport));
+  snprintf(parsereq->port, NI_MAXSERV, "%u", (unsigned)ntohs(destport));
   strncpy(parsereq->addr, destaddr, 255+1);
+  parsereq->addr[255]='\0';/*ensure nul-termination*/
   
   free(p);
   return 1;
@@ -205,7 +204,7 @@ socks5_handle_request(struct evbuffer *source,struct parsereq *parsereq)
    1b       1b    1b    1b       4b         2b
 */
 static int
-socks5_do_connect(struct parsereq parsereq, struct evbuffer *reply_dest, 
+socks5_do_connect(const struct parsereq *parsereq, struct evbuffer *reply_dest, 
                   struct bufferevent *output, struct socks_state_t *state)
 {
   /* This is the buffer that contains our reply to the client. */
@@ -222,7 +221,7 @@ socks5_do_connect(struct parsereq parsereq, struct evbuffer *reply_dest,
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
   
-  res = getaddrinfo(parsereq.addr, parsereq.port, &hints, &servinfo);
+  res = getaddrinfo(parsereq->addr, parsereq->port, &hints, &servinfo);
   if (res == 0) {/* Everything is going fine. Try to connect. */
     if (bufferevent_socket_connect(output,
                                    servinfo->ai_addr,
@@ -257,29 +256,30 @@ socks5_do_connect(struct parsereq parsereq, struct evbuffer *reply_dest,
 }
    
 /**
-   This function handles the initial SOCKS packet in 'source' sent by
+   This function handles the initial SOCKS5 packet in 'source' sent by
    the client, which negotiates the version and method of SOCKS.  If
    the packet is actually valid, we reply to 'dest'.
    
    Method Negotiation Packet (Client -> Server):
-   | version | nmethods | methods[nmethods] | 
-       1b          1b           1-255b     
+   nmethods | methods[nmethods] |
+       b           1-255b
 */
 int
-socks5_handle_negotiation(struct evbuffer *source, 
+socks5_handle_negotiation(struct evbuffer *source,
                           struct evbuffer *dest, socks_state_t *state)
 {
   unsigned int found_noauth, i;
   
   uchar nmethods;
-  
-  evbuffer_remove(source, &nmethods, 1);
-  
-  if (evbuffer_get_length(source) != nmethods) {
-    printf("socks: nmethods is lying!\n");
-    return -1;
+
+  evbuffer_copyout(source, &nmethods, 1);
+
+  if (evbuffer_get_length(source) < nmethods + 1) {
+    return 0; /* need more data */
   }
-  
+
+  evbuffer_drain(source, 1);
+
   uchar *p;
   /* XXX user controlled malloc(). range should be: 0x00-0xff */
   p = malloc(nmethods);
@@ -299,12 +299,15 @@ socks5_handle_negotiation(struct evbuffer *source,
   
   if (!found_noauth) {
     printf("socks: Client doesn't seem to support NOUATH!\n");
+    /* XXX should send back [05 FF] to say, I'm socks5 and I didn't like any
+       of those methods */
     goto err;
   }
   
   /* Packet is legit. Rejoice! */
   free(p);
-  return 1;
+
+  return socks5_do_auth(dest);
   
  err: 
   assert(p);
@@ -336,43 +339,60 @@ socks5_do_auth(struct evbuffer *dest)
 }
 
 /**
-   We are given data from the network. 
+   We are given data from the network.
    If we haven't negotiated with the connection, we try to negotiate.
    If we have already negotiated, we suppose it's a CONNECT request and
    try to be helpful.
+
+   Returns 1 on done, -1 on unrecoverable error, 0 on "need more bytes
 */
 int
 handle_socks(struct evbuffer *source, struct evbuffer *dest,
              socks_state_t *socks_state, conn_t *conn)
 {
+  int r;
+  if (socks_state->broken)
+    return -1;
+
   if (evbuffer_get_length(source) < MIN_SOCKS_PACKET) {
     printf("socks: Packet is too small.\n");
-    return -1;
+    return 0;
   }
-  
-  uchar version;
-  
+
   /* ST_OPEN connections shouldn't be here! */
   assert(socks_state->state != ST_OPEN);
-  
-  /* First byte of all SOCKS data is the version field. */
-  evbuffer_remove(source, &version, 1);
-  
-  switch(version) {
+
+  if (socks_state->version == 0) {
+    /* First byte of all SOCKS data is the version field. */
+    evbuffer_remove(source, &socks_state->version, 1);
+    if (socks_state->version != SOCKS5_VERSION) {
+      printf("socks: unexpected version %d", (int)socks_state->version);
+      goto broken;
+    }
+  }
+
+  switch(socks_state->version) {
   case SOCKS5_VERSION:
     if (socks_state->state == ST_WAITING) {
       /* We don't know this connection. We have to do method negotiation. */
-      if (socks5_handle_negotiation(source,dest,socks_state) == 1) {
-        if (socks5_do_auth(dest) == 1) { /* success */
-          socks_state->state = ST_NEGOTIATION_DONE;
-          return 1; /* success */
-        }
-      }
-    } else { /* We know this connection. Let's see what it wants. */
-      struct parsereq parsereq;
-      if (socks5_handle_request(source,&parsereq) == 1)
+      r = socks5_handle_negotiation(source,dest,socks_state);
+      if (r == -1)
+        goto broken;
+      else if (r == 0)
+        return 0;
+      else if (r == 1)
+        socks_state->state = ST_NEGOTIATION_DONE;
+    }
+    if (socks_state->state == ST_NEGOTIATION_DONE) {
+      /* We know this connection. Let's see what it wants. */
+      r = socks5_handle_request(source,&socks_state->parsereq);
+      if (r == -1)
+        goto broken;
+      else if (r == 0)
+        return 0;
+      else if (r == 1)
           /* This request actually made sense! Let's connect! */
-          if (socks5_do_connect(parsereq, dest, conn->output,socks_state) == 1)
+          if (socks5_do_connect(&socks_state->parsereq, dest, conn->output,socks_state) == 1)
             if (set_up_protocol(conn) == 1) /* Request was legit and got granted.
                                               Set up the crypto protocol now. */
               return 1;
@@ -380,9 +400,12 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
     break;
   default:
     printf("socks: Nice packet! Now beat it!\n");
-    break;
-  }  
-    
+    goto broken;
+  }
+
+  return 0;
+ broken:
+  socks_state->broken = 1;
   return -1;
 }
 

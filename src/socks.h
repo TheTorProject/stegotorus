@@ -27,6 +27,7 @@ enum socks_status_t socks_state_get_status(const socks_state_t *state);
 
 #define SOCKS5_ATYP_IPV4       0x01
 #define SOCKS5_ATYP_FQDN       0x03
+#define SOCKS5_ATYP_IPV6       0x04
 
 #define SOCKS5_REP_SUCCESS     0x0
 #define SOCKS5_REP_FAIL        0x01
@@ -46,13 +47,15 @@ enum socks_status_t socks_state_get_status(const socks_state_t *state);
 #define SIZEOF_SOCKS5_STATIC_REQ 4
 
 #ifdef SOCKS_PRIVATE
-struct socks_state_t {
-  enum socks_status_t state;
-};
-
 struct parsereq {
   char addr[255+1];
   char port[NI_MAXSERV];
+};
+struct socks_state_t {
+  enum socks_status_t state;
+  unsigned char version;
+  unsigned char broken;
+  struct parsereq parsereq;
 };
 
 int socks5_handle_negotiation(struct evbuffer *source,
