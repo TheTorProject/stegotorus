@@ -7,9 +7,14 @@ typedef struct socks_state_t socks_state_t;
 struct evbuffer;
 
 enum socks_status_t {
+  /* Waiting for initial socks4 or socks5 message */
   ST_WAITING,
+  /* Sent socks5 method negotiation message; waiting for request */
   ST_NEGOTIATION_DONE,
-  ST_OPEN,
+  /* Have received target address */
+  ST_HAVE_ADDR,
+  /* Have sent reply */
+  ST_SENT_REPLY
 };
 struct conn_t; /* remove me */
 int handle_socks(struct evbuffer *source,
@@ -48,8 +53,9 @@ enum socks_status_t socks_state_get_status(const socks_state_t *state);
 
 #ifdef SOCKS_PRIVATE
 struct parsereq {
-  char addr[255+1];
-  char port[NI_MAXSERV];
+  int af; /* Address family */
+  char addr[255+1]; /* Address as string */
+  char port[NI_MAXSERV]; /* Port as string: 1..65536 */
 };
 struct socks_state_t {
   enum socks_status_t state;
@@ -63,5 +69,10 @@ int socks5_handle_negotiation(struct evbuffer *source,
 int socks5_handle_request(struct evbuffer *source,
                           struct parsereq *parsereq);
 #endif
+
+int socks_state_get_address(const socks_state_t *state,
+                            int *af_out,
+                            const char **addr_out,
+                            const char **service_out);
 
 #endif

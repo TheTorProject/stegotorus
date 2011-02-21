@@ -50,6 +50,9 @@
 static int socks5_do_auth(struct evbuffer *dest);
 static int socks5_do_connect(const struct parsereq *parsereq, struct evbuffer *reply_dest,
                              struct bufferevent *output, struct socks_state_t *state);
+static int socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
+                             int status);
+
 
 socks_state_t *
 socks_state_new(void)
@@ -115,7 +118,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     goto err;
   }
   
-  unsigned int addrlen,af,minsize;
+  unsigned int addrlen,af,extralen=0;
   /* p[3] is Address type field */
   switch(p[3]) {
   case SOCKS5_ATYP_IPV4:
@@ -130,7 +133,8 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     break;
   case SOCKS5_ATYP_FQDN:  /* Do we actually need FQDN support? */
     addrlen = p[4];
-    af = -1;
+    extralen = 1;
+    af = AF_UNSPEC;
     /* as above, but we also have the addrlen field byte */
     break;
   default:
@@ -138,7 +142,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     goto err;
   }
 
-  minsize = SIZEOF_SOCKS5_STATIC_REQ + addrlen + 2;
+  int minsize = SIZEOF_SOCKS5_STATIC_REQ + addrlen + extralen + 2;
   if (buflength < minsize) {
     printf("socks: request packet too small %d:%d (2)\n", buflength, minsize);
     return 0;
@@ -149,11 +153,11 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   if (evbuffer_drain(source, SIZEOF_SOCKS5_STATIC_REQ) == -1)
     goto err;
   /* If it is an FQDN request, drain the addrlen byte as well. */
-  if (af == -1)
+  if (af == AF_UNSPEC)
     if (evbuffer_drain(source, 1) == -1)
       goto err;
   
-  if (evbuffer_remove(source, (char *)&destaddr, addrlen) != addrlen)
+  if (evbuffer_remove(source, destaddr, addrlen) != addrlen)
     assert(0);
   
   if (evbuffer_remove(source, (char *)&destport, 2) != 2)
@@ -166,15 +170,17 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
      can't be over 255. And in any case the overflow
      would have already happened. XXX */
 #define NI_MAXHOST 1025
-  if (p[2] == SOCKS5_ATYP_FQDN)
+  if (af == AF_UNSPEC)
     if (addrlen >= NI_MAXHOST)
       goto err;
-  
-  char ntop[INET_ADDRSTRLEN];      
-  if (p[2] == SOCKS5_ATYP_IPV4) { 
+
+  if (af != AF_UNSPEC) {
     /* XXX the inet_ntop() arguments seems to work, but it feels
        a bit awkward */
-    if (inet_ntop(af, destaddr, destaddr, sizeof(ntop)) == NULL)
+    char a[16];
+    assert(addrlen <= 16);
+    memcpy(a, destaddr, addrlen);
+    if (inet_ntop(af, a, destaddr, sizeof(destaddr)) == NULL)
       goto err;
   }
   
@@ -182,14 +188,11 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   snprintf(parsereq->port, NI_MAXSERV, "%u", (unsigned)ntohs(destport));
   strncpy(parsereq->addr, destaddr, 255+1);
   parsereq->addr[255]='\0';/*ensure nul-termination*/
+  parsereq->af = af;
   
-  free(p);
   return 1;
   
  err:
-  assert(p);
-  free(p);
-  
   return -1;
 }  
 
@@ -207,9 +210,6 @@ static int
 socks5_do_connect(const struct parsereq *parsereq, struct evbuffer *reply_dest, 
                   struct bufferevent *output, struct socks_state_t *state)
 {
-  /* This is the buffer that contains our reply to the client. */
-  uchar p[SIZEOF_SOCKS5_REQ_REPLY];
-  
   unsigned int status;
   int res;
   
@@ -235,6 +235,17 @@ socks5_do_connect(const struct parsereq *parsereq, struct evbuffer *reply_dest,
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
   }
 
+  return socks5_send_reply(reply_dest, state, status);
+}
+
+
+static int
+socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
+                  int status)
+{
+  /* This is the buffer that contains our reply to the client. */
+  uchar p[SIZEOF_SOCKS5_REQ_REPLY];
+  
   /* We either failed or succeded.
      Either way, we should send something back to the client */
   p[0] = SOCKS5_VERSION;    /* Version field */
@@ -242,19 +253,20 @@ socks5_do_connect(const struct parsereq *parsereq, struct evbuffer *reply_dest,
   p[2] = 0;                 /* Reserved */
   p[3] = SOCKS5_ATYP_IPV4;  /* Address Type */
   /* Leaving destport/destaddr to zero */
+  /* XXXX this is not correct */
   memset(&p[4], 0, 6); /* destport/destaddr */
-  
+
   evbuffer_add(reply_dest,
                p, SIZEOF_SOCKS5_REQ_REPLY);
-  
+
   if (status == SOCKS5_REP_SUCCESS) {
-    state->state = ST_OPEN; /* SOCKS phase is now done. */
+    state->state = ST_SENT_REPLY; /* SOCKS phase is now done. */
     return 1;
   }
   else
     return -1;
 }
-   
+
 /**
    This function handles the initial SOCKS5 packet in 'source' sent by
    the client, which negotiates the version and method of SOCKS.  If
@@ -359,8 +371,8 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
     return 0;
   }
 
-  /* ST_OPEN connections shouldn't be here! */
-  assert(socks_state->state != ST_OPEN);
+  /* ST_SENT_REPLY connections shouldn't be here! */
+  assert(socks_state->state != ST_SENT_REPLY);
 
   if (socks_state->version == 0) {
     /* First byte of all SOCKS data is the version field. */
@@ -413,5 +425,19 @@ enum socks_status_t
 socks_state_get_status(const socks_state_t *state)
 {
   return state->state;
+}
+
+int
+socks_state_get_address(const socks_state_t *state,
+                        int *af_out,
+                        const char **addr_out,
+                        const char **service_out)
+{
+  if (state->state != ST_HAVE_ADDR && state->state != ST_SENT_REPLY)
+    return -1;
+  *af_out = state->parsereq.af;
+  *addr_out = (char*) state->parsereq.addr;
+  *service_out = (char*) state->parsereq.port;
+  return 0;
 }
 

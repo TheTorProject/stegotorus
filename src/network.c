@@ -207,7 +207,7 @@ socks_read_cb(struct bufferevent *bev, void *arg) {
   //dbg(("Got data on the socks side (%d) \n", conn->socks_state->state));
   
   if (bev == conn->input &&
-      socks_state_get_status(conn->socks_state) != ST_OPEN) { /* SOCKS data */
+      socks_state_get_status(conn->socks_state) != ST_SENT_REPLY) { /* SOCKS data */
     if (handle_socks(bufferevent_get_input(bev),
                      bufferevent_get_output(bev), conn->socks_state, conn) < 0)
       conn_free(conn);
