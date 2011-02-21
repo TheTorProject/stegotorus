@@ -7,7 +7,8 @@
 
 #include <event2/buffer.h>
 
-#include "../socks.c"
+#define SOCKS_PRIVATE
+#include "../socks.h"
 #include "../crypt.h"
 #include "../util.h"
 #include "../crypt_protocol.h"

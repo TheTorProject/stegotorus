@@ -5,6 +5,7 @@
    in all redistributed copies and derived works.  There is no warranty.
 */
 
+#define NETWORK_PRIVATE
 #include "crypt_protocol.h"
 #include "network.h"
 #include "util.h"
@@ -203,12 +204,12 @@ socks_read_cb(struct bufferevent *bev, void *arg) {
   struct bufferevent *other;
   other = (bev == conn->input) ? conn->output : conn->input;
 
-  dbg(("Got data on the socks side (%d) \n", conn->socks_state->state));
+  //dbg(("Got data on the socks side (%d) \n", conn->socks_state->state));
   
   if (bev == conn->input &&
-      conn->socks_state->state != ST_OPEN) { /* SOCKS data */
+      socks_state_get_status(conn->socks_state) != ST_OPEN) { /* SOCKS data */
     if (handle_socks(bufferevent_get_input(bev),
-                     bufferevent_get_output(bev), conn) < 0)
+                     bufferevent_get_output(bev), conn->socks_state, conn) < 0)
       conn_free(conn);
   } else { /* pipe it over */
     assert(conn->proto_state);

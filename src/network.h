@@ -31,7 +31,7 @@ listener_t *listener_new(
                          const char *shared_secret, size_t shared_secret_len);
 void listener_free(listener_t *listener);
 
-/* XXX #define PRIVATE trickery? */
+#ifdef NETWORK_PRIVATE
 typedef struct conn_t {
   struct socks_state_t *socks_state;
   struct protocol_state_t *proto_state;
@@ -43,5 +43,6 @@ typedef struct conn_t {
 } conn_t;
 
 int set_up_protocol(conn_t *conn);
+#endif
 
 #endif

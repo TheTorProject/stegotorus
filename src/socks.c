@@ -7,7 +7,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#define SOCKS_PRIVATE
+/* XXX remove this dependency */
+#define NETWORK_PRIVATE
+/* XXX remove this include */
 #include "network.h"
+
 #include "socks.h"
 #include "crypt.h"
 
@@ -42,9 +47,6 @@
    are referenced with IPV4 addresses. Anyway, I implemented it.
 */
 
-static int socks5_handle_negotiation(struct evbuffer *source,
-                                     struct evbuffer *dest, struct socks_state_t *state);
-static int socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq);
 static int socks5_do_auth(struct evbuffer *dest);
 static int socks5_do_connect(struct parsereq parsereq, struct evbuffer *reply_dest,
                              struct bufferevent *output, struct socks_state_t *state);
@@ -82,7 +84,7 @@ socks_state_free(socks_state_t *s)
    
    Client Request (Client -> Server)
 */
-static int
+int
 socks5_handle_request(struct evbuffer *source,struct parsereq *parsereq)
 {
   /** XXX: max FQDN size is 255. */ 
@@ -227,7 +229,7 @@ socks5_do_connect(struct parsereq parsereq, struct evbuffer *reply_dest,
                                    (int) servinfo->ai_addrlen)<0)
       status = SOCKS5_REP_FAIL; /* connect failed. */
     else /* connect succeeded. */
-      status = SOCKS5_REP_SUCCESS; 
+      status = SOCKS5_REP_SUCCESS; /* XXX no, might be "in progress" */ 
     bufferevent_enable(output, EV_READ|EV_WRITE);      
   } else { /* error in getaddrinfo() */
     status = SOCKS5_REP_FAIL;
@@ -263,9 +265,10 @@ socks5_do_connect(struct parsereq parsereq, struct evbuffer *reply_dest,
    | version | nmethods | methods[nmethods] | 
        1b          1b           1-255b     
 */
-static int
+int
 socks5_handle_negotiation(struct evbuffer *source, 
-                          struct evbuffer *dest, socks_state_t *state) {
+                          struct evbuffer *dest, socks_state_t *state)
+{
   unsigned int found_noauth, i;
   
   uchar nmethods;
@@ -339,29 +342,29 @@ socks5_do_auth(struct evbuffer *dest)
    try to be helpful.
 */
 int
-handle_socks(struct evbuffer *source, struct evbuffer *dest, void *arg)
+handle_socks(struct evbuffer *source, struct evbuffer *dest,
+             socks_state_t *socks_state, conn_t *conn)
 {
   if (evbuffer_get_length(source) < MIN_SOCKS_PACKET) {
     printf("socks: Packet is too small.\n");
     return -1;
   }
   
-  conn_t *conn = arg;
   uchar version;
   
   /* ST_OPEN connections shouldn't be here! */
-  assert(conn->socks_state->state != ST_OPEN);
+  assert(socks_state->state != ST_OPEN);
   
   /* First byte of all SOCKS data is the version field. */
   evbuffer_remove(source, &version, 1);
   
   switch(version) {
   case SOCKS5_VERSION:
-    if (conn->socks_state->state == ST_WAITING) {
+    if (socks_state->state == ST_WAITING) {
       /* We don't know this connection. We have to do method negotiation. */
-      if (socks5_handle_negotiation(source,dest,conn->socks_state) == 1) {
+      if (socks5_handle_negotiation(source,dest,socks_state) == 1) {
         if (socks5_do_auth(dest) == 1) { /* success */
-          conn->socks_state->state = ST_NEGOTIATION_DONE;
+          socks_state->state = ST_NEGOTIATION_DONE;
           return 1; /* success */
         }
       }
@@ -369,7 +372,7 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest, void *arg)
       struct parsereq parsereq;
       if (socks5_handle_request(source,&parsereq) == 1)
           /* This request actually made sense! Let's connect! */
-          if (socks5_do_connect(parsereq, dest, conn->output,conn->socks_state) == 1)
+          if (socks5_do_connect(parsereq, dest, conn->output,socks_state) == 1)
             if (set_up_protocol(conn) == 1) /* Request was legit and got granted.
                                               Set up the crypto protocol now. */
               return 1;
@@ -381,5 +384,11 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest, void *arg)
   }  
     
   return -1;
+}
+
+enum socks_status_t
+socks_state_get_status(const socks_state_t *state)
+{
+  return state->state;
 }
 
