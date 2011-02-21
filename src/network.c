@@ -221,21 +221,13 @@ socks_read_cb(struct bufferevent *bev, void *arg)
       /* We shouldn't be here. */
       assert(0);
     } else if (status == ST_HAVE_ADDR) {
-      struct sockaddr_storage ss;
-      int socklen;
-      int af, r;
-      const char *addr=NULL, *port=NULL;
+      int af, r, port;
+      const char *addr=NULL;
       r = socks_state_get_address(conn->socks_state, &af, &addr, &port);
       assert(r==0);
-      /* XXXX use bufferevent_connect_hostname instead */
-      r = resolve_address_port(addr, 0, 0, &ss, &socklen, port);
-      if (r < 0) {
-        /* XXXX send socks reply */
-        conn_free(conn);
-        return;
-      }
-      r = bufferevent_socket_connect(conn->output,
-                                     (struct sockaddr*)&ss, socklen);
+      r = bufferevent_socket_connect_hostname(conn->output,
+                                              get_evdns_base(),
+                                              af, addr, port);
       if (r < 0) {
         /* XXXX send socks reply */
         conn_free(conn);

@@ -105,6 +105,11 @@ main(int argc, const char **argv)
     return 2;
   }
 
+  if (is_socks && init_evdns_base(base) < 0) {
+    fprintf(stderr, "Can't initialize evdns; failing\n");
+    return 3;
+  }
+
   /* Handle signals */
   signal(SIGPIPE, SIG_IGN);
   sigevent = evsignal_new(base, SIGINT, handle_signal_cb, (void*) base);
@@ -117,7 +122,7 @@ main(int argc, const char **argv)
                           NULL, 0);
   if (! listener) {
     printf("Couldn't create listener!\n");
-    return 0;
+    return 4;
   }
 
   /* run the event loop */

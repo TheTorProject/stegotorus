@@ -22,4 +22,10 @@ int resolve_address_port(const char *address,
 #define dbg(x) ((void)0)
 #endif
 
+struct event_base;
+struct evdns_base;
+struct evdns_base *get_evdns_base(void);
+int init_evdns_base(struct event_base *base);
+
+
 #endif

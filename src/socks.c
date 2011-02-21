@@ -175,8 +175,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
       goto err;
   }
   
-  /* XXX FIX! NI_MAXSERV: I don't even remember where I found this!! */
-  snprintf(parsereq->port, NI_MAXSERV, "%u", (unsigned)ntohs(destport));
+  parsereq->port = ntohs(destport);
   strncpy(parsereq->addr, destaddr, 255+1);
   parsereq->addr[255]='\0';/*ensure nul-termination*/
   parsereq->af = af;
@@ -381,13 +380,13 @@ int
 socks_state_get_address(const socks_state_t *state,
                         int *af_out,
                         const char **addr_out,
-                        const char **service_out)
+                        int *port_out)
 {
   if (state->state != ST_HAVE_ADDR && state->state != ST_SENT_REPLY)
     return -1;
   *af_out = state->parsereq.af;
   *addr_out = (char*) state->parsereq.addr;
-  *service_out = (char*) state->parsereq.port;
+  *port_out = state->parsereq.port;
   return 0;
 }
 

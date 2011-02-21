@@ -25,7 +25,7 @@ enum socks_status_t socks_state_get_status(const socks_state_t *state);
 int socks_state_get_address(const socks_state_t *state,
                             int *af_out,
                             const char **addr_out,
-                            const char **service_out);
+                            int *port_out);
 int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status);
 
 #define SOCKS5_REP_SUCCESS     0x0
@@ -61,7 +61,7 @@ int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status);
 struct parsereq {
   int af; /* Address family */
   char addr[255+1]; /* Address as string */
-  char port[NI_MAXSERV]; /* Port as string: 1..65536 */
+  int port;
 };
 struct socks_state_t {
   enum socks_status_t state;

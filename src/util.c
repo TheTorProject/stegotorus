@@ -10,6 +10,7 @@
 #include <stdlib.h>
 
 #include <event2/util.h>
+#include <event2/dns.h>
 
 int
 resolve_address_port(const char *address,
@@ -68,4 +69,19 @@ resolve_address_port(const char *address,
   if (ai)
     evutil_freeaddrinfo(ai);
   return result;
+}
+
+static struct evdns_base *the_evdns_base = NULL;
+
+struct evdns_base *
+get_evdns_base(void)
+{
+  return the_evdns_base;
+}
+
+int
+init_evdns_base(struct event_base *base)
+{
+  the_evdns_base = evdns_base_new(base, 1);
+  return the_evdns_base == NULL ? -1 : 0;
 }

@@ -167,7 +167,7 @@ test_socks_send_request(void *data)
   evbuffer_add(source, req3, 9);
   tt_int_op(1, ==, socks5_handle_request(source,&pr1));
   tt_str_op(pr1.addr, ==, "127.0.0.1");
-  tt_str_op(pr1.port, ==, "80");
+  tt_int_op(pr1.port, ==, 80);
   
   /* emptying source buffer before next test  */
   buffer_len = evbuffer_get_length(source);
@@ -188,7 +188,7 @@ test_socks_send_request(void *data)
   evbuffer_add(source, req4, 24);
   tt_int_op(1, ==, socks5_handle_request(source,&pr1));
   tt_assert(strcmp(pr1.addr, "www.test.example") == 0);  
-  tt_assert(strcmp(pr1.port, "80") == 0);
+  tt_int_op(pr1.port, ==, 80);
 
  end:
   if (state)
