@@ -155,29 +155,19 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     assert(0);
   
   destaddr[addrlen] = '\0';
-  
-  /* OpenSSH does this check here. I don't know why.
-     addrlen is uchar casted to uint, which means it
-     can't be over 255. And in any case the overflow
-     would have already happened. XXX */
-#define NI_MAXHOST 1025
-  if (af == AF_UNSPEC)
-    if (addrlen >= NI_MAXHOST)
-      goto err;
 
-  if (af != AF_UNSPEC) {
-    /* XXX the inet_ntop() arguments seems to work, but it feels
-       a bit awkward */
+  if (af == AF_UNSPEC) {
+    assert(addrlen < sizeof(parsereq->addr));
+    memcpy(parsereq->addr, destaddr, addrlen+1);
+  } else {
     char a[16];
     assert(addrlen <= 16);
     memcpy(a, destaddr, addrlen);
-    if (inet_ntop(af, a, destaddr, sizeof(destaddr)) == NULL)
+    if (evutil_inet_ntop(af, destaddr, parsereq->addr, sizeof(parsereq->addr)) == NULL)
       goto err;
   }
-  
+
   parsereq->port = ntohs(destport);
-  strncpy(parsereq->addr, destaddr, 255+1);
-  parsereq->addr[255]='\0';/*ensure nul-termination*/
   parsereq->af = af;
   
   return 1;
