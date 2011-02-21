@@ -96,11 +96,14 @@ main(int argc, const char **argv)
                           (struct sockaddr *)&ss_listen, sl_listen,
                           (struct sockaddr *)&ss_target, sl_target,
                           NULL, 0);
+  if (! listener) {
+    printf("Couldn't create listener!\n");
+    return 0;
+  }
 
   /* run the event loop */
   event_base_dispatch(base);
 
-  /* XXX If the port is taken, this crashes!  */
   listener_free(listener);
 
   return 0;
