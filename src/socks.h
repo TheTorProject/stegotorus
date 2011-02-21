@@ -16,14 +16,24 @@ enum socks_status_t {
   /* Have sent reply */
   ST_SENT_REPLY
 };
-struct conn_t; /* remove me */
 int handle_socks(struct evbuffer *source,
-                 struct evbuffer *dest, socks_state_t *socks_state,
-                 struct conn_t *conn);
+                 struct evbuffer *dest, socks_state_t *socks_state);
 socks_state_t *socks_state_new(void);
 void socks_state_free(socks_state_t *s);
-enum socks_status_t socks_state_get_status(const socks_state_t *state);
 
+enum socks_status_t socks_state_get_status(const socks_state_t *state);
+int socks_state_get_address(const socks_state_t *state,
+                            int *af_out,
+                            const char **addr_out,
+                            const char **service_out);
+int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status);
+
+#define SOCKS5_REP_SUCCESS     0x0
+/* XXX there are more response codes than this! */
+#define SOCKS5_REP_FAIL        0x01
+
+
+#ifdef SOCKS_PRIVATE
 #define SOCKS5_VERSION         0x05
 
 #define SOCKS5_METHOD_NOAUTH   0x00
@@ -34,11 +44,8 @@ enum socks_status_t socks_state_get_status(const socks_state_t *state);
 #define SOCKS5_ATYP_FQDN       0x03
 #define SOCKS5_ATYP_IPV6       0x04
 
-#define SOCKS5_REP_SUCCESS     0x0
-#define SOCKS5_REP_FAIL        0x01
-
 /* Minimum SOCKS packet length is 3 bytes:
-   Method Negotiation Packet with 1 method */ 
+   Method Negotiation Packet with 1 method */
 #define MIN_SOCKS_PACKET       3
 
 /* Size of a SOCKS request reply packet.
@@ -51,7 +58,6 @@ enum socks_status_t socks_state_get_status(const socks_state_t *state);
 */
 #define SIZEOF_SOCKS5_STATIC_REQ 4
 
-#ifdef SOCKS_PRIVATE
 struct parsereq {
   int af; /* Address family */
   char addr[255+1]; /* Address as string */
@@ -69,10 +75,5 @@ int socks5_handle_negotiation(struct evbuffer *source,
 int socks5_handle_request(struct evbuffer *source,
                           struct parsereq *parsereq);
 #endif
-
-int socks_state_get_address(const socks_state_t *state,
-                            int *af_out,
-                            const char **addr_out,
-                            const char **service_out);
 
 #endif

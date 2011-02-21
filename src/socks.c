@@ -8,11 +8,6 @@
 #include <stdio.h>
 
 #define SOCKS_PRIVATE
-/* XXX remove this dependency */
-#define NETWORK_PRIVATE
-/* XXX remove this include */
-#include "network.h"
-
 #include "socks.h"
 #include "crypt.h"
 
@@ -39,8 +34,6 @@
    "Method Negotiation Packet" is handled by: socks5_handle_negotiation()
    "Method Negotiation Reply" is done by: socks5_do_auth()
    "Client request" is handled by: socks5_validate_request()
-   "Server reply" is handled by: socks5_do_connect(), since we only
-   support CONNECT commands anyway.
    
    XXX: Do we actually need FQDN support? 
    It's a lot of implementation trouble for nothing, since our bridges
@@ -48,8 +41,6 @@
 */
 
 static int socks5_do_auth(struct evbuffer *dest);
-static int socks5_do_connect(const struct parsereq *parsereq, struct evbuffer *reply_dest,
-                             struct bufferevent *output, struct socks_state_t *state);
 static int socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                              int status);
 
@@ -197,48 +188,12 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
 }  
 
 /**
-   This function does the actual CONNECT to <'addr','port'>
-   It then sends the appropriate reply to the client on 'reply_dest'.
-   If everything went smoothly, it connects 'output' to the
-   client-specified cyberspace address.
-   
+   This sends the appropriate reply to the client on 'reply_dest'.
+
    Server Reply (Server -> Client):
    | version | rep | rsv | atyp | destaddr | destport
    1b       1b    1b    1b       4b         2b
 */
-static int
-socks5_do_connect(const struct parsereq *parsereq, struct evbuffer *reply_dest, 
-                  struct bufferevent *output, struct socks_state_t *state)
-{
-  unsigned int status;
-  int res;
-  
-  struct addrinfo hints;
-  struct addrinfo *servinfo;
-  
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_INET;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE;
-  
-  res = getaddrinfo(parsereq->addr, parsereq->port, &hints, &servinfo);
-  if (res == 0) {/* Everything is going fine. Try to connect. */
-    if (bufferevent_socket_connect(output,
-                                   servinfo->ai_addr,
-                                   (int) servinfo->ai_addrlen)<0)
-      status = SOCKS5_REP_FAIL; /* connect failed. */
-    else /* connect succeeded. */
-      status = SOCKS5_REP_SUCCESS; /* XXX no, might be "in progress" */ 
-    bufferevent_enable(output, EV_READ|EV_WRITE);      
-  } else { /* error in getaddrinfo() */
-    status = SOCKS5_REP_FAIL;
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
-  }
-
-  return socks5_send_reply(reply_dest, state, status);
-}
-
-
 static int
 socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                   int status)
@@ -259,12 +214,13 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
   evbuffer_add(reply_dest,
                p, SIZEOF_SOCKS5_REQ_REPLY);
 
+  state->state = ST_SENT_REPLY; /* SOCKS phase is now done. */
+
   if (status == SOCKS5_REP_SUCCESS) {
-    state->state = ST_SENT_REPLY; /* SOCKS phase is now done. */
     return 1;
-  }
-  else
+  } else {
     return -1;
+  }
 }
 
 /**
@@ -360,7 +316,7 @@ socks5_do_auth(struct evbuffer *dest)
 */
 int
 handle_socks(struct evbuffer *source, struct evbuffer *dest,
-             socks_state_t *socks_state, conn_t *conn)
+             socks_state_t *socks_state)
 {
   int r;
   if (socks_state->broken)
@@ -400,14 +356,8 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
       r = socks5_handle_request(source,&socks_state->parsereq);
       if (r == -1)
         goto broken;
-      else if (r == 0)
-        return 0;
-      else if (r == 1)
-          /* This request actually made sense! Let's connect! */
-          if (socks5_do_connect(&socks_state->parsereq, dest, conn->output,socks_state) == 1)
-            if (set_up_protocol(conn) == 1) /* Request was legit and got granted.
-                                              Set up the crypto protocol now. */
-              return 1;
+      else
+        return r;
     }
     break;
   default:
@@ -441,3 +391,11 @@ socks_state_get_address(const socks_state_t *state,
   return 0;
 }
 
+int
+socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status)
+{
+  if (state->version == 5)
+    return socks5_send_reply(dest, state, status);
+  else
+    return -1;
+}

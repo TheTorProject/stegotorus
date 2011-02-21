@@ -14,7 +14,6 @@ struct sockaddr;
 struct event_base;
 struct socks_state_t;
 struct protocol_state_t;
-struct ubfferevent;
 
 #define LSN_SIMPLE_CLIENT 1
 #define LSN_SIMPLE_SERVER 2
@@ -41,8 +40,6 @@ typedef struct conn_t {
   unsigned int flushing : 1;
   unsigned int is_open : 1;
 } conn_t;
-
-int set_up_protocol(conn_t *conn);
 #endif
 
 #endif
