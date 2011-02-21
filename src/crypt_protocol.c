@@ -180,7 +180,7 @@ crypt_and_transmit(crypt_t *crypto,
     if (n <= 0)
       return 0;
     stream_crypt(crypto, data, n);
-    printf("Message is: %s", data);
+    // printf("Message is: %s", data);
     evbuffer_add(dest, data, n);
     dbg(("Processed %d bytes.", n));
   }
