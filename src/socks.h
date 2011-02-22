@@ -35,6 +35,7 @@ int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status);
 
 #ifdef SOCKS_PRIVATE
 #define SOCKS5_VERSION         0x05
+#define SOCKS4_VERSION         0x04
 
 #define SOCKS5_METHOD_NOAUTH   0x00
 
@@ -57,6 +58,13 @@ int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status);
        1b       1b   1b     1b
 */
 #define SIZEOF_SOCKS5_STATIC_REQ 4
+
+/* In theory, a socks4 request can be arbitrarily long.  We cut off at an
+ * arbitrary point, since probably nobody has infinitely long usernames */
+#define SOCKS4_MAX_LENGTH 8192
+
+#define SOCKS4_SUCCESS 0x5a
+#define SOCKS4_FAILED 0x5b
 
 struct parsereq {
   int af; /* Address family */

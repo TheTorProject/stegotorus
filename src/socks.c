@@ -296,6 +296,99 @@ socks5_do_auth(struct evbuffer *dest)
   }
 }
 
+static int
+socks4_read_request(struct evbuffer *source, socks_state_t *state)
+{
+  /* Format is:
+       1 byte: Socks version (==4, already read)
+       1 byte: command code [== 1 for connect]
+       2 bytes: port
+       4 bytes: IPv4 address
+       X bytes: userID, terminated with NUL
+       Optional: X bytes: domain, terminated with NUL */
+  uchar header[7];
+  int is_v4a;
+  uint16_t portnum;
+  uint32_t ipaddr;
+  struct evbuffer_ptr end_of_user, end_of_hostname;
+  size_t user_len, hostname_len=0;
+  if (evbuffer_get_length(source) < 7)
+    return 0; /* more bytes needed */
+  evbuffer_copyout(source, (char*)header, 7);
+  if (header[0] != 1) {
+    printf("socks: Only CONNECT supported.\n");
+    return -1;
+  }
+  memcpy(&portnum, header+1, 2);
+  memcpy(&ipaddr, header+3, 4);
+  portnum = ntohs(portnum);
+  ipaddr = ntohl(ipaddr);
+  is_v4a = (ipaddr & 0xff) != 0 && (ipaddr & 0xffffff00)==0;
+
+  evbuffer_ptr_set(source, &end_of_user, 7, EVBUFFER_PTR_SET);
+  end_of_user = evbuffer_search(source, "\0", 1, &end_of_user);
+  if (end_of_user.pos == -1) {
+    if (evbuffer_get_length(source) > SOCKS4_MAX_LENGTH)
+      return -1;
+    return 0;
+  }
+  user_len = end_of_user.pos - 7;
+  if (is_v4a) {
+    if (end_of_user.pos == evbuffer_get_length(source)-1)
+      return 0; /*more data needed */
+    end_of_hostname = end_of_user;
+    evbuffer_ptr_set(source, &end_of_hostname, 1, EVBUFFER_PTR_ADD);
+    end_of_hostname = evbuffer_search(source, "\0", 1, &end_of_hostname);
+    if (end_of_hostname.pos == -1) {
+      if (evbuffer_get_length(source) > SOCKS4_MAX_LENGTH)
+        return -1;
+      return 0;
+    }
+    hostname_len = end_of_hostname.pos - end_of_user.pos - 1;
+    if (hostname_len >= sizeof(state->parsereq.addr)) {
+      printf("socks4a: Hostname too long\n");
+      return -1;
+    }
+  }
+
+  /* Okay.  If we get here, all the data is available. */
+  evbuffer_drain(source, 7+user_len+1); /* discard username */
+  state->parsereq.af = AF_INET; /* SOCKS4a is IPv4 only */
+  state->parsereq.port = portnum;
+  if (is_v4a) {
+    evbuffer_remove(source, state->parsereq.addr, hostname_len);
+    state->parsereq.addr[hostname_len] = '\0';
+    evbuffer_drain(source, 1);
+  } else {
+    struct in_addr in;
+    in.s_addr = htonl(ipaddr);
+    if (evutil_inet_ntop(AF_INET, &in, state->parsereq.addr, sizeof(state->parsereq.addr)) == NULL)
+      return -1;
+  }
+
+  return 1;
+}
+
+static int
+socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
+{
+  uint16_t portnum;
+  struct in_addr in;
+  uchar msg[8];
+  portnum = htons(state->parsereq.port);
+  if (evutil_inet_pton(AF_INET, state->parsereq.addr, &in)!=1)
+    in.s_addr = 0;
+
+  /* Nul byte */
+  msg[0] = 0;
+  /* convert to socks4 status */
+  msg[1] = (status == SOCKS5_REP_SUCCESS) ? SOCKS4_SUCCESS : SOCKS4_FAILED;
+  memcpy(msg+2, &portnum, 2);
+  memcpy(msg+4, &in.s_addr, 4);
+  evbuffer_add(dest, msg, 8);
+  return 1;
+}
+
 /**
    We are given data from the network.
    If we haven't negotiated with the connection, we try to negotiate.
@@ -318,12 +411,14 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
   }
 
   /* ST_SENT_REPLY connections shouldn't be here! */
-  assert(socks_state->state != ST_SENT_REPLY);
+  assert(socks_state->state != ST_SENT_REPLY &&
+         socks_state->state != ST_HAVE_ADDR);
 
   if (socks_state->version == 0) {
     /* First byte of all SOCKS data is the version field. */
     evbuffer_remove(source, &socks_state->version, 1);
-    if (socks_state->version != SOCKS5_VERSION) {
+    if (socks_state->version != SOCKS5_VERSION &&
+        socks_state->version != SOCKS4_VERSION) {
       printf("socks: unexpected version %d", (int)socks_state->version);
       goto broken;
     }
@@ -331,6 +426,17 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
   }
 
   switch(socks_state->version) {
+  case SOCKS4_VERSION:
+    if (socks_state->state == ST_WAITING) {
+      r = socks4_read_request(source, socks_state);
+      if (r == -1)
+        goto broken;
+      else if (r == 0)
+        return 0;
+      socks_state->state = ST_HAVE_ADDR;
+      return 1;
+    }
+    break;
   case SOCKS5_VERSION:
     if (socks_state->state == ST_WAITING) {
       /* We don't know this connection. We have to do method negotiation. */
@@ -353,7 +459,6 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
     }
     break;
   default:
-    printf("socks: Nice packet! Now beat it!\n");
     goto broken;
   }
 
@@ -388,6 +493,8 @@ socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status)
 {
   if (state->version == 5)
     return socks5_send_reply(dest, state, status);
+  else if (state->version == 4)
+    return socks4_send_reply(dest, state, status);
   else
     return -1;
 }
