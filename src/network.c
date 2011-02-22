@@ -330,7 +330,15 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
     dbg(("Connection done\n"));
     bufferevent_enable(conn->input, EV_READ|EV_WRITE);
     if (conn->mode == LSN_SOCKS_CLIENT) {
+      struct sockaddr_storage ss;
+      struct sockaddr *sa = (struct sockaddr*)&ss;
+      socklen_t slen = sizeof(&ss);
       assert(conn->socks_state);
+      if (getpeername(bufferevent_getfd(bev), sa, &slen) == 0) {
+        /* Figure out where we actually connected to so that we can tell the
+         * socks client */
+        socks_state_set_address(conn->socks_state, sa);
+      }
       socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
                        SOCKS5_REP_SUCCESS);
 

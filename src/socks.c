@@ -181,28 +181,41 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
    This sends the appropriate reply to the client on 'reply_dest'.
 
    Server Reply (Server -> Client):
-   | version | rep | rsv | atyp | destaddr | destport
-   1b       1b    1b    1b       4b         2b
+   | version | rep | rsv | atyp | destaddr           | destport
+     1b         1b    1b    1b       4b/16b/1+Nb         2b
 */
 static int
 socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                   int status)
 {
   /* This is the buffer that contains our reply to the client. */
-  uchar p[SIZEOF_SOCKS5_REQ_REPLY];
-  
+  uchar p[4];
+  uchar addr[16];
+  const char *extra = NULL;
+  int addrlen;
+  uint16_t port;
   /* We either failed or succeded.
      Either way, we should send something back to the client */
   p[0] = SOCKS5_VERSION;    /* Version field */
   p[1] = (unsigned char) status; /* Reply field */
   p[2] = 0;                 /* Reserved */
-  p[3] = SOCKS5_ATYP_IPV4;  /* Address Type */
-  /* Leaving destport/destaddr to zero */
-  /* XXXX this is not correct */
-  memset(&p[4], 0, 6); /* destport/destaddr */
+  if (state->parsereq.af == AF_UNSPEC) {
+    addrlen = 1;
+    addr[0] = strlen(state->parsereq.addr);
+    extra = state->parsereq.addr;
+    p[3] = SOCKS5_ATYP_FQDN;
+  } else {
+    addrlen = (state->parsereq.af == AF_INET) ? 4 : 16;
+    p[3] = (state->parsereq.af == AF_INET) ? SOCKS5_ATYP_IPV4 : SOCKS5_ATYP_IPV6;
+    evutil_inet_pton(AF_INET, state->parsereq.addr, addr);
+  }
+  port = htons(state->parsereq.port);
 
-  evbuffer_add(reply_dest,
-               p, SIZEOF_SOCKS5_REQ_REPLY);
+  evbuffer_add(reply_dest, p, 4);
+  evbuffer_add(reply_dest, addr, addrlen);
+  if (extra)
+    evbuffer_add(reply_dest, extra, strlen(extra));
+  evbuffer_add(reply_dest, &port, 2);
 
   state->state = ST_SENT_REPLY; /* SOCKS phase is now done. */
 
@@ -489,6 +502,34 @@ socks_state_get_address(const socks_state_t *state,
 }
 
 int
+socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
+{
+  int port;
+  if (sa->sa_family == AF_INET) {
+    const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
+    port = sin->sin_port;
+    if (evutil_inet_ntop(AF_INET, &sin->sin_addr, state->parsereq.addr, sizeof(state->parsereq.addr)) == NULL)
+      return -1;
+  } else if (sa->sa_family == AF_INET6) {
+    if (state->version == 4) {
+      printf("Oops; socks4 doesn't allow ipv6 addresses\n");
+      return -1;
+    }
+    const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
+    port = sin6->sin6_port;
+    if (evutil_inet_ntop(AF_INET6, &sin6->sin6_addr, state->parsereq.addr, sizeof(state->parsereq.addr)) == NULL)
+      return -1;
+  } else {
+    printf("Unknown address family %d\n", sa->sa_family);
+    return -1;
+  }
+
+  state->parsereq.port = ntohs(port);
+  state->parsereq.af = sa->sa_family;
+  return 0;
+}
+
+int
 socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status)
 {
   if (state->version == 5)
@@ -498,3 +539,4 @@ socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status)
   else
     return -1;
 }
+
