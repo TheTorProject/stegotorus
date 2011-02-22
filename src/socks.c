@@ -19,29 +19,26 @@
 
 /**
    General idea:
-   
+
    Client ------------------------> Server
           Method Negotiation Packet
-          
+
    Client <------------------------ Server
           Method Negotiation Reply
-          
+
    Client ------------------------> Server
-               Client request 
-               
+               Client request
+
    Client <------------------------ Server
                Server reply
-               
+
    "Method Negotiation Packet" is handled by: socks5_handle_negotiation()
-   "Method Negotiation Reply" is done by: socks5_do_auth()
+   "Method Negotiation Reply" is done by: socks5_reply_negotiation()
    "Client request" is handled by: socks5_validate_request()
-   
-   XXX: Do we actually need FQDN support? 
-   It's a lot of implementation trouble for nothing, since our bridges
-   are referenced with IPV4 addresses. Anyway, I implemented it.
 */
 
-static int socks5_do_auth(struct evbuffer *dest);
+static int socks5_do_negotiation(struct evbuffer *dest,
+                                    unsigned int neg_was_success);
 static int socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                              int status);
 
@@ -53,7 +50,7 @@ socks_state_new(void)
   if (!state)
     return NULL;
   state->state = ST_WAITING;
-  
+
   return state;
 }
 
@@ -70,26 +67,25 @@ socks_state_free(socks_state_t *s)
    the appropriate reply to 'dest'.
    If the request was correct and can be fulfilled, it connects 'output'
    to the location the client specified to actually set up the proxying.
-   
+
    XXX: You will notice some "sizeof(req)-1" that initially make no
    sense, but because of handle_socks() removing the version byte,
    there are only 3 bytes (==sizeof(req)-1) between the start
    of 'source' and addrlen. I don't know if replacing it with plain "3"
-   would make more sense. 
-   
+   would make more sense.
+
    Client Request (Client -> Server)
 */
 int
 socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
 {
-  /** XXX: max FQDN size is 255. */ 
+  /** XXX: max FQDN size is 255. */
   /* #define MAXFQDN */
   char destaddr[255+1]; /* Dest address */
   u_int16_t destport;    /* Dest port */
-  
-  /* buflength is without the version byte. */
+
   unsigned int buflength = evbuffer_get_length(source);
-  
+
   if (buflength < SIZEOF_SOCKS5_STATIC_REQ+1) {
     printf("socks: request packet is too small (1).\n");
     return 0;
@@ -101,15 +97,15 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   uchar p[SIZEOF_SOCKS5_STATIC_REQ+1];
   if (evbuffer_copyout(source, p, SIZEOF_SOCKS5_STATIC_REQ+1) < 0)
     goto err;
-  
+
   /* p[0] = Version
      p[1] = Command field
      p[2] = Reserved field */
   if (p[0] != SOCKS5_VERSION || p[1] != SOCKS5_CMD_CONNECT || p[2] != 0x00) {
-    printf("socks: Only CONNECT supported. Sowwy!\n"); 
+    printf("socks: Only CONNECT supported. Sowwy!\n");
     goto err;
   }
-  
+
   unsigned int addrlen,af,extralen=0;
   /* p[3] is Address type field */
   switch(p[3]) {
@@ -139,7 +135,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     printf("socks: request packet too small %d:%d (2)\n", buflength, minsize);
     return 0;
   }
-  
+
   /* Drain data from the buffer to get to the good part, the actual
      address and port. */
   if (evbuffer_drain(source, SIZEOF_SOCKS5_STATIC_REQ) == -1)
@@ -148,13 +144,13 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   if (af == AF_UNSPEC)
     if (evbuffer_drain(source, 1) == -1)
       goto err;
-  
+
   if (evbuffer_remove(source, destaddr, addrlen) != addrlen)
     assert(0);
-  
+
   if (evbuffer_remove(source, (char *)&destport, 2) != 2)
     assert(0);
-  
+
   destaddr[addrlen] = '\0';
 
   if (af == AF_UNSPEC) {
@@ -170,12 +166,12 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
 
   parsereq->port = ntohs(destport);
   parsereq->af = af;
-  
+
   return 1;
-  
+
  err:
   return -1;
-}  
+}
 
 /**
    This sends the appropriate reply to the client on 'reply_dest'.
@@ -230,7 +226,7 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
    This function handles the initial SOCKS5 packet in 'source' sent by
    the client, which negotiates the version and method of SOCKS.  If
    the packet is actually valid, we reply to 'dest'.
-   
+
    Method Negotiation Packet (Client -> Server):
    nmethods | methods[nmethods] |
        b           1-255b
@@ -240,7 +236,7 @@ socks5_handle_negotiation(struct evbuffer *source,
                           struct evbuffer *dest, socks_state_t *state)
 {
   unsigned int found_noauth, i;
-  
+
   uchar nmethods;
 
   evbuffer_copyout(source, &nmethods, 1);
@@ -256,57 +252,46 @@ socks5_handle_negotiation(struct evbuffer *source,
   p = malloc(nmethods);
   if (!p) {
     printf("malloc failed!\n");
-    goto err;
+    return -1;
   }
   if (evbuffer_remove(source, p, nmethods) < 0)
     assert(0);
-  
+
   for (found_noauth=0, i=0; i<nmethods ; i++) {
     if (p[i] == SOCKS5_METHOD_NOAUTH) {
       found_noauth = 1;
       break;
     }
   }
-  
-  if (!found_noauth) {
-    printf("socks: Client doesn't seem to support NOUATH!\n");
-    /* XXX should send back [05 FF] to say, I'm socks5 and I didn't like any
-       of those methods */
-    goto err;
-  }
-  
-  /* Packet is legit. Rejoice! */
+
   free(p);
 
-  return socks5_do_auth(dest);
-  
- err: 
-  assert(p);
-  free(p);
-  
-  return -1;
+  return socks5_do_negotiation(dest,found_noauth);
 }
-    
+
 /**
    This function sends a method negotiation reply to 'dest'.
-   it's called by socks5_handle_negotiation().
-   
+   If 'neg_was_success' is true send a positive response,
+   otherwise send a negative one.
+   It returns -1 if no suitable negotiation methods were found,
+   or if there was an error during replying.
+
    Method Negotiation Reply (Server -> Client):
    | version | method selected |
        1b           1b
 */
 static int
-socks5_do_auth(struct evbuffer *dest)
+socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
 {
   uchar reply[2];
   reply[0] = SOCKS5_VERSION;
-  reply[1] = SOCKS5_METHOD_NOAUTH;
-  
-  if (evbuffer_add(dest, reply, 2) == -1)
+
+  reply[1] = neg_was_success ? SOCKS5_METHOD_NOAUTH : SOCKS5_METHOD_FAIL;
+
+  if (evbuffer_add(dest, reply, 2) == -1 || !neg_was_success)
     return -1;
-  else {
+  else
     return 1;
-  }
 }
 
 static int
