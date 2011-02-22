@@ -45,7 +45,8 @@ derive_key(protocol_state_t *state, const char *keytype)
     digest_update(c, state->secret_seed, SHARED_SECRET_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
-  cryptstate = crypt_new(buf, sizeof(buf));
+  cryptstate = crypt_new(buf, 16);
+  crypt_set_iv(cryptstate, buf+16, 16);
   memset(buf, 0, sizeof(buf));
   digest_free(c);
   return cryptstate;
@@ -65,12 +66,12 @@ derive_padding_key(protocol_state_t *state, const uchar *seed,
     digest_update(c, state->secret_seed, OBFUSCATE_SEED_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
-  cryptstate = crypt_new(buf, sizeof(buf));
-  memset(buf, 0, sizeof(buf));
+  cryptstate = crypt_new(buf, 16);
+  crypt_set_iv(cryptstate, buf+16, 16);
+  memset(buf, 0, 16);
   digest_free(c);
   return cryptstate;
 }
-
 
 /**
    Return a new object to handle protocol state.  If 'initiator' is true,

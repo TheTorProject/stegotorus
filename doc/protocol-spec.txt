@@ -74,9 +74,9 @@ The Twobfuscator
      INIT_SECRET = MAC("Initiator obfuscated data", INIT_SEED|RESP_SEED)
      RESP_SECRET = MAC("Responder obfuscated data", INIT_SEED|RESP_SEED)
      INIT_KEY = INIT_SECRET[:KEYLEN]
-     INIT_IV = INIT_SECRET[:IVLEN]
+     INIT_IV = INIT_SECRET[KEYLEN:]
      RESP_KEY = RESP_SECRET[:KEYLEN]
-     RESP_IV = RESP_SECRET[:IVLEN]
+     RESP_IV = RESP_SECRET[KEYLEN:]
 
    The INIT_KEY value keys a stream cipher used to encrypt values from
    initiator to responder thereafter.  The stream cipher's IV is
