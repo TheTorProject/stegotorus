@@ -424,7 +424,7 @@ test_proto_wrong_handshake_plength(void *data)
   tt_assert(client_state);
   tt_assert(server_state);
 
-  uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
+  uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8 + 1];
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);
   uint32_t plength, send_plength;
   const uchar *seed;
