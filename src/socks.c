@@ -10,6 +10,7 @@
 #define SOCKS_PRIVATE
 #include "socks.h"
 #include "crypt.h"
+#include "util.h"
 
 #include <event2/buffer.h>
 #include <event2/event.h>
@@ -326,6 +327,7 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
       printf("socks: unexpected version %d", (int)socks_state->version);
       goto broken;
     }
+    dbg(("Got version %d\n",(int)socks_state->version));
   }
 
   switch(socks_state->version) {
@@ -345,8 +347,9 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
       r = socks5_handle_request(source,&socks_state->parsereq);
       if (r == -1)
         goto broken;
-      else
-        return r;
+      else if (r == 1)
+        socks_state->state = ST_HAVE_ADDR;
+      return r;
     }
     break;
   default:

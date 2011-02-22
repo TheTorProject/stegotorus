@@ -228,6 +228,9 @@ socks_read_cb(struct bufferevent *bev, void *arg)
       r = bufferevent_socket_connect_hostname(conn->output,
                                               get_evdns_base(),
                                               af, addr, port);
+      bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+      dbg(("socket_connect_hostname said %d! (%s,%d)\n", r, addr, port));
+
       if (r < 0) {
         /* XXXX send socks reply */
         conn_free(conn);
@@ -336,7 +339,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       socks_state_free(conn->socks_state);
       conn->socks_state = NULL;
       bufferevent_setcb(conn->input,
-                        encrypted_read_cb, NULL, input_event_cb, conn);
+                        plaintext_read_cb, NULL, input_event_cb, conn);
       if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
         encrypted_read_cb(bev, conn->input);
     }
