@@ -39,6 +39,7 @@ int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status);
 #define SOCKS4_VERSION         0x04
 
 #define SOCKS5_METHOD_NOAUTH   0x00
+#define SOCKS5_METHOD_FAIL     0xff
 
 #define SOCKS5_CMD_CONNECT     0x01
 

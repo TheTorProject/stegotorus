@@ -37,8 +37,12 @@ test_socks_send_negotiation(void *data)
   
   tt_int_op(1, ==, socks5_handle_negotiation(source,dest,state));
   tt_int_op(0, ==, evbuffer_get_length(source));
-  /* XXX test data in 'dest' */
-  
+
+  uchar rep1[2];
+  tt_int_op(2, ==, evbuffer_remove(dest,rep1,2));
+  tt_assert(rep1[0] == 5);
+  tt_assert(rep1[1] == 0);
+
   /* Second test:
      Ten methods: One of them NOAUTH */
   uchar req2[10];
@@ -50,8 +54,12 @@ test_socks_send_negotiation(void *data)
   
   tt_int_op(1, ==, socks5_handle_negotiation(source,dest,state));
   tt_int_op(0, ==, evbuffer_get_length(source));
-  /* XXX test data in 'dest' */
-  
+
+  uchar rep2[2];
+  tt_int_op(2, ==, evbuffer_remove(dest,rep2,2));
+  tt_assert(rep2[0] == 5);
+  tt_assert(rep2[1] == 0);
+
   /* Third test:
      100 methods: No NOAUTH */
   uchar req3[100];
@@ -62,8 +70,12 @@ test_socks_send_negotiation(void *data)
   
   tt_int_op(-1, ==, socks5_handle_negotiation(source,dest,state));
   tt_int_op(0, ==, evbuffer_get_length(source)); /* all data removed */
-  /* XXX test data in 'dest' */
-  
+
+  uchar rep3[2];
+  tt_int_op(2, ==, evbuffer_remove(dest,rep3,2));
+  tt_assert(rep3[0] == 5);
+  tt_assert(rep3[1] == 0xff);
+
   /* Fourth test:
      nmethods field = 4 but 3 actual methods.
 
@@ -92,7 +104,11 @@ test_socks_send_negotiation(void *data)
   tt_int_op(1, ==, socks5_handle_negotiation(source,dest,state));
   tt_int_op(1, ==, evbuffer_get_length(source)); /* 4 bytes removed */
   evbuffer_drain(source, 1);
-  /* check contents of "dest" */
+
+  uchar rep4[2];
+  tt_int_op(2, ==, evbuffer_remove(dest,rep4,2));
+  tt_assert(rep4[0] == 5);
+  tt_assert(rep4[1] == 0);
 
  end:
   if (state)
