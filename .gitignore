@@ -1,5 +1,8 @@
 *~
 *.o
+*.gcov
+*.gcda
+*.gcno
 
 Makefile
 Makefile.in
