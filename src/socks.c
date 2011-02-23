@@ -39,9 +39,6 @@
 
 static int socks5_do_negotiation(struct evbuffer *dest,
                                     unsigned int neg_was_success);
-static int socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
-                             int status);
-
 
 socks_state_t *
 socks_state_new(void)
@@ -180,7 +177,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
    | version | rep | rsv | atyp | destaddr           | destport
      1b         1b    1b    1b       4b/16b/1+Nb         2b
 */
-static int
+int
 socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                   int status)
 {
