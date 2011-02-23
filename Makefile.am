@@ -12,7 +12,7 @@ libobfsproxy_a_SOURCES = \
 	src/crypt_protocol.c \
 	src/network.c \
 	src/socks.c  \
-	src/util.c   
+	src/util.c
 
 
 obfsproxy_SOURCES = \
