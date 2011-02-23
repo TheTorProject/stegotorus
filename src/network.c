@@ -108,7 +108,7 @@ simple_listener_cb(struct evconnlistener *evcl,
 
   conn->mode = lsn->mode;
   conn->proto_state = protocol_state_new(lsn->mode != LSN_SIMPLE_SERVER);
-  if (!conn->proto_state) 
+  if (!conn->proto_state)
     goto err;
 
   if (conn->mode == LSN_SOCKS_CLIENT) {
@@ -138,8 +138,8 @@ simple_listener_cb(struct evconnlistener *evcl,
     bufferevent_setcb(conn->input,
                       socks_read_cb, NULL, input_event_cb, conn);
   }
-  
-  bufferevent_enable(conn->input, EV_READ|EV_WRITE);  
+
+  bufferevent_enable(conn->input, EV_READ|EV_WRITE);
 
   /* New bufferevent to connect to the target address */
   conn->output = bufferevent_socket_new(base,
@@ -147,7 +147,7 @@ simple_listener_cb(struct evconnlistener *evcl,
                                         BEV_OPT_CLOSE_ON_FREE);
   if (!conn->output)
     goto err;
-  
+
   if (conn->mode == LSN_SIMPLE_SERVER)
     bufferevent_setcb(conn->output,
                       plaintext_read_cb, NULL, output_event_cb, conn);

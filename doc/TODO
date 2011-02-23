@@ -13,7 +13,6 @@ Still to implement for minimal function:
       communicate
     - Make sure handshake still works if data arrives in a trickle
     - Make sure bogus handshake gets rejected
-  - Client-side: Socks support
 
 Later:
 
@@ -21,8 +20,8 @@ Later:
     are pluggable.
     - Instead of having the listener constructor take a shared secret, have
       it take a "protocol state factory".
-    - Use the standard C function-pointer trick to turn "protocol state" into 
-      
+    - Use the standard C function-pointer trick to turn "protocol state" into
+      a class-like thing
 
   - Drop the openssl dependency (?)
   - some way to set a shared secret or two or three

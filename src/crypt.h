@@ -17,7 +17,7 @@ typedef struct digest_t digest_t;
 
 typedef unsigned char uchar;
 
-/** Initialize global crypto state.  Return 0 on success, -1 on failure */
+/** Initialize global crypto state.  Returrn 0 on success, -1 on failure */
 int initialize_crypto(void);
 /** Clean up global crypto state */
 void cleanup_crypto(void);
