@@ -10,6 +10,7 @@
 #include "network.h"
 #include "util.h"
 #include "socks.h"
+#include "module.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -27,6 +28,7 @@ struct listener_t {
   struct evconnlistener *listener;
   struct sockaddr_storage target_address;
   int target_address_len;
+  struct protocol_t *proto; /* Protocol that this listener can speak. */
   int mode;
   char shared_secret[SHARED_SECRET_LENGTH];
   unsigned int have_shared_secret : 1;
@@ -40,13 +42,15 @@ static void conn_free(conn_t *conn);
 static void close_conn_on_flush(struct bufferevent *bev, void *arg);
 static void plaintext_read_cb(struct bufferevent *bev, void *arg);
 static void socks_read_cb(struct bufferevent *bev, void *arg);
-static void encrypted_read_cb(struct bufferevent *bev, void *arg);
+/* ASN Changed encrypted_read_cb() to obfuscated_read_cb(), it sounds
+   a bit more obfsproxy generic. I still don't like it though. */
+static void obfsucated_read_cb(struct bufferevent *bev, void *arg);
 static void input_event_cb(struct bufferevent *bev, short what, void *arg);
 static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 
 listener_t *
 listener_new(struct event_base *base,
-             int mode,
+             int mode, int protocol,
              const struct sockaddr *on_address, int on_address_len,
              const struct sockaddr *target_address, int target_address_len,
              const char *shared_secret, size_t shared_secret_len)
@@ -55,9 +59,17 @@ listener_new(struct event_base *base,
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
   listener_t *lsn = calloc(1, sizeof(listener_t));
 
-  lsn->mode = mode;
   assert(mode == LSN_SIMPLE_CLIENT || mode == LSN_SIMPLE_SERVER ||
          mode == LSN_SOCKS_CLIENT);
+
+  struct protocol_t *proto = set_up_module(protocol);
+  if (!proto) {
+    printf("This is just terrible. We can't even set up a module!Seppuku time!\n");
+    exit(-1);
+  }
+
+  lsn->proto = proto;
+  lsn->mode = mode;
 
   if (target_address) {
     assert(target_address_len <= sizeof(struct sockaddr_storage));
@@ -107,7 +119,13 @@ simple_listener_cb(struct evconnlistener *evcl,
   dbg(("Got a connection\n"));
 
   conn->mode = lsn->mode;
-  conn->proto_state = protocol_state_new(lsn->mode != LSN_SIMPLE_SERVER);
+  conn->proto = lsn->proto;
+
+  /* ASN Is this actually modular. Will all protocols need to init here?
+     I don't think so. I don't know. */
+  int is_initiator = (conn->mode != LSN_SIMPLE_SERVER) ? 1 : 0;
+  conn->proto_state = lsn->proto->init(&is_initiator);
+
   if (!conn->proto_state)
     goto err;
 
@@ -129,7 +147,7 @@ simple_listener_cb(struct evconnlistener *evcl,
 
   if (conn->mode == LSN_SIMPLE_SERVER) {
     bufferevent_setcb(conn->input,
-                      encrypted_read_cb, NULL, input_event_cb, conn);
+                      obfsucated_read_cb, NULL, input_event_cb, conn);
   } else if (conn->mode == LSN_SIMPLE_CLIENT) {
     bufferevent_setcb(conn->input,
                       plaintext_read_cb, NULL, input_event_cb, conn);
@@ -153,13 +171,14 @@ simple_listener_cb(struct evconnlistener *evcl,
                       plaintext_read_cb, NULL, output_event_cb, conn);
   else
     bufferevent_setcb(conn->output,
-                      encrypted_read_cb, NULL, output_event_cb, conn);
+                      obfsucated_read_cb, NULL, output_event_cb, conn);
 
   /* Queue output right now. */
   struct bufferevent *encrypted =
     conn->mode == LSN_SIMPLE_SERVER ? conn->input : conn->output;
-  if (proto_send_initial_message(conn->proto_state,
-                                 bufferevent_get_output(encrypted))<0)
+  /* ASN Send handshake */
+  if (lsn->proto->handshake(conn->proto_state,
+                            bufferevent_get_output(encrypted))<0)
     goto err;
 
   if (conn->mode == LSN_SIMPLE_SERVER || conn->mode == LSN_SIMPLE_CLIENT) {
@@ -184,7 +203,7 @@ static void
 conn_free(conn_t *conn)
 {
   if (conn->proto_state)
-    protocol_state_free(conn->proto_state);
+    conn->proto->destroy((void *)conn->proto_state);
   if (conn->socks_state)
     socks_state_free(conn->socks_state);
   if (conn->input)
@@ -259,21 +278,21 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
   other = (bev == conn->input) ? conn->output : conn->input;
 
   dbg(("Got data on plaintext side\n"));
-  if (proto_send(conn->proto_state,
+  if (conn->proto->send(conn->proto_state,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
     conn_free(conn);
 }
 
 static void
-encrypted_read_cb(struct bufferevent *bev, void *arg)
+obfsucated_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   struct bufferevent *other;
   other = (bev == conn->input) ? conn->output : conn->input;
 
   dbg(("Got data on encrypted side\n"));
-  if (proto_recv(conn->proto_state,
+  if (conn->proto->recv(conn->proto_state,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
     conn_free(conn);
@@ -309,6 +328,8 @@ input_event_cb(struct bufferevent *bev, short what, void *arg)
   assert(bev == conn->input);
 
   if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
+    printf("Got error: %s\n",
+           evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     error_or_eof(conn, bev, conn->output);
   }
   /* XXX we don't expect any other events */
@@ -321,6 +342,8 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
   assert(bev == conn->output);
 
   if (conn->flushing || (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR))) {
+    printf("Got error: %s\n",
+           evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     error_or_eof(conn, bev, conn->input);
     return;
   }
@@ -341,7 +364,6 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       }
       socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
                        SOCKS5_REP_SUCCESS);
-
       /* we sent a socks reply.  We can finally move over to being a regular
          input bufferevent. */
       socks_state_free(conn->socks_state);
@@ -349,7 +371,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       bufferevent_setcb(conn->input,
                         plaintext_read_cb, NULL, input_event_cb, conn);
       if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
-        encrypted_read_cb(bev, conn->input);
+        obfsucated_read_cb(bev, conn->input);
     }
   }
   /* XXX we don't expect any other events */

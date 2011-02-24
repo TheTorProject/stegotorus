@@ -13,7 +13,7 @@ typedef struct listener_t *listener;
 struct sockaddr;
 struct event_base;
 struct socks_state_t;
-struct protocol_state_t;
+
 
 #define LSN_SIMPLE_CLIENT 1
 #define LSN_SIMPLE_SERVER 2
@@ -24,7 +24,7 @@ struct addrinfo;
 
 listener_t *listener_new(
                          struct event_base *base,
-                         int mode,
+                         int mode, int protocol,
                          const struct sockaddr *on_address, int on_address_len,
                          const struct sockaddr *target_address, int target_address_len,
                          const char *shared_secret, size_t shared_secret_len);
@@ -33,7 +33,10 @@ void listener_free(listener_t *listener);
 #ifdef NETWORK_PRIVATE
 typedef struct conn_t {
   struct socks_state_t *socks_state;
-  struct protocol_state_t *proto_state;
+  void *proto_state; /* ASN Is this correct?
+                        Supposedly, it represents a generic proto state. */
+  struct protocol_t *proto; /* ASN Do we like this here? We probably don't.
+                               But it's so convenient!! So convenient! */
   int mode;
   struct bufferevent *input;
   struct bufferevent *output;

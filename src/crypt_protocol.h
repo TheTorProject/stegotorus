@@ -10,20 +10,23 @@
 
 #include <sys/types.h>
 
-typedef struct protocol_state_t protocol_state_t;
+typedef struct brl_state_t brl_state_t;
 struct evbuffer;
+struct protocol_t;
 
 #define SHARED_SECRET_LENGTH 16
 
-protocol_state_t *protocol_state_new(int initiator);
-void protocol_state_set_shared_secret(protocol_state_t *state,
+brl_state_t *brl_state_new(int *initiator);
+void brl_state_set_shared_secret(brl_state_t *state,
                                       const char *secret, size_t secretlen);
-void protocol_state_free(protocol_state_t *state);
-int proto_send_initial_message(protocol_state_t *state, struct evbuffer *buf);
-int proto_send(protocol_state_t *state,
+void brl_state_free(brl_state_t *state);
+int brl_send_initial_message(brl_state_t *state, struct evbuffer *buf);
+int brl_send(brl_state_t *state,
                struct evbuffer *source, struct evbuffer *dest);
-int proto_recv(protocol_state_t *state, struct evbuffer *source,
+int brl_recv(brl_state_t *state, struct evbuffer *source,
                struct evbuffer *dest);
+
+void *new_brl(struct protocol_t *proto_struct);
 
 
 #ifdef CRYPT_PROTOCOL_PRIVATE
@@ -46,7 +49,7 @@ int proto_recv(protocol_state_t *state, struct evbuffer *source,
 #define INITIATOR_SEND_TYPE "Initiator obfuscated data"
 #define RESPONDER_SEND_TYPE "Responder obfuscated data"
 
-struct protocol_state_t {
+struct brl_state_t {
   /** Current protocol state.  We start out waiting for key information.  Then
       we have a key and wait for padding to arrive.  Finally, we are sending
       and receiving bytes on the connection.

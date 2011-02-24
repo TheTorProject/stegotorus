@@ -14,6 +14,7 @@
 #include "crypt.h"
 #include "network.h"
 #include "util.h"
+#include "module.h"
 
 #ifndef __GNUC__
 #define __attribute__(x)
@@ -92,12 +93,6 @@ main(int argc, const char **argv)
     sa_target = (struct sockaddr *)&ss_target;
   }
 
-  /* Initialize crypto */
-  if (initialize_crypto() < 0) {
-    fprintf(stderr, "Can't initialize crypto; failing\n");
-    return 2;
-  }
-
   /* Initialize libevent */
   base = event_base_new();
   if (base == NULL) {
@@ -115,8 +110,9 @@ main(int argc, const char **argv)
   sigevent = evsignal_new(base, SIGINT, handle_signal_cb, (void*) base);
 
   /* start an evconnlistener on the appropriate port(s) */
+  /* ASN We hardcode BRL_PROTOCOL for now. */
   listener = listener_new(base,
-                          mode,
+                          mode, BRL_PROTOCOL,
                           (struct sockaddr *)&ss_listen, sl_listen,
                           sa_target, sl_target,
                           NULL, 0);

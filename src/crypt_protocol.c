@@ -18,6 +18,18 @@
 #include "crypt.h"
 #include "crypt_protocol.h"
 #include "util.h"
+#include "module.h"
+
+void *
+new_brl(struct protocol_t *proto_struct) {
+  proto_struct->destroy = (void *)brl_state_free;
+  proto_struct->init = (void *)brl_state_new;
+  proto_struct->handshake = (void *)brl_send_initial_message;
+  proto_struct->send = (void *)brl_send;
+  proto_struct->recv = (void *)brl_recv;
+
+  return NULL;
+}
 
 /** Return true iff the OBFUSCATE_SEED_LENGTH-byte seed in 'seed' is nonzero */
 static int
@@ -31,7 +43,7 @@ seed_nonzero(const uchar *seed)
    'state'.  Returns NULL on failure.
  */
 static crypt_t *
-derive_key(protocol_state_t *state, const char *keytype)
+derive_key(brl_state_t *state, const char *keytype)
 {
   crypt_t *cryptstate;
   uchar buf[32];
@@ -53,7 +65,7 @@ derive_key(protocol_state_t *state, const char *keytype)
 }
 
 static crypt_t *
-derive_padding_key(protocol_state_t *state, const uchar *seed,
+derive_padding_key(brl_state_t *state, const uchar *seed,
                    const char *keytype)
 {
   crypt_t *cryptstate;
@@ -78,18 +90,18 @@ derive_padding_key(protocol_state_t *state, const uchar *seed,
    we're the handshake initiator.  Otherwise, we're the responder.  Return
    NULL on failure.
  */
-protocol_state_t *
-protocol_state_new(int initiator)
+brl_state_t *
+brl_state_new(int *initiator)
 {
-  protocol_state_t *state = calloc(1, sizeof(protocol_state_t));
+  brl_state_t *state = calloc(1, sizeof(brl_state_t));
   uchar *seed;
   const char *send_pad_type;
 
   if (!state)
     return NULL;
   state->state = ST_WAIT_FOR_KEY;
-  state->we_are_initiator = initiator;
-  if (initiator) {
+  state->we_are_initiator = *initiator;
+  if (*initiator) {
     send_pad_type = INITIATOR_PAD_TYPE;
     seed = state->initiator_seed;
   } else {
@@ -115,7 +127,7 @@ protocol_state_new(int initiator)
 
 /** Set the shared secret to be used with this protocol state. */
 void
-protocol_state_set_shared_secret(protocol_state_t *state,
+brl_state_set_shared_secret(brl_state_t *state,
                                  const char *secret, size_t secretlen)
 {
   if (secretlen > SHARED_SECRET_LENGTH)
@@ -128,7 +140,7 @@ protocol_state_set_shared_secret(protocol_state_t *state,
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
  */
 int
-proto_send_initial_message(protocol_state_t *state, struct evbuffer *buf)
+brl_send_initial_message(brl_state_t *state, struct evbuffer *buf)
 {
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE), plength, send_plength;
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
@@ -193,8 +205,8 @@ crypt_and_transmit(crypt_t *crypto,
    using the state in 'state'.  Returns 0 on success, -1 on failure.
  */
 int
-proto_send(protocol_state_t *state,
-           struct evbuffer *source, struct evbuffer *dest)
+brl_send(brl_state_t *state,
+          struct evbuffer *source, struct evbuffer *dest)
 {
   if (state->send_crypto) {
     /* Our crypto is set up; just relay the bytes */
@@ -216,7 +228,7 @@ proto_send(protocol_state_t *state,
    keys.  Returns 0 on success, -1 on failure.
  */
 static int
-init_crypto(protocol_state_t *state)
+init_crypto(brl_state_t *state)
 {
   const char *send_keytype;
   const char *recv_keytype;
@@ -253,7 +265,7 @@ init_crypto(protocol_state_t *state)
  * Returns x for "don't call again till you have x bytes".  0 for "all ok". -1
  * for "fail, close" */
 int
-proto_recv(protocol_state_t *state, struct evbuffer *source,
+brl_recv(brl_state_t *state, struct evbuffer *source,
            struct evbuffer *dest)
 {
   if (state->state == ST_WAIT_FOR_KEY) {
@@ -330,7 +342,7 @@ proto_recv(protocol_state_t *state, struct evbuffer *source,
 }
 
 void
-protocol_state_free(protocol_state_t *s)
+brl_state_free(brl_state_t *s)
 {
   if (s->send_crypto)
     crypt_free(s->send_crypto);
@@ -342,6 +354,6 @@ protocol_state_free(protocol_state_t *s)
     crypt_free(s->recv_padding_crypto);
   if (s->pending_data_to_send)
     evbuffer_free(s->pending_data_to_send);
-  memset(s, 0x0a, sizeof(protocol_state_t));
+  memset(s, 0x0a, sizeof(brl_state_t));
   free(s);
 }
