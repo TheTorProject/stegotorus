@@ -9,7 +9,7 @@
 
 #define SOCKS_PRIVATE
 #include "../socks.h"
-#include "../crypt.h"
+#include "../plugins/obfs2_crypt.h"
 #include "../util.h"
 #include "../plugins/obfs2.h"
 

@@ -3,7 +3,6 @@
 #include <assert.h>
 
 #include "protocol.h"
-#include "crypt.h"
 #include "network.h"
 
 #include "plugins/obfs2.h"
@@ -18,14 +17,8 @@ set_up_protocol(int protocol) {
 
   if (protocol == BRL_PROTOCOL) {
     proto->new = &obfs2_new;
-    proto->new(proto);
-
-    if (initialize_crypto() < 0) {
-      fprintf(stderr, "Can't initialize crypto; failing\n");
-      return NULL;
-    }
-
-    printf("Protocol constructed\n");
+    if (proto->new(proto))
+      printf("Protocol constructed\n");
   }
   /* elif { other protocols } */
 

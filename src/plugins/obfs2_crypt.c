@@ -26,7 +26,7 @@
 #include <openssl/err.h>
 
 #define CRYPT_PRIVATE
-#include "crypt.h"
+#include "obfs2_crypt.h"
 
 #if OPENSSL_VERSION_NUMBER >= 0x0090800f
 #define USE_OPENSSL_RANDPOLL 1

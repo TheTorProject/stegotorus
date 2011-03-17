@@ -26,7 +26,7 @@ int obfs2_send(obfs2_state_t *state,
 int obfs2_recv(obfs2_state_t *state, struct evbuffer *source,
                struct evbuffer *dest);
 
-void *obfs2_new(struct protocol_t *proto_struct);
+int obfs2_new(struct protocol_t *proto_struct);
 
 
 #ifdef CRYPT_PROTOCOL_PRIVATE

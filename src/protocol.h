@@ -16,7 +16,7 @@ int proto_recv(struct protocol_t *proto, void *source, void *dest);
 /* ASN Why the hell do half of them return int? FIXME */
 struct protocol_t {
   /* Constructor: creates the protocol; sets up functions etc. */
-  void *(*new)(struct protocol_t *self);
+  int (*new)(struct protocol_t *self);
   /* Destructor */
   void (*destroy)(void *state);
 

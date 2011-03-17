@@ -5,8 +5,8 @@
    in all redistributed copies and derived works.  There is no warranty.
 */
 
-#ifndef CRYPT_H
-#define CRYPT_H
+#ifndef OBFS2_CRYPT_H
+#define OBFS2_CRYPT_H
 
 #include <sys/types.h>
 

@@ -17,7 +17,7 @@
 
 #define CRYPT_PROTOCOL_PRIVATE
 #define CRYPT_PRIVATE
-#include "../crypt.h"
+#include "../plugins/obfs2_crypt.h"
 #include "../util.h"
 #include "../protocol.h"
 #include "../plugins/obfs2.h"

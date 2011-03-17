@@ -11,7 +11,6 @@
 #include <signal.h>
 
 #include <event2/event.h>
-#include "crypt.h"
 #include "network.h"
 #include "util.h"
 #include "protocol.h"

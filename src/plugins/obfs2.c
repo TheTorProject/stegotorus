@@ -15,12 +15,16 @@
 
 #define CRYPT_PROTOCOL_PRIVATE
 
-#include "../crypt.h"
+#include "obfs2_crypt.h"
 #include "obfs2.h"
 #include "../util.h"
 #include "../protocol.h"
 
-void *
+/* Sets the function table for the obfs2 protocol and
+   calls initialize_crypto(). 
+   Returns 0 on success, -1 on fail.
+*/
+int
 obfs2_new(struct protocol_t *proto_struct) {
   proto_struct->destroy = (void *)obfs2_state_free;
   proto_struct->init = (void *)obfs2_state_new;
@@ -28,7 +32,12 @@ obfs2_new(struct protocol_t *proto_struct) {
   proto_struct->send = (void *)obfs2_send;
   proto_struct->recv = (void *)obfs2_recv;
 
-  return NULL;
+  if (initialize_crypto() < 0) {
+    fprintf(stderr, "Can't initialize crypto; failing\n");
+    return -1;
+  }
+
+  return 0;
 }
 
 /** Return true iff the OBFUSCATE_SEED_LENGTH-byte seed in 'seed' is nonzero */

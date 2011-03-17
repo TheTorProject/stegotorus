@@ -23,16 +23,16 @@
 #include <errno.h>
 #include <event2/util.h>
 
-#include "plugins/obfs2.h"
-
 struct listener_t {
   struct evconnlistener *listener;
   struct sockaddr_storage target_address;
   int target_address_len;
   struct protocol_t *proto; /* Protocol that this listener can speak. */
   int mode;
-  char shared_secret[SHARED_SECRET_LENGTH];
+  /* ASN */
+  /*  char shared_secret[SHARED_SECRET_LENGTH];
   unsigned int have_shared_secret : 1;
+  */
 };
 
 static void simple_listener_cb(struct evconnlistener *evcl,
@@ -79,11 +79,14 @@ listener_new(struct event_base *base,
   } else {
     assert(lsn->mode == LSN_SOCKS_CLIENT);
   }
+  /* ASN */
+  /*
   assert(shared_secret == NULL || shared_secret_len == SHARED_SECRET_LENGTH);
   if (shared_secret) {
     memcpy(lsn->shared_secret, shared_secret, SHARED_SECRET_LENGTH);
     lsn->have_shared_secret = 1;
   }
+  */
 
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
                                           flags,

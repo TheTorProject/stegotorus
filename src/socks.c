@@ -9,7 +9,6 @@
 
 #define SOCKS_PRIVATE
 #include "socks.h"
-#include "crypt.h"
 #include "util.h"
 
 #include <event2/buffer.h>
@@ -39,6 +38,8 @@
 
 static int socks5_do_negotiation(struct evbuffer *dest,
                                     unsigned int neg_was_success);
+
+typedef unsigned char uchar;
 
 socks_state_t *
 socks_state_new(void)
