@@ -5,22 +5,31 @@
 #define BRL_PROTOCOL      1
 
 struct protocol_t *set_up_protocol(int protocol);
+void *proto_init(struct protocol_t *proto, void *arg);
+void proto_destroy(struct protocol_t *proto);
+int proto_handshake(struct protocol_t *proto, void *buf);
+int proto_send(struct protocol_t *proto, void *source, void *dest);
+int proto_recv(struct protocol_t *proto, void *source, void *dest);
 
-/* ASN */
+
+
+/* ASN Why the hell do half of them return int? FIXME */
 struct protocol_t {
   /* Constructor: creates the protocol; sets up functions etc. */
   void *(*new)(struct protocol_t *self);
   /* Destructor */
-  void (*destroy)(void *arg);
+  void (*destroy)(void *state);
 
   /* does nessesary initiation steps; like build a proto state etc. */
   void *(*init)(void *arg);
 
   /* does handshake. Supposedly all protocols have a handshake. */
-  void *(*handshake)(void *state, void *buf);
+  int (*handshake)(void *state, void *buf);
+
   /* send data function */
   int (*send)(void *state, void *source,
               void *dest);
+
   /* receive data function */
   int (*recv)(void *state, void *source,
               void *dest);

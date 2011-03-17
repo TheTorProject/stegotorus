@@ -122,10 +122,9 @@ simple_listener_cb(struct evconnlistener *evcl,
   conn->mode = lsn->mode;
   conn->proto = lsn->proto;
 
-  /* ASN Is this actually modular. Will all protocols need to init here?
-     I don't think so. I don't know. */
+  /* Will all protocols need to _init() here? Don't think so! */
   int is_initiator = (conn->mode != LSN_SIMPLE_SERVER) ? 1 : 0;
-  conn->proto->state = lsn->proto->init(&is_initiator);
+  conn->proto->state = proto_init(conn->proto, &is_initiator);
 
   if (!conn->proto->state)
     goto err;
@@ -178,9 +177,9 @@ simple_listener_cb(struct evconnlistener *evcl,
   struct bufferevent *encrypted =
     conn->mode == LSN_SIMPLE_SERVER ? conn->input : conn->output;
 
-  /* ASN Send handshake */
-  if (lsn->proto->handshake(conn->proto->state,
-                            bufferevent_get_output(encrypted))<0)
+  /* ASN Will all protocols need to handshake here? Don't think so. */
+  if (proto_handshake(conn->proto,
+                      bufferevent_get_output(encrypted))<0)
     goto err;
 
   if (conn->mode == LSN_SIMPLE_SERVER || conn->mode == LSN_SIMPLE_CLIENT) {
@@ -205,7 +204,7 @@ static void
 conn_free(conn_t *conn)
 {
   if (conn->proto->state)
-    conn->proto->destroy((void *)conn->proto->state);
+    proto_destroy(conn->proto->state);
   if (conn->socks_state)
     socks_state_free(conn->socks_state);
   if (conn->input)
@@ -280,7 +279,7 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
   other = (bev == conn->input) ? conn->output : conn->input;
 
   dbg(("Got data on plaintext side\n"));
-  if (conn->proto->send(conn->proto->state,
+  if (proto_send(conn->proto,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
     conn_free(conn);
@@ -294,7 +293,7 @@ obfsucated_read_cb(struct bufferevent *bev, void *arg)
   other = (bev == conn->input) ? conn->output : conn->input;
 
   dbg(("Got data on encrypted side\n"));
-  if (conn->proto->recv(conn->proto->state,
+  if (proto_recv(conn->proto,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
     conn_free(conn);
