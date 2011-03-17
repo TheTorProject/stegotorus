@@ -15,18 +15,18 @@
 
 #define CRYPT_PROTOCOL_PRIVATE
 
-#include "crypt.h"
-#include "crypt_protocol.h"
-#include "util.h"
-#include "module.h"
+#include "../crypt.h"
+#include "obfs2.h"
+#include "../util.h"
+#include "../protocol.h"
 
 void *
-new_brl(struct protocol_t *proto_struct) {
-  proto_struct->destroy = (void *)brl_state_free;
-  proto_struct->init = (void *)brl_state_new;
-  proto_struct->handshake = (void *)brl_send_initial_message;
-  proto_struct->send = (void *)brl_send;
-  proto_struct->recv = (void *)brl_recv;
+obfs2_new(struct protocol_t *proto_struct) {
+  proto_struct->destroy = (void *)obfs2_state_free;
+  proto_struct->init = (void *)obfs2_state_new;
+  proto_struct->handshake = (void *)obfs2_send_initial_message;
+  proto_struct->send = (void *)obfs2_send;
+  proto_struct->recv = (void *)obfs2_recv;
 
   return NULL;
 }
@@ -43,7 +43,7 @@ seed_nonzero(const uchar *seed)
    'state'.  Returns NULL on failure.
  */
 static crypt_t *
-derive_key(brl_state_t *state, const char *keytype)
+derive_key(obfs2_state_t *state, const char *keytype)
 {
   crypt_t *cryptstate;
   uchar buf[32];
@@ -65,7 +65,7 @@ derive_key(brl_state_t *state, const char *keytype)
 }
 
 static crypt_t *
-derive_padding_key(brl_state_t *state, const uchar *seed,
+derive_padding_key(obfs2_state_t *state, const uchar *seed,
                    const char *keytype)
 {
   crypt_t *cryptstate;
@@ -90,10 +90,10 @@ derive_padding_key(brl_state_t *state, const uchar *seed,
    we're the handshake initiator.  Otherwise, we're the responder.  Return
    NULL on failure.
  */
-brl_state_t *
-brl_state_new(int *initiator)
+obfs2_state_t *
+obfs2_state_new(int *initiator)
 {
-  brl_state_t *state = calloc(1, sizeof(brl_state_t));
+  obfs2_state_t *state = calloc(1, sizeof(obfs2_state_t));
   uchar *seed;
   const char *send_pad_type;
 
@@ -127,7 +127,7 @@ brl_state_new(int *initiator)
 
 /** Set the shared secret to be used with this protocol state. */
 void
-brl_state_set_shared_secret(brl_state_t *state,
+obfs2_state_set_shared_secret(obfs2_state_t *state,
                                  const char *secret, size_t secretlen)
 {
   if (secretlen > SHARED_SECRET_LENGTH)
@@ -140,7 +140,7 @@ brl_state_set_shared_secret(brl_state_t *state,
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
  */
 int
-brl_send_initial_message(brl_state_t *state, struct evbuffer *buf)
+obfs2_send_initial_message(obfs2_state_t *state, struct evbuffer *buf)
 {
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE), plength, send_plength;
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
@@ -205,7 +205,7 @@ crypt_and_transmit(crypt_t *crypto,
    using the state in 'state'.  Returns 0 on success, -1 on failure.
  */
 int
-brl_send(brl_state_t *state,
+obfs2_send(obfs2_state_t *state,
           struct evbuffer *source, struct evbuffer *dest)
 {
   if (state->send_crypto) {
@@ -228,7 +228,7 @@ brl_send(brl_state_t *state,
    keys.  Returns 0 on success, -1 on failure.
  */
 static int
-init_crypto(brl_state_t *state)
+init_crypto(obfs2_state_t *state)
 {
   const char *send_keytype;
   const char *recv_keytype;
@@ -265,7 +265,7 @@ init_crypto(brl_state_t *state)
  * Returns x for "don't call again till you have x bytes".  0 for "all ok". -1
  * for "fail, close" */
 int
-brl_recv(brl_state_t *state, struct evbuffer *source,
+obfs2_recv(obfs2_state_t *state, struct evbuffer *source,
            struct evbuffer *dest)
 {
   if (state->state == ST_WAIT_FOR_KEY) {
@@ -342,7 +342,7 @@ brl_recv(brl_state_t *state, struct evbuffer *source,
 }
 
 void
-brl_state_free(brl_state_t *s)
+obfs2_state_free(obfs2_state_t *s)
 {
   if (s->send_crypto)
     crypt_free(s->send_crypto);
@@ -354,6 +354,6 @@ brl_state_free(brl_state_t *s)
     crypt_free(s->recv_padding_crypto);
   if (s->pending_data_to_send)
     evbuffer_free(s->pending_data_to_send);
-  memset(s, 0x0a, sizeof(brl_state_t));
+  memset(s, 0x0a, sizeof(obfs2_state_t));
   free(s);
 }

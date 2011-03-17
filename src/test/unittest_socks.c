@@ -11,7 +11,7 @@
 #include "../socks.h"
 #include "../crypt.h"
 #include "../util.h"
-#include "../crypt_protocol.h"
+#include "../plugins/obfs2.h"
 
 static void
 test_socks_send_negotiation(void *data)

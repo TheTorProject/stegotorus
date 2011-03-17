@@ -6,11 +6,10 @@
 */
 
 #define NETWORK_PRIVATE
-#include "crypt_protocol.h"
 #include "network.h"
 #include "util.h"
 #include "socks.h"
-#include "module.h"
+#include "protocol.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -23,6 +22,8 @@
 
 #include <errno.h>
 #include <event2/util.h>
+
+#include "plugins/obfs2.h"
 
 struct listener_t {
   struct evconnlistener *listener;
@@ -62,9 +63,9 @@ listener_new(struct event_base *base,
   assert(mode == LSN_SIMPLE_CLIENT || mode == LSN_SIMPLE_SERVER ||
          mode == LSN_SOCKS_CLIENT);
 
-  struct protocol_t *proto = set_up_module(protocol);
+  struct protocol_t *proto = set_up_protocol(protocol);
   if (!proto) {
-    printf("This is just terrible. We can't even set up a module!Seppuku time!\n");
+    printf("This is just terrible. We can't even set up a protocol! Seppuku time!\n");
     exit(-1);
   }
 
@@ -124,9 +125,9 @@ simple_listener_cb(struct evconnlistener *evcl,
   /* ASN Is this actually modular. Will all protocols need to init here?
      I don't think so. I don't know. */
   int is_initiator = (conn->mode != LSN_SIMPLE_SERVER) ? 1 : 0;
-  conn->proto_state = lsn->proto->init(&is_initiator);
+  conn->proto->state = lsn->proto->init(&is_initiator);
 
-  if (!conn->proto_state)
+  if (!conn->proto->state)
     goto err;
 
   if (conn->mode == LSN_SOCKS_CLIENT) {
@@ -176,8 +177,9 @@ simple_listener_cb(struct evconnlistener *evcl,
   /* Queue output right now. */
   struct bufferevent *encrypted =
     conn->mode == LSN_SIMPLE_SERVER ? conn->input : conn->output;
+
   /* ASN Send handshake */
-  if (lsn->proto->handshake(conn->proto_state,
+  if (lsn->proto->handshake(conn->proto->state,
                             bufferevent_get_output(encrypted))<0)
     goto err;
 
@@ -202,8 +204,8 @@ simple_listener_cb(struct evconnlistener *evcl,
 static void
 conn_free(conn_t *conn)
 {
-  if (conn->proto_state)
-    conn->proto->destroy((void *)conn->proto_state);
+  if (conn->proto->state)
+    conn->proto->destroy((void *)conn->proto->state);
   if (conn->socks_state)
     socks_state_free(conn->socks_state);
   if (conn->input)
@@ -278,7 +280,7 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
   other = (bev == conn->input) ? conn->output : conn->input;
 
   dbg(("Got data on plaintext side\n"));
-  if (conn->proto->send(conn->proto_state,
+  if (conn->proto->send(conn->proto->state,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
     conn_free(conn);
@@ -292,7 +294,7 @@ obfsucated_read_cb(struct bufferevent *bev, void *arg)
   other = (bev == conn->input) ? conn->output : conn->input;
 
   dbg(("Got data on encrypted side\n"));
-  if (conn->proto->recv(conn->proto_state,
+  if (conn->proto->recv(conn->proto->state,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
     conn_free(conn);

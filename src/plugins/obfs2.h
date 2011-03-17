@@ -5,28 +5,28 @@
    in all redistributed copies and derived works.  There is no warranty.
 */
 
-#ifndef CRYPT_PROTOCOL_H
-#define CRYPT_PROTOCOL_H
+#ifndef OBFS2_H
+#define OBFS2_H
 
 #include <sys/types.h>
 
-typedef struct brl_state_t brl_state_t;
+typedef struct obfs2_state_t obfs2_state_t;
 struct evbuffer;
 struct protocol_t;
 
 #define SHARED_SECRET_LENGTH 16
 
-brl_state_t *brl_state_new(int *initiator);
-void brl_state_set_shared_secret(brl_state_t *state,
+obfs2_state_t *obfs2_state_new(int *initiator);
+void obfs2_state_set_shared_secret(obfs2_state_t *state,
                                       const char *secret, size_t secretlen);
-void brl_state_free(brl_state_t *state);
-int brl_send_initial_message(brl_state_t *state, struct evbuffer *buf);
-int brl_send(brl_state_t *state,
+void obfs2_state_free(obfs2_state_t *state);
+int obfs2_send_initial_message(obfs2_state_t *state, struct evbuffer *buf);
+int obfs2_send(obfs2_state_t *state,
                struct evbuffer *source, struct evbuffer *dest);
-int brl_recv(brl_state_t *state, struct evbuffer *source,
+int obfs2_recv(obfs2_state_t *state, struct evbuffer *source,
                struct evbuffer *dest);
 
-void *new_brl(struct protocol_t *proto_struct);
+void *obfs2_new(struct protocol_t *proto_struct);
 
 
 #ifdef CRYPT_PROTOCOL_PRIVATE
@@ -49,7 +49,7 @@ void *new_brl(struct protocol_t *proto_struct);
 #define INITIATOR_SEND_TYPE "Initiator obfuscated data"
 #define RESPONDER_SEND_TYPE "Responder obfuscated data"
 
-struct brl_state_t {
+struct obfs2_state_t {
   /** Current protocol state.  We start out waiting for key information.  Then
       we have a key and wait for padding to arrive.  Finally, we are sending
       and receiving bytes on the connection.

@@ -14,7 +14,7 @@
 #include "crypt.h"
 #include "network.h"
 #include "util.h"
-#include "module.h"
+#include "protocol.h"
 
 #ifndef __GNUC__
 #define __attribute__(x)
