@@ -158,6 +158,8 @@ obfs2_send_initial_message(obfs2_state_t *state, struct evbuffer *buf)
   plength %= OBFUSCATE_MAX_PADDING;
   send_plength = htonl(plength);
 
+  printf("death and dest\n");
+
   if (state->we_are_initiator)
     seed = state->initiator_seed;
   else

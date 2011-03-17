@@ -1,4 +1,3 @@
-#if 0
 /* Copyright 2011 Nick Mathewson
 
    You may do anything with this work that copyright law would normally
@@ -20,22 +19,31 @@
 #define CRYPT_PRIVATE
 #include "../crypt.h"
 #include "../util.h"
-#include "../crypt_protocol.h"
+#include "../protocol.h"
+#include "../plugins/obfs2.h"
 
 /* Make sure we can successfully set up a protocol state */
 static void
 test_proto_setup(void *data)
 {
-  protocol_state_t *proto1, *proto2;
-  proto1 = protocol_state_new(1);
-  proto2 = protocol_state_new(0);
-  tt_assert(proto1);
-  tt_assert(proto2);
+  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+
+  int initiator = 1;
+  int no_initiator = 0;
+  client_proto->state = proto_init(client_proto, &initiator);
+  server_proto->state = proto_init(server_proto, &no_initiator);
+
+  tt_assert(client_proto);
+  tt_assert(server_proto);
+  tt_assert(client_proto->state);
+  tt_assert(server_proto->state);
+
  end:
-  if (proto1)
-    protocol_state_free(proto1);
-  if (proto2)
-    protocol_state_free(proto2);
+  if (client_proto->state)
+    proto_destroy(client_proto);
+  if (server_proto->state)
+    proto_destroy(server_proto);
 
 }
 
@@ -47,24 +55,33 @@ test_proto_handshake(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  protocol_state_t *client_state, *server_state;
-  client_state = protocol_state_new(1);
-  server_state = protocol_state_new(0);
-  tt_assert(client_state);
-  tt_assert(server_state);
+  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+
+  int initiator = 1;
+  int no_initiator = 0;
+  client_proto->state = proto_init(client_proto, &initiator);
+  server_proto->state = proto_init(server_proto, &no_initiator);
+  tt_assert(client_proto);
+  tt_assert(server_proto);
+  tt_assert(client_proto->state);
+  tt_assert(server_proto->state);
+
+  obfs2_state_t *client_state = client_proto->state;
+  obfs2_state_t *server_state = server_proto->state;
 
   /* We create a client handshake message and pass it to output_buffer */
-  tt_int_op(0, <=, proto_send_initial_message(client_state, output_buffer)<0);
+  tt_int_op(0, <=, proto_handshake(client_proto, output_buffer)<0);
 
   /* We simulate the server receiving and processing the client's handshake message,
      by using proto_recv() on the output_buffer */
-  tt_int_op(0, <=, proto_recv(server_state, output_buffer, dummy_buffer) <0);
+  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer) <0);
 
   /* Now, we create the server's handshake and pass it to output_buffer */
-  tt_int_op(0, <=, proto_send_initial_message(server_state, output_buffer)<0);
+  tt_int_op(0, <=, proto_handshake(server_proto, output_buffer)<0);
 
   /* We simulate the client receiving and processing the server's handshake */
-  tt_int_op(0, <=, proto_recv(client_state, output_buffer, dummy_buffer) <0);
+  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer) <0);
 
   /* The handshake is now complete. We should have:
      client's send_crypto == server's recv_crypto
@@ -78,10 +95,10 @@ test_proto_handshake(void *data)
                           sizeof(crypt_t)));
 
  end:
-  if (client_state)
-    protocol_state_free(client_state);
-  if (server_state)
-    protocol_state_free(server_state);
+  if (client_proto->state)
+    proto_destroy(client_proto);
+  if (server_proto->state)
+    proto_destroy(server_proto);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -97,20 +114,26 @@ test_proto_transfer(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  protocol_state_t *client_state, *server_state;
-  client_state = protocol_state_new(1);
-  server_state = protocol_state_new(0);
-  tt_assert(client_state);
-  tt_assert(server_state);
+  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+
+  int initiator = 1;
+  int no_initiator = 0;
+  client_proto->state = proto_init(client_proto, &initiator);
+  server_proto->state = proto_init(server_proto, &no_initiator);
+  tt_assert(client_proto);
+  tt_assert(server_proto);
+  tt_assert(client_proto->state);
+  tt_assert(server_proto->state);
 
   int n;
   struct evbuffer_iovec v[2];
 
   /* Handshake */
-  tt_int_op(0, <=, proto_send_initial_message(client_state, output_buffer)<0);
-  tt_int_op(0, <=, proto_recv(server_state, output_buffer, dummy_buffer) <0);
-  tt_int_op(0, <=, proto_send_initial_message(server_state, output_buffer)<0);
-  tt_int_op(0, <=, proto_recv(client_state, output_buffer, dummy_buffer) <0);
+  tt_int_op(0, <=, proto_handshake(client_proto, output_buffer)<0);
+  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer) <0);
+  tt_int_op(0, <=, proto_handshake(server_proto, output_buffer)<0);
+  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer) <0);
   /* End of Handshake */
 
   /* Now let's pass some data around. */
@@ -119,9 +142,9 @@ test_proto_transfer(void *data)
 
   /* client -> server */
   evbuffer_add(dummy_buffer, msg1, 54);
-  proto_send(client_state, dummy_buffer, output_buffer);
+  proto_send(client_proto, dummy_buffer, output_buffer);
 
-  tt_int_op(0, <=, proto_recv(server_state, output_buffer, dummy_buffer));
+  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer));
 
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[0], 2);
 
@@ -134,18 +157,18 @@ test_proto_transfer(void *data)
 
   /* client <- server */
   evbuffer_add(dummy_buffer, msg2, 55);
-  tt_int_op(0, <=, proto_send(server_state, dummy_buffer, output_buffer));
+  tt_int_op(0, <=, proto_send(server_proto, dummy_buffer, output_buffer));
 
-  tt_int_op(0, <=, proto_recv(client_state, output_buffer, dummy_buffer));
+  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer));
 
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[1], 2);
   tt_int_op(0, ==, strncmp(msg2, v[1].iov_base, 55));
 
  end:
-  if (client_state)
-    protocol_state_free(client_state);
-  if (server_state)
-    protocol_state_free(server_state);
+  if (client_proto->state)
+    proto_destroy(client_proto);
+  if (server_proto->state)
+    proto_destroy(server_proto);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -166,17 +189,28 @@ test_proto_transfer(void *data)
 static void
 test_proto_splitted_handshake(void *data)
 {
+  obfs2_state_t *client_state = NULL;
+  obfs2_state_t *server_state = NULL;
+
   struct evbuffer *output_buffer = NULL;
   struct evbuffer *dummy_buffer = NULL;
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  protocol_state_t *client_state;
-  protocol_state_t *server_state;
-  client_state = protocol_state_new(1);
-  server_state = protocol_state_new(0);
-  tt_assert(client_state);
-  tt_assert(server_state);
+  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+
+  int initiator = 1;
+  int no_initiator = 0;
+  client_proto->state = proto_init(client_proto, &initiator);
+  server_proto->state = proto_init(server_proto, &no_initiator);
+  tt_assert(client_proto);
+  tt_assert(server_proto);
+  tt_assert(client_proto->state);
+  tt_assert(server_proto->state);
+
+  client_state = client_proto->state;
+  server_state = server_proto->state;
 
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);
   uint32_t plength1, plength1_msg1, plength1_msg2, send_plength1;
@@ -208,7 +242,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgclient_1, OBFUSCATE_SEED_LENGTH+8+plength1_msg1);
 
   /* Server receives handshake part 1 */
-  tt_int_op(0, <=, proto_recv(server_state, output_buffer, dummy_buffer));
+  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_PADDING);
 
@@ -220,7 +254,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgclient_2, plength1_msg2);
 
   /* Server receives handshake part 2 */
-  tt_int_op(0, <=, proto_recv(server_state, output_buffer, dummy_buffer));
+  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_OPEN);
 
@@ -249,7 +283,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgserver_1, OBFUSCATE_SEED_LENGTH+8);
 
   /* Client receives handshake part 1 */
-  tt_int_op(0, <=, proto_recv(client_state, output_buffer, dummy_buffer));
+  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer));
 
   tt_assert(client_state->state == ST_WAIT_FOR_PADDING);
 
@@ -261,7 +295,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgserver_2, plength2);
 
   /* Client receives handshake part 2 */
-  tt_int_op(0, <=, proto_recv(client_state, output_buffer, dummy_buffer));
+  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer));
 
   tt_assert(client_state->state == ST_OPEN);
 
@@ -278,9 +312,9 @@ test_proto_splitted_handshake(void *data)
 
  end:
   if (client_state)
-    protocol_state_free(client_state);
+    proto_destroy(client_proto);
   if (server_state)
-    protocol_state_free(server_state);
+    proto_destroy(server_proto);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -295,17 +329,28 @@ test_proto_splitted_handshake(void *data)
 static void
 test_proto_wrong_handshake_magic(void *data)
 {
+  obfs2_state_t *client_state = NULL;
+  obfs2_state_t *server_state = NULL;
+
   struct evbuffer *output_buffer = NULL;
   struct evbuffer *dummy_buffer = NULL;
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  protocol_state_t *client_state;
-  protocol_state_t *server_state;
-  client_state = protocol_state_new(1);
-  server_state = protocol_state_new(0);
-  tt_assert(client_state);
-  tt_assert(server_state);
+  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+
+  int initiator = 1;
+  int no_initiator = 0;
+  client_proto->state = proto_init(client_proto, &initiator);
+  server_proto->state = proto_init(server_proto, &no_initiator);
+  tt_assert(client_proto);
+  tt_assert(server_proto);
+  tt_assert(client_proto->state);
+  tt_assert(server_proto->state);
+
+  client_state = client_proto->state;
+  server_state = server_proto->state;
 
   uint32_t wrong_magic = 0xD15EA5E;
 
@@ -328,84 +373,21 @@ test_proto_wrong_handshake_magic(void *data)
 
   evbuffer_add(output_buffer, msg, OBFUSCATE_SEED_LENGTH+8+plength);
 
-  tt_int_op(-1, ==, proto_recv(server_state, output_buffer, dummy_buffer));
+  tt_int_op(-1, ==, proto_recv(server_proto, output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_KEY);
 
  end:
   if (client_state)
-    protocol_state_free(client_state);
+    proto_destroy(client_proto);
   if (server_state)
-    protocol_state_free(server_state);
+    proto_destroy(server_proto);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
   if (dummy_buffer)
     evbuffer_free(dummy_buffer);
 }
-
-#if 0
-/*
-  Erroneous handshake test:
-  Normal plength field but actual padding larger than
-  OBFUSCATE_MAX_PADDING.
-
-  XXXX This won't actually fail.  If we send extra padding, it gets treated as
-  part of the message.  Decrypting it will give odd results, but this protocol
-  doesn't actually get you integrity.
-*/
-static void
-test_proto_wrong_handshake_padding(void *data)
-{
-  struct evbuffer *output_buffer = NULL;
-  struct evbuffer *dummy_buffer = NULL;
-  output_buffer = evbuffer_new();
-  dummy_buffer = evbuffer_new();
-
-  protocol_state_t *client_state;
-  protocol_state_t *server_state;
-  client_state = protocol_state_new(1);
-  server_state = protocol_state_new(0);
-  tt_assert(client_state);
-  tt_assert(server_state);
-
-  uchar bigmsg[OBFUSCATE_MAX_PADDING + 1 + OBFUSCATE_SEED_LENGTH + 8];
-  uint32_t actual_plength, fake_plength, send_plength;
-
-  const uchar *seed;
-  seed = client_state->initiator_seed;
-  uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);
-
-  actual_plength = OBFUSCATE_MAX_PADDING + 1U;
-  fake_plength = 666U;
-  send_plength = htonl(fake_plength);
-
-  memcpy(bigmsg, seed, OBFUSCATE_SEED_LENGTH);
-  memcpy(bigmsg+OBFUSCATE_SEED_LENGTH, &magic, 4);
-  memcpy(bigmsg+OBFUSCATE_SEED_LENGTH+4, &send_plength, 4);
-  tt_int_op(0, >=, random_bytes(bigmsg+OBFUSCATE_SEED_LENGTH+8, actual_plength));
-
-  stream_crypt(client_state->send_padding_crypto,
-               bigmsg+OBFUSCATE_SEED_LENGTH, 8+actual_plength);
-
-  evbuffer_add(output_buffer, bigmsg, OBFUSCATE_SEED_LENGTH+8+actual_plength);
-
-  tt_int_op(-1, ==, proto_recv(server_state, output_buffer, dummy_buffer));
-
-  tt_assert(server_state->state == ST_WAIT_FOR_KEY);
-
- end:
-  if (client_state)
-    protocol_state_free(client_state);
-  if (server_state)
-    protocol_state_free(server_state);
-
-  if (output_buffer)
-    evbuffer_free(output_buffer);
-  if (dummy_buffer)
-    evbuffer_free(dummy_buffer);
-}
-#endif
 
 /* Erroneous handshake test:
    plength field larger than OBFUSCATE_MAX_PADDING
@@ -413,17 +395,26 @@ test_proto_wrong_handshake_padding(void *data)
 static void
 test_proto_wrong_handshake_plength(void *data)
 {
+  obfs2_state_t *client_state = NULL;
+  obfs2_state_t *server_state = NULL;
   struct evbuffer *output_buffer = NULL;
   struct evbuffer *dummy_buffer = NULL;
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
+  
+  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+  int initiator = 1;
+  int no_initiator = 0;
+  client_proto->state = proto_init(client_proto, &initiator);
+  server_proto->state = proto_init(server_proto, &no_initiator);
+  tt_assert(client_proto);
+  tt_assert(server_proto);
+  tt_assert(client_proto->state);
+  tt_assert(server_proto->state);
 
-  protocol_state_t *client_state;
-  protocol_state_t *server_state;
-  client_state = protocol_state_new(1);
-  server_state = protocol_state_new(0);
-  tt_assert(client_state);
-  tt_assert(server_state);
+  client_state = client_proto->state;
+  server_state = server_proto->state;
 
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8 + 1];
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);
@@ -444,15 +435,15 @@ test_proto_wrong_handshake_plength(void *data)
 
   evbuffer_add(output_buffer, msg, OBFUSCATE_SEED_LENGTH+8+plength);
 
-  tt_int_op(-1, ==, proto_recv(server_state, output_buffer, dummy_buffer));
+  tt_int_op(-1, ==, proto_recv(server_proto, output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_KEY);
 
  end:
   if (client_state)
-    protocol_state_free(client_state);
+    proto_destroy(client_proto);
   if (server_state)
-    protocol_state_free(server_state);
+    proto_destroy(server_proto);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -476,4 +467,3 @@ struct testcase_t protocol_tests[] = {
   T(wrong_handshake_plength, 0),
   END_OF_TESTCASES
 };
-#endif
