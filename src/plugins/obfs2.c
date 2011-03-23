@@ -37,7 +37,7 @@ obfs2_new(struct protocol_t *proto_struct) {
     return -1;
   }
 
-  return 0;
+  return 1;
 }
 
 /** Return true iff the OBFUSCATE_SEED_LENGTH-byte seed in 'seed' is nonzero */
@@ -166,8 +166,6 @@ obfs2_send_initial_message(obfs2_state_t *state, struct evbuffer *buf)
     return -1;
   plength %= OBFUSCATE_MAX_PADDING;
   send_plength = htonl(plength);
-
-  printf("death and dest\n");
 
   if (state->we_are_initiator)
     seed = state->initiator_seed;

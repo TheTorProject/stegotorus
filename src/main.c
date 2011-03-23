@@ -25,7 +25,7 @@ static void
 usage(void)
 {
   fprintf(stderr,
-    "Usage: obfsproxy {client/server/socks} listenaddr[:port] targetaddr:port\n"
+    "Usage: obfsproxy {client/server/socks} {obfs2/dummy} listenaddr[:port] targetaddr:port\n"
     "  (Default listen port is 48988 for client; 23548 for socks; 11253 for server)\n"
           );
   exit(1);
@@ -43,6 +43,7 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 int
 main(int argc, const char **argv)
 {
+  int protocol;
   int is_client, is_socks = 0, mode;
   struct sockaddr_storage ss_listen, ss_target;
   struct sockaddr *sa_target=NULL;
@@ -54,7 +55,7 @@ main(int argc, const char **argv)
   listener_t *listener;
 
   /* XXXXX the interface is crap.  Fix that. XXXXX */
-  if (argc < 3)
+  if (argc < 4)
     usage();
   if (!strcmp(argv[1], "client")) {
     is_client = 1;
@@ -73,21 +74,28 @@ main(int argc, const char **argv)
     usage();
   }
 
+  if (!strcmp(argv[2], "obfs2"))
+    protocol = OBFS2_PROTOCOL;
+  else if (!strcmp(argv[2], "dummy"))
+    protocol = DUMMY_PROTOCOL;
+  else
+    usage();
+
   /* figure out what port(s) to listen on as client/server */
-  if (resolve_address_port(argv[2], 1, 1, &ss_listen, &sl_listen, defport) < 0)
+  if (resolve_address_port(argv[3], 1, 1, &ss_listen, &sl_listen, defport) < 0)
     usage();
 
   if (is_socks) {
-    if (argc != 3)
+    if (argc != 4)
       usage();
   } else {
-    if (argc != 4)
+    if (argc != 5)
       usage();
 
     /* figure out what place to connect to as a client/server. */
     /* XXXX when we add socks support, clients will not have a fixed "target"
      * XXXX address but will instead connect to a client-selected address. */
-    if (resolve_address_port(argv[3], 1, 0, &ss_target, &sl_target, NULL) < 0)
+    if (resolve_address_port(argv[4], 1, 0, &ss_target, &sl_target, NULL) < 0)
       usage();
     sa_target = (struct sockaddr *)&ss_target;
   }
@@ -109,9 +117,9 @@ main(int argc, const char **argv)
   sigevent = evsignal_new(base, SIGINT, handle_signal_cb, (void*) base);
 
   /* start an evconnlistener on the appropriate port(s) */
-  /* ASN We hardcode BRL_PROTOCOL for now. */
+  /* ASN We hardcode OBFS2_PROTOCOL for now. */
   listener = listener_new(base,
-                          mode, BRL_PROTOCOL,
+                          mode, protocol,
                           (struct sockaddr *)&ss_listen, sl_listen,
                           sa_target, sl_target,
                           NULL, 0);

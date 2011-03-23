@@ -13,7 +13,8 @@ libobfsproxy_a_SOURCES = \
 	src/socks.c  \
 	src/util.c   \
 	src/plugins/obfs2.c \
-	src/plugins/obfs2_crypt.c
+	src/plugins/obfs2_crypt.c \
+	src/plugins/dummy.c
 
 obfsproxy_SOURCES = \
 	src/main.c
@@ -35,7 +36,8 @@ noinst_HEADERS = \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h \
 	src/plugins/obfs2.h \
-	src/plugins/obfs2_crypt.h
+	src/plugins/obfs2_crypt.h \
+	src/plugins/dummy.h
 
 EXTRA_DIST = doc/protocol-spec.txt src/sha256.c
 

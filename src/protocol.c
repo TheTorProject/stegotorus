@@ -6,6 +6,7 @@
 #include "network.h"
 
 #include "plugins/obfs2.h"
+#include "plugins/dummy.h"
 
 /**
     This function returns a protocol_t structure based on the mode
@@ -15,12 +16,14 @@ struct protocol_t *
 set_up_protocol(int protocol) {
   struct protocol_t *proto = calloc(1, sizeof(struct protocol_t));
 
-  if (protocol == BRL_PROTOCOL) {
+  if (protocol == OBFS2_PROTOCOL)
     proto->new = &obfs2_new;
-    if (proto->new(proto))
-      printf("Protocol constructed\n");
-  }
+  else if (protocol == DUMMY_PROTOCOL)
+    proto->new = &dummy_new;
   /* elif { other protocols } */
+
+  if (proto->new(proto)>0)
+    printf("Protocol constructed\n");
 
   return proto;
 }
@@ -39,8 +42,8 @@ proto_handshake(struct protocol_t *proto, void *buf) {
   assert(proto);
   if (proto->handshake)
     return proto->handshake(proto->state, buf);
-  else
-    return -1;
+  else /* It's okay with me, protocol didn't have a handshake */
+    return 0;
 }
 
 int
@@ -48,7 +51,7 @@ proto_send(struct protocol_t *proto, void *source, void *dest) {
   assert(proto);
   if (proto->send)
     return proto->send(proto->state, source, dest);
-  else
+  else 
     return -1;
 }
 
@@ -63,6 +66,7 @@ proto_recv(struct protocol_t *proto, void *source, void *dest) {
 
 void proto_destroy(struct protocol_t *proto) {
   assert(proto);
+  assert(proto->state);
 
   if (proto->destroy)
     proto->destroy(proto->state);

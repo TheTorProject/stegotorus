@@ -45,7 +45,7 @@ static void plaintext_read_cb(struct bufferevent *bev, void *arg);
 static void socks_read_cb(struct bufferevent *bev, void *arg);
 /* ASN Changed encrypted_read_cb() to obfuscated_read_cb(), it sounds
    a bit more obfsproxy generic. I still don't like it though. */
-static void obfsucated_read_cb(struct bufferevent *bev, void *arg);
+static void obfuscated_read_cb(struct bufferevent *bev, void *arg);
 static void input_event_cb(struct bufferevent *bev, short what, void *arg);
 static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 
@@ -129,6 +129,7 @@ simple_listener_cb(struct evconnlistener *evcl,
   int is_initiator = (conn->mode != LSN_SIMPLE_SERVER) ? 1 : 0;
   conn->proto->state = proto_init(conn->proto, &is_initiator);
 
+  /* ASN Which means that all plugins need a state... */
   if (!conn->proto->state)
     goto err;
 
@@ -150,7 +151,7 @@ simple_listener_cb(struct evconnlistener *evcl,
 
   if (conn->mode == LSN_SIMPLE_SERVER) {
     bufferevent_setcb(conn->input,
-                      obfsucated_read_cb, NULL, input_event_cb, conn);
+                      obfuscated_read_cb, NULL, input_event_cb, conn);
   } else if (conn->mode == LSN_SIMPLE_CLIENT) {
     bufferevent_setcb(conn->input,
                       plaintext_read_cb, NULL, input_event_cb, conn);
@@ -174,7 +175,7 @@ simple_listener_cb(struct evconnlistener *evcl,
                       plaintext_read_cb, NULL, output_event_cb, conn);
   else
     bufferevent_setcb(conn->output,
-                      obfsucated_read_cb, NULL, output_event_cb, conn);
+                      obfuscated_read_cb, NULL, output_event_cb, conn);
 
   /* Queue output right now. */
   struct bufferevent *encrypted =
@@ -206,8 +207,8 @@ simple_listener_cb(struct evconnlistener *evcl,
 static void
 conn_free(conn_t *conn)
 {
-  if (conn->proto->state)
-    proto_destroy(conn->proto->state);
+  if (conn->proto)
+    proto_destroy(conn->proto);
   if (conn->socks_state)
     socks_state_free(conn->socks_state);
   if (conn->input)
@@ -289,7 +290,7 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
 }
 
 static void
-obfsucated_read_cb(struct bufferevent *bev, void *arg)
+obfuscated_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   struct bufferevent *other;
@@ -375,7 +376,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       bufferevent_setcb(conn->input,
                         plaintext_read_cb, NULL, input_event_cb, conn);
       if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
-        obfsucated_read_cb(bev, conn->input);
+        obfuscated_read_cb(bev, conn->input);
     }
   }
   /* XXX we don't expect any other events */

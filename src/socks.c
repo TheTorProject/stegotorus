@@ -17,7 +17,7 @@
 
 
 /**
-   General idea:
+   General SOCKS5 idea:
 
    Client ------------------------> Server
           Method Negotiation Packet
@@ -32,8 +32,9 @@
                Server reply
 
    "Method Negotiation Packet" is handled by: socks5_handle_negotiation()
-   "Method Negotiation Reply" is done by: socks5_reply_negotiation()
-   "Client request" is handled by: socks5_validate_request()
+   "Method Negotiation Reply" is done by: socks5_do_negotiation()
+   "Client request" is handled by: socks5_handle_request()
+   "Server reply" is done by: socks5_send_reply
 */
 
 static int socks5_do_negotiation(struct evbuffer *dest,
@@ -191,6 +192,8 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
   /* We either failed or succeded.
      Either way, we should send something back to the client */
   p[0] = SOCKS5_VERSION;    /* Version field */
+  if (status == SOCKS5_REP_FAIL)
+    printf("Sending negative shit\n");
   p[1] = (unsigned char) status; /* Reply field */
   p[2] = 0;                 /* Reserved */
   if (state->parsereq.af == AF_UNSPEC) {

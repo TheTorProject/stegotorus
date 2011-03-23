@@ -26,8 +26,8 @@
 static void
 test_proto_setup(void *data)
 {
-  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
 
   int initiator = 1;
   int no_initiator = 0;
@@ -55,8 +55,8 @@ test_proto_handshake(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
 
   int initiator = 1;
   int no_initiator = 0;
@@ -114,8 +114,8 @@ test_proto_transfer(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
 
   int initiator = 1;
   int no_initiator = 0;
@@ -197,8 +197,8 @@ test_proto_splitted_handshake(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
 
   int initiator = 1;
   int no_initiator = 0;
@@ -337,8 +337,8 @@ test_proto_wrong_handshake_magic(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
 
   int initiator = 1;
   int no_initiator = 0;
@@ -402,8 +402,8 @@ test_proto_wrong_handshake_plength(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
   
-  struct protocol_t *client_proto = set_up_protocol(BRL_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(BRL_PROTOCOL);
+  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
   int initiator = 1;
   int no_initiator = 0;
   client_proto->state = proto_init(client_proto, &initiator);

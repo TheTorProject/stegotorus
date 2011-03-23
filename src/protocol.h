@@ -2,7 +2,9 @@
 #define PROTOCOL_H
 
 /* ASN I'm gonna be calling crypt_protocol.c BRL_RPOTOCOL for now. Yes. */
-#define BRL_PROTOCOL      1
+#define DUMMY_PROTOCOL    0
+#define OBFS2_PROTOCOL      1
+
 
 struct protocol_t *set_up_protocol(int protocol);
 void *proto_init(struct protocol_t *proto, void *arg);
