@@ -1,0 +1,21 @@
+-
+Program received signal SIGSEGV, Segmentation fault.
+crypt_free (key=0xa0a0a0a0a0a0a0a) at src/plugins/obfs2_crypt.c:194
+194          memset(key, 0, sizeof(key));
+(gdb) backtrace
+#0  crypt_free (key=0xa0a0a0a0a0a0a0a) at src/plugins/obfs2_crypt.c:194
+#1  0x0000000000403852 in obfs2_state_free (s=0x618230) at src/plugins/obfs2.c:357
+#2  0x0000000000401df2 in conn_free (conn=0x615bc0) at src/network.c:210
+#3  0x00007ffff7bb4ad8 in bufferevent_readcb (fd=<value optimized out>, event=<value optimized out>, arg=0x615f30) at bufferevent_sock.c:191
+#4  0x00007ffff7baa88c in event_process_active_single_queue (base=0x606220, flags=<value optimized out>) at event.c:1287
+#5  event_process_active (base=0x606220, flags=<value optimized out>) at event.c:1354
+#6  event_base_loop (base=0x606220, flags=<value optimized out>) at event.c:1551
+#7  0x0000000000401cc9 in main (argc=<value optimized out>, argv=<value optimized out>) at src/main.c:124
+(gdb) up
+#1  0x0000000000403852 in obfs2_state_free (s=0x618230) at src/plugins/obfs2.c:357
+357     crypt_free(s->send_crypto);
+(gdb) p s
+$1 = (obfs2_state_t *) 0x618230
+(gdb) p s->send_crypto
+$2 = (crypt_t *) 0xa0a0a0a0a0a0a0a
+-
