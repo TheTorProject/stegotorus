@@ -26,13 +26,13 @@
 static void
 test_proto_setup(void *data)
 {
-  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *client_proto = NULL;
+  struct protocol_t *server_proto = NULL;
 
-  int initiator = 1;
-  int no_initiator = 0;
-  client_proto->state = proto_init(client_proto, &initiator);
-  server_proto->state = proto_init(server_proto, &no_initiator);
+  tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
+
+  client_proto = proto_new(OBFS2_PROTOCOL,1);
+  server_proto = proto_new(OBFS2_PROTOCOL,1);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -55,13 +55,14 @@ test_proto_handshake(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *client_proto = NULL;
+  struct protocol_t *server_proto = NULL;
 
-  int initiator = 1;
-  int no_initiator = 0;
-  client_proto->state = proto_init(client_proto, &initiator);
-  server_proto->state = proto_init(server_proto, &no_initiator);
+  tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
+
+  client_proto = proto_new(OBFS2_PROTOCOL,1);
+  server_proto = proto_new(OBFS2_PROTOCOL,0);
+
   tt_assert(client_proto);
   tt_assert(server_proto);
   tt_assert(client_proto->state);
@@ -113,14 +114,15 @@ test_proto_transfer(void *data)
   struct evbuffer *dummy_buffer = NULL;
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
+  
+  struct protocol_t *client_proto = NULL;
+  struct protocol_t *server_proto = NULL;
 
-  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
+  tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
 
-  int initiator = 1;
-  int no_initiator = 0;
-  client_proto->state = proto_init(client_proto, &initiator);
-  server_proto->state = proto_init(server_proto, &no_initiator);
+  client_proto = proto_new(OBFS2_PROTOCOL,1);
+  server_proto = proto_new(OBFS2_PROTOCOL,0);
+
   tt_assert(client_proto);
   tt_assert(server_proto);
   tt_assert(client_proto->state);
@@ -197,13 +199,14 @@ test_proto_splitted_handshake(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *client_proto = NULL;
+  struct protocol_t *server_proto = NULL;
 
-  int initiator = 1;
-  int no_initiator = 0;
-  client_proto->state = proto_init(client_proto, &initiator);
-  server_proto->state = proto_init(server_proto, &no_initiator);
+  tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
+  
+  client_proto = proto_new(OBFS2_PROTOCOL,1);
+  server_proto = proto_new(OBFS2_PROTOCOL,0);
+
   tt_assert(client_proto);
   tt_assert(server_proto);
   tt_assert(client_proto->state);
@@ -337,13 +340,14 @@ test_proto_wrong_handshake_magic(void *data)
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
 
-  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
+  struct protocol_t *client_proto = NULL;
+  struct protocol_t *server_proto = NULL;
 
-  int initiator = 1;
-  int no_initiator = 0;
-  client_proto->state = proto_init(client_proto, &initiator);
-  server_proto->state = proto_init(server_proto, &no_initiator);
+  tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
+
+  client_proto = proto_new(OBFS2_PROTOCOL,1);
+  server_proto = proto_new(OBFS2_PROTOCOL,0);
+
   tt_assert(client_proto);
   tt_assert(server_proto);
   tt_assert(client_proto->state);
@@ -397,17 +401,20 @@ test_proto_wrong_handshake_plength(void *data)
 {
   obfs2_state_t *client_state = NULL;
   obfs2_state_t *server_state = NULL;
+
   struct evbuffer *output_buffer = NULL;
   struct evbuffer *dummy_buffer = NULL;
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
-  
-  struct protocol_t *client_proto = set_up_protocol(OBFS2_PROTOCOL);
-  struct protocol_t *server_proto = set_up_protocol(OBFS2_PROTOCOL);
-  int initiator = 1;
-  int no_initiator = 0;
-  client_proto->state = proto_init(client_proto, &initiator);
-  server_proto->state = proto_init(server_proto, &no_initiator);
+
+  struct protocol_t *client_proto = NULL;
+  struct protocol_t *server_proto = NULL;
+
+  tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
+
+  client_proto = proto_new(OBFS2_PROTOCOL,1);
+  server_proto = proto_new(OBFS2_PROTOCOL,0);
+
   tt_assert(client_proto);
   tt_assert(server_proto);
   tt_assert(client_proto->state);
