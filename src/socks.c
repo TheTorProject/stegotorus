@@ -192,8 +192,6 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
   /* We either failed or succeded.
      Either way, we should send something back to the client */
   p[0] = SOCKS5_VERSION;    /* Version field */
-  if (status == SOCKS5_REP_FAIL)
-    printf("Sending negative shit\n");
   p[1] = (unsigned char) status; /* Reply field */
   p[2] = 0;                 /* Reserved */
   if (state->parsereq.af == AF_UNSPEC) {

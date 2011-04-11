@@ -27,7 +27,7 @@ struct listener_t {
   struct evconnlistener *listener;
   struct sockaddr_storage target_address;
   int target_address_len;
-  struct protocol_t *proto; /* Protocol that this listener can speak. */
+  int proto; /* Protocol that this listener can speak. */
   int mode;
   /* ASN */
   /*  char shared_secret[SHARED_SECRET_LENGTH];
@@ -63,13 +63,12 @@ listener_new(struct event_base *base,
   assert(mode == LSN_SIMPLE_CLIENT || mode == LSN_SIMPLE_SERVER ||
          mode == LSN_SOCKS_CLIENT);
 
-  struct protocol_t *proto = set_up_protocol(protocol);
-  if (!proto) {
-    printf("This is just terrible. We can't even set up a protocol! Seppuku time!\n");
-    exit(-1);
+  if (set_up_protocol(protocol)<0) {
+    printf("This is just terrible. We can't even set up a protocol! Exiting.\n");
+    exit(1);
   }
 
-  lsn->proto = proto;
+  lsn->proto = protocol;
   lsn->mode = mode;
 
   if (target_address) {
@@ -79,6 +78,7 @@ listener_new(struct event_base *base,
   } else {
     assert(lsn->mode == LSN_SOCKS_CLIENT);
   }
+
   /* ASN */
   /*
   assert(shared_secret == NULL || shared_secret_len == SHARED_SECRET_LENGTH);
@@ -123,16 +123,11 @@ simple_listener_cb(struct evconnlistener *evcl,
   dbg(("Got a connection\n"));
 
   conn->mode = lsn->mode;
-  conn->proto = lsn->proto;
 
   /* Will all protocols need to _init() here? Don't think so! */
-  int is_initiator = (conn->mode != LSN_SIMPLE_SERVER) ? 1 : 0;
-  conn->proto->state = proto_init(conn->proto, &is_initiator);
-
-  /* ASN Which means that all plugins need a state... */
-  if (!conn->proto->state)
-    goto err;
-
+  conn->proto = proto_new(lsn->proto,
+                          conn->mode != LSN_SIMPLE_SERVER);
+  
   if (conn->mode == LSN_SOCKS_CLIENT) {
     /* Construct SOCKS state. */
     conn->socks_state = socks_state_new();

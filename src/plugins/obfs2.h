@@ -16,17 +16,10 @@ struct protocol_t;
 
 #define SHARED_SECRET_LENGTH 16
 
-obfs2_state_t *obfs2_state_new(int *initiator);
-void obfs2_state_set_shared_secret(obfs2_state_t *state,
+void obfs2_state_set_shared_secret(void *state,
                                       const char *secret, size_t secretlen);
-void obfs2_state_free(obfs2_state_t *state);
-int obfs2_send_initial_message(obfs2_state_t *state, struct evbuffer *buf);
-int obfs2_send(obfs2_state_t *state,
-               struct evbuffer *source, struct evbuffer *dest);
-int obfs2_recv(obfs2_state_t *state, struct evbuffer *source,
-               struct evbuffer *dest);
-
-int obfs2_new(struct protocol_t *proto_struct);
+int obfs2_init(void);
+void *obfs2_new(struct protocol_t *proto_struct, int initiator);
 
 
 #ifdef CRYPT_PROTOCOL_PRIVATE

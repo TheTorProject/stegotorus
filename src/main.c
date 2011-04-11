@@ -117,7 +117,6 @@ main(int argc, const char **argv)
   sigevent = evsignal_new(base, SIGINT, handle_signal_cb, (void*) base);
 
   /* start an evconnlistener on the appropriate port(s) */
-  /* ASN We hardcode OBFS2_PROTOCOL for now. */
   listener = listener_new(base,
                           mode, protocol,
                           (struct sockaddr *)&ss_listen, sl_listen,

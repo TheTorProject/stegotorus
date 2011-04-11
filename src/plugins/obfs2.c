@@ -20,17 +20,31 @@
 #include "../util.h"
 #include "../protocol.h"
 
+static void obfs2_state_free(void *state);
+static int obfs2_send_initial_message(void *state, struct evbuffer *buf);
+static int obfs2_send(void *state,
+               struct evbuffer *source, struct evbuffer *dest);
+static int obfs2_recv(void *state, struct evbuffer *source,
+               struct evbuffer *dest);
+static void *obfs2_state_new(int initiator);
+
+static protocol_vtable *vtable=NULL;
+
 /* Sets the function table for the obfs2 protocol and
    calls initialize_crypto(). 
    Returns 0 on success, -1 on fail.
 */
 int
-obfs2_new(struct protocol_t *proto_struct) {
-  proto_struct->destroy = (void *)obfs2_state_free;
-  proto_struct->init = (void *)obfs2_state_new;
-  proto_struct->handshake = (void *)obfs2_send_initial_message;
-  proto_struct->send = (void *)obfs2_send;
-  proto_struct->recv = (void *)obfs2_recv;
+obfs2_init(void) {
+  vtable = calloc(1, sizeof(protocol_vtable));
+  if (!vtable)
+    return -1;
+  
+  vtable->destroy = obfs2_state_free;
+  vtable->create = obfs2_new;
+  vtable->handshake = obfs2_send_initial_message;
+  vtable->send = obfs2_send;
+  vtable->recv = obfs2_recv;
 
   if (initialize_crypto() < 0) {
     fprintf(stderr, "Can't initialize crypto; failing\n");
@@ -52,8 +66,10 @@ seed_nonzero(const uchar *seed)
    'state'.  Returns NULL on failure.
  */
 static crypt_t *
-derive_key(obfs2_state_t *state, const char *keytype)
+derive_key(void *s, const char *keytype)
 {
+  obfs2_state_t *state = s;
+
   crypt_t *cryptstate;
   uchar buf[32];
   digest_t *c = digest_new();
@@ -74,9 +90,11 @@ derive_key(obfs2_state_t *state, const char *keytype)
 }
 
 static crypt_t *
-derive_padding_key(obfs2_state_t *state, const uchar *seed,
+derive_padding_key(void *s, const uchar *seed,
                    const char *keytype)
 {
+  obfs2_state_t *state = s;
+
   crypt_t *cryptstate;
   uchar buf[32];
   digest_t *c = digest_new();
@@ -94,13 +112,21 @@ derive_padding_key(obfs2_state_t *state, const uchar *seed,
   return cryptstate;
 }
 
+void *
+obfs2_new(struct protocol_t *proto_struct, int initiator) {
+  assert(vtable);
+  proto_struct->vtable = vtable;
+  
+  return obfs2_state_new(initiator);
+}
+  
 /**
    Return a new object to handle protocol state.  If 'initiator' is true,
    we're the handshake initiator.  Otherwise, we're the responder.  Return
    NULL on failure.
  */
-obfs2_state_t *
-obfs2_state_new(int *initiator)
+static void *
+obfs2_state_new(int initiator)
 {
   obfs2_state_t *state = calloc(1, sizeof(obfs2_state_t));
   uchar *seed;
@@ -109,8 +135,8 @@ obfs2_state_new(int *initiator)
   if (!state)
     return NULL;
   state->state = ST_WAIT_FOR_KEY;
-  state->we_are_initiator = *initiator;
-  if (*initiator) {
+  state->we_are_initiator = initiator;
+  if (initiator) {
     send_pad_type = INITIATOR_PAD_TYPE;
     seed = state->initiator_seed;
   } else {
@@ -136,9 +162,11 @@ obfs2_state_new(int *initiator)
 
 /** Set the shared secret to be used with this protocol state. */
 void
-obfs2_state_set_shared_secret(obfs2_state_t *state,
+obfs2_state_set_shared_secret(void *s,
                                  const char *secret, size_t secretlen)
 {
+  obfs2_state_t *state = s;
+
   if (secretlen > SHARED_SECRET_LENGTH)
     secretlen = SHARED_SECRET_LENGTH;
   memcpy(state->secret_seed, secret, secretlen);
@@ -148,9 +176,11 @@ obfs2_state_set_shared_secret(obfs2_state_t *state,
    Write the initial protocol setup and padding message for 'state' to
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
  */
-int
-obfs2_send_initial_message(obfs2_state_t *state, struct evbuffer *buf)
+static int
+obfs2_send_initial_message(void *s, struct evbuffer *buf)
 {
+  obfs2_state_t *state = s;
+
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE), plength, send_plength;
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
   const uchar *seed;
@@ -213,10 +243,12 @@ crypt_and_transmit(crypt_t *crypto,
    obfuscated version.  Copies and obfuscates data from 'source' into 'dest'
    using the state in 'state'.  Returns 0 on success, -1 on failure.
  */
-int
-obfs2_send(obfs2_state_t *state,
+static int
+obfs2_send(void *s,
           struct evbuffer *source, struct evbuffer *dest)
 {
+  obfs2_state_t *state = s;
+
   if (state->send_crypto) {
     /* Our crypto is set up; just relay the bytes */
     return crypt_and_transmit(state->send_crypto, source, dest);
@@ -237,8 +269,10 @@ obfs2_send(obfs2_state_t *state,
    keys.  Returns 0 on success, -1 on failure.
  */
 static int
-init_crypto(obfs2_state_t *state)
+init_crypto(void *s)
 {
+  obfs2_state_t *state = s;
+
   const char *send_keytype;
   const char *recv_keytype;
   const char *recv_pad_keytype;
@@ -273,10 +307,12 @@ init_crypto(obfs2_state_t *state)
  *
  * Returns x for "don't call again till you have x bytes".  0 for "all ok". -1
  * for "fail, close" */
-int
-obfs2_recv(obfs2_state_t *state, struct evbuffer *source,
+static int
+obfs2_recv(void *s, struct evbuffer *source,
            struct evbuffer *dest)
 {
+  obfs2_state_t *state = s;
+
   if (state->state == ST_WAIT_FOR_KEY) {
     /* We're waiting for the first OBFUSCATE_SEED_LENGTH+8 bytes to show up
      * so we can learn the partner's seed and padding length */
@@ -350,19 +386,20 @@ obfs2_recv(obfs2_state_t *state, struct evbuffer *source,
   return crypt_and_transmit(state->recv_crypto, source, dest);
 }
 
-void
-obfs2_state_free(obfs2_state_t *s)
+static void
+obfs2_state_free(void *s)
 {
-  if (s->send_crypto)
-    crypt_free(s->send_crypto);
-  if (s->send_padding_crypto)
-    crypt_free(s->send_padding_crypto);
-  if (s->recv_crypto)
-    crypt_free(s->recv_crypto);
-  if (s->recv_padding_crypto)
-    crypt_free(s->recv_padding_crypto);
-  if (s->pending_data_to_send)
-    evbuffer_free(s->pending_data_to_send);
-  memset(s, 0x0a, sizeof(obfs2_state_t));
-  free(s);
+  obfs2_state_t *state = s;
+  if (state->send_crypto)
+    crypt_free(state->send_crypto);
+  if (state->send_padding_crypto)
+    crypt_free(state->send_padding_crypto);
+  if (state->recv_crypto)
+    crypt_free(state->recv_crypto);
+  if (state->recv_padding_crypto)
+    crypt_free(state->recv_padding_crypto);
+  if (state->pending_data_to_send)
+    evbuffer_free(state->pending_data_to_send);
+  memset(state, 0x0a, sizeof(obfs2_state_t));
+  free(state);
 }
