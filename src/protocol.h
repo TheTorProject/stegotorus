@@ -15,16 +15,16 @@ int proto_recv(struct protocol_t *proto, void *source, void *dest);
 
 
 typedef struct protocol_vtable {
-  /* Constructor: creates the protocol; sets up functions etc. */
+  /* Initialization function: Fills in the protocol vtable. */
   int (*init)(struct protocol_t *self);
-  /* Destructor */
+  /* Destructor: Destroys the protocol state.  */
   void (*destroy)(void *state);
 
-  /* does nessesary initiation steps; like build a proto state etc. */
+  /* Constructor: Creates a protocol object. */
   void *(*create)(struct protocol_t *proto_struct,
                   int is_initiator);
 
-  /* does handshake. Supposedly all protocols have a handshake. */
+  /* does handshake. Not all protocols have a handshake. */
   int (*handshake)(void *state,
                    struct evbuffer *buf);
 

@@ -25,8 +25,9 @@ set_up_protocol(int protocol) {
 }
 
 /**
-   This function initializes a protocol. It creates a new
-   protocol_t structure and fills it's vtable etc.
+   This function creates a protocol object. It's called once
+   for every connection. It creates a new protocol_t structure
+   and fills it's vtable etc.
    Return the protocol_t if successful, NULL otherwise.
 */
 struct protocol_t *
