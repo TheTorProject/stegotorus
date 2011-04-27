@@ -12,7 +12,7 @@
 
 #include <openssl/aes.h>
 
-#include "../plugins/obfs2_crypt.h"
+#include "../protocols/obfs2_crypt.h"
 
 struct crypt_t {
   AES_KEY key;

@@ -5,8 +5,8 @@
 #include "protocol.h"
 #include "network.h"
 
-#include "plugins/obfs2.h"
-#include "plugins/dummy.h"
+#include "protocols/obfs2.h"
+#include "protocols/dummy.h"
 
 /**
    This function initializes <protocol>. 

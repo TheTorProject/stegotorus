@@ -17,10 +17,10 @@
 
 #define CRYPT_PROTOCOL_PRIVATE
 #define CRYPT_PRIVATE
-#include "../plugins/obfs2_crypt.h"
+#include "../protocols/obfs2_crypt.h"
 #include "../util.h"
 #include "../protocol.h"
-#include "../plugins/obfs2.h"
+#include "../protocols/obfs2.h"
 
 /* Make sure we can successfully set up a protocol state */
 static void

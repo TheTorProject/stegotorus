@@ -9,9 +9,9 @@
 
 #define SOCKS_PRIVATE
 #include "../socks.h"
-#include "../plugins/obfs2_crypt.h"
+#include "../protocols/obfs2_crypt.h"
 #include "../util.h"
-#include "../plugins/obfs2.h"
+#include "../protocols/obfs2.h"
 
 static void
 test_socks_send_negotiation(void *data)
