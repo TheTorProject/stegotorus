@@ -341,11 +341,26 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
   conn_t *conn = arg;
   assert(bev == conn->output);
 
-  if (conn->flushing || (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR))) {
+  if (conn->flushing || (what & (BEV_EVENT_EOF))) {
     printf("Got error: %s\n",
            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     error_or_eof(conn, bev, conn->input);
     return;
+  }
+  /* ASN PROBABLY connect failed and we should send a "fail" SOCKS
+     response. (or maybe not. I should check all the cases where
+     BEV_EVENT_ERROR is waved) */
+  if (what & BEV_EVENT_ERROR) {
+    /* assert(conn->socks_state) ? */
+    if (conn->socks_state) {
+      if (socks_state_get_status(conn->socks_state) == ST_HAVE_ADDR) {
+        dbg(("Connection failed\n"));
+        bufferevent_enable(conn->input, EV_READ|EV_WRITE);
+        socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
+                         SOCKS5_REP_FAIL);
+        return;
+      }
+    }
   }
   if (what & BEV_EVENT_CONNECTED) {
     /* woo, we're connected.  Now the input buffer can start reading. */
@@ -373,6 +388,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
         obfuscated_read_cb(bev, conn->input);
     }
+    return;
   }
   /* XXX we don't expect any other events */
 }
