@@ -48,7 +48,7 @@ get_uint32(const void *ptr)
   return val;
 }
 #define LTC_ARGCHK(x) assert((x))
-#include "sha256.c"
+#include "../sha256.c"
 #endif
 
 int
