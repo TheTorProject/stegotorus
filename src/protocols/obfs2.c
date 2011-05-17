@@ -26,7 +26,9 @@ static int obfs2_send(void *state,
                struct evbuffer *source, struct evbuffer *dest);
 static int obfs2_recv(void *state, struct evbuffer *source,
                struct evbuffer *dest);
-static void *obfs2_state_new(int initiator);
+static void *obfs2_state_new(int initiator, const char *shared_secret);
+static int obfs2_state_set_shared_secret(void *s,
+                                         const char *secret);
 
 static protocol_vtable *vtable=NULL;
 
@@ -113,11 +115,11 @@ derive_padding_key(void *s, const uchar *seed,
 }
 
 void *
-obfs2_new(struct protocol_t *proto_struct, int initiator) {
+obfs2_new(struct protocol_t *proto_struct, int initiator, const char *shared_secret) {
   assert(vtable);
   proto_struct->vtable = vtable;
   
-  return obfs2_state_new(initiator);
+  return obfs2_state_new(initiator, shared_secret);
 }
   
 /**
@@ -126,7 +128,7 @@ obfs2_new(struct protocol_t *proto_struct, int initiator) {
    NULL on failure.
  */
 static void *
-obfs2_state_new(int initiator)
+obfs2_state_new(int initiator, const char *shared_secret)
 {
   obfs2_state_t *state = calloc(1, sizeof(obfs2_state_t));
   uchar *seed;
@@ -150,6 +152,9 @@ obfs2_state_new(int initiator)
     return NULL;
   }
 
+  if (shared_secret)
+    obfs2_state_set_shared_secret(state, shared_secret);
+
   /* Derive the key for what we're sending */
   state->send_padding_crypto = derive_padding_key(state, seed, send_pad_type);
   if (state->send_padding_crypto == NULL) {
@@ -161,15 +166,25 @@ obfs2_state_new(int initiator)
 }
 
 /** Set the shared secret to be used with this protocol state. */
-void
+static int
 obfs2_state_set_shared_secret(void *s,
-                                 const char *secret, size_t secretlen)
+                              const char *secret)
 {
+  assert(secret);
   obfs2_state_t *state = s;
+  size_t secretlen = strlen(secret);
 
-  if (secretlen > SHARED_SECRET_LENGTH)
+  if (secretlen < SHARED_SECRET_LENGTH) {
+    printf("Shared secrets must be at least 16 bytes.\n"); /* Why? */
+    return -1;
+  } else if (secretlen > SHARED_SECRET_LENGTH) 
     secretlen = SHARED_SECRET_LENGTH;
+
   memcpy(state->secret_seed, secret, secretlen);
+
+  /* free(secret); */
+
+  return 0;
 }
 
 /**
@@ -232,7 +247,6 @@ crypt_and_transmit(crypt_t *crypto,
     if (n <= 0)
       return 0;
     stream_crypt(crypto, data, n);
-    // printf("Message is: %s", data);
     evbuffer_add(dest, data, n);
     dbg(("Processed %d bytes.", n));
   }

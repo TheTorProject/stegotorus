@@ -29,10 +29,8 @@ struct listener_t {
   int target_address_len;
   int proto; /* Protocol that this listener can speak. */
   int mode;
-  /* ASN */
-  /*  char shared_secret[SHARED_SECRET_LENGTH];
+  const char *shared_secret;
   unsigned int have_shared_secret : 1;
-  */
 };
 
 static void simple_listener_cb(struct evconnlistener *evcl,
@@ -54,7 +52,7 @@ listener_new(struct event_base *base,
              int mode, int protocol,
              const struct sockaddr *on_address, int on_address_len,
              const struct sockaddr *target_address, int target_address_len,
-             const char *shared_secret, size_t shared_secret_len)
+             const char *shared_secret)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
@@ -70,6 +68,8 @@ listener_new(struct event_base *base,
 
   lsn->proto = protocol;
   lsn->mode = mode;
+  lsn->shared_secret = shared_secret;
+  lsn->have_shared_secret = 1;
 
   if (target_address) {
     assert(target_address_len <= sizeof(struct sockaddr_storage));
@@ -78,15 +78,6 @@ listener_new(struct event_base *base,
   } else {
     assert(lsn->mode == LSN_SOCKS_CLIENT);
   }
-
-  /* ASN */
-  /*
-  assert(shared_secret == NULL || shared_secret_len == SHARED_SECRET_LENGTH);
-  if (shared_secret) {
-    memcpy(lsn->shared_secret, shared_secret, SHARED_SECRET_LENGTH);
-    lsn->have_shared_secret = 1;
-  }
-  */
 
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
                                           flags,
@@ -124,10 +115,17 @@ simple_listener_cb(struct evconnlistener *evcl,
 
   conn->mode = lsn->mode;
 
-  /* Will all protocols need to _init() here? Don't think so! */
+  struct protocol_params_t *proto_params = calloc(1, sizeof(struct protocol_params_t));
+  proto_params->is_initiator = conn->mode != LSN_SIMPLE_SERVER;
+  proto_params->shared_secret = lsn->shared_secret; 
+
   conn->proto = proto_new(lsn->proto,
-                          conn->mode != LSN_SIMPLE_SERVER);
-  
+                          proto_params);
+  if (!conn->proto) {
+    printf("Creation of protocol object failed! Closing connection.\n");
+    goto err;
+  }
+
   if (conn->mode == LSN_SOCKS_CLIENT) {
     /* Construct SOCKS state. */
     conn->socks_state = socks_state_new();

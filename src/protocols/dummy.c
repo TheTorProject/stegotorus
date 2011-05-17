@@ -36,8 +36,10 @@ dummy_init(void) {
 }
 
 void *
-dummy_new(struct protocol_t *proto_struct, int whatever) {
+dummy_new(struct protocol_t *proto_struct, int whatever, 
+          const char *whatever2) {
   (void)whatever;
+  (void)whatever2;
 
   proto_struct->vtable = vtable;
 

@@ -1,3 +1,4 @@
+#if 0
 /* Copyright 2011 Nick Mathewson
 
    You may do anything with this work that copyright law would normally
@@ -474,3 +475,4 @@ struct testcase_t protocol_tests[] = {
   T(wrong_handshake_plength, 0),
   END_OF_TESTCASES
 };
+#endif

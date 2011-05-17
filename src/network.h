@@ -28,7 +28,7 @@ listener_t *listener_new(
                          int mode, int protocol,
                          const struct sockaddr *on_address, int on_address_len,
                          const struct sockaddr *target_address, int target_address_len,
-                         const char *shared_secret, size_t shared_secret_len);
+                         const char *shared_secret);
 void listener_free(listener_t *listener);
 
 #ifdef NETWORK_PRIVATE
