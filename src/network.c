@@ -316,7 +316,7 @@ error_or_eof(conn_t *conn,
   bufferevent_disable(bev_err, EV_READ|EV_WRITE);
   bufferevent_disable(bev_flush, EV_READ);
 
-  bufferevent_setcb(conn->output, NULL,
+  bufferevent_setcb(bev_flush, NULL,
                     close_conn_on_flush, output_event_cb, conn);
   bufferevent_enable(bev_flush, EV_WRITE);
 }
