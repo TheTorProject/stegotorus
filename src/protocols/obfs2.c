@@ -153,7 +153,8 @@ obfs2_state_new(int initiator, const char *shared_secret)
   }
 
   if (shared_secret)
-    obfs2_state_set_shared_secret(state, shared_secret);
+    if (obfs2_state_set_shared_secret(state, shared_secret)<0)
+      return NULL;
 
   /* Derive the key for what we're sending */
   state->send_padding_crypto = derive_padding_key(state, seed, send_pad_type);
