@@ -341,12 +341,49 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
   conn_t *conn = arg;
   assert(bev == conn->output);
 
+  /**
+     If we got the BEV_EVENT_ERROR flag *AND* we are in socks mode
+     *AND* we are in the ST_HAVE_ADDR state, chances are that we
+     failed connecting to the host requested by the CONNECT call. This
+     means that we should send a negative SOCKS reply back to the
+     client and terminate the connection.
+  */
+  if (what & BEV_EVENT_ERROR) {
+    if ((conn->mode == LSN_SOCKS_CLIENT) && 
+        (conn->socks_state) &&
+        (socks_state_get_status(conn->socks_state) == ST_HAVE_ADDR)) {
+      dbg(("Connection failed\n"));
+      /* Enable EV_WRITE so that we can send the response.
+         Disable EV_READ so that we don't get more stuff from the client. */
+      bufferevent_enable(conn->input, EV_WRITE);
+      bufferevent_disable(conn->input, EV_READ);
+      socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
+                       SOCKS5_REP_FAIL);
+      bufferevent_setcb(conn->input, NULL,
+                        close_conn_on_flush, output_event_cb, conn);
+      return;
+    }
+  }
+
+  /**
+     If the connection is terminating *OR* if we got a BEV_EVENT_ERROR
+     but we don't match the case above, we most probably have to close
+     this connection soon.
+  */
   if (conn->flushing || (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR))) {
     printf("Got error: %s\n",
            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     error_or_eof(conn, bev, conn->input);
     return;
   }
+
+  /**
+     If we got the BEV_EVENT_CONNECTED flag it means that a connection
+     request was succesfull and normally that should have been off a
+     CONNECT request by the SOCKS client. If that's the case we should
+     send a happy response to the client and switch to start serving
+     our pluggable transport protocol.
+  */
   if (what & BEV_EVENT_CONNECTED) {
     /* woo, we're connected.  Now the input buffer can start reading. */
     conn->is_open = 1;
@@ -373,6 +410,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
         obfuscated_read_cb(bev, conn->input);
     }
+    return;
   }
   /* XXX we don't expect any other events */
 }
