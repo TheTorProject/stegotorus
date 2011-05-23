@@ -214,11 +214,7 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
 
   state->state = ST_SENT_REPLY; /* SOCKS phase is now done. */
 
-  if (status == SOCKS5_REP_SUCCESS) {
-    return 1;
-  } else {
-    return -1;
-  }
+  return 1;
 }
 
 /**
@@ -386,11 +382,7 @@ socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
   memcpy(msg+4, &in.s_addr, 4);
   evbuffer_add(dest, msg, 8);
 
-  /* ASN: Do we actually like this return tactic? Check out why I do it. */
-  if (status == SOCKS5_REP_SUCCESS)
-    return 1;
-  else
-    return -1;
+  return 1;
 }
 
 /**

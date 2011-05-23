@@ -347,7 +347,7 @@ test_socks_socks5_request_reply(void *data)
   state->parsereq.af = AF_UNSPEC;
   strcpy(state->parsereq.addr, fqdn);
 
-  tt_int_op(-1, ==, socks5_send_reply(reply_dest,
+  tt_int_op(1, ==, socks5_send_reply(reply_dest,
                                      state, SOCKS5_REP_FAIL));
 
   uchar rep3[255];
@@ -557,7 +557,7 @@ test_socks_socks4_request_reply(void *data)
   state->parsereq.af = AF_UNSPEC;
   strcpy(state->parsereq.addr, fqdn);
 
-  tt_int_op(-1, ==, socks4_send_reply(reply_dest,
+  tt_int_op(1, ==, socks4_send_reply(reply_dest,
                                       state, SOCKS5_REP_FAIL));
 
   uchar rep2[255];
