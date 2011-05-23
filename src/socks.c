@@ -202,7 +202,7 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
   } else {
     addrlen = (state->parsereq.af == AF_INET) ? 4 : 16;
     p[3] = (state->parsereq.af == AF_INET) ? SOCKS5_ATYP_IPV4 : SOCKS5_ATYP_IPV6;
-    evutil_inet_pton(AF_INET, state->parsereq.addr, addr);
+    evutil_inet_pton(state->parsereq.af, state->parsereq.addr, addr);
   }
   port = htons(state->parsereq.port);
 
@@ -293,7 +293,8 @@ socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
     return 1;
 }
 
-static int
+/* rename to socks4_handle_request or something. */
+int
 socks4_read_request(struct evbuffer *source, socks_state_t *state)
 {
   /* Format is:
@@ -366,7 +367,7 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
   return 1;
 }
 
-static int
+int
 socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
 {
   uint16_t portnum;
@@ -381,9 +382,15 @@ socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
   /* convert to socks4 status */
   msg[1] = (status == SOCKS5_REP_SUCCESS) ? SOCKS4_SUCCESS : SOCKS4_FAILED;
   memcpy(msg+2, &portnum, 2);
+  /* ASN: What should we do here in the case of an FQDN request? */
   memcpy(msg+4, &in.s_addr, 4);
   evbuffer_add(dest, msg, 8);
-  return 1;
+
+  /* ASN: Do we actually like this return tactic? Check out why I do it. */
+  if (status == SOCKS5_REP_SUCCESS)
+    return 1;
+  else
+    return -1;
 }
 
 /**

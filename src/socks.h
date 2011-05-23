@@ -84,9 +84,12 @@ int socks5_handle_negotiation(struct evbuffer *source,
                               struct evbuffer *dest, socks_state_t *state);
 int socks5_handle_request(struct evbuffer *source,
                           struct parsereq *parsereq);
-
 int socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                       int status);
+
+int socks4_read_request(struct evbuffer *source, socks_state_t *state);
+int socks4_send_reply(struct evbuffer *dest, 
+                      socks_state_t *state, int status);
 #endif
 
 #endif
