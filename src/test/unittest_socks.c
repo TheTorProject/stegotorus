@@ -14,7 +14,7 @@
 #include "../protocols/obfs2.h"
 
 /**
-   This unit test tests the negotiation phase of the SOCKS5 protocol.
+   This function tests the negotiation phase of the SOCKS5 protocol.
    It sends broken 'Method Negotiation Packets' and it verifies that
    the SOCKS server detected the errors. It also sends some correct
    packets and it expects the server to like them.
@@ -34,7 +34,6 @@ test_socks_socks5_send_negotiation(void *data)
   /* First test:
      Only one method: NOAUTH.
      SOCKS proxy should like this. */
-
   uchar req1[2];
   req1[0] = 1;
   req1[1] = 0;
@@ -127,7 +126,7 @@ test_socks_socks5_send_negotiation(void *data)
 }
 
 /**
-   This unit test tests the 'Client Request' phase of the SOCKS5
+   This function tests the 'Client Request' phase of the SOCKS5
    protocol.
    It sends broken 'Client Request' packets and it verifies that
    the SOCKS server detected the errors. It also sends some correct
@@ -136,7 +135,6 @@ test_socks_socks5_send_negotiation(void *data)
 static void
 test_socks_socks5_request(void *data)
 {
-
   struct evbuffer *dest = NULL;
   struct evbuffer *source = NULL;
   dest = evbuffer_new();
@@ -236,7 +234,7 @@ test_socks_socks5_request(void *data)
 
   evbuffer_add(source, req5, 24);
   tt_int_op(1, ==, socks5_handle_request(source,&pr1));
-  tt_assert(strcmp(pr1.addr, "www.test.example") == 0);
+  tt_str_op(pr1.addr, ==, "www.test.example");
   tt_int_op(pr1.port, ==, 80);
 
   /* Sixth test:
@@ -280,7 +278,7 @@ test_socks_socks5_request(void *data)
 }
 
 /**
-   This unit test tests the 'Server reply' phase of the SOCKS5
+   This function tests the 'Server reply' phase of the SOCKS5
    protocol.  
    We ask the server to send us 'Server reply' packets to different
    requests and with different status codes, and check if the server
@@ -301,8 +299,7 @@ test_socks_socks5_request_reply(void *data)
 
   /* First test:
      We ask the server to send us a reply on an IPv4 request with
-     succesful status.
-  */
+     succesful status. */
   tt_int_op(1, ==, socks5_send_reply(reply_dest,
                                      state, SOCKS5_REP_SUCCESS));
 
@@ -373,6 +370,207 @@ test_socks_socks5_request_reply(void *data)
     evbuffer_free(reply_dest);
 }
 
+/**
+   This function tests the 'Server reply' phase of the SOCKS4
+   *and* SOCKS4a protocol.  
+   It sends broken client request packets and it verifies that the
+   SOCKS server detected the errors. It also sends some correct
+   packets and it expects the server to like them.
+*/
+static void
+test_socks_socks4_request(void *data)
+{
+  struct evbuffer *dest = NULL;
+  struct evbuffer *source = NULL;
+  dest = evbuffer_new();
+  source = evbuffer_new();
+
+  const uint32_t addr = htonl(0x7f000001); /* 127.0.0.1 */
+  const uint16_t port = htons(80);    /* 80 */
+
+  socks_state_t *state;
+  state = socks_state_new();
+  tt_assert(state);
+
+  /* First test:
+     Correct SOCKS4 req packet with nothing in the optional field. */
+  struct parsereq pr1;
+  state->parsereq = pr1;
+  uchar req1[8];
+  req1[0] = 1;
+  memcpy(req1+1,&port,2);
+  memcpy(req1+3,&addr,4);
+  req1[7] = '\x00';
+
+  evbuffer_add(source,req1,8);
+
+  tt_int_op(1, ==, socks4_read_request(source,state));
+  tt_str_op(state->parsereq.addr, ==, "127.0.0.1");
+  tt_int_op(state->parsereq.port, ==, 80);
+
+  /* emptying source buffer before next test  */
+  size_t buffer_len = evbuffer_get_length(source);
+  tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
+
+  /* Second test:
+     Broken SOCKS4 req packet with incomplete optional field */
+  char req2[10];
+  req2[0] = 1;
+  memcpy(req2+1,&port,2);
+  memcpy(req2+3,&addr,4);
+  strcpy(req2+7,"KO");
+  
+  evbuffer_add(source,req2,9);
+
+  tt_int_op(0, ==, socks4_read_request(source,state));
+
+  /* emptying source buffer before next test  */
+  buffer_len = evbuffer_get_length(source);
+  tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
+  
+  /* Third test:
+     Correct SOCKS4 req packet with optional field. */
+  char req3[16];
+  req3[0] = 1;
+  memcpy(req3+1,&port,2);
+  memcpy(req3+3,&addr,4);
+  strcpy(req3+7,"iamalive");
+
+  evbuffer_add(source,req3,16);
+
+  tt_int_op(1, ==, socks4_read_request(source,state));
+  tt_str_op(state->parsereq.addr, ==, "127.0.0.1");
+  tt_int_op(state->parsereq.port, ==, 80);
+
+  /* emptying source buffer before next test  */
+  buffer_len = evbuffer_get_length(source);
+  tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
+
+  /* Fourth test:
+     Correct SOCKS4a req packet with optional field. */
+  const uint32_t addr_4a = htonl(0x00000042); /* 127.0.0.1 */
+  char req4[33];
+  req4[0] = 1;
+  memcpy(req4+1,&port,2);
+  memcpy(req4+3,&addr_4a,4);
+  strcpy(req4+7,"iamalive");
+  strcpy(req4+16, "www.test.example");
+  
+  evbuffer_add(source,req4,33);
+
+  tt_int_op(1, ==, socks4_read_request(source,state));
+  tt_str_op(state->parsereq.addr, ==, "www.test.example");
+  tt_int_op(state->parsereq.port, ==, 80);
+
+  /* emptying source buffer before next test  */
+  buffer_len = evbuffer_get_length(source);
+  tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
+
+  /* Fifth test:
+     Broken SOCKS4a req packet with incomplete optional field. */
+  char req5[33];
+  req5[0] = 1;
+  memcpy(req5+1,&port,2);
+  memcpy(req5+3,&addr_4a,4);
+  strcpy(req5+7,"iamalive");
+  strcpy(req5+16, "www.test.example");
+  
+  evbuffer_add(source,req5,28);
+
+  tt_int_op(0, ==, socks4_read_request(source,state));
+
+  /* emptying source buffer before next test  */
+  buffer_len = evbuffer_get_length(source);
+  tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
+
+  /* Sixth test:
+     Broken SOCKS4a req packet with a HUGE domain name. */
+  #define HUGE 256
+
+  char req6[283];
+  req6[0] = 1;
+  memcpy(req6+1,&port,2);
+  memcpy(req6+3,&addr_4a,4);
+  strcpy(req6+7,"iamalive");
+  memset(req6+16,'2', HUGE);
+  req6[16+HUGE] = '\x00';
+  
+  evbuffer_add(source,req6,16+HUGE+1);
+
+  tt_int_op(-1, ==, socks4_read_request(source,state));
+  #undef HUGE
+
+ end:
+  if (state)
+    socks_state_free(state);
+
+  if (source)
+    evbuffer_free(source);
+  if (dest)
+    evbuffer_free(dest);
+}
+
+static void
+test_socks_socks4_request_reply(void *data)
+{
+  struct evbuffer *reply_dest = NULL;
+  reply_dest = evbuffer_new();
+
+  socks_state_t *state;
+  state = socks_state_new();
+  tt_assert(state);
+
+  state->parsereq.af = AF_INET;
+  strcpy(state->parsereq.addr, "127.0.0.1");
+  state->parsereq.port = 7357;
+
+  /* First test:
+     We ask the server to send us a reply on an IPv4 request with
+     succesful status. */
+  tt_int_op(1, ==, socks4_send_reply(reply_dest,
+                                     state, SOCKS5_REP_SUCCESS));
+  
+  uchar rep1[255];
+  evbuffer_remove(reply_dest,rep1,255); /* yes, this is dirty */
+
+  tt_assert(rep1[0] == '\x00');
+  tt_assert(rep1[1] == SOCKS4_SUCCESS);
+  /* check port */
+  tt_int_op(0, ==, memcmp(rep1+2,"\x1c\xbd",2));
+  /* check address */
+  tt_int_op(0, ==, memcmp(rep1+2+2,"\x7f\x00\x00\x01", 4));
+
+  /* emptying reply_dest buffer before next test  */
+  size_t buffer_len = evbuffer_get_length(reply_dest);
+  tt_int_op(0, ==, evbuffer_drain(reply_dest, buffer_len));
+
+  /* Second test :
+     We ask the server to send us a reply on an FQDN request with
+     failure status.
+  */
+  const char *fqdn = "www.test.example";
+  state->parsereq.af = AF_UNSPEC;
+  strcpy(state->parsereq.addr, fqdn);
+
+  tt_int_op(-1, ==, socks4_send_reply(reply_dest,
+                                      state, SOCKS5_REP_FAIL));
+
+  uchar rep2[255];
+  evbuffer_remove(reply_dest,rep2,255);
+
+  tt_assert(rep2[1] == SOCKS4_FAILED);
+  /* check port */
+  tt_int_op(0, ==, memcmp(rep1+2,"\x1c\xbd",2));
+  /* check address */
+  /*  tt_str_op(rep1+2+2, ==, "www.test.example"); */
+
+ end:
+  if (state)
+    socks_state_free(state);
+
+  if (reply_dest)
+    evbuffer_free(reply_dest);
+}
 
 #define T(name, flags) \
   { #name, test_socks_##name, (flags), NULL, NULL }
@@ -381,5 +579,7 @@ struct testcase_t socks_tests[] = {
   T(socks5_send_negotiation, 0),
   T(socks5_request, 0),
   T(socks5_request_reply, 0),
+  T(socks4_request, 0),
+  T(socks4_request_reply, 0),
   END_OF_TESTCASES
 };
