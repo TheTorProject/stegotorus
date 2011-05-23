@@ -13,8 +13,14 @@
 #include "../util.h"
 #include "../protocols/obfs2.h"
 
+/**
+   This unit test tests the negotiation phase of the SOCKS5 protocol.
+   It sends broken 'Method Negotiation Packets' and it verifies that
+   the SOCKS server detected the errors. It also sends some correct
+   packets and it expects the server to like them.
+*/
 static void
-test_socks_send_negotiation(void *data)
+test_socks_socks5_send_negotiation(void *data)
 {
   struct evbuffer *dest = NULL;
   struct evbuffer *source = NULL;
@@ -120,6 +126,13 @@ test_socks_send_negotiation(void *data)
     evbuffer_free(dest);
 }
 
+/**
+   This unit test tests the 'Client Request' phase of the SOCKS5
+   protocol.
+   It sends broken 'Client Request' packets and it verifies that
+   the SOCKS server detected the errors. It also sends some correct
+   packets and it expects the server to like them.
+*/
 static void
 test_socks_socks5_request(void *data)
 {
@@ -133,7 +146,8 @@ test_socks_socks5_request(void *data)
   state = socks_state_new();
   tt_assert(state);
 
-  const uint32_t addr = htonl(0x7f000001); /* 127.0.0.1 */
+  const uint32_t addr_ipv4 = htonl(0x7f000001); /* 127.0.0.1 */
+  const uint8_t addr_ipv6[16] = {0,13,0,1,0,5,0,14,0,10,0,5,0,14,0,0}; /* d:1:5:e:a:5:e:0 */
   const uint16_t port = htons(80);    /* 80 */
 
   /* First test:
@@ -143,7 +157,7 @@ test_socks_socks5_request(void *data)
   req1[0] = 1;
   req1[1] = 0;
   req1[2] = 1;
-  memcpy(req1+3,&addr,4);
+  memcpy(req1+3,&addr_ipv4,4);
 
   evbuffer_add(source, "\x05", 1);
   evbuffer_add(source, req1, 7);
@@ -160,7 +174,7 @@ test_socks_socks5_request(void *data)
   req2[1] = 0;
   req2[2] = 3;
   req2[3] = 15;
-  memcpy(req1+4,&addr,3);
+  memcpy(req1+4,&addr_ipv4,3);
 
   evbuffer_add(source, "\x05", 1);
   evbuffer_add(source, req2, 7);
@@ -171,12 +185,12 @@ test_socks_socks5_request(void *data)
   tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
 
   /* Third test:
-     Correct IPV4 req packet. */
+     Correct IPv4 req packet. */
   uchar req3[9];
   req3[0] = 1;
   req3[1] = 0;
   req3[2] = 1;
-  memcpy(req3+3,&addr,4);
+  memcpy(req3+3,&addr_ipv4,4);
   memcpy(req3+7,&port,2);
 
   evbuffer_add(source, "\x05", 1);
@@ -190,46 +204,65 @@ test_socks_socks5_request(void *data)
   tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
 
   /* Fourth test:
-     Correct FQDN req packet. */
-  const char fqdn[17] = "www.test.example";
+     Correct IPv6 req packet. */
   uchar req4[24];
   req4[0] = 5;
   req4[1] = 1;
   req4[2] = 0;
-  req4[3] = 3;
-  req4[4] = strlen(fqdn);
-  strcpy((char *)req4+5,fqdn);
-  memcpy(req4+5+strlen(fqdn),&port,2);
+  req4[3] = SOCKS5_ATYP_IPV6;
+  memcpy(req4+4,&addr_ipv6,16);
+  memcpy(req4+20,&port,2);
 
-  evbuffer_add(source, req4, 24);
+  evbuffer_add(source,req4,22);
+  tt_int_op(1, ==, socks5_handle_request(source,&pr1));
+  tt_str_op(pr1.addr, ==, "d:1:5:e:a:5:e:0");
+  tt_int_op(pr1.port, ==, 80);
+
+  /* emptying source buffer before next test  */
+  buffer_len = evbuffer_get_length(source);
+  tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
+
+  /* Fifth test:
+     Correct FQDN req packet. */
+  const char fqdn[17] = "www.test.example";
+  uchar req5[24];
+  req5[0] = 5;
+  req5[1] = 1;
+  req5[2] = 0;
+  req5[3] = 3;
+  req5[4] = strlen(fqdn);
+  strcpy((char *)req5+5,fqdn);
+  memcpy(req5+5+strlen(fqdn),&port,2);
+
+  evbuffer_add(source, req5, 24);
   tt_int_op(1, ==, socks5_handle_request(source,&pr1));
   tt_assert(strcmp(pr1.addr, "www.test.example") == 0);
   tt_int_op(pr1.port, ==, 80);
 
-  /* Third test:
+  /* Sixth test:
      Small request packet */
-  uchar req5[3];
-  req5[0] = 5;
-  req5[1] = 1;
-  req5[2] = 0;
+  uchar req6[3];
+  req6[0] = 5;
+  req6[1] = 1;
+  req6[2] = 0;
 
-  evbuffer_add(source,req5,3);
+  evbuffer_add(source,req6,3);
   tt_int_op(0, ==, socks5_handle_request(source,&pr1));
 
   /* emptying source buffer before next test  */
   buffer_len = evbuffer_get_length(source);
   tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
 
-  /* Fourth test:
+  /* Seventh test:
      Wrong Reserved field */
-  uchar req6[5];
-  req6[0] = 5;
-  req6[1] = 1;
-  req6[2] = 1;
-  req6[3] = 42;
-  req6[4] = 42;
+  uchar req7[5];
+  req7[0] = 5;
+  req7[1] = 1;
+  req7[2] = 1;
+  req7[3] = 42;
+  req7[4] = 42;
 
-  evbuffer_add(source,req6,5);
+  evbuffer_add(source,req7,5);
   tt_int_op(-1, ==, socks5_handle_request(source,&pr1));
 
   /* emptying source buffer before next test  */
@@ -246,6 +279,12 @@ test_socks_socks5_request(void *data)
     evbuffer_free(dest);
 }
 
+/**
+   This unit test tests the 'Server reply' phase of the SOCKS5
+   protocol.  
+   We ask the server to send us 'Server reply' packets to different
+   requests and with different status codes, and check if the server
+   composed the packets well. */
 static void
 test_socks_socks5_request_reply(void *data)
 {
@@ -260,6 +299,10 @@ test_socks_socks5_request_reply(void *data)
   strcpy(state->parsereq.addr, "127.0.0.1");
   state->parsereq.port = 7357;
 
+  /* First test:
+     We ask the server to send us a reply on an IPv4 request with
+     succesful status.
+  */
   tt_int_op(1, ==, socks5_send_reply(reply_dest,
                                      state, SOCKS5_REP_SUCCESS));
 
@@ -276,23 +319,51 @@ test_socks_socks5_request_reply(void *data)
   size_t buffer_len = evbuffer_get_length(reply_dest);
   tt_int_op(0, ==, evbuffer_drain(reply_dest, buffer_len));
 
+  /* Second test:
+     We ask the server to send us a reply on an IPv6 request with 
+     succesful status.
+  */
+  state->parsereq.af = AF_INET6;
+  strcpy(state->parsereq.addr, "d:1:5:e:a:5:e:0");
+  
+  tt_int_op(1, ==, socks5_send_reply(reply_dest,
+                                     state, SOCKS5_REP_SUCCESS));
+
+  uchar rep2[255];
+  evbuffer_remove(reply_dest,rep2,255);
+  
+  tt_assert(rep2[3] = SOCKS5_ATYP_IPV6);
+  /* Test returned address against inet_pton(d:1:5:e:a:5:e:0) */
+  tt_int_op(0, ==, memcmp(rep2+4,
+                          "\x00\x0d\x00\x01\x00\x05\x00\x0e\x00"
+                          "\x0a\x00\x05\x00\x0e\x00\x00",  
+                          16));
+  tt_int_op(0, ==, memcmp(rep2+4+16, "\x1c\xbd", 2));
+
+  /* emptying reply_dest buffer before next test  */
+  buffer_len = evbuffer_get_length(reply_dest);
+  tt_int_op(0, ==, evbuffer_drain(reply_dest, buffer_len));
+
+  /* Third test :
+     We ask the server to send us a reply on an FQDN request with
+     failure status.
+  */
   const char *fqdn = "www.test.example";
   state->parsereq.af = AF_UNSPEC;
   strcpy(state->parsereq.addr, fqdn);
-  state->parsereq.port = 7357;
 
   tt_int_op(-1, ==, socks5_send_reply(reply_dest,
                                      state, SOCKS5_REP_FAIL));
 
-  uchar rep2[255];
-  evbuffer_remove(reply_dest,rep2,255);
+  uchar rep3[255];
+  evbuffer_remove(reply_dest,rep3,255);
 
-  tt_assert(rep2[3] == SOCKS5_ATYP_FQDN);
-  tt_assert(rep2[4] == strlen(fqdn));
+  tt_assert(rep3[3] == SOCKS5_ATYP_FQDN);
+  tt_assert(rep3[4] == strlen(fqdn));
   /* check fqdn */
-  tt_int_op(0, ==, memcmp(rep2+5,fqdn,strlen(fqdn)));
+  tt_int_op(0, ==, memcmp(rep3+5,fqdn,strlen(fqdn)));
   /* check port */
-  tt_int_op(0, ==, memcmp(rep2+5+strlen(fqdn),"\x1c\xbd",2));
+  tt_int_op(0, ==, memcmp(rep3+5+strlen(fqdn),"\x1c\xbd",2));
 
  end:
   if (state)
@@ -307,7 +378,7 @@ test_socks_socks5_request_reply(void *data)
   { #name, test_socks_##name, (flags), NULL, NULL }
 
 struct testcase_t socks_tests[] = {
-  T(send_negotiation, 0),
+  T(socks5_send_negotiation, 0),
   T(socks5_request, 0),
   T(socks5_request_reply, 0),
   END_OF_TESTCASES
