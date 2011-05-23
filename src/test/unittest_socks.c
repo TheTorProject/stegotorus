@@ -98,8 +98,7 @@ test_socks_socks5_send_negotiation(void *data)
 
   /* Fifth test:
      nmethods field = 3 but 4 actual methods.
-     Should be okay; the next byte is part of the request.
-  */
+     Should be okay; the next byte is part of the request. */
   uchar req5[5];
   req5[0] = 3;
   memset(req5+1,0x0,4);
@@ -279,10 +278,11 @@ test_socks_socks5_request(void *data)
 
 /**
    This function tests the 'Server reply' phase of the SOCKS5
-   protocol.  
+   protocol.
    We ask the server to send us 'Server reply' packets to different
-   requests and with different status codes, and check if the server
-   composed the packets well. */
+   requests and with different status codes, and we check if the server
+   composed the packets well.
+*/
 static void
 test_socks_socks5_request_reply(void *data)
 {
@@ -318,8 +318,7 @@ test_socks_socks5_request_reply(void *data)
 
   /* Second test:
      We ask the server to send us a reply on an IPv6 request with 
-     succesful status.
-  */
+     succesful status. */
   state->parsereq.af = AF_INET6;
   strcpy(state->parsereq.addr, "d:1:5:e:a:5:e:0");
   
@@ -343,8 +342,7 @@ test_socks_socks5_request_reply(void *data)
 
   /* Third test :
      We ask the server to send us a reply on an FQDN request with
-     failure status.
-  */
+     failure status. */
   const char *fqdn = "www.test.example";
   state->parsereq.af = AF_UNSPEC;
   strcpy(state->parsereq.addr, fqdn);
@@ -475,6 +473,7 @@ test_socks_socks4_request(void *data)
   strcpy(req5+7,"iamalive");
   strcpy(req5+16, "www.test.example");
   
+  /* Don't send it all. */
   evbuffer_add(source,req5,28);
 
   tt_int_op(0, ==, socks4_read_request(source,state));
@@ -510,6 +509,13 @@ test_socks_socks4_request(void *data)
     evbuffer_free(dest);
 }
 
+/**
+   This function tests the 'Server reply' phase of the SOCKS4/SOCKS4a
+   protocol.
+   We ask the server to send us server reply packets to different
+   requests and with different status codes, and we check if the server
+   composed the packets well.
+*/
 static void
 test_socks_socks4_request_reply(void *data)
 {
@@ -546,8 +552,7 @@ test_socks_socks4_request_reply(void *data)
 
   /* Second test :
      We ask the server to send us a reply on an FQDN request with
-     failure status.
-  */
+     failure status. */
   const char *fqdn = "www.test.example";
   state->parsereq.af = AF_UNSPEC;
   strcpy(state->parsereq.addr, fqdn);
