@@ -90,13 +90,13 @@ socks_errno_to_reply(socks_state_t *state, int error)
         return SOCKS5_FAILED_GENERAL;
       }      
     }
-  }
-  return -1;
+  } else
+    return -1;
 }
 
 /**
    Takes a command request from 'source', it evaluates it and if it's
-   legit it parses into 'parsereq'.
+   legit it parses it into 'parsereq'.
    
    It returns '1' if everything went fine.
    It returns '0' if we need more data from the client.
@@ -138,6 +138,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     printf("socks: Corrupted packet. Discarding.\n");
     goto err;
   }
+
   if (p[1] != SOCKS5_CMD_CONNECT)
     return -2; /* We must send reply to the client. */
 
@@ -495,13 +496,14 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
     if (socks_state->state == ST_NEGOTIATION_DONE) {
       /* We know this connection. Let's see what it wants. */
       r = socks5_handle_request(source,&socks_state->parsereq);
-      if (r == -1)
+      if (r == -2) { /* Request CMD != CONNECT. */ 
+        socks_state->broken = 1;
+        return -2;
+      } else if (r == -1) /* Broken request. */
         goto broken;
-      else if (r == -2) {
-        socks5_send_reply(dest,socks_state,
-                          SOCKS5_FAILED_UNSUPPORTED);
-        goto broken;
-      } else if (r == 1)
+      else if (r == 0) /* Incomplete. */
+        return 0;
+      else if (r == 1) /* Neat request. */
         socks_state->state = ST_HAVE_ADDR;
       return r;
     }
@@ -565,6 +567,7 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
 }
 
 /**
+   This function sends a SOCKS{5,4} "Server Reply" to 'dest'.
    'error' is 0 if no errors were encountered during the SOCKS
    operation (normally a CONNECT with no errors means that the
    connect() was successful).
@@ -582,4 +585,3 @@ socks_send_reply(socks_state_t *state, struct evbuffer *dest, int error)
   else
     return -1;
 }
-

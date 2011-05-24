@@ -28,6 +28,9 @@ int socks_state_get_address(const socks_state_t *state,
                             int *port_out);
 int socks_state_set_address(socks_state_t *state, const struct sockaddr *sa);
 int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int error);
+int socks5_send_reply(struct evbuffer *reply_dest, 
+                      socks_state_t *state, int status);
+
 
 #define SOCKS_SUCCESS     0x0
 #define SOCKS_FAILED        0x01

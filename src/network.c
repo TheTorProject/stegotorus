@@ -268,6 +268,15 @@ socks_read_cb(struct bufferevent *bev, void *arg)
     return; /* need to read more data. */
   else if (r == -1)
     conn_free(conn); /* XXXX maybe send socks reply */
+  else if (r == -2) {
+    bufferevent_enable(bev, EV_WRITE);
+    bufferevent_disable(bev, EV_READ);
+    socks5_send_reply(bufferevent_get_output(bev), conn->socks_state,
+                      SOCKS5_FAILED_UNSUPPORTED);
+    bufferevent_setcb(bev, NULL,
+                      close_conn_on_flush, output_event_cb, conn);
+    return;
+  }
 }
 
 static void
@@ -399,8 +408,8 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
          * socks client */
         socks_state_set_address(conn->socks_state, sa);
       }
-      socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
-                       0);
+      socks_send_reply(conn->socks_state, 
+                       bufferevent_get_output(conn->input), 0);
       /* we sent a socks reply.  We can finally move over to being a regular
          input bufferevent. */
       socks_state_free(conn->socks_state);
