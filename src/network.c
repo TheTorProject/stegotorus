@@ -29,7 +29,7 @@ struct listener_t {
   int target_address_len;
   int mode;
   int proto; /* Protocol that this listener can speak. */
-  struct protocol_params_t *proto_params;
+  protocol_params_t *proto_params;
 };
 
 static void simple_listener_cb(struct evconnlistener *evcl,
@@ -68,7 +68,7 @@ listener_new(struct event_base *base,
   lsn->proto = protocol;
   lsn->mode = mode;
 
-  struct protocol_params_t *proto_params = calloc(1, sizeof(struct protocol_params_t));
+  protocol_params_t *proto_params = calloc(1, sizeof(protocol_params_t));
   proto_params->is_initiator = mode != LSN_SIMPLE_SERVER;
   proto_params->shared_secret = shared_secret; 
   proto_params->shared_secret_len = shared_secret_len;
@@ -97,11 +97,12 @@ listener_new(struct event_base *base,
 }
 
 static void
-protocol_params_free(struct protocol_params_t *params)
+protocol_params_free(protocol_params_t *params)
 {
   assert(params);
   if (params->shared_secret)
     free(&params->shared_secret);
+  free(params);
 }
 
 void

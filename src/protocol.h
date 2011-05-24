@@ -13,12 +13,12 @@ struct evbuffer;
   be inherited by *all* connections opened from the listener_t that
   owns this protocol_params_t.
 */
-struct protocol_params_t {
-int is_initiator;
+typedef struct protocol_params_t {
+  int is_initiator;
   
   const char *shared_secret;
   size_t shared_secret_len;
-};
+} protocol_params_t;
 
 struct protocol_t {
   /* protocol */
@@ -49,7 +49,7 @@ typedef struct protocol_vtable {
 
   /* Constructor: Creates a protocol object. */
   void *(*create)(struct protocol_t *proto_struct,
-                  struct protocol_params_t *parameters);
+                  protocol_params_t *parameters);
 
   /* does handshake. Not all protocols have a handshake. */
   int (*handshake)(void *state,
@@ -69,7 +69,7 @@ typedef struct protocol_vtable {
 
 int set_up_protocol(int protocol);
 struct protocol_t *proto_new(int protocol,
-                             struct protocol_params_t *params);
+                             protocol_params_t *params);
 void proto_destroy(struct protocol_t *proto);
 int proto_handshake(struct protocol_t *proto, void *buf);
 int proto_send(struct protocol_t *proto, void *source, void *dest);

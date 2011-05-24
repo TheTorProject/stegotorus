@@ -26,7 +26,7 @@ static int obfs2_send(void *state,
                struct evbuffer *source, struct evbuffer *dest);
 static int obfs2_recv(void *state, struct evbuffer *source,
                struct evbuffer *dest);
-static void *obfs2_state_new(struct protocol_params_t *params); 
+static void *obfs2_state_new(protocol_params_t *params); 
 static int obfs2_state_set_shared_secret(void *s,
                                          const char *secret,
                                          size_t secretlen);
@@ -117,7 +117,7 @@ derive_padding_key(void *s, const uchar *seed,
 
 void *
 obfs2_new(struct protocol_t *proto_struct,
-          struct protocol_params_t *params)
+          protocol_params_t *params)
 {
   assert(vtable);
   proto_struct->vtable = vtable;
@@ -131,7 +131,7 @@ obfs2_new(struct protocol_t *proto_struct,
    NULL on failure.
  */
 static void *
-obfs2_state_new(struct protocol_params_t *params)
+obfs2_state_new(protocol_params_t *params)
 {
   obfs2_state_t *state = calloc(1, sizeof(obfs2_state_t));
   uchar *seed;
@@ -183,9 +183,9 @@ obfs2_state_set_shared_secret(void *s, const char *secret,
   obfs2_state_t *state = s;
 
   digest_t *c = digest_new();
-  /* ASN do we like this cast here? */
   digest_update(c, (uchar*)secret, secretlen);
   digest_getdigest(c, buf, sizeof(buf));
+
   memcpy(state->secret_seed, buf, SHARED_SECRET_LENGTH);
 
   memset(buf,0,SHARED_SECRET_LENGTH);

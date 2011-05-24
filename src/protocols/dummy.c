@@ -37,7 +37,7 @@ dummy_init(void) {
 
 void *
 dummy_new(struct protocol_t *proto_struct, 
-          struct protocol_params_t *params)
+          protocol_params_t *params)
 {
   proto_struct->vtable = vtable;
 
