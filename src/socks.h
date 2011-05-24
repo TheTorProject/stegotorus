@@ -32,10 +32,7 @@ int socks5_send_reply(struct evbuffer *reply_dest,
                       socks_state_t *state, int status);
 
 
-#define SOCKS_SUCCESS     0x0
-#define SOCKS_FAILED        0x01
-
-#define SOCKS5_SUCCESS            0x0
+#define SOCKS5_SUCCESS            0x00
 #define SOCKS5_FAILED_GENERAL     0x01
 #define SOCKS5_FAILED_NOTALLOWED  0x02
 #define SOCKS5_FAILED_NETUNREACH  0x03

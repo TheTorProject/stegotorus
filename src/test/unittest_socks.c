@@ -269,7 +269,7 @@ test_socks_socks5_request(void *data)
   /* Eigth test:
      Everything is dreamy... if only the requested command was CONNECT... */
   uchar req8[9];
-  req8[0] = 3;
+  req8[0] = 2; /* BIND CMD */
   req8[1] = 0;
   req8[2] = 1;
   memcpy(req8+3,&addr_ipv4,4);
@@ -338,7 +338,7 @@ test_socks_socks5_request_reply(void *data)
   strcpy(state->parsereq.addr, "d:1:5:e:a:5:e:0");
   
   tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS_SUCCESS));
+                                     state, SOCKS5_SUCCESS));
 
   uchar rep2[255];
   evbuffer_remove(reply_dest,rep2,255);

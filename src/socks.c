@@ -233,7 +233,7 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
   p[2] = 0;                 /* Reserved */
 
   /* If status is SOCKS5_FAILED_UNSUPPORTED, it means that we failed
-     before populating state->parsereq. We will just feel the rest
+     before populating state->parsereq. We will just fill the rest
      of the reply packet with zeroes and ship it off.
    */
   if (status == SOCKS5_FAILED_UNSUPPORTED) {
@@ -241,7 +241,7 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
     p[3] = SOCKS5_ATYP_IPV4;
     memset(addr,'\x00',4);
     port = 0;
-  } else {
+  } else { /* state->parsereq is fine. move on. */
     if (state->parsereq.af == AF_UNSPEC) {
       addrlen = 1;
       addr[0] = strlen(state->parsereq.addr);
