@@ -358,7 +358,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       bufferevent_enable(conn->input, EV_WRITE);
       bufferevent_disable(conn->input, EV_READ);
       socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
-                       SOCKS5_REP_FAIL);
+                       SOCKS_FAILED);
       bufferevent_setcb(conn->input, NULL,
                         close_conn_on_flush, output_event_cb, conn);
       return;
@@ -400,7 +400,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
         socks_state_set_address(conn->socks_state, sa);
       }
       socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
-                       SOCKS5_REP_SUCCESS);
+                       SOCKS_SUCCESS);
       /* we sent a socks reply.  We can finally move over to being a regular
          input bufferevent. */
       socks_state_free(conn->socks_state);

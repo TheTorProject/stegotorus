@@ -192,7 +192,8 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
   /* We either failed or succeded.
      Either way, we should send something back to the client */
   p[0] = SOCKS5_VERSION;    /* Version field */
-  p[1] = (unsigned char) status; /* Reply field */
+  /* Reply field */
+  p[1] = (status == SOCKS_SUCCESS) ? SOCKS5_SUCCESS : SOCKS5_FAILED;
   p[2] = 0;                 /* Reserved */
   if (state->parsereq.af == AF_UNSPEC) {
     addrlen = 1;
@@ -376,7 +377,7 @@ socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
   /* Nul byte */
   msg[0] = 0;
   /* convert to socks4 status */
-  msg[1] = (status == SOCKS5_REP_SUCCESS) ? SOCKS4_SUCCESS : SOCKS4_FAILED;
+  msg[1] = (status == SOCKS_SUCCESS) ? SOCKS4_SUCCESS : SOCKS4_FAILED;
   memcpy(msg+2, &portnum, 2);
   /* ASN: What should we do here in the case of an FQDN request? */
   memcpy(msg+4, &in.s_addr, 4);

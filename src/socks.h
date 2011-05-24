@@ -29,9 +29,11 @@ int socks_state_get_address(const socks_state_t *state,
 int socks_state_set_address(socks_state_t *state, const struct sockaddr *sa);
 int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status);
 
-#define SOCKS5_REP_SUCCESS     0x0
-/* XXX there are more response codes than this! */
-#define SOCKS5_REP_FAIL        0x01
+#define SOCKS_SUCCESS     0x0
+#define SOCKS_FAILED        0x01
+
+#define SOCKS5_SUCCESS     0x0
+#define SOCKS5_FAILED        0x01
 
 
 #ifdef SOCKS_PRIVATE

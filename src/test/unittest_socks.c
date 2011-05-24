@@ -301,7 +301,7 @@ test_socks_socks5_request_reply(void *data)
      We ask the server to send us a reply on an IPv4 request with
      succesful status. */
   tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS5_REP_SUCCESS));
+                                     state, SOCKS_SUCCESS));
 
   uchar rep1[255];
   evbuffer_remove(reply_dest,rep1,255); /* yes, this is dirty */
@@ -323,7 +323,7 @@ test_socks_socks5_request_reply(void *data)
   strcpy(state->parsereq.addr, "d:1:5:e:a:5:e:0");
   
   tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS5_REP_SUCCESS));
+                                     state, SOCKS_SUCCESS));
 
   uchar rep2[255];
   evbuffer_remove(reply_dest,rep2,255);
@@ -348,7 +348,7 @@ test_socks_socks5_request_reply(void *data)
   strcpy(state->parsereq.addr, fqdn);
 
   tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS5_REP_FAIL));
+                                     state, SOCKS_FAILED));
 
   uchar rep3[255];
   evbuffer_remove(reply_dest,rep3,255);
@@ -534,7 +534,7 @@ test_socks_socks4_request_reply(void *data)
      We ask the server to send us a reply on an IPv4 request with
      succesful status. */
   tt_int_op(1, ==, socks4_send_reply(reply_dest,
-                                     state, SOCKS5_REP_SUCCESS));
+                                     state, SOCKS_SUCCESS));
   
   uchar rep1[255];
   evbuffer_remove(reply_dest,rep1,255); /* yes, this is dirty */
@@ -558,7 +558,7 @@ test_socks_socks4_request_reply(void *data)
   strcpy(state->parsereq.addr, fqdn);
 
   tt_int_op(1, ==, socks4_send_reply(reply_dest,
-                                      state, SOCKS5_REP_FAIL));
+                                      state, SOCKS_FAILED));
 
   uchar rep2[255];
   evbuffer_remove(reply_dest,rep2,255);
