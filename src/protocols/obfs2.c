@@ -26,9 +26,10 @@ static int obfs2_send(void *state,
                struct evbuffer *source, struct evbuffer *dest);
 static int obfs2_recv(void *state, struct evbuffer *source,
                struct evbuffer *dest);
-static void *obfs2_state_new(int initiator, const char *shared_secret);
+static void *obfs2_state_new(struct protocol_params_t *params); 
 static int obfs2_state_set_shared_secret(void *s,
-                                         const char *secret);
+                                         const char *secret,
+                                         size_t secretlen);
 
 static protocol_vtable *vtable=NULL;
 
@@ -115,11 +116,13 @@ derive_padding_key(void *s, const uchar *seed,
 }
 
 void *
-obfs2_new(struct protocol_t *proto_struct, int initiator, const char *shared_secret) {
+obfs2_new(struct protocol_t *proto_struct,
+          struct protocol_params_t *params)
+{
   assert(vtable);
   proto_struct->vtable = vtable;
   
-  return obfs2_state_new(initiator, shared_secret);
+  return obfs2_state_new(params);
 }
   
 /**
@@ -128,7 +131,7 @@ obfs2_new(struct protocol_t *proto_struct, int initiator, const char *shared_sec
    NULL on failure.
  */
 static void *
-obfs2_state_new(int initiator, const char *shared_secret)
+obfs2_state_new(struct protocol_params_t *params)
 {
   obfs2_state_t *state = calloc(1, sizeof(obfs2_state_t));
   uchar *seed;
@@ -137,8 +140,8 @@ obfs2_state_new(int initiator, const char *shared_secret)
   if (!state)
     return NULL;
   state->state = ST_WAIT_FOR_KEY;
-  state->we_are_initiator = initiator;
-  if (initiator) {
+  state->we_are_initiator = params->is_initiator;
+  if (state->we_are_initiator) {
     send_pad_type = INITIATOR_PAD_TYPE;
     seed = state->initiator_seed;
   } else {
@@ -152,8 +155,10 @@ obfs2_state_new(int initiator, const char *shared_secret)
     return NULL;
   }
 
-  if (shared_secret)
-    if (obfs2_state_set_shared_secret(state, shared_secret)<0)
+  if (params->shared_secret)
+    if (obfs2_state_set_shared_secret(state, 
+                                      params->shared_secret, 
+                                      params->shared_secret_len)<0)
       return NULL;
 
   /* Derive the key for what we're sending */
@@ -168,22 +173,23 @@ obfs2_state_new(int initiator, const char *shared_secret)
 
 /** Set the shared secret to be used with this protocol state. */
 static int
-obfs2_state_set_shared_secret(void *s,
-                              const char *secret)
+obfs2_state_set_shared_secret(void *s, const char *secret, 
+                              size_t secretlen)
 {
   assert(secret);
+  assert(secretlen);
+
+  uchar buf[SHARED_SECRET_LENGTH];
   obfs2_state_t *state = s;
-  size_t secretlen = strlen(secret);
 
-  if (secretlen < SHARED_SECRET_LENGTH) {
-    printf("Shared secrets must be at least 16 bytes.\n"); /* Why? */
-    return -1;
-  } else if (secretlen > SHARED_SECRET_LENGTH) 
-    secretlen = SHARED_SECRET_LENGTH;
+  digest_t *c = digest_new();
+  /* ASN do we like this cast here? */
+  digest_update(c, (uchar*)secret, secretlen);
+  digest_getdigest(c, buf, sizeof(buf));
+  memcpy(state->secret_seed, buf, SHARED_SECRET_LENGTH);
 
-  memcpy(state->secret_seed, secret, secretlen);
-
-  /* free(secret); */
+  memset(buf,0,SHARED_SECRET_LENGTH);
+  digest_free(c);
 
   return 0;
 }

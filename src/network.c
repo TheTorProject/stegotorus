@@ -27,10 +27,9 @@ struct listener_t {
   struct evconnlistener *listener;
   struct sockaddr_storage target_address;
   int target_address_len;
-  int proto; /* Protocol that this listener can speak. */
   int mode;
-  const char *shared_secret;
-  unsigned int have_shared_secret : 1;
+  int proto; /* Protocol that this listener can speak. */
+  struct protocol_params_t *proto_params;
 };
 
 static void simple_listener_cb(struct evconnlistener *evcl,
@@ -52,7 +51,7 @@ listener_new(struct event_base *base,
              int mode, int protocol,
              const struct sockaddr *on_address, int on_address_len,
              const struct sockaddr *target_address, int target_address_len,
-             const char *shared_secret)
+             const char *shared_secret, size_t shared_secret_len)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
@@ -68,8 +67,13 @@ listener_new(struct event_base *base,
 
   lsn->proto = protocol;
   lsn->mode = mode;
-  lsn->shared_secret = shared_secret;
-  lsn->have_shared_secret = 1;
+
+  struct protocol_params_t *proto_params = calloc(1, sizeof(struct protocol_params_t));
+  proto_params->is_initiator = mode != LSN_SIMPLE_SERVER;
+  proto_params->shared_secret = shared_secret; 
+  proto_params->shared_secret_len = shared_secret_len;
+
+  lsn->proto_params = proto_params;
 
   if (target_address) {
     assert(target_address_len <= sizeof(struct sockaddr_storage));
@@ -92,11 +96,21 @@ listener_new(struct event_base *base,
   return lsn;
 }
 
+static void
+protocol_params_free(struct protocol_params_t *params)
+{
+  assert(params);
+  if (params->shared_secret)
+    free(&params->shared_secret);
+}
+
 void
 listener_free(listener_t *lsn)
 {
   if (lsn->listener)
     evconnlistener_free(lsn->listener);
+  if (lsn->proto_params)
+    protocol_params_free(lsn->proto_params);
   memset(lsn, 0xb0, sizeof(listener_t));
   free(lsn);
 }
@@ -115,12 +129,8 @@ simple_listener_cb(struct evconnlistener *evcl,
 
   conn->mode = lsn->mode;
 
-  struct protocol_params_t *proto_params = calloc(1, sizeof(struct protocol_params_t));
-  proto_params->is_initiator = conn->mode != LSN_SIMPLE_SERVER;
-  proto_params->shared_secret = lsn->shared_secret; 
-
   conn->proto = proto_new(lsn->proto,
-                          proto_params);
+                          lsn->proto_params);
   if (!conn->proto) {
     printf("Creation of protocol object failed! Closing connection.\n");
     goto err;

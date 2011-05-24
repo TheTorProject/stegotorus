@@ -36,11 +36,9 @@ dummy_init(void) {
 }
 
 void *
-dummy_new(struct protocol_t *proto_struct, int whatever, 
-          const char *whatever2) {
-  (void)whatever;
-  (void)whatever2;
-
+dummy_new(struct protocol_t *proto_struct, 
+          struct protocol_params_t *params)
+{
   proto_struct->vtable = vtable;
 
   /* Dodging state check. 

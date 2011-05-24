@@ -6,14 +6,37 @@
 
 struct evbuffer;
 
+/**
+  This struct defines parameters of the protocol per-listener basis.
+  
+  By 'per-listener basis' I mean that the parameters defined here will
+  be inherited by *all* connections opened from the listener_t that
+  owns this protocol_params_t.
+*/
+struct protocol_params_t {
+int is_initiator;
+  
+  const char *shared_secret;
+  size_t shared_secret_len;
+};
+
 struct protocol_t {
   /* protocol */
   int proto;
 
   /* protocol vtable */
   struct protocol_vtable *vtable;
+  
+  /* This protocol specific struct defines the state of the protocol
+     per-connection basis.
 
-  /* ASN do we need a proto_get_state()? */
+     By 'protocol specific' I mean that every protocol has it's own
+     state struct. (for example, obfs2 has obfs2_state_t)
+
+     By 'per-connection basis' I mean that the every connection has a
+     different protocol_t struct, and that's precisely the reason that
+     this struct is owned by the conn_t struct.
+  */
   void *state;
 };
 
@@ -26,7 +49,7 @@ typedef struct protocol_vtable {
 
   /* Constructor: Creates a protocol object. */
   void *(*create)(struct protocol_t *proto_struct,
-                  int is_initiator, const char *parameters);
+                  struct protocol_params_t *parameters);
 
   /* does handshake. Not all protocols have a handshake. */
   int (*handshake)(void *state,
@@ -43,12 +66,6 @@ typedef struct protocol_vtable {
               struct evbuffer *dest);
 
 } protocol_vtable;
-
-struct protocol_params_t {
-  int is_initiator;
-  
-  const char *shared_secret;
-};
 
 int set_up_protocol(int protocol);
 struct protocol_t *proto_new(int protocol,

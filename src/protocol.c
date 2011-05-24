@@ -42,10 +42,10 @@ proto_new(int protocol, struct protocol_params_t *params) {
 
   if (protocol == OBFS2_PROTOCOL) {
     proto->proto = protocol;
-    proto->state = obfs2_new(proto, params->is_initiator, params->shared_secret);
+    proto->state = obfs2_new(proto, params);
   } else if (protocol == DUMMY_PROTOCOL) {
     proto->proto = protocol;
-    proto->state = dummy_new(proto, 666, NULL);
+    proto->state = dummy_new(proto, NULL);
   }
 
   if (proto->state)

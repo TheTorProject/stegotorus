@@ -13,11 +13,14 @@
 typedef struct obfs2_state_t obfs2_state_t;
 struct evbuffer;
 struct protocol_t;
+struct protocol_params_t;
 
-#define SHARED_SECRET_LENGTH 16
+#define SHA256_LENGTH 32
+#define SHARED_SECRET_LENGTH SHA256_LENGTH
 
 int obfs2_init(void);
-void *obfs2_new(struct protocol_t *proto_struct, int initiator, const char *parameters);
+void *obfs2_new(struct protocol_t *proto_struct, 
+                struct protocol_params_t *params);
 
 
 #ifdef CRYPT_PROTOCOL_PRIVATE
