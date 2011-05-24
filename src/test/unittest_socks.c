@@ -266,6 +266,21 @@ test_socks_socks5_request(void *data)
   buffer_len = evbuffer_get_length(source);
   tt_int_op(0, ==, evbuffer_drain(source, buffer_len));
 
+  /* Eigth test:
+     Everything is dreamy... if only the requested command was CONNECT... */
+  uchar req8[9];
+  req8[0] = 3;
+  req8[1] = 0;
+  req8[2] = 1;
+  memcpy(req8+3,&addr_ipv4,4);
+  memcpy(req8+7,&port,2);
+
+  evbuffer_add(source, "\x05", 1);
+  evbuffer_add(source, req8, 9);
+  /* '-2' means that we don't support the requested command. */ 
+  tt_int_op(-2, ==, socks5_handle_request(source,&pr1));
+
+
  end:
   if (state)
     socks_state_free(state);
@@ -301,7 +316,7 @@ test_socks_socks5_request_reply(void *data)
      We ask the server to send us a reply on an IPv4 request with
      succesful status. */
   tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS_SUCCESS));
+                                     state, SOCKS5_SUCCESS));
 
   uchar rep1[255];
   evbuffer_remove(reply_dest,rep1,255); /* yes, this is dirty */
@@ -348,7 +363,7 @@ test_socks_socks5_request_reply(void *data)
   strcpy(state->parsereq.addr, fqdn);
 
   tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS_FAILED));
+                                     state, SOCKS5_FAILED_GENERAL));
 
   uchar rep3[255];
   evbuffer_remove(reply_dest,rep3,255);
@@ -360,6 +375,20 @@ test_socks_socks5_request_reply(void *data)
   /* check port */
   tt_int_op(0, ==, memcmp(rep3+5+strlen(fqdn),"\x1c\xbd",2));
 
+  /* Fourth test: 
+     We ask the server while having an empty parsereq and with a
+     SOCKS5_FAILED_UNSUPPORTED status. */  
+  memset(&state->parsereq,'\x00',sizeof(struct parsereq));
+  
+  tt_int_op(1, ==, socks5_send_reply(reply_dest,
+                                     state, SOCKS5_FAILED_UNSUPPORTED));
+  uchar rep4[255];
+  evbuffer_remove(reply_dest,rep4,255);
+
+  tt_assert(rep4[3] == SOCKS5_ATYP_IPV4);
+  tt_int_op(0, ==, memcmp(rep4+4,"\x00\x00\x00\x00",4));
+  tt_int_op(0, ==, memcmp(rep4+4+4, "\x00\x00", 2));
+  
  end:
   if (state)
     socks_state_free(state);
@@ -534,7 +563,7 @@ test_socks_socks4_request_reply(void *data)
      We ask the server to send us a reply on an IPv4 request with
      succesful status. */
   tt_int_op(1, ==, socks4_send_reply(reply_dest,
-                                     state, SOCKS_SUCCESS));
+                                     state, SOCKS4_SUCCESS));
   
   uchar rep1[255];
   evbuffer_remove(reply_dest,rep1,255); /* yes, this is dirty */
@@ -558,7 +587,7 @@ test_socks_socks4_request_reply(void *data)
   strcpy(state->parsereq.addr, fqdn);
 
   tt_int_op(1, ==, socks4_send_reply(reply_dest,
-                                      state, SOCKS_FAILED));
+                                      state, SOCKS4_FAILED));
 
   uchar rep2[255];
   evbuffer_remove(reply_dest,rep2,255);

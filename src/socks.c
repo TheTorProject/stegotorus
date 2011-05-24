@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #define SOCKS_PRIVATE
 #include "socks.h"
@@ -34,7 +35,7 @@
    "Method Negotiation Packet" is handled by: socks5_handle_negotiation()
    "Method Negotiation Reply" is done by: socks5_do_negotiation()
    "Client request" is handled by: socks5_handle_request()
-   "Server reply" is done by: socks5_send_reply
+   "Server reply" is done by: socks5_send_reply()
 */
 
 static int socks5_do_negotiation(struct evbuffer *dest,
@@ -59,20 +60,53 @@ socks_state_free(socks_state_t *s)
   memset(s,0x0b, sizeof(socks_state_t));
   free(s);
 }
+
 /**
-   This function handles connection requests by authenticated SOCKS
-   clients.
-   Considering a request packet from 'source', it evaluates it and pushes
-   the appropriate reply to 'dest'.
-   If the request was correct and can be fulfilled, it connects 'output'
-   to the location the client specified to actually set up the proxying.
+   This function receives an errno(3) 'error' and returns the reply
+   code that should be sent to the SOCKS client.
+   If 'error' is 0 it means that no errors were encountered, and
+   SOCKS{4,5}_SUCCESS is returned.
+*/
+static int
+socks_errno_to_reply(socks_state_t *state, int error)
+{
+  if (state->version == SOCKS4_VERSION) {
+    if (!error)
+      return SOCKS4_SUCCESS;
+    else
+      return SOCKS4_FAILED;
+  } else if (state->version == SOCKS5_VERSION) {
+    if (!error)
+      return SOCKS5_SUCCESS;
+    else {
+      switch (error) {
+      case ENETUNREACH: 
+        return SOCKS5_FAILED_NETUNREACH;
+      case EHOSTUNREACH:
+        return SOCKS5_FAILED_HOSTUNREACH;
+      case ECONNREFUSED:
+        return SOCKS5_FAILED_REFUSED;
+      default:
+        return SOCKS5_FAILED_GENERAL;
+      }      
+    }
+  }
+  return -1;
+}
 
-   XXX: You will notice some "sizeof(req)-1" that initially make no
-   sense, but because of handle_socks() removing the version byte,
-   there are only 3 bytes (==sizeof(req)-1) between the start
-   of 'source' and addrlen. I don't know if replacing it with plain "3"
-   would make more sense.
-
+/**
+   Takes a command request from 'source', it evaluates it and if it's
+   legit it parses into 'parsereq'.
+   
+   It returns '1' if everything went fine.
+   It returns '0' if we need more data from the client.
+   It returns '-1' if we didn't like something.
+   It returns '-2' if the client asked for something else than CONNECT.
+   If that's the case we should send a reply back to the client
+   telling him that we don't support it.
+   
+   Disclaimer: This is just a temporary documentation.  
+   
    Client Request (Client -> Server)
 */
 int
@@ -100,10 +134,12 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   /* p[0] = Version
      p[1] = Command field
      p[2] = Reserved field */
-  if (p[0] != SOCKS5_VERSION || p[1] != SOCKS5_CMD_CONNECT || p[2] != 0x00) {
-    printf("socks: Only CONNECT supported. Sowwy!\n");
+  if (p[0] != SOCKS5_VERSION || p[2] != 0x00) {
+    printf("socks: Corrupted packet. Discarding.\n");
     goto err;
   }
+  if (p[1] != SOCKS5_CMD_CONNECT)
+    return -2; /* We must send reply to the client. */
 
   unsigned int addrlen,af,extralen=0;
   /* p[3] is Address type field */
@@ -183,7 +219,6 @@ int
 socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                   int status)
 {
-  /* This is the buffer that contains our reply to the client. */
   uchar p[4];
   uchar addr[16];
   const char *extra = NULL;
@@ -193,19 +228,31 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
      Either way, we should send something back to the client */
   p[0] = SOCKS5_VERSION;    /* Version field */
   /* Reply field */
-  p[1] = (status == SOCKS_SUCCESS) ? SOCKS5_SUCCESS : SOCKS5_FAILED;
+  p[1] = status;
   p[2] = 0;                 /* Reserved */
-  if (state->parsereq.af == AF_UNSPEC) {
-    addrlen = 1;
-    addr[0] = strlen(state->parsereq.addr);
-    extra = state->parsereq.addr;
-    p[3] = SOCKS5_ATYP_FQDN;
+
+  /* If status is SOCKS5_FAILED_UNSUPPORTED, it means that we failed
+     before populating state->parsereq. We will just feel the rest
+     of the reply packet with zeroes and ship it off.
+   */
+  if (status == SOCKS5_FAILED_UNSUPPORTED) {
+    addrlen = 4;
+    p[3] = SOCKS5_ATYP_IPV4;
+    memset(addr,'\x00',4);
+    port = 0;
   } else {
-    addrlen = (state->parsereq.af == AF_INET) ? 4 : 16;
-    p[3] = (state->parsereq.af == AF_INET) ? SOCKS5_ATYP_IPV4 : SOCKS5_ATYP_IPV6;
-    evutil_inet_pton(state->parsereq.af, state->parsereq.addr, addr);
+    if (state->parsereq.af == AF_UNSPEC) {
+      addrlen = 1;
+      addr[0] = strlen(state->parsereq.addr);
+      extra = state->parsereq.addr;
+      p[3] = SOCKS5_ATYP_FQDN;
+    } else {
+      addrlen = (state->parsereq.af == AF_INET) ? 4 : 16;
+      p[3] = (state->parsereq.af == AF_INET) ? SOCKS5_ATYP_IPV4 : SOCKS5_ATYP_IPV6;
+      evutil_inet_pton(state->parsereq.af, state->parsereq.addr, addr);
+    }
+    port = htons(state->parsereq.port);
   }
-  port = htons(state->parsereq.port);
 
   evbuffer_add(reply_dest, p, 4);
   evbuffer_add(reply_dest, addr, addrlen);
@@ -377,7 +424,7 @@ socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
   /* Nul byte */
   msg[0] = 0;
   /* convert to socks4 status */
-  msg[1] = (status == SOCKS_SUCCESS) ? SOCKS4_SUCCESS : SOCKS4_FAILED;
+  msg[1] = status;
   memcpy(msg+2, &portnum, 2);
   /* ASN: What should we do here in the case of an FQDN request? */
   memcpy(msg+4, &in.s_addr, 4);
@@ -450,7 +497,11 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
       r = socks5_handle_request(source,&socks_state->parsereq);
       if (r == -1)
         goto broken;
-      else if (r == 1)
+      else if (r == -2) {
+        socks5_send_reply(dest,socks_state,
+                          SOCKS5_FAILED_UNSUPPORTED);
+        goto broken;
+      } else if (r == 1)
         socks_state->state = ST_HAVE_ADDR;
       return r;
     }
@@ -513,12 +564,20 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
   return 0;
 }
 
+/**
+   'error' is 0 if no errors were encountered during the SOCKS
+   operation (normally a CONNECT with no errors means that the
+   connect() was successful).
+   If 'error' is not 0, it means that an error was encountered and
+   error carries the errno(3) of the error.
+*/
 int
-socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status)
+socks_send_reply(socks_state_t *state, struct evbuffer *dest, int error)
 {
-  if (state->version == 5)
+  int status = socks_errno_to_reply(state, error);
+  if (state->version == SOCKS5_VERSION)
     return socks5_send_reply(dest, state, status);
-  else if (state->version == 4)
+  else if (state->version == SOCKS4_VERSION)
     return socks4_send_reply(dest, state, status);
   else
     return -1;

@@ -27,13 +27,19 @@ int socks_state_get_address(const socks_state_t *state,
                             const char **addr_out,
                             int *port_out);
 int socks_state_set_address(socks_state_t *state, const struct sockaddr *sa);
-int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int status);
+int socks_send_reply(socks_state_t *state, struct evbuffer *dest, int error);
 
 #define SOCKS_SUCCESS     0x0
 #define SOCKS_FAILED        0x01
 
-#define SOCKS5_SUCCESS     0x0
-#define SOCKS5_FAILED        0x01
+#define SOCKS5_SUCCESS            0x0
+#define SOCKS5_FAILED_GENERAL     0x01
+#define SOCKS5_FAILED_NOTALLOWED  0x02
+#define SOCKS5_FAILED_NETUNREACH  0x03
+#define SOCKS5_FAILED_HOSTUNREACH 0x04
+#define SOCKS5_FAILED_REFUSED     0x05
+#define SOCKS5_FAILED_TTLEXPIRED  0x06
+#define SOCKS5_FAILED_UNSUPPORTED 0x07
 
 
 #ifdef SOCKS_PRIVATE
