@@ -109,7 +109,7 @@ digest_update(digest_t *d, const uchar *buf, size_t len)
 size_t
 digest_getdigest(digest_t *d, uchar *buf, size_t len)
 {
-  uchar tmp[32];
+  uchar tmp[SHA256_LENGTH];
   int n = 32;
   SHA256_Final(tmp, &d->ctx);
   if (len < 32)
@@ -137,7 +137,7 @@ digest_update(digest_t *d, const uchar *buf, size_t len)
 size_t
 digest_getdigest(digest_t *d, uchar *buf, size_t len)
 {
-  uchar tmp[32];
+  uchar tmp[SHA256_LENGTH];
   int n = 32;
   sha256_done(&d->ctx, tmp);
   if (len < 32)

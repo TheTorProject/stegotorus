@@ -74,7 +74,7 @@ derive_key(void *s, const char *keytype)
   obfs2_state_t *state = s;
 
   crypt_t *cryptstate;
-  uchar buf[32];
+  uchar buf[SHA256_LENGTH];
   digest_t *c = digest_new();
   digest_update(c, (uchar*)keytype, strlen(keytype));
   if (seed_nonzero(state->initiator_seed))
@@ -99,7 +99,7 @@ derive_padding_key(void *s, const uchar *seed,
   obfs2_state_t *state = s;
 
   crypt_t *cryptstate;
-  uchar buf[32];
+  uchar buf[SHA256_LENGTH];
   digest_t *c = digest_new();
   digest_update(c, (uchar*)keytype, strlen(keytype));
   if (seed_nonzero(seed))

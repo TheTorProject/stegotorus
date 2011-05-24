@@ -15,7 +15,6 @@ struct evbuffer;
 struct protocol_t;
 struct protocol_params_t;
 
-#define SHA256_LENGTH 32
 #define SHARED_SECRET_LENGTH SHA256_LENGTH
 
 int obfs2_init(void);
