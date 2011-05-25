@@ -15,7 +15,7 @@ extern struct testcase_t socks_tests[];
 
 struct testgroup_t groups[] = {
   { "crypt/", crypt_tests },
-  /*  { "proto/", protocol_tests }, */
+  { "proto/", protocol_tests },
   { "socks/", socks_tests },
   END_OF_GROUPS
 };

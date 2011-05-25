@@ -1,4 +1,3 @@
-#if 0
 /* Copyright 2011 Nick Mathewson
 
    You may do anything with this work that copyright law would normally
@@ -32,8 +31,20 @@ test_proto_setup(void *data)
 
   tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
 
-  client_proto = proto_new(OBFS2_PROTOCOL,1);
-  server_proto = proto_new(OBFS2_PROTOCOL,1);
+  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_serv);
+  proto_params_serv->is_initiator = 1;
+  proto_params_serv->shared_secret = "hahaha"; 
+  proto_params_serv->shared_secret_len = 7;
+  
+  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_client);
+  proto_params_client->is_initiator = 0;
+  proto_params_client->shared_secret = "hahaha"; 
+  proto_params_client->shared_secret_len = 7;
+
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -61,8 +72,20 @@ test_proto_handshake(void *data)
 
   tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
 
-  client_proto = proto_new(OBFS2_PROTOCOL,1);
-  server_proto = proto_new(OBFS2_PROTOCOL,0);
+  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_serv);
+  proto_params_serv->is_initiator = 1;
+  proto_params_serv->shared_secret = "hahaha"; 
+  proto_params_serv->shared_secret_len = 7;
+  
+  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_client);
+  proto_params_client->is_initiator = 0;
+  proto_params_client->shared_secret = "hahaha"; 
+  proto_params_client->shared_secret_len = 7;
+
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -121,8 +144,20 @@ test_proto_transfer(void *data)
 
   tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
 
-  client_proto = proto_new(OBFS2_PROTOCOL,1);
-  server_proto = proto_new(OBFS2_PROTOCOL,0);
+  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_serv);
+  proto_params_serv->is_initiator = 1;
+  proto_params_serv->shared_secret = "hahaha"; 
+  proto_params_serv->shared_secret_len = 7;
+  
+  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_client);
+  proto_params_client->is_initiator = 0;
+  proto_params_client->shared_secret = "hahaha"; 
+  proto_params_client->shared_secret_len = 7;
+
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -204,9 +239,21 @@ test_proto_splitted_handshake(void *data)
   struct protocol_t *server_proto = NULL;
 
   tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
+
+  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_serv);
+  proto_params_serv->is_initiator = 1;
+  proto_params_serv->shared_secret = "hahaha"; 
+  proto_params_serv->shared_secret_len = 7;
   
-  client_proto = proto_new(OBFS2_PROTOCOL,1);
-  server_proto = proto_new(OBFS2_PROTOCOL,0);
+  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_client);
+  proto_params_client->is_initiator = 0;
+  proto_params_client->shared_secret = "hahaha"; 
+  proto_params_client->shared_secret_len = 7;
+  
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -346,8 +393,20 @@ test_proto_wrong_handshake_magic(void *data)
 
   tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
 
-  client_proto = proto_new(OBFS2_PROTOCOL,1);
-  server_proto = proto_new(OBFS2_PROTOCOL,0);
+  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_serv);
+  proto_params_serv->is_initiator = 1;
+  proto_params_serv->shared_secret = "hahaha"; 
+  proto_params_serv->shared_secret_len = 7;
+  
+  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_client);
+  proto_params_client->is_initiator = 0;
+  proto_params_client->shared_secret = "hahaha"; 
+  proto_params_client->shared_secret_len = 7;
+
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -413,8 +472,21 @@ test_proto_wrong_handshake_plength(void *data)
 
   tt_assert(set_up_protocol(OBFS2_PROTOCOL) >= 0);
 
-  client_proto = proto_new(OBFS2_PROTOCOL,1);
-  server_proto = proto_new(OBFS2_PROTOCOL,0);
+  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_serv);
+  proto_params_serv->is_initiator = 1;
+  proto_params_serv->shared_secret = "hahaha"; 
+  proto_params_serv->shared_secret_len = 7;
+  
+  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
+  tt_assert(proto_params_client);
+  proto_params_client->is_initiator = 0;
+  proto_params_client->shared_secret = "hahaha"; 
+  proto_params_client->shared_secret_len = 7;
+
+
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -475,4 +547,3 @@ struct testcase_t protocol_tests[] = {
   T(wrong_handshake_plength, 0),
   END_OF_TESTCASES
 };
-#endif
