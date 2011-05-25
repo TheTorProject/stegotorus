@@ -27,9 +27,10 @@ The Twobfuscator
     s[:n] is the first n bytes of s.
     s[n:] is the last n bytes of s.
 
-    MAGIC_VALUE  is  0x2BF5CA7E
-    SEED_LENGTH  is  16
-    MAX_PADDING  is  8192
+    MAGIC_VALUE      is  0x2BF5CA7E
+    SEED_LENGTH      is  16
+    MAX_PADDING      is  8192
+    HASH_ITERATIONS  is  100000
 
     KEYLEN is the length of the key used by E_K(s) -- that is, 16.
     IVLEN is the length of the IV used by E_K(s) -- that is, 16
@@ -37,6 +38,9 @@ The Twobfuscator
     HASHLEN is the length of the output of H() -- that is, 32.
 
     MAC(s, x) = H(s | x | s)
+
+    Let n = HASH_ITERATIONS through section '2. Key establishment phase.'.
+    Then, H^n(x) is H(x) called iteratively n times. 
 
     A "byte" is an 8-bit octet.
 
@@ -49,12 +53,14 @@ The Twobfuscator
    a padding key as follows.  The initiator generates:
 
     INIT_SEED = SR(SEED_LENGTH)
-    INIT_PAD_KEY = MAC("Initiator obfuscation padding", INIT_SEED)[:KEYLEN]
+    INIT_PAD_TEMP = MAC("Initiator obfuscation padding", INIT_SEED)[:KEYLEN]
+    INIT_PAD_KEY = H^n(INIT_PAD_TEMP)
 
    And the responder generates:
 
     RESP_SEED = SR(SEED_LENGTH)
-    RESP_PAD_KEY = MAC("Responder obfuscation padding", INIT_SEED)[:KEYLEN]
+    RESP_PAD_TEMP = MAC("Responder obfuscation padding", INIT_SEED)[:KEYLEN]
+    RESP_PAD_KEY = H^n(RESP_PAD_TEMP)
 
    Each then generates a random number PADLEN in range from 0 through
    MAX_PADDING (inclusive), and sends:
@@ -73,10 +79,12 @@ The Twobfuscator
 
      INIT_SECRET = MAC("Initiator obfuscated data", INIT_SEED|RESP_SEED)
      RESP_SECRET = MAC("Responder obfuscated data", INIT_SEED|RESP_SEED)
-     INIT_KEY = INIT_SECRET[:KEYLEN]
-     INIT_IV = INIT_SECRET[KEYLEN:]
-     RESP_KEY = RESP_SECRET[:KEYLEN]
-     RESP_IV = RESP_SECRET[KEYLEN:]
+     INIT_MASTER_KEY = H^n(INIT_SECRET)
+     RESP_MASTER_KEY = H^n(RESP_SECRET)
+     INIT_KEY = INIT_MASTER_KEY[:KEYLEN]
+     INIT_IV = INIT_MASTER_KEY[KEYLEN:]
+     RESP_KEY = RESP_MASTER_KEY[:KEYLEN]
+     RESP_IV = RESP_MASTER_KEY[KEYLEN:]
 
    The INIT_KEY value keys a stream cipher used to encrypt values from
    initiator to responder thereafter.  The stream cipher's IV is
@@ -89,5 +97,5 @@ The Twobfuscator
    Optionally, if the client and server share a secret value SECRET,
    they can replace the MAC function with:
 
-      MAC(s,x) = MAC(s | x | SECRET | s)
+      MAC(s,x) = H(s | x | SECRET | s)
 

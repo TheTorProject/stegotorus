@@ -36,6 +36,7 @@ void *obfs2_new(struct protocol_t *proto_struct,
 #define OBFUSCATE_SEED_LENGTH        16
 #define OBFUSCATE_MAX_PADDING        8192
 #define OBFUSCATE_ZERO_SEED "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+#define OBFUSCATE_HASH_ITERATIONS     100000
 
 #define INITIATOR_PAD_TYPE "Initiator obfuscation padding"
 #define RESPONDER_PAD_TYPE "Responder obfuscation padding"

@@ -72,10 +72,12 @@ static crypt_t *
 derive_key(void *s, const char *keytype)
 {
   obfs2_state_t *state = s;
-
   crypt_t *cryptstate;
   uchar buf[SHA256_LENGTH];
   digest_t *c = digest_new();
+  digest_t *d;
+  int i;
+
   digest_update(c, (uchar*)keytype, strlen(keytype));
   if (seed_nonzero(state->initiator_seed))
     digest_update(c, state->initiator_seed, OBFUSCATE_SEED_LENGTH);
@@ -85,6 +87,13 @@ derive_key(void *s, const char *keytype)
     digest_update(c, state->secret_seed, SHARED_SECRET_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
+
+  for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
+    d = digest_new();
+    digest_update(d, buf, sizeof(buf));
+    digest_getdigest(d, buf, sizeof(buf));
+  }
+
   cryptstate = crypt_new(buf, 16);
   crypt_set_iv(cryptstate, buf+16, 16);
   memset(buf, 0, sizeof(buf));
@@ -101,6 +110,9 @@ derive_padding_key(void *s, const uchar *seed,
   crypt_t *cryptstate;
   uchar buf[SHA256_LENGTH];
   digest_t *c = digest_new();
+  digest_t *d;
+  int i;
+
   digest_update(c, (uchar*)keytype, strlen(keytype));
   if (seed_nonzero(seed))
     digest_update(c, seed, OBFUSCATE_SEED_LENGTH);
@@ -108,6 +120,13 @@ derive_padding_key(void *s, const uchar *seed,
     digest_update(c, state->secret_seed, OBFUSCATE_SEED_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
+
+  for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
+    d = digest_new();
+    digest_update(d, buf, sizeof(buf));
+    digest_getdigest(d, buf, sizeof(buf));
+  }
+
   cryptstate = crypt_new(buf, 16);
   crypt_set_iv(cryptstate, buf+16, 16);
   memset(buf, 0, 16);
