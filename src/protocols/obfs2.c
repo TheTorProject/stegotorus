@@ -290,13 +290,20 @@ obfs2_send(void *s,
   obfs2_state_t *state = s;
 
   if (state->send_crypto) {
+    /* First of all, send any data that we've been waiting to send. */
+    if (state->pending_data_to_send) {
+      crypt_and_transmit(state->send_crypto, state->pending_data_to_send, dest);
+      evbuffer_free(state->pending_data_to_send);
+      state->pending_data_to_send = NULL;
+    }
     /* Our crypto is set up; just relay the bytes */
     return crypt_and_transmit(state->send_crypto, source, dest);
   } else {
     /* Our crypto isn't set up yet, we'll have to queue the data */
     if (evbuffer_get_length(source)) {
       if (! state->pending_data_to_send) {
-        state->pending_data_to_send = evbuffer_new();
+        if ((state->pending_data_to_send = evbuffer_new()) == NULL)
+          return -1;
       }
       evbuffer_add_buffer(state->pending_data_to_send, source);
     }
@@ -386,13 +393,6 @@ obfs2_recv(void *s, struct evbuffer *source,
       return -1;
     if (plength > OBFUSCATE_MAX_PADDING)
       return -1;
-
-    /* Send any data that we've been waiting to send */
-    if (state->pending_data_to_send) {
-      crypt_and_transmit(state->send_crypto, state->pending_data_to_send, dest);
-      evbuffer_free(state->pending_data_to_send);
-      state->pending_data_to_send = NULL;
-    }
 
     /* Now we're waiting for plength bytes of padding */
     state->padding_left_to_read = plength;
