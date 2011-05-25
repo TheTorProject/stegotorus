@@ -398,6 +398,10 @@ obfs2_recv(void *s, struct evbuffer *source,
     if (plength > OBFUSCATE_MAX_PADDING)
       return -1;
 
+    /* XXX FIXME we should now be sending any 'pending_data_to_send'
+       but we can't send them from here, so we send them with
+       obfs2_send() when we next have to send data */
+
     /* Now we're waiting for plength bytes of padding */
     state->padding_left_to_read = plength;
     state->state = ST_WAIT_FOR_PADDING;
