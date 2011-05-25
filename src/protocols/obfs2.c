@@ -75,8 +75,6 @@ derive_key(void *s, const char *keytype)
   crypt_t *cryptstate;
   uchar buf[SHA256_LENGTH];
   digest_t *c = digest_new();
-  digest_t *d;
-  int i;
 
   digest_update(c, (uchar*)keytype, strlen(keytype));
   if (seed_nonzero(state->initiator_seed))
@@ -88,10 +86,14 @@ derive_key(void *s, const char *keytype)
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
 
-  for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
-    d = digest_new();
-    digest_update(d, buf, sizeof(buf));
-    digest_getdigest(d, buf, sizeof(buf));
+  if (seed_nonzero(state->secret_seed)) {
+    digest_t *d;
+    int i;
+    for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
+      d = digest_new();
+      digest_update(d, buf, sizeof(buf));
+      digest_getdigest(d, buf, sizeof(buf));
+    }
   }
 
   cryptstate = crypt_new(buf, 16);
@@ -110,8 +112,6 @@ derive_padding_key(void *s, const uchar *seed,
   crypt_t *cryptstate;
   uchar buf[SHA256_LENGTH];
   digest_t *c = digest_new();
-  digest_t *d;
-  int i;
 
   digest_update(c, (uchar*)keytype, strlen(keytype));
   if (seed_nonzero(seed))
@@ -121,10 +121,14 @@ derive_padding_key(void *s, const uchar *seed,
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
 
-  for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
-    d = digest_new();
-    digest_update(d, buf, sizeof(buf));
-    digest_getdigest(d, buf, sizeof(buf));
+  if (seed_nonzero(state->secret_seed)) {
+    digest_t *d;
+    int i;
+    for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
+      d = digest_new();
+      digest_update(d, buf, sizeof(buf));
+      digest_getdigest(d, buf, sizeof(buf));
+    }
   }
 
   cryptstate = crypt_new(buf, 16);

@@ -17,6 +17,8 @@ The Twobfuscator
 1. Primitives, notation, and constants.
 
     H(x) is SHA256 of X
+    H^n(x) is H(x) called iteratively n times. 
+
     E_K(s) is the AES-counter-mode encryption of s using the key K.
 
     x | y is the concatenation of x and y
@@ -39,9 +41,6 @@ The Twobfuscator
 
     MAC(s, x) = H(s | x | s)
 
-    Let n = HASH_ITERATIONS through section '2. Key establishment phase.'.
-    Then, H^n(x) is H(x) called iteratively n times. 
-
     A "byte" is an 8-bit octet.
 
     We require that HASHLEN >= KEYLEN + IVLEN
@@ -53,14 +52,12 @@ The Twobfuscator
    a padding key as follows.  The initiator generates:
 
     INIT_SEED = SR(SEED_LENGTH)
-    INIT_PAD_TEMP = MAC("Initiator obfuscation padding", INIT_SEED)[:KEYLEN]
-    INIT_PAD_KEY = H^n(INIT_PAD_TEMP)
+    INIT_PAD_KEY = MAC("Initiator obfuscation padding", INIT_SEED)[:KEYLEN]
 
    And the responder generates:
 
     RESP_SEED = SR(SEED_LENGTH)
-    RESP_PAD_TEMP = MAC("Responder obfuscation padding", INIT_SEED)[:KEYLEN]
-    RESP_PAD_KEY = H^n(RESP_PAD_TEMP)
+    RESP_PAD_KEY = MAC("Responder obfuscation padding", INIT_SEED)[:KEYLEN]
 
    Each then generates a random number PADLEN in range from 0 through
    MAX_PADDING (inclusive), and sends:
@@ -79,12 +76,10 @@ The Twobfuscator
 
      INIT_SECRET = MAC("Initiator obfuscated data", INIT_SEED|RESP_SEED)
      RESP_SECRET = MAC("Responder obfuscated data", INIT_SEED|RESP_SEED)
-     INIT_MASTER_KEY = H^n(INIT_SECRET)
-     RESP_MASTER_KEY = H^n(RESP_SECRET)
-     INIT_KEY = INIT_MASTER_KEY[:KEYLEN]
-     INIT_IV = INIT_MASTER_KEY[KEYLEN:]
-     RESP_KEY = RESP_MASTER_KEY[:KEYLEN]
-     RESP_IV = RESP_MASTER_KEY[KEYLEN:]
+     INIT_KEY = INIT_SECRET[:KEYLEN]
+     INIT_IV = INIT_SECRET[KEYLEN:]
+     RESP_KEY = RESP_SECRET[:KEYLEN]
+     RESP_IV = RESP_SECRET[KEYLEN:]
 
    The INIT_KEY value keys a stream cipher used to encrypt values from
    initiator to responder thereafter.  The stream cipher's IV is
@@ -97,5 +92,6 @@ The Twobfuscator
    Optionally, if the client and server share a secret value SECRET,
    they can replace the MAC function with:
 
-      MAC(s,x) = H(s | x | SECRET | s)
+      MAC(s,x) = H^n(s | x | SECRET | s)
 
+   where n = HASH_ITERATIONS.

@@ -128,7 +128,8 @@ main(int argc, const char **argv)
                           mode, protocol,
                           (struct sockaddr *)&ss_listen, sl_listen,
                           sa_target, sl_target,
-                          shared_secret, strlen(shared_secret));
+                          shared_secret, 
+                          shared_secret ? strlen(shared_secret) : 0);
   if (! listener) {
     printf("Couldn't create listener!\n");
     return 4;
