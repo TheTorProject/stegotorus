@@ -16,13 +16,13 @@ The Twobfuscator
 
 1. Primitives, notation, and constants.
 
-    H(x) is SHA256 of X
-    E_K(s) is the AES-counter-mode encryption of s using the key K.
+    H(x) is SHA256 of x.
+    E_K(s) is the AES-CTR-128 encryption of s using K as key.
 
-    x | y is the concatenation of x and y
-    UINT32(n) is the 4 byte value of n in big-endian (network) order
-    SR(n) is n bytes of strong random data
-    WR(n) is n bytes of weaker random data
+    x | y is the concatenation of x and y.
+    UINT32(n) is the 4 byte value of n in big-endian (network) order.
+    SR(n) is n bytes of strong random data.
+    WR(n) is n bytes of weaker random data.
     "xyz" is the ASCII characters 'x', 'y', and 'z', not NUL-terminated.
     s[:n] is the first n bytes of s.
     s[n:] is the last n bytes of s.
@@ -44,9 +44,9 @@ The Twobfuscator
 
 2. Key establishment phase.
 
-   The party who opens the connection is the initiator; the one who
-   accepts it is the responder.  Each begins by generating a seed and
-   a padding key as follows.  The initiator generates:
+   The party who opens the connection is the 'initiator'; the one who
+   accepts it is the 'responder'.  Each begins by generating a seed
+   and a padding key as follows.  The initiator generates:
 
     INIT_SEED = SR(SEED_LENGTH)
     INIT_PAD_KEY = MAC("Initiator obfuscation padding", INIT_SEED)[:KEYLEN]
@@ -57,17 +57,24 @@ The Twobfuscator
     RESP_PAD_KEY = MAC("Responder obfuscation padding", INIT_SEED)[:KEYLEN]
 
    Each then generates a random number PADLEN in range from 0 through
-   MAX_PADDING (inclusive), and sends:
+   MAX_PADDING (inclusive).
 
-    SEED | E_PAD_KEY( UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN) )
+   The initiator then sends:
+
+    SEED | INIT_PAD_KEY( UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN) )
+
+   and the responder replies with:
+
+    SEED | RESP_PAD_KEY( UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN) )
 
    Upon receiving the SEED from the other party, each party derives
-   the other party's PAD_KEY value as above, and decrypts the next 8
-   bytes of the key establishment message.  If the MAGIC_VALUE does not
-   match, or the PADLEN value is greater than MAX_PADDING, the party
-   receiving it should wait for a random amount of time then close the
-   connection.  Otherwise, it should read the remaining PADLEN bytes of
-   padding data and discard them.
+   the other party's padding key value as above, and decrypts the next
+   8 bytes of the key establishment message.  If the MAGIC_VALUE does
+   not match, or the PADLEN value is greater than MAX_PADDING, the
+   party receiving it should wait for a random amount of time (with
+   maximum wait time being 4 seconds) then close the connection.
+   Otherwise, it should read the remaining PADLEN bytes of padding data
+   and discard them.
 
    Additional keys are then derived as:
 
