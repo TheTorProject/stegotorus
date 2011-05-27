@@ -1,0 +1,99 @@
+        Role of this document
+
+The role of this document is to give a clear image of what obfs2
+provides to a censored Tor user.
+The role of this document is *not* to describe the censorship ecosystem,
+or to analyze the full threat model of Tor.
+
+        Terminology
+* Censorship:
+  'Censorship is the suppression of speech or other public
+  communication which may be considered objectionable, harmful,
+  sensitive, or inconvenient to the general body of people as
+  determined by a government, media outlet, or other controlling
+  body.'
+* Anonymity
+  Anonymity is the state of an individual's personal identity being
+  publicly unknown. Anonymity does not imply Privacy.
+* Tor
+  Tor is a software system and a computer network intended to provide
+  online anonymity. It's main application is 'tor'.
+* Privacy
+  Privacy is used to prevent the disclosure of information to
+  unauthorized individuals or systems. Privacy does not imply
+  Anonymity.
+* Tor bridge
+  A Tor bridge is a component of the tor network that is not publicly
+  announced as part of it. It's main purpose is Censorship
+  circumvention since finding and blocking a bridge is considered
+  non-trivial.
+* obfsproxy
+  obfsproxy is an application that accepts data as input and can
+  reshape it into another form.
+  When used with tor, it can transform tor's traffic into other
+  protocols in the hope of dodging Censorship.
+* obfs2
+  obfs2 is a protocol supported by obfsproxy. It shapes data by
+  encrypting them with a stream cipher with a randomly generated
+  key. It also supports pre-shared passwords.
+
+        Players:
+* Censored tor/obfsproxy user:
+  A censored tor/obfsproxy user is an Internet user that is censored
+  by 'A Man In The Middle'. He wants to use tor to achieve anonymity,
+  but he also needs privacy, to hide the fact that he is using Tor.
+* Bridge Operator:
+  A bridge operator is a person who runs a tor bridge and has
+  successfully given to the 'Censored tor/obfsproxy user' the necessary
+  information so that the latter can access the bridge service. 
+* A Man In The Middle (MITM):
+  A MITM is a person or a group of people who have the power to
+  apply Censorship.
+
+        What Tor does and does not provide:
+
+Once he is a member of the Tor network a censored Tor user can expect
+low-latency anonymity. A Tor user can also expect Privacy with regards
+to A Man In The Middle, when he is a member of the Tor network.
+
+The problem is that before and while becoming a member of the Tor
+network the user is *not* anonymous and his communications with the
+Tor network are *not* private. This allows A Man In The Middle to
+identify the Tor user and censor him/her.
+
+        What obfs2 does and does not provide:
+
+A Tor user using obfs2 with a Tor Bridge *without* a pre-shared password
+can expect low quality privacy on his communications with the Tor
+network before becoming part of it.
+'low quality privacy' means that A Man In The Middle who has studied
+the obfs2 protocol can easily decipher it, effectively extinguishing
+the privacy.
+
+A Tor user using obfs2 with a Tor Bridge *with* a pre-shared password
+can expect modest privacy on his communications with the Tor network
+before becoming part of it.
+'modest privacy' means that A Man In The Middle who has studied the
+obfs2 protocol should not be able to decipher it. 
+Still one should know that:
+* Because of the nature of the protocol, it is susceptible to offline
+  password cracking attacks.
+* It is the responsibility of the user and the bridge operator to
+  decide upon a strong pre-shared password.
+
+After becoming part of the Tor network, the user is considered
+anonymous and his communication private, with regards to A Man In The
+Middle, under normal circumstances.
+
+Since the realm of anti-censorship is quite young and
+not well studied, the obfs2 user should be aware that there are known
+and unknown attacks that can potentially identify obfs2 and can be
+deployed by A Man In The Middle. Known attacks like that include
+entropy counting and timing attacks.
+
+Additionally, a Tor user using obfs2 with a Tor bridge must *not*
+expect additional entity authentication, data integrity, availability
+or deniability.
+
+Finally, a Tor user using obfs2 with a Tor bridge must *not* expect
+protection from flows of the Tor protocol.  
