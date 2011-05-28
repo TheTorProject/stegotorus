@@ -368,7 +368,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       bufferevent_enable(conn->input, EV_WRITE);
       bufferevent_disable(conn->input, EV_READ);
       socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
-                       evutil_socket_geterror());
+                       evutil_socket_geterror(bufferevent_getfd(bev)));
       bufferevent_setcb(conn->input, NULL,
                         close_conn_on_flush, output_event_cb, conn);
       return;
