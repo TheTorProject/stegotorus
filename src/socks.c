@@ -38,6 +38,7 @@
    "Server reply" is done by: socks5_send_reply()
 */
 
+
 static int socks5_do_negotiation(struct evbuffer *dest,
                                     unsigned int neg_was_success);
 
@@ -61,6 +62,12 @@ socks_state_free(socks_state_t *s)
   free(s);
 }
 
+#ifdef _WIN32
+#define ERR(e) WSA##e
+#else
+#define ERR(e) e
+#endif
+
 /**
    This function receives an errno(3) 'error' and returns the reply
    code that should be sent to the SOCKS client.
@@ -80,11 +87,11 @@ socks_errno_to_reply(socks_state_t *state, int error)
       return SOCKS5_SUCCESS;
     else {
       switch (error) {
-      case ENETUNREACH: 
+      case ERR(ENETUNREACH): 
         return SOCKS5_FAILED_NETUNREACH;
-      case EHOSTUNREACH:
+      case ERR(EHOSTUNREACH):
         return SOCKS5_FAILED_HOSTUNREACH;
-      case ECONNREFUSED:
+      case ERR(ECONNREFUSED):
         return SOCKS5_FAILED_REFUSED;
       default:
         return SOCKS5_FAILED_GENERAL;
@@ -93,6 +100,8 @@ socks_errno_to_reply(socks_state_t *state, int error)
   } else
     return -1;
 }
+
+#undef ERR
 
 /**
    Takes a command request from 'source', it evaluates it and if it's
@@ -109,7 +118,7 @@ socks_errno_to_reply(socks_state_t *state, int error)
    
    Client Request (Client -> Server)
 */
-int
+enum req_status
 socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
 {
   /** XXX: max FQDN size is 255. */
@@ -121,7 +130,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
 
   if (buflength < SIZEOF_SOCKS5_STATIC_REQ+1) {
     printf("socks: request packet is too small (1).\n");
-    return 0;
+    return SOCKS_INCOMPLETE;
   }
 
   /* We only need the socks5_req and an extra byte to get
@@ -140,7 +149,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   }
 
   if (p[1] != SOCKS5_CMD_CONNECT)
-    return -2; /* We must send reply to the client. */
+    return SOCKS_CMD_NOT_CONNECT; /* We must send reply to the client. */
 
   unsigned int addrlen,af,extralen=0;
   /* p[3] is Address type field */
@@ -169,7 +178,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   int minsize = SIZEOF_SOCKS5_STATIC_REQ + addrlen + extralen + 2;
   if (buflength < minsize) {
     printf("socks: request packet too small %d:%d (2)\n", buflength, minsize);
-    return 0;
+    return SOCKS_INCOMPLETE;
   }
 
   /* Drain data from the buffer to get to the good part, the actual
@@ -203,10 +212,10 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   parsereq->port = ntohs(destport);
   parsereq->af = af;
 
-  return 1;
+  return SOCKS_GOOD;
 
  err:
-  return -1;
+  return SOCKS_BROKEN;
 }
 
 /**
@@ -446,7 +455,7 @@ int
 handle_socks(struct evbuffer *source, struct evbuffer *dest,
              socks_state_t *socks_state)
 {
-  int r;
+  enum req_status r;
   if (socks_state->broken)
     return -1;
 
@@ -496,15 +505,15 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
     if (socks_state->state == ST_NEGOTIATION_DONE) {
       /* We know this connection. Let's see what it wants. */
       r = socks5_handle_request(source,&socks_state->parsereq);
-      if (r == -2) { /* Request CMD != CONNECT. */ 
-        socks_state->broken = 1;
-        return -2;
-      } else if (r == -1) /* Broken request. */
-        goto broken;
-      else if (r == 0) /* Incomplete. */
-        return 0;
-      else if (r == 1) /* Neat request. */
+      if (r == SOCKS_GOOD)
         socks_state->state = ST_HAVE_ADDR;
+      else if (r == SOCKS_INCOMPLETE) 
+        return SOCKS_INCOMPLETE;
+      else if (r == SOCKS_CMD_NOT_CONNECT) {
+        socks_state->broken = 1;
+        return SOCKS_CMD_NOT_CONNECT;
+      } else if (r == SOCKS_BROKEN)
+        goto broken;
       return r;
     }
     break;

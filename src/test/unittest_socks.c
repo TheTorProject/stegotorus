@@ -158,7 +158,7 @@ test_socks_socks5_request(void *data)
 
   evbuffer_add(source, "\x05", 1);
   evbuffer_add(source, req1, 7);
-  tt_int_op(0, ==, socks5_handle_request(source,&pr1)); /* 0: want more data*/
+  tt_int_op(SOCKS_INCOMPLETE, ==, socks5_handle_request(source,&pr1)); /* 0: want more data*/
 
   /* emptying source buffer before next test  */
   size_t buffer_len = evbuffer_get_length(source);
@@ -175,7 +175,7 @@ test_socks_socks5_request(void *data)
 
   evbuffer_add(source, "\x05", 1);
   evbuffer_add(source, req2, 7);
-  tt_int_op(0, ==, socks5_handle_request(source,&pr1)); /* 0: want more data*/
+  tt_int_op(SOCKS_INCOMPLETE, ==, socks5_handle_request(source,&pr1)); /* 0: want more data*/
 
   /* emptying source buffer before next test  */
   buffer_len = evbuffer_get_length(source);
@@ -192,7 +192,7 @@ test_socks_socks5_request(void *data)
 
   evbuffer_add(source, "\x05", 1);
   evbuffer_add(source, req3, 9);
-  tt_int_op(1, ==, socks5_handle_request(source,&pr1));
+  tt_int_op(SOCKS_GOOD, ==, socks5_handle_request(source,&pr1));
   tt_str_op(pr1.addr, ==, "127.0.0.1");
   tt_int_op(pr1.port, ==, 80);
 
@@ -211,7 +211,7 @@ test_socks_socks5_request(void *data)
   memcpy(req4+20,&port,2);
 
   evbuffer_add(source,req4,22);
-  tt_int_op(1, ==, socks5_handle_request(source,&pr1));
+  tt_int_op(SOCKS_GOOD, ==, socks5_handle_request(source,&pr1));
   tt_str_op(pr1.addr, ==, "d:1:5:e:a:5:e:0");
   tt_int_op(pr1.port, ==, 80);
 
@@ -232,7 +232,7 @@ test_socks_socks5_request(void *data)
   memcpy(req5+5+strlen(fqdn),&port,2);
 
   evbuffer_add(source, req5, 24);
-  tt_int_op(1, ==, socks5_handle_request(source,&pr1));
+  tt_int_op(SOCKS_GOOD, ==, socks5_handle_request(source,&pr1));
   tt_str_op(pr1.addr, ==, "www.test.example");
   tt_int_op(pr1.port, ==, 80);
 
@@ -244,7 +244,7 @@ test_socks_socks5_request(void *data)
   req6[2] = 0;
 
   evbuffer_add(source,req6,3);
-  tt_int_op(0, ==, socks5_handle_request(source,&pr1));
+  tt_int_op(SOCKS_INCOMPLETE, ==, socks5_handle_request(source,&pr1));
 
   /* emptying source buffer before next test  */
   buffer_len = evbuffer_get_length(source);
@@ -260,7 +260,7 @@ test_socks_socks5_request(void *data)
   req7[4] = 42;
 
   evbuffer_add(source,req7,5);
-  tt_int_op(-1, ==, socks5_handle_request(source,&pr1));
+  tt_int_op(SOCKS_BROKEN, ==, socks5_handle_request(source,&pr1));
 
   /* emptying source buffer before next test  */
   buffer_len = evbuffer_get_length(source);
@@ -278,7 +278,7 @@ test_socks_socks5_request(void *data)
   evbuffer_add(source, "\x05", 1);
   evbuffer_add(source, req8, 9);
   /* '-2' means that we don't support the requested command. */ 
-  tt_int_op(-2, ==, socks5_handle_request(source,&pr1));
+  tt_int_op(SOCKS_CMD_NOT_CONNECT, ==, socks5_handle_request(source,&pr1));
 
 
  end:

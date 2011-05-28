@@ -13,4 +13,6 @@ s.send(request)
 data = s.recv(1024)
 if (struct.unpack('BBBBih', data)[1] == 7):
     print "Works."
+else:
+    print "Fail!"
 

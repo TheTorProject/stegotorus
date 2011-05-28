@@ -10,6 +10,7 @@
 #include "util.h"
 #include "socks.h"
 #include "protocol.h"
+#include "socks.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -229,7 +230,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   //struct bufferevent *other;
-  int r;
+  enum req_status r;
   assert(bev == conn->input); /* socks must be on the initial bufferevent */
 
   //dbg(("Got data on the socks side (%d) \n", conn->socks_state->state));
@@ -262,13 +263,13 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 
     r = handle_socks(bufferevent_get_input(bev),
                      bufferevent_get_output(bev), conn->socks_state);
-  } while (r == 1);
+  } while (r == SOCKS_GOOD);
 
-  if (r == 0)
+  if (r == SOCKS_INCOMPLETE)
     return; /* need to read more data. */
-  else if (r == -1)
+  else if (r == SOCKS_BROKEN)
     conn_free(conn); /* XXXX maybe send socks reply */
-  else if (r == -2) {
+  else if (r == SOCKS_CMD_NOT_CONNECT) {
     bufferevent_enable(bev, EV_WRITE);
     bufferevent_disable(bev, EV_READ);
     socks5_send_reply(bufferevent_get_output(bev), conn->socks_state,
@@ -367,7 +368,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       bufferevent_enable(conn->input, EV_WRITE);
       bufferevent_disable(conn->input, EV_READ);
       socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
-                       EVUTIL_SOCKET_ERROR());
+                       evutil_socket_geterror());
       bufferevent_setcb(conn->input, NULL,
                         close_conn_on_flush, output_event_cb, conn);
       return;
