@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <string.h>
 
 #include "protocol.h"
 #include "network.h"
@@ -13,15 +14,18 @@
    It's called once in the runtime of the program for each proto.
 */
 int
-set_up_protocol(int protocol) {
-  if (protocol == OBFS2_PROTOCOL)
-    obfs2_init();
-  else if (protocol == DUMMY_PROTOCOL)
-    dummy_init();
+set_up_protocol(int n_options, char **options, 
+                struct protocol_params_t *params)
+{
+  char **name = options;
+  while (!strncmp(*name,"--",2))
+         name++;
+  if (!strcmp(*name,"dummy"))
+    return dummy_init(n_options, options, params);
+  else if (!strcmp(*name,"obfs2"))
+    return obfs2_init(n_options, options, params);
   else
     return -1;
-
-  return 1;
 }
 
 /**
@@ -31,7 +35,7 @@ set_up_protocol(int protocol) {
    Return the protocol_t if successful, NULL otherwise.
 */
 struct protocol_t *
-proto_new(int protocol, protocol_params_t *params) {
+proto_new(protocol_params_t *params) {
   struct protocol_t *proto = calloc(1, sizeof(struct protocol_t));
   if (!proto)
     return NULL;
@@ -40,11 +44,9 @@ proto_new(int protocol, protocol_params_t *params) {
   if (!proto->vtable)
     return NULL;
 
-  if (protocol == OBFS2_PROTOCOL) {
-    proto->proto = protocol;
+  if (params->proto == OBFS2_PROTOCOL) {
     proto->state = obfs2_new(proto, params);
-  } else if (protocol == DUMMY_PROTOCOL) {
-    proto->proto = protocol;
+  } else if (params->proto == DUMMY_PROTOCOL) {
     proto->state = dummy_new(proto, NULL);
   }
 
@@ -81,7 +83,8 @@ proto_recv(struct protocol_t *proto, void *source, void *dest) {
     return -1;
 }
 
-void proto_destroy(struct protocol_t *proto) {
+void 
+proto_destroy(struct protocol_t *proto) {
   assert(proto);
   assert(proto->state);
 

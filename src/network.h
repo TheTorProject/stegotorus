@@ -10,6 +10,12 @@
 
 #include <stdlib.h>
 
+#include <event2/buffer.h>
+#include <event2/bufferevent.h>
+#include <event2/listener.h>
+#include <event2/event.h>
+
+
 typedef struct listener_t *listener;
 
 struct sockaddr;
@@ -23,12 +29,8 @@ struct socks_state_t;
 typedef struct listener_t listener_t;
 struct addrinfo;
 
-listener_t *listener_new(
-                         struct event_base *base,
-                         int mode, int protocol,
-                         const struct sockaddr *on_address, int on_address_len,
-                         const struct sockaddr *target_address, int target_address_len,
-                         const char *shared_secret, size_t shared_secret_len);
+listener_t *listener_new(struct event_base *base,
+                         int n_options, char **options);
 void listener_free(listener_t *listener);
 
 #ifdef NETWORK_PRIVATE
