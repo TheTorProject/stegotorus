@@ -43,20 +43,12 @@ proto_new(protocol_params_t *params) {
   if (!proto)
     return NULL;
 
-  proto->vtable = calloc(1, sizeof(struct protocol_vtable));
-  if (!proto->vtable)
-    return NULL;
-
-  if (params->proto == OBFS2_PROTOCOL) {
+  if (params->proto == OBFS2_PROTOCOL)
     proto->state = obfs2_new(proto, params);
-  } else if (params->proto == DUMMY_PROTOCOL) {
+  else if (params->proto == DUMMY_PROTOCOL)
     proto->state = dummy_new(proto, NULL);
-  }
 
-  if (proto->state)
-    return proto;
-  else
-    return NULL;
+  return proto->state ? proto : NULL;
 }
 
 int
@@ -93,4 +85,16 @@ proto_destroy(struct protocol_t *proto) {
 
   if (proto->vtable->destroy)
     proto->vtable->destroy(proto->state);
+
+  free(proto);
+}
+
+void
+proto_params_free(protocol_params_t *params)
+{
+  assert(params);
+
+  if (params->shared_secret)
+    free(params->shared_secret);
+  free(params);
 }

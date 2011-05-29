@@ -136,6 +136,7 @@ obfs2_init(int n_options, char **options,
     }
 
     return 1;
+
  err:
     usage();
     return -1;

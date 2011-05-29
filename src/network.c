@@ -71,23 +71,13 @@ listener_new(struct event_base *base,
   return lsn;
 }
 
-static void
-protocol_params_free(protocol_params_t *params)
-{
-  assert(params);
-
-  if (params->shared_secret)
-    free(params->shared_secret);
-  free(params);
-}
-
 void
 listener_free(listener_t *lsn)
 {
   if (lsn->listener)
     evconnlistener_free(lsn->listener);
   if (lsn->proto_params)
-    protocol_params_free(lsn->proto_params);
+    proto_params_free(lsn->proto_params);
   memset(lsn, 0xb0, sizeof(listener_t));
   free(lsn);
 }

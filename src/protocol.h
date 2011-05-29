@@ -52,6 +52,8 @@ int proto_handshake(struct protocol_t *proto, void *buf);
 int proto_send(struct protocol_t *proto, void *source, void *dest);
 int proto_recv(struct protocol_t *proto, void *source, void *dest);
 
+void proto_params_free(protocol_params_t *params);
+
 
 typedef struct protocol_vtable {
   /* Initialization function: Fills in the protocol vtable. */

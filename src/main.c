@@ -19,10 +19,12 @@
 #define __attribute__(x)
 #endif
 
-static void usage(void) __attribute__((noreturn));
-
+/* The character that seperates multiple listeners in the cli */
 #define SEPERATOR "+"
+/* Totally arbitrary. */
 #define MAXPROTOCOLS 20
+
+static void usage(void) __attribute__((noreturn));
 
 /* protocol.c */
 extern char *supported_protocols[];
@@ -84,6 +86,8 @@ is_supported_protocol(const char *name) {
   }
   return 0;
 }
+
+#define STUPID_BEAUTIFIER "===========================\n"
 
 int
 main(int argc, const char **argv)
@@ -215,10 +219,11 @@ main(int argc, const char **argv)
   listener_t *temp_listener;
   int n_listeners=0;
   for (h=0;h<actual_protocols;h++) {
+
     if (n_protocols > 1) {
-      printf("===========================\n"
-             "Spawning listener %d!\n"
-             "===========================\n", h+1);
+      dbg((STUPID_BEAUTIFIER
+           "Spawning listener %d!\n"
+           STUPID_BEAUTIFIER, h+1));
     }
 
     temp_listener = listener_new(base, n_options_array[h], protocol_options[h]);
@@ -232,18 +237,18 @@ main(int argc, const char **argv)
       continue;
     }
     
-    printf("Succesfully created listener.\n");
+    dbg(("Succesfully created listener.\n"));
     listeners[n_listeners] = temp_listener;
     
     n_listeners++;
   }
 
   if (n_protocols > 1) {
-    printf("\n===========================\n"
-           "From the original %d protocols only %d were parsed from main.c. "
-           "In the end only %d survived.\n\nStarting up...\n"
-           "===========================\n", 
-           n_protocols, actual_protocols,n_listeners);
+    dbg((STUPID_BEAUTIFIER           
+         "From the original %d protocols only %d were parsed from main.c. "
+         "In the end only %d survived.\n\nStarting up...\n"
+         STUPID_BEAUTIFIER, 
+         n_protocols, actual_protocols,n_listeners));
   }
 
   /* run the event loop if at least a listener was created. */
@@ -258,3 +263,5 @@ main(int argc, const char **argv)
 
   return 0;
 }
+
+#undef STUPID_BEAUTIFIER
