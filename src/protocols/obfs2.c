@@ -19,13 +19,14 @@
 #include "obfs2.h"
 #include "../util.h"
 #include "../protocol.h"
+#include "../network.h"
 
 static void obfs2_state_free(void *state);
 static int obfs2_send_initial_message(void *state, struct evbuffer *buf);
 static int obfs2_send(void *state,
                struct evbuffer *source, struct evbuffer *dest);
-static int obfs2_recv(void *state, struct evbuffer *source,
-               struct evbuffer *dest);
+static enum recv_ret obfs2_recv(void *state, struct evbuffer *source,
+                                struct evbuffer *dest);
 static void *obfs2_state_new(protocol_params_t *params); 
 static int obfs2_state_set_shared_secret(void *s,
                                          const char *secret,
@@ -358,11 +359,12 @@ init_crypto(void *s)
  *
  * Returns x for "don't call again till you have x bytes".  0 for "all ok". -1
  * for "fail, close" */
-static int
+static enum recv_ret
 obfs2_recv(void *s, struct evbuffer *source,
            struct evbuffer *dest)
 {
   obfs2_state_t *state = s;
+  enum recv_ret r=0;
 
   if (state->state == ST_WAIT_FOR_KEY) {
     /* We're waiting for the first OBFUSCATE_SEED_LENGTH+8 bytes to show up
@@ -371,7 +373,7 @@ obfs2_recv(void *s, struct evbuffer *source,
     uint32_t magic, plength;
     if (evbuffer_get_length(source) < OBFUSCATE_SEED_LENGTH+8) {
       /* data not here yet */
-      return OBFUSCATE_SEED_LENGTH+8;
+      return (enum recv_ret) RECV_INCOMPLETE;
     }
     evbuffer_remove(source, buf, OBFUSCATE_SEED_LENGTH+8);
 
@@ -384,7 +386,7 @@ obfs2_recv(void *s, struct evbuffer *source,
 
     /* Now we can set up all the keys from the seed */
     if (init_crypto(state) < 0)
-      return -1;
+      return (enum recv_ret) RECV_BAD;
 
     /* Decrypt the next 8 bytes */
     stream_crypt(state->recv_padding_crypto, buf+OBFUSCATE_SEED_LENGTH, 8);
@@ -394,9 +396,9 @@ obfs2_recv(void *s, struct evbuffer *source,
     magic = ntohl(magic);
     plength = ntohl(plength);
     if (magic != OBFUSCATE_MAGIC_VALUE)
-      return -1;
+      return (enum recv_ret) RECV_BAD;
     if (plength > OBFUSCATE_MAX_PADDING)
-      return -1;
+      return (enum recv_ret) RECV_BAD;
 
     /* XXX FIXME we should now be sending any 'pending_data_to_send'
        but we can't send them from here, so we send them with
@@ -411,13 +413,19 @@ obfs2_recv(void *s, struct evbuffer *source,
     dbg(("Received key, expecting %d bytes of padding\n", plength));
   }
 
+  /* If we have pending data to send, we set the return code
+  appropriately so that we call proto_send() right after we get out of
+  here! */  
+  if (state->pending_data_to_send)
+    r = RECV_OBFS2_PENDING;
+
   /* If we're still looking for padding, start pulling off bytes and
      discarding them. */
   while (state->padding_left_to_read) {
     int n = state->padding_left_to_read;
     size_t sourcelen = evbuffer_get_length(source);
     if (!sourcelen)
-      return n;
+      return RECV_INCOMPLETE;
     if ((size_t) n > evbuffer_get_length(source))
       n = evbuffer_get_length(source);
     evbuffer_drain(source, n);
@@ -431,7 +439,12 @@ obfs2_recv(void *s, struct evbuffer *source,
 
   dbg(("Processing %d bytes data onto destination buffer\n",
        (int) evbuffer_get_length(source)));
-  return crypt_and_transmit(state->recv_crypto, source, dest);
+  crypt_and_transmit(state->recv_crypto, source, dest);
+
+  if (r != RECV_OBFS2_PENDING)
+    r = RECV_GOOD;
+
+  return r;
 }
 
 static void

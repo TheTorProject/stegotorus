@@ -72,7 +72,7 @@ proto_send(struct protocol_t *proto, void *source, void *dest) {
     return -1;
 }
 
-int
+enum recv_ret
 proto_recv(struct protocol_t *proto, void *source, void *dest) {
   assert(proto);
   if (proto->vtable->recv)

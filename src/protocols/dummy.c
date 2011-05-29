@@ -11,12 +11,12 @@
 #include "dummy.h"
 #include "../util.h"
 #include "../protocol.h"
-
+#include "../network.h"
 
 static int dummy_send(void *nothing,
-               struct evbuffer *source, struct evbuffer *dest);
-static int dummy_recv(void *nothing, struct evbuffer *source,
-               struct evbuffer *dest);
+                                struct evbuffer *source, struct evbuffer *dest);
+static enum recv_ret dummy_recv(void *nothing, struct evbuffer *source,
+                                struct evbuffer *dest);
 
 static protocol_vtable *vtable=NULL;
 
@@ -54,10 +54,13 @@ dummy_send(void *nothing,
   return evbuffer_add_buffer(dest,source);
 }
 
-static int
+static enum recv_ret
 dummy_recv(void *nothing,
            struct evbuffer *source, struct evbuffer *dest) {
   (void)nothing;
-
-  return evbuffer_add_buffer(dest,source);
+  
+  if (evbuffer_add_buffer(dest,source)<0)
+    return (enum recv_ret) RECV_BAD;
+  else
+    return (enum recv_ret) RECV_GOOD;
 }

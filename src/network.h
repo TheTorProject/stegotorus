@@ -20,6 +20,22 @@ struct socks_state_t;
 #define LSN_SIMPLE_SERVER 2
 #define LSN_SOCKS_CLIENT  3
 
+enum recv_ret {
+  /* Everything went fine. */
+  RECV_GOOD=0,
+  /* Something went bad. */
+  RECV_BAD,
+  /* ...need...more...data... */
+  RECV_INCOMPLETE,
+
+  /* Originally needed by the obfs2 protocol but it might get other
+     users in the future. Maybe it should be renamed to something neutral.
+     It means:
+     "We have pending data that we have to send. You should do that by
+     calling proto_send() immediately." */
+  RECV_OBFS2_PENDING
+};
+
 typedef struct listener_t listener_t;
 struct addrinfo;
 

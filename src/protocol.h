@@ -61,9 +61,9 @@ typedef struct protocol_vtable {
               struct evbuffer *dest);
 
   /* receive data function */
-  int (*recv)(void *state, 
-              struct evbuffer *source,
-              struct evbuffer *dest);
+  enum recv_ret (*recv)(void *state, 
+                        struct evbuffer *source,
+                        struct evbuffer *dest);
 
 } protocol_vtable;
 
@@ -73,6 +73,6 @@ struct protocol_t *proto_new(int protocol,
 void proto_destroy(struct protocol_t *proto);
 int proto_handshake(struct protocol_t *proto, void *buf);
 int proto_send(struct protocol_t *proto, void *source, void *dest);
-int proto_recv(struct protocol_t *proto, void *source, void *dest);
+enum recv_ret proto_recv(struct protocol_t *proto, void *source, void *dest);
 
 #endif

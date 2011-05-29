@@ -309,12 +309,19 @@ obfuscated_read_cb(struct bufferevent *bev, void *arg)
   conn_t *conn = arg;
   struct bufferevent *other;
   other = (bev == conn->input) ? conn->output : conn->input;
+  enum recv_ret r;
 
   dbg(("Got data on encrypted side\n"));
-  if (proto_recv(conn->proto,
+  r = proto_recv(conn->proto,
                  bufferevent_get_input(bev),
-                 bufferevent_get_output(other)) < 0)
+                 bufferevent_get_output(other));
+  
+  if (r == RECV_BAD)
     conn_free(conn);
+  else if (r == RECV_OBFS2_PENDING)
+    proto_send(conn->proto, 
+               bufferevent_get_input(conn->input),
+               bufferevent_get_output(conn->output));
 }
 
 static void
