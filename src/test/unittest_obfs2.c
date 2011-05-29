@@ -21,6 +21,7 @@
 #include "../util.h"
 #include "../protocol.h"
 #include "../protocols/obfs2.h"
+#include "../network.h"
 
 /* Make sure we can successfully set up a protocol state */
 static void
@@ -33,18 +34,18 @@ test_proto_setup(void *data)
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_serv);
-  proto_params_serv->is_initiator = 1;
+  proto_params_serv->is_initiator = 0;
   proto_params_serv->shared_secret = "hahaha"; 
   proto_params_serv->shared_secret_len = 7;
   
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_client);
-  proto_params_client->is_initiator = 0;
+  proto_params_client->is_initiator = 1;
   proto_params_client->shared_secret = "hahaha"; 
   proto_params_client->shared_secret_len = 7;
 
-  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
-  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -74,18 +75,18 @@ test_proto_handshake(void *data)
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_serv);
-  proto_params_serv->is_initiator = 1;
+  proto_params_serv->is_initiator = 0;
   proto_params_serv->shared_secret = "hahaha"; 
   proto_params_serv->shared_secret_len = 7;
   
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_client);
-  proto_params_client->is_initiator = 0;
+  proto_params_client->is_initiator = 1;
   proto_params_client->shared_secret = "hahaha"; 
   proto_params_client->shared_secret_len = 7;
 
-  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
-  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -96,17 +97,17 @@ test_proto_handshake(void *data)
   obfs2_state_t *server_state = server_proto->state;
 
   /* We create a client handshake message and pass it to output_buffer */
-  tt_int_op(0, <=, proto_handshake(client_proto, output_buffer)<0);
+  tt_int_op(0, <=, proto_handshake(client_proto, output_buffer));
 
   /* We simulate the server receiving and processing the client's handshake message,
      by using proto_recv() on the output_buffer */
-  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer) <0);
+  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(server_proto, output_buffer, dummy_buffer));
 
   /* Now, we create the server's handshake and pass it to output_buffer */
-  tt_int_op(0, <=, proto_handshake(server_proto, output_buffer)<0);
+  tt_int_op(0, <=, proto_handshake(server_proto, output_buffer));
 
   /* We simulate the client receiving and processing the server's handshake */
-  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer) <0);
+  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(client_proto, output_buffer, dummy_buffer));
 
   /* The handshake is now complete. We should have:
      client's send_crypto == server's recv_crypto
@@ -146,18 +147,18 @@ test_proto_transfer(void *data)
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_serv);
-  proto_params_serv->is_initiator = 1;
+  proto_params_serv->is_initiator = 0;
   proto_params_serv->shared_secret = "hahaha"; 
   proto_params_serv->shared_secret_len = 7;
   
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_client);
-  proto_params_client->is_initiator = 0;
+  proto_params_client->is_initiator = 1;
   proto_params_client->shared_secret = "hahaha"; 
   proto_params_client->shared_secret_len = 7;
 
-  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
-  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -168,10 +169,12 @@ test_proto_transfer(void *data)
   struct evbuffer_iovec v[2];
 
   /* Handshake */
-  tt_int_op(0, <=, proto_handshake(client_proto, output_buffer)<0);
-  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer) <0);
-  tt_int_op(0, <=, proto_handshake(server_proto, output_buffer)<0);
-  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer) <0);
+  tt_int_op(0, <=, proto_handshake(client_proto, output_buffer));
+  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(server_proto, 
+                                                    output_buffer, dummy_buffer));
+  tt_int_op(0, <=, proto_handshake(server_proto, output_buffer));
+  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(client_proto, 
+                                                    output_buffer, dummy_buffer));
   /* End of Handshake */
 
   /* Now let's pass some data around. */
@@ -182,7 +185,8 @@ test_proto_transfer(void *data)
   evbuffer_add(dummy_buffer, msg1, 54);
   proto_send(client_proto, dummy_buffer, output_buffer);
 
-  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer));
+  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(server_proto, 
+                                                    output_buffer, dummy_buffer));
 
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[0], 2);
 
@@ -197,7 +201,8 @@ test_proto_transfer(void *data)
   evbuffer_add(dummy_buffer, msg2, 55);
   tt_int_op(0, <=, proto_send(server_proto, dummy_buffer, output_buffer));
 
-  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer));
+  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(client_proto, 
+                                                    output_buffer, dummy_buffer));
 
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[1], 2);
   tt_int_op(0, ==, strncmp(msg2, v[1].iov_base, 55));
@@ -242,18 +247,18 @@ test_proto_splitted_handshake(void *data)
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_serv);
-  proto_params_serv->is_initiator = 1;
+  proto_params_serv->is_initiator = 0;
   proto_params_serv->shared_secret = "hahaha"; 
   proto_params_serv->shared_secret_len = 7;
   
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_client);
-  proto_params_client->is_initiator = 0;
+  proto_params_client->is_initiator = 1;
   proto_params_client->shared_secret = "hahaha"; 
   proto_params_client->shared_secret_len = 7;
   
-  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
-  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -293,7 +298,8 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgclient_1, OBFUSCATE_SEED_LENGTH+8+plength1_msg1);
 
   /* Server receives handshake part 1 */
-  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer));
+  tt_assert((enum recv_ret) RECV_INCOMPLETE == proto_recv(server_proto,
+                                                          output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_PADDING);
 
@@ -305,7 +311,8 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgclient_2, plength1_msg2);
 
   /* Server receives handshake part 2 */
-  tt_int_op(0, <=, proto_recv(server_proto, output_buffer, dummy_buffer));
+  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(server_proto, 
+                                                    output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_OPEN);
 
@@ -334,7 +341,8 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgserver_1, OBFUSCATE_SEED_LENGTH+8);
 
   /* Client receives handshake part 1 */
-  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer));
+  tt_assert((enum recv_ret) RECV_INCOMPLETE == proto_recv(client_proto, 
+                                                    output_buffer, dummy_buffer));
 
   tt_assert(client_state->state == ST_WAIT_FOR_PADDING);
 
@@ -346,7 +354,8 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgserver_2, plength2);
 
   /* Client receives handshake part 2 */
-  tt_int_op(0, <=, proto_recv(client_proto, output_buffer, dummy_buffer));
+  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(client_proto, 
+                                                    output_buffer, dummy_buffer));
 
   tt_assert(client_state->state == ST_OPEN);
 
@@ -395,18 +404,18 @@ test_proto_wrong_handshake_magic(void *data)
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_serv);
-  proto_params_serv->is_initiator = 1;
+  proto_params_serv->is_initiator = 0;
   proto_params_serv->shared_secret = "hahaha"; 
   proto_params_serv->shared_secret_len = 7;
   
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_client);
-  proto_params_client->is_initiator = 0;
+  proto_params_client->is_initiator = 1;
   proto_params_client->shared_secret = "hahaha"; 
   proto_params_client->shared_secret_len = 7;
 
-  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
-  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -437,7 +446,8 @@ test_proto_wrong_handshake_magic(void *data)
 
   evbuffer_add(output_buffer, msg, OBFUSCATE_SEED_LENGTH+8+plength);
 
-  tt_int_op(-1, ==, proto_recv(server_proto, output_buffer, dummy_buffer));
+  tt_assert((enum recv_ret) RECV_BAD == proto_recv(server_proto, 
+                                                   output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_KEY);
 
@@ -474,19 +484,19 @@ test_proto_wrong_handshake_plength(void *data)
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_serv);
-  proto_params_serv->is_initiator = 1;
+  proto_params_serv->is_initiator = 0;
   proto_params_serv->shared_secret = "hahaha"; 
   proto_params_serv->shared_secret_len = 7;
   
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
   tt_assert(proto_params_client);
-  proto_params_client->is_initiator = 0;
+  proto_params_client->is_initiator = 1;
   proto_params_client->shared_secret = "hahaha"; 
   proto_params_client->shared_secret_len = 7;
 
 
-  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
-  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  client_proto = proto_new(OBFS2_PROTOCOL,proto_params_client);
+  server_proto = proto_new(OBFS2_PROTOCOL,proto_params_serv);
 
   tt_assert(client_proto);
   tt_assert(server_proto);
@@ -515,7 +525,9 @@ test_proto_wrong_handshake_plength(void *data)
 
   evbuffer_add(output_buffer, msg, OBFUSCATE_SEED_LENGTH+8+plength);
 
-  tt_int_op(-1, ==, proto_recv(server_proto, output_buffer, dummy_buffer));
+
+  tt_assert((enum recv_ret) RECV_BAD == proto_recv(server_proto, 
+                                                   output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_KEY);
 
