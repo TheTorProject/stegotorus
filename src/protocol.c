@@ -9,6 +9,9 @@
 #include "protocols/obfs2.h"
 #include "protocols/dummy.h"
 
+char *supported_protocols[] = { "obfs2", "dummy" };
+int n_supported_protocols = 2;
+
 /**
    This function initializes <protocol>. 
    It's called once in the runtime of the program for each proto.

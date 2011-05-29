@@ -24,8 +24,9 @@ static void usage(void) __attribute__((noreturn));
 #define SEPERATOR "+"
 #define MAXPROTOCOLS 20
 
-const char *supported_protocols[] = { "obfs2", "dummy" };
-const int n_supported_protocols = 2;
+/* protocol.c */
+extern char *supported_protocols[];
+extern int n_supported_protocols;
 
 static void
 usage(void)
@@ -35,7 +36,7 @@ usage(void)
           "Usage: obfsproxy protocol_name [protocol_args] protocol_options %s protocol_name ...\n"
           "Available protocols:",
           SEPERATOR);
-  /* cheapie */
+  /* this is awful. */
   for (i=0;i<n_supported_protocols;i++)
     fprintf(stderr," [%s]", supported_protocols[i]);
   fprintf(stderr,"\n");

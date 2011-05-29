@@ -3,11 +3,11 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#define DUMMY_PROTOCOL      0
-#define OBFS2_PROTOCOL      1
-
 struct evbuffer;
 struct listener_t;
+
+#define DUMMY_PROTOCOL      1
+#define OBFS2_PROTOCOL      2
 
 /**
   This struct defines parameters of the protocol per-listener basis.
