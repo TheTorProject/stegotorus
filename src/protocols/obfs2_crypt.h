@@ -10,6 +10,8 @@
 
 #include <sys/types.h>
 
+#define SHA256_LENGTH 32
+
 /* Stream cipher state */
 typedef struct crypt_t crypt_t;
 /* Digest state */

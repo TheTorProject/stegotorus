@@ -25,7 +25,7 @@ static void
 usage(void)
 {
   fprintf(stderr,
-    "Usage: obfsproxy {client/server/socks} {obfs2/dummy} listenaddr[:port] targetaddr:port\n"
+    "Usage: obfsproxy {client/server/socks} {obfs2/dummy} listenaddr[:port] targetaddr:port <shared secret>\n"
     "  (Default listen port is 48988 for client; 23548 for socks; 11253 for server)\n"
           );
   exit(1);
@@ -49,6 +49,7 @@ main(int argc, const char **argv)
   struct sockaddr *sa_target=NULL;
   int sl_listen, sl_target=0;
   const char *defport;
+  char *shared_secret = NULL;
 
   struct event_base *base;
   struct event *sigevent;
@@ -85,19 +86,25 @@ main(int argc, const char **argv)
   if (resolve_address_port(argv[3], 1, 1, &ss_listen, &sl_listen, defport) < 0)
     usage();
 
-  if (is_socks) {
-    if (argc != 4)
-      usage();
-  } else {
-    if (argc != 5)
-      usage();
+  /* figure out what place to connect to as a client/server. */
+  /* XXXX when we add socks support, clients will not have a fixed "target"
+   * XXXX address but will instead connect to a client-selected address. */
+  if (resolve_address_port(argv[4], 1, 0, &ss_target, &sl_target, NULL) < 0)
+    usage();
+  sa_target = (struct sockaddr *)&ss_target;
 
-    /* figure out what place to connect to as a client/server. */
-    /* XXXX when we add socks support, clients will not have a fixed "target"
-     * XXXX address but will instead connect to a client-selected address. */
-    if (resolve_address_port(argv[4], 1, 0, &ss_target, &sl_target, NULL) < 0)
-      usage();
-    sa_target = (struct sockaddr *)&ss_target;
+  /* Let's see if the user wants a shared secret. 
+     So ugly. So ugly. So ugly. So ugly. So ugly interface.
+  */
+  if (argc > 5 && argc != 6)
+    usage();
+  if (argc == 6) {
+    if (protocol != OBFS2_PROTOCOL) {
+      printf("shared secret is only supported with obfs2 atm.\n");
+      exit(1);
+    }
+
+    shared_secret = strdup(argv[5]);
   }
 
   /* Initialize libevent */
@@ -121,7 +128,8 @@ main(int argc, const char **argv)
                           mode, protocol,
                           (struct sockaddr *)&ss_listen, sl_listen,
                           sa_target, sl_target,
-                          NULL, 0);
+                          shared_secret, 
+                          shared_secret ? strlen(shared_secret) : 0);
   if (! listener) {
     printf("Couldn't create listener!\n");
     return 4;

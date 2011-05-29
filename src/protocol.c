@@ -31,7 +31,7 @@ set_up_protocol(int protocol) {
    Return the protocol_t if successful, NULL otherwise.
 */
 struct protocol_t *
-proto_new(int protocol, int is_initiator) {
+proto_new(int protocol, protocol_params_t *params) {
   struct protocol_t *proto = calloc(1, sizeof(struct protocol_t));
   if (!proto)
     return NULL;
@@ -42,10 +42,10 @@ proto_new(int protocol, int is_initiator) {
 
   if (protocol == OBFS2_PROTOCOL) {
     proto->proto = protocol;
-    proto->state = obfs2_new(proto, is_initiator);
+    proto->state = obfs2_new(proto, params);
   } else if (protocol == DUMMY_PROTOCOL) {
     proto->proto = protocol;
-    proto->state = dummy_new(proto, is_initiator);
+    proto->state = dummy_new(proto, NULL);
   }
 
   if (proto->state)

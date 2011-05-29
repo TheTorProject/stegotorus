@@ -17,6 +17,8 @@ The Twobfuscator
 1. Primitives, notation, and constants.
 
     H(x) is SHA256 of x.
+    H^n(x) is H(x) called iteratively n times. 
+
     E_K(s) is the AES-CTR-128 encryption of s using K as key.
 
     x | y is the concatenation of x and y.
@@ -27,9 +29,10 @@ The Twobfuscator
     s[:n] is the first n bytes of s.
     s[n:] is the last n bytes of s.
 
-    MAGIC_VALUE  is  0x2BF5CA7E
-    SEED_LENGTH  is  16
-    MAX_PADDING  is  8192
+    MAGIC_VALUE      is  0x2BF5CA7E
+    SEED_LENGTH      is  16
+    MAX_PADDING      is  8192
+    HASH_ITERATIONS  is  100000
 
     KEYLEN is the length of the key used by E_K(s) -- that is, 16.
     IVLEN is the length of the IV used by E_K(s) -- that is, 16
@@ -96,5 +99,6 @@ The Twobfuscator
    Optionally, if the client and server share a secret value SECRET,
    they can replace the MAC function with:
 
-      MAC(s,x) = MAC(s | x | SECRET | s)
+      MAC(s,x) = H^n(s | x | SECRET | s)
 
+   where n = HASH_ITERATIONS.

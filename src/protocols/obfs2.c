@@ -26,7 +26,10 @@ static int obfs2_send(void *state,
                struct evbuffer *source, struct evbuffer *dest);
 static int obfs2_recv(void *state, struct evbuffer *source,
                struct evbuffer *dest);
-static void *obfs2_state_new(int initiator);
+static void *obfs2_state_new(protocol_params_t *params); 
+static int obfs2_state_set_shared_secret(void *s,
+                                         const char *secret,
+                                         size_t secretlen);
 
 static protocol_vtable *vtable=NULL;
 
@@ -69,10 +72,10 @@ static crypt_t *
 derive_key(void *s, const char *keytype)
 {
   obfs2_state_t *state = s;
-
   crypt_t *cryptstate;
-  uchar buf[32];
+  uchar buf[SHA256_LENGTH];
   digest_t *c = digest_new();
+
   digest_update(c, (uchar*)keytype, strlen(keytype));
   if (seed_nonzero(state->initiator_seed))
     digest_update(c, state->initiator_seed, OBFUSCATE_SEED_LENGTH);
@@ -82,6 +85,17 @@ derive_key(void *s, const char *keytype)
     digest_update(c, state->secret_seed, SHARED_SECRET_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
+
+  if (seed_nonzero(state->secret_seed)) {
+    digest_t *d;
+    int i;
+    for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
+      d = digest_new();
+      digest_update(d, buf, sizeof(buf));
+      digest_getdigest(d, buf, sizeof(buf));
+    }
+  }
+
   cryptstate = crypt_new(buf, 16);
   crypt_set_iv(cryptstate, buf+16, 16);
   memset(buf, 0, sizeof(buf));
@@ -96,8 +110,9 @@ derive_padding_key(void *s, const uchar *seed,
   obfs2_state_t *state = s;
 
   crypt_t *cryptstate;
-  uchar buf[32];
+  uchar buf[SHA256_LENGTH];
   digest_t *c = digest_new();
+
   digest_update(c, (uchar*)keytype, strlen(keytype));
   if (seed_nonzero(seed))
     digest_update(c, seed, OBFUSCATE_SEED_LENGTH);
@@ -105,6 +120,17 @@ derive_padding_key(void *s, const uchar *seed,
     digest_update(c, state->secret_seed, OBFUSCATE_SEED_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
+
+  if (seed_nonzero(state->secret_seed)) {
+    digest_t *d;
+    int i;
+    for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
+      d = digest_new();
+      digest_update(d, buf, sizeof(buf));
+      digest_getdigest(d, buf, sizeof(buf));
+    }
+  }
+
   cryptstate = crypt_new(buf, 16);
   crypt_set_iv(cryptstate, buf+16, 16);
   memset(buf, 0, 16);
@@ -113,11 +139,13 @@ derive_padding_key(void *s, const uchar *seed,
 }
 
 void *
-obfs2_new(struct protocol_t *proto_struct, int initiator) {
+obfs2_new(struct protocol_t *proto_struct,
+          protocol_params_t *params)
+{
   assert(vtable);
   proto_struct->vtable = vtable;
   
-  return obfs2_state_new(initiator);
+  return obfs2_state_new(params);
 }
   
 /**
@@ -126,7 +154,7 @@ obfs2_new(struct protocol_t *proto_struct, int initiator) {
    NULL on failure.
  */
 static void *
-obfs2_state_new(int initiator)
+obfs2_state_new(protocol_params_t *params)
 {
   obfs2_state_t *state = calloc(1, sizeof(obfs2_state_t));
   uchar *seed;
@@ -135,8 +163,8 @@ obfs2_state_new(int initiator)
   if (!state)
     return NULL;
   state->state = ST_WAIT_FOR_KEY;
-  state->we_are_initiator = initiator;
-  if (initiator) {
+  state->we_are_initiator = params->is_initiator;
+  if (state->we_are_initiator) {
     send_pad_type = INITIATOR_PAD_TYPE;
     seed = state->initiator_seed;
   } else {
@@ -150,6 +178,12 @@ obfs2_state_new(int initiator)
     return NULL;
   }
 
+  if (params->shared_secret)
+    if (obfs2_state_set_shared_secret(state, 
+                                      params->shared_secret, 
+                                      params->shared_secret_len)<0)
+      return NULL;
+
   /* Derive the key for what we're sending */
   state->send_padding_crypto = derive_padding_key(state, seed, send_pad_type);
   if (state->send_padding_crypto == NULL) {
@@ -161,15 +195,26 @@ obfs2_state_new(int initiator)
 }
 
 /** Set the shared secret to be used with this protocol state. */
-void
-obfs2_state_set_shared_secret(void *s,
-                                 const char *secret, size_t secretlen)
+static int
+obfs2_state_set_shared_secret(void *s, const char *secret, 
+                              size_t secretlen)
 {
+  assert(secret);
+  assert(secretlen);
+
+  uchar buf[SHARED_SECRET_LENGTH];
   obfs2_state_t *state = s;
 
-  if (secretlen > SHARED_SECRET_LENGTH)
-    secretlen = SHARED_SECRET_LENGTH;
-  memcpy(state->secret_seed, secret, secretlen);
+  digest_t *c = digest_new();
+  digest_update(c, (uchar*)secret, secretlen);
+  digest_getdigest(c, buf, sizeof(buf));
+
+  memcpy(state->secret_seed, buf, SHARED_SECRET_LENGTH);
+
+  memset(buf,0,SHARED_SECRET_LENGTH);
+  digest_free(c);
+
+  return 0;
 }
 
 /**
@@ -232,7 +277,6 @@ crypt_and_transmit(crypt_t *crypto,
     if (n <= 0)
       return 0;
     stream_crypt(crypto, data, n);
-    // printf("Message is: %s", data);
     evbuffer_add(dest, data, n);
     dbg(("Processed %d bytes.", n));
   }
@@ -250,13 +294,20 @@ obfs2_send(void *s,
   obfs2_state_t *state = s;
 
   if (state->send_crypto) {
+    /* First of all, send any data that we've been waiting to send. */
+    if (state->pending_data_to_send) {
+      crypt_and_transmit(state->send_crypto, state->pending_data_to_send, dest);
+      evbuffer_free(state->pending_data_to_send);
+      state->pending_data_to_send = NULL;
+    }
     /* Our crypto is set up; just relay the bytes */
     return crypt_and_transmit(state->send_crypto, source, dest);
   } else {
     /* Our crypto isn't set up yet, we'll have to queue the data */
     if (evbuffer_get_length(source)) {
       if (! state->pending_data_to_send) {
-        state->pending_data_to_send = evbuffer_new();
+        if ((state->pending_data_to_send = evbuffer_new()) == NULL)
+          return -1;
       }
       evbuffer_add_buffer(state->pending_data_to_send, source);
     }
@@ -347,12 +398,9 @@ obfs2_recv(void *s, struct evbuffer *source,
     if (plength > OBFUSCATE_MAX_PADDING)
       return -1;
 
-    /* Send any data that we've been waiting to send */
-    if (state->pending_data_to_send) {
-      crypt_and_transmit(state->send_crypto, state->pending_data_to_send, dest);
-      evbuffer_free(state->pending_data_to_send);
-      state->pending_data_to_send = NULL;
-    }
+    /* XXX FIXME we should now be sending any 'pending_data_to_send'
+       but we can't send them from here, so we send them with
+       obfs2_send() when we next have to send data */
 
     /* Now we're waiting for plength bytes of padding */
     state->padding_left_to_read = plength;

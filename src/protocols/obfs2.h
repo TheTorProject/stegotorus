@@ -13,13 +13,13 @@
 typedef struct obfs2_state_t obfs2_state_t;
 struct evbuffer;
 struct protocol_t;
+struct protocol_params_t;
 
-#define SHARED_SECRET_LENGTH 16
+#define SHARED_SECRET_LENGTH SHA256_LENGTH
 
-void obfs2_state_set_shared_secret(void *state,
-                                      const char *secret, size_t secretlen);
 int obfs2_init(void);
-void *obfs2_new(struct protocol_t *proto_struct, int initiator);
+void *obfs2_new(struct protocol_t *proto_struct, 
+                struct protocol_params_t *params);
 
 
 #ifdef CRYPT_PROTOCOL_PRIVATE
@@ -36,6 +36,7 @@ void *obfs2_new(struct protocol_t *proto_struct, int initiator);
 #define OBFUSCATE_SEED_LENGTH        16
 #define OBFUSCATE_MAX_PADDING        8192
 #define OBFUSCATE_ZERO_SEED "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+#define OBFUSCATE_HASH_ITERATIONS     100000
 
 #define INITIATOR_PAD_TYPE "Initiator obfuscation padding"
 #define RESPONDER_PAD_TYPE "Responder obfuscation padding"

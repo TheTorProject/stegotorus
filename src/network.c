@@ -28,12 +28,9 @@ struct listener_t {
   struct evconnlistener *listener;
   struct sockaddr_storage target_address;
   int target_address_len;
-  int proto; /* Protocol that this listener can speak. */
   int mode;
-  /* ASN */
-  /*  char shared_secret[SHARED_SECRET_LENGTH];
-  unsigned int have_shared_secret : 1;
-  */
+  int proto; /* Protocol that this listener can speak. */
+  protocol_params_t *proto_params;
 };
 
 static void simple_listener_cb(struct evconnlistener *evcl,
@@ -72,6 +69,13 @@ listener_new(struct event_base *base,
   lsn->proto = protocol;
   lsn->mode = mode;
 
+  protocol_params_t *proto_params = calloc(1, sizeof(protocol_params_t));
+  proto_params->is_initiator = mode != LSN_SIMPLE_SERVER;
+  proto_params->shared_secret = shared_secret; 
+  proto_params->shared_secret_len = shared_secret_len;
+
+  lsn->proto_params = proto_params;
+
   if (target_address) {
     assert(target_address_len <= sizeof(struct sockaddr_storage));
     memcpy(&lsn->target_address, target_address, target_address_len);
@@ -79,15 +83,6 @@ listener_new(struct event_base *base,
   } else {
     assert(lsn->mode == LSN_SOCKS_CLIENT);
   }
-
-  /* ASN */
-  /*
-  assert(shared_secret == NULL || shared_secret_len == SHARED_SECRET_LENGTH);
-  if (shared_secret) {
-    memcpy(lsn->shared_secret, shared_secret, SHARED_SECRET_LENGTH);
-    lsn->have_shared_secret = 1;
-  }
-  */
 
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
                                           flags,
@@ -102,11 +97,22 @@ listener_new(struct event_base *base,
   return lsn;
 }
 
+static void
+protocol_params_free(protocol_params_t *params)
+{
+  assert(params);
+  if (params->shared_secret)
+    free(&params->shared_secret);
+  free(params);
+}
+
 void
 listener_free(listener_t *lsn)
 {
   if (lsn->listener)
     evconnlistener_free(lsn->listener);
+  if (lsn->proto_params)
+    protocol_params_free(lsn->proto_params);
   memset(lsn, 0xb0, sizeof(listener_t));
   free(lsn);
 }
@@ -125,10 +131,13 @@ simple_listener_cb(struct evconnlistener *evcl,
 
   conn->mode = lsn->mode;
 
-  /* Will all protocols need to _init() here? Don't think so! */
   conn->proto = proto_new(lsn->proto,
-                          conn->mode != LSN_SIMPLE_SERVER);
-  
+                          lsn->proto_params);
+  if (!conn->proto) {
+    printf("Creation of protocol object failed! Closing connection.\n");
+    goto err;
+  }
+
   if (conn->mode == LSN_SOCKS_CLIENT) {
     /* Construct SOCKS state. */
     conn->socks_state = socks_state_new();
