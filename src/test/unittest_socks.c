@@ -594,7 +594,7 @@ test_socks_socks4_request_reply(void *data)
 
   tt_assert(rep2[1] == SOCKS4_FAILED);
   /* check port */
-  tt_int_op(0, ==, memcmp(rep1+2,"\x1c\xbd",2));
+  tt_int_op(0, ==, memcmp(rep2+2,"\x1c\xbd",2));
   /* check address */
   /*  tt_str_op(rep1+2+2, ==, "www.test.example"); */
 
