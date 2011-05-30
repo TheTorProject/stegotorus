@@ -30,6 +30,9 @@ static void usage(void) __attribute__((noreturn));
 extern char *supported_protocols[];
 extern int n_supported_protocols;
 
+/**
+   Prints the obfsproxy usage instructions then exits.
+*/
 static void
 usage(void)
 {
@@ -46,6 +49,10 @@ usage(void)
   exit(1);
 }
 
+/**
+   This is called on SIGINT. It kills the event base loop, so that we
+   start exiting.
+*/
 static void
 handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 {
@@ -56,9 +63,11 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 }
 
 /**
-   This function visits all the command line arguments in 'argv' between
-   'start' and 'end' and writes them in 'options_string'.
- */
+   This function visits 'n_options' command line arguments off 'argv'
+   and writes them in 'options_string'.
+
+   Returns 1 on success, -1 on fail.
+*/
 static int
 populate_options(char **options_string, 
                  const char **argv, int n_options) 
@@ -70,12 +79,14 @@ populate_options(char **options_string,
       return -1;
     }
   }
-  return 0;
+  return 1;
 }
 
 /**
-   Runs through all the supported protocols and checks if 'name'
+   Iterates through all the supported protocols and checks if 'name'
    matches with the name of any of them.
+
+   Returns 1 on success, 0 on fail.
 */ 
 static int
 is_supported_protocol(const char *name) {
@@ -134,7 +145,7 @@ main(int argc, const char **argv)
       if (n_protocols > MAXPROTOCOLS) {
         printf("Sorry, we only allow %d protocols. Don't ask me why. "
                "Exiting.\n", MAXPROTOCOLS);
-        return 5;
+        return 1;
       }
     }
   }
@@ -148,14 +159,15 @@ main(int argc, const char **argv)
     start = protocols[i]+1;
     /* This "points" to the last argument of this protocol in argv. */
     end = protocols[i+1]-1;
+    /* This is the number of options of this protocol. */
     n_options = end-start+1;
 
+    /* First option should be protocol_name. See if we support it. */
     if (!is_supported_protocol(argv[start])) {
       printf("We don't support crappy protocols, son.\n"); 
       continue;
     }
 
-    /* Okay seems like we support this protocol. */
     actual_protocols++;
 
     /* We now allocate enough space for our parsing adventures.
@@ -185,8 +197,9 @@ main(int argc, const char **argv)
     n_options_array[actual_protocols-1] = n_options;
 
     /* Finally! Let's fill protocol_options. */
-    populate_options(protocol_options[actual_protocols-1],
-                     &argv[start], n_options);
+    if (populate_options(protocol_options[actual_protocols-1],
+                         &argv[start], n_options) < 0)
+      return 1;
   }
 
   /* Excellent. Now we should have protocol_options populated with all
@@ -196,13 +209,13 @@ main(int argc, const char **argv)
   base = event_base_new();
   if (!base) {
     fprintf(stderr, "Can't initialize Libevent; failing\n");
-    return 2;
+    return 1;
   }
 
   /* ASN should this happen only when SOCKS is enabled? */
   if (init_evdns_base(base) < 0) {
     fprintf(stderr, "Can't initialize evdns; failing\n");
-    return 3;
+    return 1;
   }
   
   /* Handle signals */
@@ -210,7 +223,7 @@ main(int argc, const char **argv)
   sigevent = evsignal_new(base, SIGINT, handle_signal_cb, (void*) base);
   if (event_add(sigevent,NULL)) {
     printf("Oh come on! We can't even add events for signals! Exiting.\n");
-    return 4;
+    return 1;
   }
 
   /*Let's open a new listener for each protocol. */ 
@@ -228,7 +241,8 @@ main(int argc, const char **argv)
 
     temp_listener = listener_new(base, n_options_array[h], protocol_options[h]);
 
-    /** Free the space allocated for this protocol's options. */
+    /** Now that we created the listener, free the space allocated for
+        this protocol's options. */
     for (i=0;i<n_options_array[h];i++)
       free(protocol_options[h][i]);
     free(protocol_options[h]);

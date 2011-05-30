@@ -37,8 +37,11 @@ static void usage(void);
 
 static protocol_vtable *vtable=NULL;
 
-/* Sets the function table for the obfs2 protocol and
-   calls initialize_crypto(). 
+/* 
+   This function parses 'options' and fills the protocol_params_t
+   'params'.
+   It then fills the obfs2 vtable and initializes the crypto subsystem.
+
    Returns 0 on success, -1 on fail.
 */
 int
@@ -127,7 +130,7 @@ obfs2_init(int n_options, char **options,
       goto err;
     }
   
-    if (!set_up_vtable())
+    if (set_up_vtable() < 0)
       return -1;
 
     if (initialize_crypto() < 0) {
@@ -142,6 +145,9 @@ obfs2_init(int n_options, char **options,
     return -1;
 }
 
+/**
+   Prints usage instructions for the obfs2 protocol.
+*/
 static void
 usage(void)
 {
@@ -159,13 +165,18 @@ usage(void)
          "\tobfs2 server 127.0.0.1:1026\n");
 }
 
+/**
+   Helper: Allocates space for the protocol vtable and populates it's
+   function pointers.
+   Returns 1 on success, -1 on fail.
+*/
 static int
 set_up_vtable(void)
 {
   /* XXX memleak. */
   vtable = calloc(1, sizeof(protocol_vtable));
   if (!vtable)
-    return 0;
+    return -1;
   
   vtable->destroy = obfs2_state_free;
   vtable->create = obfs2_new;

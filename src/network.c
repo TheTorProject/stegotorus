@@ -38,6 +38,12 @@ static void obfuscated_read_cb(struct bufferevent *bev, void *arg);
 static void input_event_cb(struct bufferevent *bev, short what, void *arg);
 static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 
+/**
+   This function sets up the protocol defined by 'options' and
+   attempts to bind a new listener for it.
+
+   Returns the listener on success, NULL on fail. 
+*/
 listener_t *
 listener_new(struct event_base *base,
              int n_options, char **options)
