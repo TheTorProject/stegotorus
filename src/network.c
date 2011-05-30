@@ -318,7 +318,7 @@ obfuscated_read_cb(struct bufferevent *bev, void *arg)
   
   if (r == RECV_BAD)
     conn_free(conn);
-  else if (r == RECV_OBFS2_PENDING)
+  else if (r == RECV_SEND_PENDING)
     proto_send(conn->proto, 
                bufferevent_get_input(conn->input),
                bufferevent_get_output(conn->output));

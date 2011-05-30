@@ -29,11 +29,11 @@ enum recv_ret {
   RECV_INCOMPLETE,
 
   /* Originally needed by the obfs2 protocol but it might get other
-     users in the future. Maybe it should be renamed to something neutral.
+     users in the future.
      It means:
      "We have pending data that we have to send. You should do that by
      calling proto_send() immediately." */
-  RECV_OBFS2_PENDING
+  RECV_SEND_PENDING
 };
 
 typedef struct listener_t listener_t;
