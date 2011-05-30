@@ -60,7 +60,7 @@ dummy_recv(void *nothing,
   (void)nothing;
   
   if (evbuffer_add_buffer(dest,source)<0)
-    return (enum recv_ret) RECV_BAD;
+    return RECV_BAD;
   else
-    return (enum recv_ret) RECV_GOOD;
+    return RECV_GOOD;
 }

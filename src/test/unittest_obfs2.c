@@ -101,13 +101,13 @@ test_proto_handshake(void *data)
 
   /* We simulate the server receiving and processing the client's handshake message,
      by using proto_recv() on the output_buffer */
-  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(server_proto, output_buffer, dummy_buffer));
+  tt_assert(RECV_GOOD == proto_recv(server_proto, output_buffer, dummy_buffer));
 
   /* Now, we create the server's handshake and pass it to output_buffer */
   tt_int_op(0, <=, proto_handshake(server_proto, output_buffer));
 
   /* We simulate the client receiving and processing the server's handshake */
-  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(client_proto, output_buffer, dummy_buffer));
+  tt_assert(RECV_GOOD == proto_recv(client_proto, output_buffer, dummy_buffer));
 
   /* The handshake is now complete. We should have:
      client's send_crypto == server's recv_crypto
@@ -170,10 +170,10 @@ test_proto_transfer(void *data)
 
   /* Handshake */
   tt_int_op(0, <=, proto_handshake(client_proto, output_buffer));
-  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(server_proto, 
+  tt_assert(RECV_GOOD == proto_recv(server_proto, 
                                                     output_buffer, dummy_buffer));
   tt_int_op(0, <=, proto_handshake(server_proto, output_buffer));
-  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(client_proto, 
+  tt_assert(RECV_GOOD == proto_recv(client_proto, 
                                                     output_buffer, dummy_buffer));
   /* End of Handshake */
 
@@ -185,7 +185,7 @@ test_proto_transfer(void *data)
   evbuffer_add(dummy_buffer, msg1, 54);
   proto_send(client_proto, dummy_buffer, output_buffer);
 
-  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(server_proto, 
+  tt_assert(RECV_GOOD == proto_recv(server_proto, 
                                                     output_buffer, dummy_buffer));
 
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[0], 2);
@@ -201,7 +201,7 @@ test_proto_transfer(void *data)
   evbuffer_add(dummy_buffer, msg2, 55);
   tt_int_op(0, <=, proto_send(server_proto, dummy_buffer, output_buffer));
 
-  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(client_proto, 
+  tt_assert(RECV_GOOD == proto_recv(client_proto, 
                                                     output_buffer, dummy_buffer));
 
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[1], 2);
@@ -298,7 +298,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgclient_1, OBFUSCATE_SEED_LENGTH+8+plength1_msg1);
 
   /* Server receives handshake part 1 */
-  tt_assert((enum recv_ret) RECV_INCOMPLETE == proto_recv(server_proto,
+  tt_assert(RECV_INCOMPLETE == proto_recv(server_proto,
                                                           output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_PADDING);
@@ -311,7 +311,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgclient_2, plength1_msg2);
 
   /* Server receives handshake part 2 */
-  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(server_proto, 
+  tt_assert(RECV_GOOD == proto_recv(server_proto, 
                                                     output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_OPEN);
@@ -341,7 +341,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgserver_1, OBFUSCATE_SEED_LENGTH+8);
 
   /* Client receives handshake part 1 */
-  tt_assert((enum recv_ret) RECV_INCOMPLETE == proto_recv(client_proto, 
+  tt_assert(RECV_INCOMPLETE == proto_recv(client_proto, 
                                                     output_buffer, dummy_buffer));
 
   tt_assert(client_state->state == ST_WAIT_FOR_PADDING);
@@ -354,7 +354,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgserver_2, plength2);
 
   /* Client receives handshake part 2 */
-  tt_assert((enum recv_ret) RECV_GOOD == proto_recv(client_proto, 
+  tt_assert(RECV_GOOD == proto_recv(client_proto, 
                                                     output_buffer, dummy_buffer));
 
   tt_assert(client_state->state == ST_OPEN);
@@ -446,7 +446,7 @@ test_proto_wrong_handshake_magic(void *data)
 
   evbuffer_add(output_buffer, msg, OBFUSCATE_SEED_LENGTH+8+plength);
 
-  tt_assert((enum recv_ret) RECV_BAD == proto_recv(server_proto, 
+  tt_assert(RECV_BAD == proto_recv(server_proto, 
                                                    output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_KEY);
@@ -526,7 +526,7 @@ test_proto_wrong_handshake_plength(void *data)
   evbuffer_add(output_buffer, msg, OBFUSCATE_SEED_LENGTH+8+plength);
 
 
-  tt_assert((enum recv_ret) RECV_BAD == proto_recv(server_proto, 
+  tt_assert(RECV_BAD == proto_recv(server_proto, 
                                                    output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_KEY);
