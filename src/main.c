@@ -86,9 +86,13 @@ main(int argc, const char **argv)
   /* figure out what place to connect to as a client/server. */
   /* XXXX when we add socks support, clients will not have a fixed "target"
    * XXXX address but will instead connect to a client-selected address. */
-  if (resolve_address_port(argv[4], 1, 0, &ss_target, &sl_target, NULL) < 0)
-    usage();
-  sa_target = (struct sockaddr *)&ss_target;
+  if (mode != LSN_SOCKS_CLIENT) {
+    if (argc < 5)
+      usage();
+    if (resolve_address_port(argv[4], 1, 0, &ss_target, &sl_target, NULL) < 0)
+      usage();
+    sa_target = (struct sockaddr *)&ss_target;
+  }
 
   /* Let's see if the user wants a shared secret. 
      So ugly. So ugly. So ugly. So ugly. So ugly interface.
