@@ -207,6 +207,8 @@ test_proto_transfer(void *data)
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[1], 2);
   tt_int_op(0, ==, strncmp(msg2, v[1].iov_base, 55));
 
+  (void) n; /* XXXX: use n for something, or remove it. */
+
  end:
   if (client_proto->state)
     proto_destroy(client_proto);

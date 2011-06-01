@@ -44,7 +44,7 @@ int
 main(int argc, const char **argv)
 {
   int protocol;
-  int is_client, is_socks = 0, mode;
+  int is_socks = 0, mode;
   struct sockaddr_storage ss_listen, ss_target;
   struct sockaddr *sa_target=NULL;
   int sl_listen, sl_target=0;
@@ -59,16 +59,13 @@ main(int argc, const char **argv)
   if (argc < 4)
     usage();
   if (!strcmp(argv[1], "client")) {
-    is_client = 1;
     defport = "48988"; /* bf5c */
     mode = LSN_SIMPLE_CLIENT;
   } else if (!strcmp(argv[1], "socks")) {
-    is_client = 1;
     is_socks = 1;
     defport = "23548"; /* 5bf5 */
     mode = LSN_SOCKS_CLIENT;
   } else if (!strcmp(argv[1], "server")) {
-    is_client = 0;
     defport = "11253"; /* 2bf5 */
     mode = LSN_SIMPLE_SERVER;
   } else {
@@ -122,6 +119,7 @@ main(int argc, const char **argv)
   /* Handle signals */
   signal(SIGPIPE, SIG_IGN);
   sigevent = evsignal_new(base, SIGINT, handle_signal_cb, (void*) base);
+  event_add(sigevent, NULL);
 
   /* start an evconnlistener on the appropriate port(s) */
   listener = listener_new(base,
