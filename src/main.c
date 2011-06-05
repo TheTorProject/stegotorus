@@ -162,6 +162,9 @@ main(int argc, const char **argv)
     /* This is the number of options of this protocol. */
     n_options = end-start+1;
 
+    if (start >= end)
+      usage();
+
     /* First option should be protocol_name. See if we support it. */
     if (!is_supported_protocol(argv[start])) {
       printf("We don't support crappy protocols, son.\n"); 
