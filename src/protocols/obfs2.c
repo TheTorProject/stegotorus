@@ -38,8 +38,8 @@ static void usage(void);
 static protocol_vtable *vtable=NULL;
 
 /* 
-   This function parses 'options' and fills the protocol_params_t
-   'params'.
+   This function parses 'options' and fills the protocol parameters
+   structure 'params'.
    It then fills the obfs2 vtable and initializes the crypto subsystem.
 
    Returns 0 on success, -1 on fail.
@@ -233,6 +233,10 @@ derive_key(void *s, const char *keytype)
   return cryptstate;
 }
 
+/**
+   Derive and return padding key of type 'keytype' from the seeds
+   currently set in state 's'.  Returns NULL on failure.
+*/   
 static crypt_t *
 derive_padding_key(void *s, const uchar *seed,
                    const char *keytype)
@@ -268,6 +272,14 @@ derive_padding_key(void *s, const uchar *seed,
   return cryptstate;
 }
 
+/**
+   This is called everytime we get a connection for the obfs2
+   protocol.
+   
+   It sets up the protocol vtable in 'proto_struct' and then attempts
+   to create and return a protocol state according to the protocol
+   parameters 'params'.
+*/
 void *
 obfs2_new(struct protocol_t *proto_struct,
           protocol_params_t *params)
@@ -279,9 +291,8 @@ obfs2_new(struct protocol_t *proto_struct,
 }
   
 /**
-   Return a new object to handle protocol state.  If 'initiator' is true,
-   we're the handshake initiator.  Otherwise, we're the responder.  Return
-   NULL on failure.
+   Returns an obfs2 state according to the protocol parameters
+   'params'. If something goes wrong it returns NULL.
  */
 static void *
 obfs2_state_new(protocol_params_t *params)
@@ -324,7 +335,9 @@ obfs2_state_new(protocol_params_t *params)
   return state;
 }
 
-/** Set the shared secret to be used with this protocol state. */
+/** 
+    Sets the shared 'secret' to be used, on the protocol state 's'.
+*/
 static int
 obfs2_state_set_shared_secret(void *s, const char *secret, 
                               size_t secretlen)
@@ -349,7 +362,7 @@ obfs2_state_set_shared_secret(void *s, const char *secret,
 }
 
 /**
-   Write the initial protocol setup and padding message for 'state' to
+   Write the initial protocol setup and padding message for state 's' to
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
  */
 static int
@@ -565,6 +578,9 @@ obfs2_recv(void *s, struct evbuffer *source,
   return crypt_and_transmit(state->recv_crypto, source, dest);
 }
 
+/** 
+    Frees obfs2 state 's' 
+*/
 static void
 obfs2_state_free(void *s)
 {
