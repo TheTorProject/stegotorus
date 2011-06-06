@@ -68,18 +68,13 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 
    Returns 1 on success, -1 on fail.
 */
-static int
+static void
 populate_options(char **options_string, 
                  const char **argv, int n_options) 
 {
-  int x,g;
-  for (g=0;g<=n_options-1;g++) {
-    options_string[g] = strdup(argv[g]);
-    if (!options_string[x]) {
-      return -1;
-    }
-  }
-  return 1;
+  int g;
+  for (g=0;g<=n_options-1;g++)
+    options_string[g] = (char*) argv[g];
 }
 
 /**
@@ -209,9 +204,8 @@ main(int argc, const char **argv)
     n_options_array[actual_protocols-1] = n_options;
 
     /* Finally! Let's fill protocol_options. */
-    if (populate_options(protocol_options[actual_protocols-1],
-                         &argv[start], n_options) < 0)
-      return 1;
+    populate_options(protocol_options[actual_protocols-1],
+                     &argv[start], n_options);
   }
 
   /* Excellent. Now we should have protocol_options populated with all
@@ -232,9 +226,10 @@ main(int argc, const char **argv)
   
   /* Handle signals */
   signal(SIGPIPE, SIG_IGN);
-  sigevent = evsignal_new(base, SIGINT, handle_signal_cb, (void*) base);
+  sigevent = evsignal_new(base, SIGINT, 
+                          handle_signal_cb, (void*) base);
   if (event_add(sigevent,NULL)) {
-    printf("Oh come on! We can't even add events for signals! Exiting.\n");
+    printf("We can't even add events for signals! Exiting.\n");
     return 1;
   }
 
@@ -251,12 +246,10 @@ main(int argc, const char **argv)
            STUPID_BEAUTIFIER, h+1));
     }
 
-    temp_listener = listener_new(base, n_options_array[h], protocol_options[h]);
+    temp_listener = listener_new(base, n_options_array[h], 
+                                 protocol_options[h]);
 
-    /** Now that we created the listener, free the space allocated for
-        this protocol's options. */
-    for (i=0;i<n_options_array[h];i++)
-      free(protocol_options[h][i]);
+    /** Free the space allocated for this protocol's options. */
     free(protocol_options[h]);
 
     if (!temp_listener) {
