@@ -46,23 +46,20 @@ static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 */
 listener_t *
 listener_new(struct event_base *base,
-             int n_options, char **options)
+             protocol_params_t *proto_params)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
 
   listener_t *lsn = calloc(1, sizeof(listener_t));
-  if (!lsn)
-    return NULL;
-
-  protocol_params_t *proto_params = calloc(1, sizeof(protocol_params_t));
-  lsn->proto_params = proto_params;
-  
-  if (set_up_protocol(n_options,options,lsn->proto_params)<0) {
-    listener_free(lsn);
+  if (!lsn) {
+    if (proto_params)
+      free(proto_params);
     return NULL;
   }
 
+  lsn->proto_params = proto_params;
+  
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
                                           flags,
                                           -1,

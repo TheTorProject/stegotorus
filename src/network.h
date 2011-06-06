@@ -21,6 +21,7 @@ typedef struct listener_t *listener;
 struct sockaddr;
 struct event_base;
 struct socks_state_t;
+struct protocol_params_t;
 
 #define LSN_SIMPLE_CLIENT 1
 #define LSN_SIMPLE_SERVER 2
@@ -30,7 +31,7 @@ typedef struct listener_t listener_t;
 struct addrinfo;
 
 listener_t *listener_new(struct event_base *base,
-                         int n_options, char **options);
+                         struct protocol_params_t *params);
 void listener_free(listener_t *listener);
 
 #ifdef NETWORK_PRIVATE
