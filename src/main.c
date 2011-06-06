@@ -20,7 +20,7 @@
 #endif
 
 /* The character that seperates multiple listeners in the cli */
-#define SEPERATOR "+"
+#define SEPARATOR "+"
 /* Totally arbitrary. */
 #define MAXPROTOCOLS 20
 
@@ -40,7 +40,7 @@ usage(void)
   fprintf(stderr,
           "Usage: obfsproxy protocol_name [protocol_args] protocol_options %s protocol_name ...\n"
           "Available protocols:",
-          SEPERATOR);
+          SEPARATOR);
   /* this is awful. */
   for (i=0;i<n_supported_protocols;i++)
     fprintf(stderr," [%s]", supported_protocols[i]);
@@ -83,10 +83,8 @@ populate_options(char **options_string,
 }
 
 /**
-   Iterates through all the supported protocols and checks if 'name'
-   matches with the name of any of them.
-
-   Returns 1 on success, 0 on fail.
+   Returns 1 if 'name' is the nmae of a supported protocol, otherwise
+   it returns 0.
 */ 
 static int
 is_supported_protocol(const char *name) {
@@ -129,29 +127,40 @@ main(int argc, const char **argv)
   void *temp;
   int i;
 
+  /* The number of protocols. */
   unsigned int n_protocols=1;
-  unsigned int protocols[MAXPROTOCOLS+1];
-  protocols[0] = 0;
+  /* An array which holds the position in argv of the command line
+     options for each protocol. */
+  unsigned int *protocols=NULL;
+
 
   if (argc < 2) {
     usage();
   }
 
-  /* Iterate through command line arguments and find protocols. */
+  protocols = malloc(sizeof(int)*(n_protocols+1));
+  if (!protocols)
+    exit(1);
+
+  protocols[0] = 0;
+
+  /* Populate protocols and calculate n_protocols. */
   for (i=0;i<argc;i++) {
-    if (!strcmp(argv[i],SEPERATOR)) {
+    if (!strcmp(argv[i],SEPARATOR)) {
       protocols[n_protocols] = i;
       n_protocols++;
-      if (n_protocols > MAXPROTOCOLS) {
-        printf("Sorry, we only allow %d protocols. Don't ask me why. "
-               "Exiting.\n", MAXPROTOCOLS);
-        return 1;
-      }
+
+      temp = realloc(protocols, sizeof(int)*(n_protocols+1));
+      if (!temp)
+        exit(1);
+      protocols = temp;
     }
   }
+
   protocols[n_protocols] = argc;
+
   if (n_protocols > 1)
-    printf("Found %d protocols.\n", n_protocols);
+    dbg(("Found %d protocols.\n", n_protocols));
 
   /* Iterate through protocols. */
   for (i=0;i<n_protocols;i++) {
@@ -167,7 +176,7 @@ main(int argc, const char **argv)
 
     /* First option should be protocol_name. See if we support it. */
     if (!is_supported_protocol(argv[start])) {
-      printf("We don't support crappy protocols, son.\n"); 
+      printf("We don't support protocol: %s\n", argv[start]); 
       continue;
     }
 
@@ -277,6 +286,7 @@ main(int argc, const char **argv)
     listener_free(listeners[h]);
   free(protocol_options);
   free(n_options_array);
+  free(protocols);
 
   return 0;
 }
