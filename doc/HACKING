@@ -1,0 +1,43 @@
+        obfproxy codebase tour  
+
+main.[ch] - entry point
+network.[ch] - network functions
+protocol.[ch] - protocol abstraction layer
+socks.[ch] - SOCKS server
+util.[ch] - utility functions
+protocols/ - protocol specific files 
+
+         DIY pluggable transports
+
+Everything starts from protocol.c:set_up_protocol(), that's where your
+protocol's init function is called.
+
+Init function:
+     Your protocol's init function must parse the cli protocol line [1] and
+     fill the protocol_params_t struct appropriately. It should also do
+     anything else you want to do only once for the runtime of your
+     protocol [2]. Finally and most importantly each protocol has a
+     function table and your init function should populate it.
+
+obfsproxy currently provides the following functions for protocols
+(protocol.h:protocol_vtable):
+          (*create): Where you fill the protocol_params_t struct and
+                     create a protocol state if you feel like it.
+                     Called for every connection.
+          (*destroy): Where you free the protocol state and anything
+                      else you might have created.
+                      Called for every connection.
+          (*handshake): Where you send a handshake message to the
+                        other party. 
+                        Called right after the listener is created 
+                        and the necessary network stuff are set up.
+          (*send): Where you specify how the data is send according to
+                   your protocol.
+          (*recv): Where you specify how the data is received
+                   according to your protocol.
+Note that (*handshake) and (*destroy) are optional.
+
+[1]: For example:
+     'your_protocol --additional-parameter=yes server 127.0.0.1:666'
+[2]: For example setting up the crypto subsystem. You shouldn't be
+     doing this for every connection, just once is enough.
