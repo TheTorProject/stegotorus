@@ -17,15 +17,15 @@ enum socks_status_t {
   ST_SENT_REPLY
 };
 
-enum req_status {
+enum socks_ret {
   SOCKS_GOOD=0,
   SOCKS_INCOMPLETE,
   SOCKS_CMD_NOT_CONNECT,
   SOCKS_BROKEN
 };
 
-int handle_socks(struct evbuffer *source,
-                 struct evbuffer *dest, socks_state_t *socks_state);
+enum socks_ret handle_socks(struct evbuffer *source,
+                             struct evbuffer *dest, socks_state_t *socks_state);
 socks_state_t *socks_state_new(void);
 void socks_state_free(socks_state_t *s);
 
@@ -96,14 +96,13 @@ struct socks_state_t {
   struct parsereq parsereq;
 };
 
-int socks5_handle_negotiation(struct evbuffer *source,
+enum socks_ret socks5_handle_negotiation(struct evbuffer *source,
                               struct evbuffer *dest, socks_state_t *state);
 int socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                       int status);
-enum req_status socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq);
+enum socks_ret socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq);
 
-
-int socks4_read_request(struct evbuffer *source, socks_state_t *state);
+enum socks_ret socks4_read_request(struct evbuffer *source, socks_state_t *state);
 int socks4_send_reply(struct evbuffer *dest, 
                       socks_state_t *state, int status);
 #endif

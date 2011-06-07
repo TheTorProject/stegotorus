@@ -230,7 +230,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   //struct bufferevent *other;
-  enum req_status r;
+  enum socks_ret socks_ret;
   assert(bev == conn->input); /* socks must be on the initial bufferevent */
 
   //dbg(("Got data on the socks side (%d) \n", conn->socks_state->state));
@@ -261,15 +261,15 @@ socks_read_cb(struct bufferevent *bev, void *arg)
       return;
     }
 
-    r = handle_socks(bufferevent_get_input(bev),
+    socks_ret = handle_socks(bufferevent_get_input(bev),
                      bufferevent_get_output(bev), conn->socks_state);
-  } while (r == SOCKS_GOOD);
+  } while (socks_ret == SOCKS_GOOD);
 
-  if (r == SOCKS_INCOMPLETE)
+  if (socks_ret == SOCKS_INCOMPLETE)
     return; /* need to read more data. */
-  else if (r == SOCKS_BROKEN)
+  else if (socks_ret == SOCKS_BROKEN)
     conn_free(conn); /* XXXX maybe send socks reply */
-  else if (r == SOCKS_CMD_NOT_CONNECT) {
+  else if (socks_ret == SOCKS_CMD_NOT_CONNECT) {
     bufferevent_enable(bev, EV_WRITE);
     bufferevent_disable(bev, EV_READ);
     socks5_send_reply(bufferevent_get_output(bev), conn->socks_state,
