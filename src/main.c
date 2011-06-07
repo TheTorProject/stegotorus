@@ -238,7 +238,7 @@ main(int argc, const char **argv)
   listener_t *listeners[actual_protocols];
   listener_t *temp_listener;
   int n_listeners=0;
-  protocol_params_t *proto_params;
+  protocol_params_t *proto_params=NULL;
   for (h=0;h<actual_protocols;h++) {
 
     if (n_protocols > 1) {
@@ -247,20 +247,21 @@ main(int argc, const char **argv)
            STUPID_BEAUTIFIER, h+1));
     }
 
-    /** free'd in listener_free() */
+    /** normally free'd in listener_free() */
     proto_params = calloc(1, sizeof(protocol_params_t));
     if (set_up_protocol(n_options_array[h],protocol_options[h],
-                        proto_params)<0)
+                        proto_params)<0) {
+      free(proto_params);
       continue;
+    }
 
     temp_listener = listener_new(base, proto_params);
 
     /** Free the space allocated for this protocol's options. */
     free(protocol_options[h]);
 
-    if (!temp_listener) {
+    if (!temp_listener)
       continue;
-    }
     
     dbg(("Succesfully created listener.\n"));
     listeners[n_listeners] = temp_listener;
