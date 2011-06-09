@@ -23,6 +23,84 @@
 #include "../protocols/obfs2.h"
 #include "../network.h"
 
+static void
+test_proto_option_parsing(void *data)
+{
+  protocol_params_t *proto_params = calloc(1, sizeof(protocol_params_t));  
+  char *options[] = {"obfs2", "--shared-secret=a", "socks", "127.0.0.1:0"};
+  int n_options = 4;
+
+  tt_assert(set_up_protocol(n_options, options,
+                            proto_params) == 1);
+
+  /** two --dest. */
+  char *options2[] = {"obfs2", "--dest=127.0.0.1:5555", "--dest=a", 
+                      "server", "127.0.0.1:5552"};
+  n_options = 5;
+
+  tt_assert(set_up_protocol(n_options, options2,
+                            proto_params) == -1);
+
+  /** unknown arg */
+  char *options3[] = {"obfs2", "--gabura=a", 
+                      "server", "127.0.0.1:5552"};
+  n_options = 4;
+
+  tt_assert(set_up_protocol(n_options, options3,
+                            proto_params) == -1);
+
+  /** too many args */
+  char *options4[] = {"obfs2", "1", "2", "3", "4", "5" };
+  n_options = 6;
+
+  tt_assert(set_up_protocol(n_options, options4,
+                            proto_params) == -1);
+
+  /** wrong mode  */
+  char *options5[] = {"obfs2", "--dest=1:1", 
+                      "gladiator", "127.0.0.1:5552"};
+  n_options = 4;
+
+  tt_assert(set_up_protocol(n_options, options5,
+                            proto_params) == -1);
+
+  /** stupid listen addr.  */
+  char *options6[] = {"obfs2", "--dest=1:1", 
+                      "server", "127.0.0.1:a"};
+  n_options = 4;
+
+  tt_assert(set_up_protocol(n_options, options6,
+                            proto_params) == -1);
+
+  /** stupid dest addr.  */
+  char *options7[] = {"obfs2", "--dest=1:b", 
+                      "server", "127.0.0.1:1"};
+  n_options = 4;
+
+  tt_assert(set_up_protocol(n_options, options7,
+                            proto_params) == -1);
+
+  /** socks with dest.  */
+  char *options8[] = {"obfs2", "--dest=1:2", 
+                      "socks", "127.0.0.1:1"};
+  n_options = 4;
+
+  tt_assert(set_up_protocol(n_options, options8,
+                            proto_params) == -1);
+
+  /** socks with dest.  */
+  char *options9[] = {"obfs2", "--shared-secret=a", 
+                      "server", "127.0.0.1:1"};
+  n_options = 4;
+
+  tt_assert(set_up_protocol(n_options, options9,
+                            proto_params) == -1);
+
+ end:
+  if (proto_params)
+    free(proto_params);
+}
+
 /* Make sure we can successfully set up a protocol state */
 static void
 test_proto_setup(void *data)
@@ -57,7 +135,6 @@ test_proto_setup(void *data)
     proto_destroy(client_proto);
   if (server_proto->state)
     proto_destroy(server_proto);
-
 }
 
 static void
@@ -125,6 +202,11 @@ test_proto_handshake(void *data)
     proto_destroy(client_proto);
   if (server_proto->state)
     proto_destroy(server_proto);
+
+  if (proto_params_client)
+    free(proto_params_client);
+  if (proto_params_serv)
+    free(proto_params_serv);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -214,6 +296,11 @@ test_proto_transfer(void *data)
     proto_destroy(client_proto);
   if (server_proto->state)
     proto_destroy(server_proto);
+
+  if (proto_params_client)
+    free(proto_params_client);
+  if (proto_params_serv)
+    free(proto_params_serv);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -378,6 +465,11 @@ test_proto_splitted_handshake(void *data)
   if (server_state)
     proto_destroy(server_proto);
 
+  if (proto_params_client)
+    free(proto_params_client);
+  if (proto_params_serv)
+    free(proto_params_serv);
+
   if (output_buffer)
     evbuffer_free(output_buffer);
   if (dummy_buffer)
@@ -459,6 +551,11 @@ test_proto_wrong_handshake_magic(void *data)
   if (server_state)
     proto_destroy(server_proto);
 
+  if (proto_params_client)
+    free(proto_params_client);
+  if (proto_params_serv)
+    free(proto_params_serv);
+
   if (output_buffer)
     evbuffer_free(output_buffer);
   if (dummy_buffer)
@@ -539,25 +636,27 @@ test_proto_wrong_handshake_plength(void *data)
   if (server_state)
     proto_destroy(server_proto);
 
+  if (proto_params_client)
+    free(proto_params_client);
+  if (proto_params_serv)
+    free(proto_params_serv);
+
   if (output_buffer)
     evbuffer_free(output_buffer);
   if (dummy_buffer)
     evbuffer_free(dummy_buffer);
 }
 
-
 #define T(name, flags) \
   { #name, test_proto_##name, (flags), NULL, NULL }
 
 struct testcase_t protocol_tests[] = {
+  T(option_parsing,0),
   T(setup, 0),
   T(handshake, 0),
   T(transfer, 0),
   T(splitted_handshake, 0),
   T(wrong_handshake_magic, 0),
-#if 0
-  T(wrong_handshake_padding, 0),
-#endif
   T(wrong_handshake_plength, 0),
   END_OF_TESTCASES
 };

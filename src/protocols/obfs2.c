@@ -34,9 +34,6 @@ static int obfs2_state_set_shared_secret(void *s,
                                          size_t secretlen);
 static int set_up_vtable(void);
 static void usage(void);
-static int parse_and_set_options(int n_options, char **options, 
-                                 struct protocol_params_t *params);
-
 
 static protocol_vtable *vtable=NULL;
 
@@ -67,7 +64,7 @@ obfs2_init(int n_options, char **options,
   return 1;
 }
 
-static int
+int
 parse_and_set_options(int n_options, char **options, 
                       struct protocol_params_t *params)
 {
@@ -94,7 +91,7 @@ parse_and_set_options(int n_options, char **options,
         struct sockaddr_storage ss_target;
         struct sockaddr *sa_target=NULL;
         int sl_target=0;
-        if (resolve_address_port(*options+7, 1, 0, 
+        if (resolve_address_port(*options+7, 1, 0,
                                  &ss_target, &sl_target, NULL) < 0)
           return -1;
         assert(sl_target <= sizeof(struct sockaddr_storage));

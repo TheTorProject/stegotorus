@@ -21,6 +21,9 @@ struct listener_t;
 int obfs2_init(int n_options, char **options, struct protocol_params_t *params);
 void *obfs2_new(struct protocol_t *proto_struct,
                 struct protocol_params_t *params);
+int parse_and_set_options(int n_options, char **options, 
+                          struct protocol_params_t *params);
+
 
 
 #ifdef CRYPT_PROTOCOL_PRIVATE
