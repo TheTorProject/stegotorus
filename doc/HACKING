@@ -37,6 +37,9 @@ obfsproxy currently provides the following functions for protocols
                    according to your protocol.
 Note that (*handshake) and (*destroy) are optional.
 
+For all your logging needs you can use the functions log_{warn,info,debug}
+defined in src/util.h.
+
 [1]: For example:
      'your_protocol --additional-parameter=yes server 127.0.0.1:666'
 [2]: For example setting up the crypto subsystem. You shouldn't be
