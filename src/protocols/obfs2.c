@@ -25,7 +25,7 @@
 static void obfs2_state_free(void *state);
 static int obfs2_send_initial_message(void *state, struct evbuffer *buf);
 static int obfs2_send(void *state,
-               struct evbuffer *source, struct evbuffer *dest);
+                      struct evbuffer *source, struct evbuffer *dest);
 static enum recv_ret obfs2_recv(void *state, struct evbuffer *source,
                                 struct evbuffer *dest);
 static void *obfs2_state_new(protocol_params_t *params); 
@@ -75,7 +75,7 @@ parse_and_set_options(int n_options, char **options,
   const char* defport;
 
   if ((n_options < 3) || (n_options > 5)) {
-    printf("wrong options number: %d\n", n_options);
+    log_warn("%s(): wrong options number: %d", __func__, n_options);
     return -1;
   }
 
@@ -107,7 +107,7 @@ parse_and_set_options(int n_options, char **options,
         params->shared_secret_len = strlen(*options+16);
         got_ss=1;
       } else {
-        printf("Unknown argument.\n");
+        log_warn("%s(): Unknown argument.", __func__);
         return -1;
       }
       options++;
@@ -123,7 +123,7 @@ parse_and_set_options(int n_options, char **options,
       defport = "11253"; /* 2bf5 */
       params->mode = LSN_SIMPLE_SERVER;
     } else {
-      printf("only client/socks/server modes supported.\n");
+      log_warn("%s(): only client/socks/server modes supported.", __func__);
       return -1;
     }
     options++;
@@ -141,15 +141,16 @@ parse_and_set_options(int n_options, char **options,
 
     /* Validate option selection. */
     if (got_dest && (params->mode == LSN_SOCKS_CLIENT)) {
-      printf("You can't be on socks mode and have --dest.\n");
+      log_warn("%s(): You can't be on socks mode and have --dest.", __func__);
       return -1;
     }
 
     if (!got_dest && (params->mode != LSN_SOCKS_CLIENT)) {
-      printf("client/server mode needs --dest.\n");
+      log_warn("%s(): client/server mode needs --dest.", __func__);
       return -1;
     }
 
+    log_debug("%s(): Parsed obfs2 options nicely!", __func__);
     return 1;
 }
 
@@ -159,7 +160,7 @@ parse_and_set_options(int n_options, char **options,
 static void
 usage(void)
 {
-  printf("You failed at creating an understandable command.\n"
+  printf("You failed at creating a correct obfs2 line.\n"
          "obfs2 syntax:\n"
          "\tobfs2 [obfs2_args] obfs2_opts\n"
          "\t'obfs2_opts':\n"
@@ -430,7 +431,7 @@ crypt_and_transmit(crypt_t *crypto,
       return 0;
     stream_crypt(crypto, data, n);
     evbuffer_add(dest, data, n);
-    dbg(("Processed %d bytes.", n));
+    log_debug("%s(): Processed %d bytes.", __func__, n);
   }
 }
 
@@ -563,7 +564,7 @@ obfs2_recv(void *s, struct evbuffer *source,
 
     /* Fall through here: if there is padding data waiting on the buffer, pull
        it off immediately. */
-    dbg(("Received key, expecting %d bytes of padding\n", plength));
+    log_debug("%s(): Received key, expecting %d bytes of padding", __func__, plength);
   }
 
   /* If we have pending data to send, we set the return code
@@ -583,15 +584,15 @@ obfs2_recv(void *s, struct evbuffer *source,
       n = evbuffer_get_length(source);
     evbuffer_drain(source, n);
     state->padding_left_to_read -= n;
-    dbg(("Received %d bytes of padding; %d left to read\n", n,
-         state->padding_left_to_read));
+    log_debug("%s(): Received %d bytes of padding; %d left to read", 
+              __func__, n, state->padding_left_to_read);
   }
 
   /* Okay; now we're definitely open.  Process whatever data we have. */
   state->state = ST_OPEN;
 
-  dbg(("Processing %d bytes data onto destination buffer\n",
-       (int) evbuffer_get_length(source)));
+  log_debug("%s(): Processing %d bytes data onto destination buffer",
+            __func__, (int) evbuffer_get_length(source));
   crypt_and_transmit(state->recv_crypto, source, dest);
 
   if (r != RECV_SEND_PENDING)

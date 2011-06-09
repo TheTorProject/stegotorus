@@ -81,7 +81,7 @@ parse_and_set_options(int n_options, char **options,
 
   if (resolve_address_port(options[2], 1, 1, 
                            &ss_listen, &sl_listen, defport) < 0) {
-    printf("addr\n");
+    log_warn("addr");
     return -1;
   }
   assert(sl_listen <= sizeof(struct sockaddr_storage));

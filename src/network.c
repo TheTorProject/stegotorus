@@ -67,6 +67,7 @@ listener_new(struct event_base *base,
                                           lsn->proto_params->on_address_len);
 
   if (!lsn->listener) {
+    log_warn("Failed to create listener!");
     listener_free(lsn);
     return NULL;
   }
@@ -95,13 +96,13 @@ simple_listener_cb(struct evconnlistener *evcl,
   if (!conn)
     goto err;
 
-  dbg(("Got a connection\n"));
+  log_debug("Got a connection");
 
   conn->mode = lsn->proto_params->mode;
 
   conn->proto = proto_new(lsn->proto_params);
   if (!conn->proto) {
-    printf("Creation of protocol object failed! Closing connection.\n");
+    log_warn("Creation of protocol object failed! Closing connection.");
     goto err;
   }
 
@@ -209,7 +210,6 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   enum socks_ret socks_ret;
   assert(bev == conn->input); /* socks must be on the initial bufferevent */
 
-  //dbg(("Got data on the socks side (%d) \n", conn->socks_state->state));
 
   do {
     enum socks_status_t status = socks_state_get_status(conn->socks_state);
@@ -225,7 +225,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
                                               get_evdns_base(),
                                               af, addr, port);
       bufferevent_enable(conn->output, EV_READ|EV_WRITE);
-      dbg(("socket_connect_hostname said %d! (%s,%d)\n", r, addr, port));
+      log_debug("socket_connect_hostname said %d! (%s,%d)", r, addr, port);
 
       if (r < 0) {
         /* XXXX send socks reply */
@@ -263,7 +263,7 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
   struct bufferevent *other;
   other = (bev == conn->input) ? conn->output : conn->input;
 
-  dbg(("Got data on plaintext side\n"));
+  log_debug("Got data on plaintext side");
   if (proto_send(conn->proto,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
@@ -278,7 +278,7 @@ obfuscated_read_cb(struct bufferevent *bev, void *arg)
   other = (bev == conn->input) ? conn->output : conn->input;
   enum recv_ret r;
 
-  dbg(("Got data on encrypted side\n"));
+  log_debug("Got data on encrypted side");
   r = proto_recv(conn->proto,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other));
@@ -295,7 +295,7 @@ static void
 error_or_eof(conn_t *conn,
              struct bufferevent *bev_err, struct bufferevent *bev_flush)
 {
-  dbg(("error_or_eof\n"));
+  log_debug("error_or_eof");
 
   if (conn->flushing || ! conn->is_open ||
       0 == evbuffer_get_length(bufferevent_get_output(bev_flush))) {
@@ -321,7 +321,7 @@ input_event_cb(struct bufferevent *bev, short what, void *arg)
   assert(bev == conn->input);
 
   if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
-    printf("Got error: %s\n",
+    log_warn("Got error: %s",
            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     error_or_eof(conn, bev, conn->output);
   }
@@ -345,7 +345,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
     if ((conn->mode == LSN_SOCKS_CLIENT) && 
         (conn->socks_state) &&
         (socks_state_get_status(conn->socks_state) == ST_HAVE_ADDR)) {
-      dbg(("Connection failed\n"));
+      log_debug("Connection failed") ;
       /* Enable EV_WRITE so that we can send the response.
          Disable EV_READ so that we don't get more stuff from the client. */
       bufferevent_enable(conn->input, EV_WRITE);
@@ -364,7 +364,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
      this connection soon.
   */
   if (conn->flushing || (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR))) {
-    printf("Got error: %s\n",
+    log_warn("Got error: %s",
            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     error_or_eof(conn, bev, conn->input);
     return;
@@ -380,7 +380,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
   if (what & BEV_EVENT_CONNECTED) {
     /* woo, we're connected.  Now the input buffer can start reading. */
     conn->is_open = 1;
-    dbg(("Connection done\n"));
+    log_debug("Connection done") ;
     bufferevent_enable(conn->input, EV_READ|EV_WRITE);
     if (conn->mode == LSN_SOCKS_CLIENT) {
       struct sockaddr_storage ss;
