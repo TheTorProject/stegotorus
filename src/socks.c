@@ -39,7 +39,7 @@
 */
 
 
-static int socks5_do_negotiation(struct evbuffer *dest,
+static enum socks_ret socks5_do_negotiation(struct evbuffer *dest,
                                     unsigned int neg_was_success);
 
 typedef unsigned char uchar;
@@ -118,7 +118,7 @@ socks_errno_to_reply(socks_state_t *state, int error)
    
    Client Request (Client -> Server)
 */
-enum req_status
+enum socks_ret
 socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
 {
   /** XXX: max FQDN size is 255. */
@@ -284,7 +284,7 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
    nmethods | methods[nmethods] |
        b           1-255b
 */
-int
+enum socks_ret
 socks5_handle_negotiation(struct evbuffer *source,
                           struct evbuffer *dest, socks_state_t *state)
 {
@@ -295,7 +295,7 @@ socks5_handle_negotiation(struct evbuffer *source,
   evbuffer_copyout(source, &nmethods, 1);
 
   if (evbuffer_get_length(source) < nmethods + 1) {
-    return 0; /* need more data */
+    return SOCKS_INCOMPLETE; /* need more data */
   }
 
   evbuffer_drain(source, 1);
@@ -305,7 +305,7 @@ socks5_handle_negotiation(struct evbuffer *source,
   p = malloc(nmethods);
   if (!p) {
     printf("malloc failed!\n");
-    return -1;
+    return SOCKS_BROKEN;
   }
   if (evbuffer_remove(source, p, nmethods) < 0)
     assert(0);
@@ -333,7 +333,7 @@ socks5_handle_negotiation(struct evbuffer *source,
    | version | method selected |
        1b           1b
 */
-static int
+static enum socks_ret
 socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
 {
   uchar reply[2];
@@ -342,13 +342,13 @@ socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
   reply[1] = neg_was_success ? SOCKS5_METHOD_NOAUTH : SOCKS5_METHOD_FAIL;
 
   if (evbuffer_add(dest, reply, 2) == -1 || !neg_was_success)
-    return -1;
+    return SOCKS_BROKEN;
   else
-    return 1;
+    return SOCKS_GOOD;
 }
 
 /* rename to socks4_handle_request or something. */
-int
+enum socks_ret
 socks4_read_request(struct evbuffer *source, socks_state_t *state)
 {
   /* Format is:
@@ -365,11 +365,11 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
   struct evbuffer_ptr end_of_user, end_of_hostname;
   size_t user_len, hostname_len=0;
   if (evbuffer_get_length(source) < 7)
-    return 0; /* more bytes needed */
+    return SOCKS_INCOMPLETE; /* more bytes needed */
   evbuffer_copyout(source, (char*)header, 7);
   if (header[0] != 1) {
     printf("socks: Only CONNECT supported.\n");
-    return -1;
+    return SOCKS_BROKEN;
   }
   memcpy(&portnum, header+1, 2);
   memcpy(&ipaddr, header+3, 4);
@@ -381,25 +381,25 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
   end_of_user = evbuffer_search(source, "\0", 1, &end_of_user);
   if (end_of_user.pos == -1) {
     if (evbuffer_get_length(source) > SOCKS4_MAX_LENGTH)
-      return -1;
-    return 0;
+      return SOCKS_BROKEN;
+    return SOCKS_INCOMPLETE;
   }
   user_len = end_of_user.pos - 7;
   if (is_v4a) {
     if (end_of_user.pos == evbuffer_get_length(source)-1)
-      return 0; /*more data needed */
+      return SOCKS_INCOMPLETE; /*more data needed */
     end_of_hostname = end_of_user;
     evbuffer_ptr_set(source, &end_of_hostname, 1, EVBUFFER_PTR_ADD);
     end_of_hostname = evbuffer_search(source, "\0", 1, &end_of_hostname);
     if (end_of_hostname.pos == -1) {
       if (evbuffer_get_length(source) > SOCKS4_MAX_LENGTH)
-        return -1;
-      return 0;
+        return SOCKS_BROKEN;
+      return SOCKS_INCOMPLETE;
     }
     hostname_len = end_of_hostname.pos - end_of_user.pos - 1;
     if (hostname_len >= sizeof(state->parsereq.addr)) {
       printf("socks4a: Hostname too long\n");
-      return -1;
+      return SOCKS_BROKEN;
     }
   }
 
@@ -415,10 +415,10 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
     struct in_addr in;
     in.s_addr = htonl(ipaddr);
     if (evutil_inet_ntop(AF_INET, &in, state->parsereq.addr, sizeof(state->parsereq.addr)) == NULL)
-      return -1;
+      return SOCKS_BROKEN;
   }
 
-  return 1;
+  return SOCKS_GOOD;
 }
 
 int
@@ -451,17 +451,18 @@ socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
 
    Returns 1 on done, -1 on unrecoverable error, 0 on "need more bytes
 */
-int
+enum socks_ret
 handle_socks(struct evbuffer *source, struct evbuffer *dest,
              socks_state_t *socks_state)
 {
-  enum req_status r;
+  enum socks_ret r;
+
   if (socks_state->broken)
-    return -1;
+    return SOCKS_BROKEN;
 
   if (evbuffer_get_length(source) < MIN_SOCKS_PACKET) {
     printf("socks: Packet is too small.\n");
-    return 0;
+    return SOCKS_INCOMPLETE;
   }
 
   /* ST_SENT_REPLY connections shouldn't be here! */
@@ -483,48 +484,49 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
   case SOCKS4_VERSION:
     if (socks_state->state == ST_WAITING) {
       r = socks4_read_request(source, socks_state);
-      if (r == -1)
+      if (r == SOCKS_BROKEN)
         goto broken;
-      else if (r == 0)
-        return 0;
+      else if (r == SOCKS_INCOMPLETE)
+        return SOCKS_INCOMPLETE;
       socks_state->state = ST_HAVE_ADDR;
-      return 1;
+      return SOCKS_GOOD;
     }
     break;
   case SOCKS5_VERSION:
     if (socks_state->state == ST_WAITING) {
       /* We don't know this connection. We have to do method negotiation. */
       r = socks5_handle_negotiation(source,dest,socks_state);
-      if (r == -1)
+      if (r == SOCKS_BROKEN)
         goto broken;
-      else if (r == 0)
-        return 0;
-      else if (r == 1)
+      else if (r == SOCKS_INCOMPLETE)
+        return SOCKS_INCOMPLETE;
+      else if (r == SOCKS_GOOD)
         socks_state->state = ST_NEGOTIATION_DONE;
     }
     if (socks_state->state == ST_NEGOTIATION_DONE) {
       /* We know this connection. Let's see what it wants. */
       r = socks5_handle_request(source,&socks_state->parsereq);
-      if (r == SOCKS_GOOD)
+      if (r == SOCKS_GOOD) {
         socks_state->state = ST_HAVE_ADDR;
-      else if (r == SOCKS_INCOMPLETE) 
+        return SOCKS_GOOD;
+      } else if (r == SOCKS_INCOMPLETE) 
         return SOCKS_INCOMPLETE;
       else if (r == SOCKS_CMD_NOT_CONNECT) {
         socks_state->broken = 1;
         return SOCKS_CMD_NOT_CONNECT;
       } else if (r == SOCKS_BROKEN)
         goto broken;
-      return r;
+      assert(0);
     }
     break;
   default:
     goto broken;
   }
 
-  return 0;
+  return SOCKS_INCOMPLETE;
  broken:
   socks_state->broken = 1;
-  return -1;
+  return SOCKS_BROKEN;
 }
 
 enum socks_status_t

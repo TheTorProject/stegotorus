@@ -40,7 +40,7 @@ test_socks_socks5_send_negotiation(void *data)
 
   evbuffer_add(source, req1, 2);
 
-  tt_int_op(1, ==, socks5_handle_negotiation(source,dest,state));
+  tt_int_op(SOCKS_GOOD, ==, socks5_handle_negotiation(source,dest,state));
   tt_int_op(0, ==, evbuffer_get_length(source));
 
   uchar rep1[2];
@@ -57,7 +57,7 @@ test_socks_socks5_send_negotiation(void *data)
 
   evbuffer_add(source, req2, 10);
 
-  tt_int_op(1, ==, socks5_handle_negotiation(source,dest,state));
+  tt_int_op(SOCKS_GOOD, ==, socks5_handle_negotiation(source,dest,state));
   tt_int_op(0, ==, evbuffer_get_length(source));
 
   uchar rep2[2];
@@ -73,7 +73,7 @@ test_socks_socks5_send_negotiation(void *data)
 
   evbuffer_add(source, req3, 100);
 
-  tt_int_op(-1, ==, socks5_handle_negotiation(source,dest,state));
+  tt_int_op(SOCKS_BROKEN, ==, socks5_handle_negotiation(source,dest,state));
   tt_int_op(0, ==, evbuffer_get_length(source)); /* all data removed */
 
   uchar rep3[2];
@@ -92,7 +92,7 @@ test_socks_socks5_send_negotiation(void *data)
 
   evbuffer_add(source, req4, 4);
 
-  tt_int_op(0, ==, socks5_handle_negotiation(source,dest,state));
+  tt_int_op(SOCKS_INCOMPLETE, ==, socks5_handle_negotiation(source,dest,state));
   tt_int_op(4, ==, evbuffer_get_length(source)); /* no bytes removed */
   evbuffer_drain(source, 4);
 
@@ -105,7 +105,7 @@ test_socks_socks5_send_negotiation(void *data)
 
   evbuffer_add(source, req5, 5);
 
-  tt_int_op(1, ==, socks5_handle_negotiation(source,dest,state));
+  tt_int_op(SOCKS_GOOD, ==, socks5_handle_negotiation(source,dest,state));
   tt_int_op(1, ==, evbuffer_get_length(source)); /* 4 bytes removed */
   evbuffer_drain(source, 1);
 
@@ -431,7 +431,7 @@ test_socks_socks4_request(void *data)
 
   evbuffer_add(source,req1,8);
 
-  tt_int_op(1, ==, socks4_read_request(source,state));
+  tt_int_op(SOCKS_GOOD, ==, socks4_read_request(source,state));
   tt_str_op(state->parsereq.addr, ==, "127.0.0.1");
   tt_int_op(state->parsereq.port, ==, 80);
 
@@ -449,7 +449,7 @@ test_socks_socks4_request(void *data)
   
   evbuffer_add(source,req2,9);
 
-  tt_int_op(0, ==, socks4_read_request(source,state));
+  tt_int_op(SOCKS_INCOMPLETE, ==, socks4_read_request(source,state));
 
   /* emptying source buffer before next test  */
   buffer_len = evbuffer_get_length(source);
@@ -465,7 +465,7 @@ test_socks_socks4_request(void *data)
 
   evbuffer_add(source,req3,16);
 
-  tt_int_op(1, ==, socks4_read_request(source,state));
+  tt_int_op(SOCKS_GOOD, ==, socks4_read_request(source,state));
   tt_str_op(state->parsereq.addr, ==, "127.0.0.1");
   tt_int_op(state->parsereq.port, ==, 80);
 
@@ -485,7 +485,7 @@ test_socks_socks4_request(void *data)
   
   evbuffer_add(source,req4,33);
 
-  tt_int_op(1, ==, socks4_read_request(source,state));
+  tt_int_op(SOCKS_GOOD, ==, socks4_read_request(source,state));
   tt_str_op(state->parsereq.addr, ==, "www.test.example");
   tt_int_op(state->parsereq.port, ==, 80);
 
@@ -505,7 +505,7 @@ test_socks_socks4_request(void *data)
   /* Don't send it all. */
   evbuffer_add(source,req5,28);
 
-  tt_int_op(0, ==, socks4_read_request(source,state));
+  tt_int_op(SOCKS_INCOMPLETE, ==, socks4_read_request(source,state));
 
   /* emptying source buffer before next test  */
   buffer_len = evbuffer_get_length(source);
@@ -525,7 +525,7 @@ test_socks_socks4_request(void *data)
   
   evbuffer_add(source,req6,16+HUGE+1);
 
-  tt_int_op(-1, ==, socks4_read_request(source,state));
+  tt_int_op(SOCKS_BROKEN, ==, socks4_read_request(source,state));
   #undef HUGE
 
  end:
