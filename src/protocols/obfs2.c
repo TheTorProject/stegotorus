@@ -17,6 +17,7 @@
 
 #include "obfs2_crypt.h"
 #include "obfs2.h"
+#include "../network.h"
 #include "../util.h"
 #include "../protocol.h"
 #include "../network.h"
@@ -31,15 +32,149 @@ static void *obfs2_state_new(protocol_params_t *params);
 static int obfs2_state_set_shared_secret(void *s,
                                          const char *secret,
                                          size_t secretlen);
+static int set_up_vtable(void);
+static void usage(void);
+
 
 static protocol_vtable *vtable=NULL;
 
-/* Sets the function table for the obfs2 protocol and
-   calls initialize_crypto(). 
+/* 
+   This function parses 'options' and fills the protocol parameters
+   structure 'params'.
+   It then fills the obfs2 vtable and initializes the crypto subsystem.
+
    Returns 0 on success, -1 on fail.
 */
 int
-obfs2_init(void) {
+obfs2_init(int n_options, char **options, 
+           struct protocol_params_t *params)
+{
+  struct sockaddr_storage ss_listen;
+  int sl_listen;
+  int got_dest=0;
+  int got_ss=0;
+  const char* defport;
+
+  if ((n_options < 3) || (n_options > 5)) {
+    printf("wrong options number: %d\n", n_options);
+    goto err;
+  }
+
+  assert(!strcmp(*options,"obfs2"));
+  params->proto = OBFS2_PROTOCOL;
+  options++;
+
+  /* Now parse the optional arguments */
+  while (!strncmp(*options,"--",2)) {
+      if (!strncmp(*options,"--dest=",7)) {
+        if (got_dest)
+          goto err;
+        struct sockaddr_storage ss_target;
+        struct sockaddr *sa_target=NULL;
+        int sl_target=0;
+        if (resolve_address_port(*options+7, 1, 0, 
+                                 &ss_target, &sl_target, NULL) < 0)
+          goto err;
+        assert(sl_target <= sizeof(struct sockaddr_storage));
+        sa_target = (struct sockaddr *)&ss_target;
+        memcpy(&params->target_address, sa_target, sl_target);
+        params->target_address_len = sl_target;
+        got_dest=1;
+      } else if (!strncmp(*options,"--shared-secret=",16)) {
+        if (got_ss)
+          goto err;
+        /* this is freed in protocol_params_free() */
+        params->shared_secret = strdup(*options+16);
+        params->shared_secret_len = strlen(*options+16);
+        got_ss=1;
+      } else {
+        printf("Unknown argument.\n");
+        goto err;
+      }
+      options++;
+    }
+
+    if (!strcmp(*options, "client")) {
+      defport = "48988"; /* bf5c */
+      params->mode = LSN_SIMPLE_CLIENT;
+    } else if (!strcmp(*options, "socks")) {
+      defport = "23548"; /* 5bf5 */
+      params->mode = LSN_SOCKS_CLIENT;
+    } else if (!strcmp(*options, "server")) {
+      defport = "11253"; /* 2bf5 */
+      params->mode = LSN_SIMPLE_SERVER;
+    } else {
+      printf("only client/socks/server modes supported.\n");
+      goto err;
+    }
+    options++;
+
+    params->is_initiator = (params->mode != LSN_SIMPLE_SERVER);
+
+    if (resolve_address_port(*options, 1, 1, 
+                             &ss_listen, &sl_listen, defport) < 0)
+      goto err;
+    assert(sl_listen <= sizeof(struct sockaddr_storage));
+    struct sockaddr *sa_listen=NULL;
+    sa_listen = (struct sockaddr *)&ss_listen;
+    memcpy(&params->on_address, sa_listen, sl_listen);
+    params->on_address_len = sl_listen;
+
+    /* Validate option selection. */
+    if (got_dest && (params->mode == LSN_SOCKS_CLIENT)) {
+      printf("You can't be on socks mode and have --dest.\n");
+      goto err;
+    }
+
+    if (!got_dest && (params->mode != LSN_SOCKS_CLIENT)) {
+      printf("client/server mode needs --dest.\n");
+      goto err;
+    }
+  
+    if (set_up_vtable() < 0)
+      return -1;
+
+    if (initialize_crypto() < 0) {
+      fprintf(stderr, "Can't initialize crypto; failing\n");
+      return -1;
+    }
+
+    return 1;
+
+ err:
+    usage();
+    return -1;
+}
+
+/**
+   Prints usage instructions for the obfs2 protocol.
+*/
+static void
+usage(void)
+{
+  printf("You failed at creating an understandable command.\n"
+         "obfs2 syntax:\n"
+         "\tobfs2 [obfs2_args] obfs2_opts\n"
+         "\t'obfs2_opts':\n"
+         "\t\tmode ~ server|client|socks\n"
+         "\t\tlisten address ~ host:port\n"
+         "\t'obfs2_args':\n"
+         "\t\tDestination Address ~ --dest=host:port\n"
+         "\t\tShared Secret ~ --shared-secret=<secret>\n"
+         "\tExample:\n"
+         "\tobfsproxy --dest=127.0.0.1:666 --shared-secret=himitsu "
+         "\tobfs2 server 127.0.0.1:1026\n");
+}
+
+/**
+   Helper: Allocates space for the protocol vtable and populates it's
+   function pointers.
+   Returns 1 on success, -1 on fail.
+*/
+static int
+set_up_vtable(void)
+{
+  /* XXX memleak. */
   vtable = calloc(1, sizeof(protocol_vtable));
   if (!vtable)
     return -1;
@@ -49,12 +184,7 @@ obfs2_init(void) {
   vtable->handshake = obfs2_send_initial_message;
   vtable->send = obfs2_send;
   vtable->recv = obfs2_recv;
-
-  if (initialize_crypto() < 0) {
-    fprintf(stderr, "Can't initialize crypto; failing\n");
-    return -1;
-  }
-
+  
   return 1;
 }
 
@@ -104,6 +234,10 @@ derive_key(void *s, const char *keytype)
   return cryptstate;
 }
 
+/**
+   Derive and return padding key of type 'keytype' from the seeds
+   currently set in state 's'.  Returns NULL on failure.
+*/   
 static crypt_t *
 derive_padding_key(void *s, const uchar *seed,
                    const char *keytype)
@@ -139,6 +273,14 @@ derive_padding_key(void *s, const uchar *seed,
   return cryptstate;
 }
 
+/**
+   This is called everytime we get a connection for the obfs2
+   protocol.
+   
+   It sets up the protocol vtable in 'proto_struct' and then attempts
+   to create and return a protocol state according to the protocol
+   parameters 'params'.
+*/
 void *
 obfs2_new(struct protocol_t *proto_struct,
           protocol_params_t *params)
@@ -150,9 +292,8 @@ obfs2_new(struct protocol_t *proto_struct,
 }
   
 /**
-   Return a new object to handle protocol state.  If 'initiator' is true,
-   we're the handshake initiator.  Otherwise, we're the responder.  Return
-   NULL on failure.
+   Returns an obfs2 state according to the protocol parameters
+   'params'. If something goes wrong it returns NULL.
  */
 static void *
 obfs2_state_new(protocol_params_t *params)
@@ -195,7 +336,9 @@ obfs2_state_new(protocol_params_t *params)
   return state;
 }
 
-/** Set the shared secret to be used with this protocol state. */
+/** 
+    Sets the shared 'secret' to be used, on the protocol state 's'.
+*/
 static int
 obfs2_state_set_shared_secret(void *s, const char *secret, 
                               size_t secretlen)
@@ -206,6 +349,7 @@ obfs2_state_set_shared_secret(void *s, const char *secret,
   uchar buf[SHARED_SECRET_LENGTH];
   obfs2_state_t *state = s;
 
+  /* ASN we must say in spec that we hash command line shared secret. */
   digest_t *c = digest_new();
   digest_update(c, (uchar*)secret, secretlen);
   digest_getdigest(c, buf, sizeof(buf));
@@ -219,7 +363,7 @@ obfs2_state_set_shared_secret(void *s, const char *secret,
 }
 
 /**
-   Write the initial protocol setup and padding message for 'state' to
+   Write the initial protocol setup and padding message for state 's' to
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
  */
 static int
@@ -449,6 +593,9 @@ obfs2_recv(void *s, struct evbuffer *source,
   return r;
 }
 
+/** 
+    Frees obfs2 state 's' 
+*/
 static void
 obfs2_state_free(void *s)
 {

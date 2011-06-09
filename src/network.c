@@ -16,20 +16,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <event2/buffer.h>
-#include <event2/bufferevent.h>
-#include <event2/listener.h>
-#include <event2/event.h>
-
 #include <errno.h>
 #include <event2/util.h>
 
 struct listener_t {
   struct evconnlistener *listener;
-  struct sockaddr_storage target_address;
-  int target_address_len;
-  int mode;
-  int proto; /* Protocol that this listener can speak. */
   protocol_params_t *proto_params;
 };
 
@@ -47,48 +38,34 @@ static void obfuscated_read_cb(struct bufferevent *bev, void *arg);
 static void input_event_cb(struct bufferevent *bev, short what, void *arg);
 static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 
+/**
+   This function sets up the protocol defined by 'options' and
+   attempts to bind a new listener for it.
+
+   Returns the listener on success, NULL on fail. 
+*/
 listener_t *
 listener_new(struct event_base *base,
-             int mode, int protocol,
-             const struct sockaddr *on_address, int on_address_len,
-             const struct sockaddr *target_address, int target_address_len,
-             const char *shared_secret, size_t shared_secret_len)
+             protocol_params_t *proto_params)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
+
   listener_t *lsn = calloc(1, sizeof(listener_t));
-
-  assert(mode == LSN_SIMPLE_CLIENT || mode == LSN_SIMPLE_SERVER ||
-         mode == LSN_SOCKS_CLIENT);
-
-  if (set_up_protocol(protocol)<0) {
-    printf("This is just terrible. We can't even set up a protocol! Exiting.\n");
-    exit(1);
+  if (!lsn) {
+    if (proto_params)
+      free(proto_params);
+    return NULL;
   }
-
-  lsn->proto = protocol;
-  lsn->mode = mode;
-
-  protocol_params_t *proto_params = calloc(1, sizeof(protocol_params_t));
-  proto_params->is_initiator = mode != LSN_SIMPLE_SERVER;
-  proto_params->shared_secret = shared_secret; 
-  proto_params->shared_secret_len = shared_secret_len;
 
   lsn->proto_params = proto_params;
-
-  if (target_address) {
-    assert(target_address_len <= sizeof(struct sockaddr_storage));
-    memcpy(&lsn->target_address, target_address, target_address_len);
-    lsn->target_address_len = target_address_len;
-  } else {
-    assert(lsn->mode == LSN_SOCKS_CLIENT);
-  }
-
+  
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
                                           flags,
                                           -1,
-                                          on_address,
-                                          on_address_len);
+                                          &lsn->proto_params->on_address,
+                                          lsn->proto_params->on_address_len);
+
   if (!lsn->listener) {
     listener_free(lsn);
     return NULL;
@@ -97,22 +74,13 @@ listener_new(struct event_base *base,
   return lsn;
 }
 
-static void
-protocol_params_free(protocol_params_t *params)
-{
-  assert(params);
-  if (params->shared_secret)
-    free(&params->shared_secret);
-  free(params);
-}
-
 void
 listener_free(listener_t *lsn)
 {
   if (lsn->listener)
     evconnlistener_free(lsn->listener);
   if (lsn->proto_params)
-    protocol_params_free(lsn->proto_params);
+    proto_params_free(lsn->proto_params);
   memset(lsn, 0xb0, sizeof(listener_t));
   free(lsn);
 }
@@ -129,10 +97,9 @@ simple_listener_cb(struct evconnlistener *evcl,
 
   dbg(("Got a connection\n"));
 
-  conn->mode = lsn->mode;
+  conn->mode = lsn->proto_params->mode;
 
-  conn->proto = proto_new(lsn->proto,
-                          lsn->proto_params);
+  conn->proto = proto_new(lsn->proto_params);
   if (!conn->proto) {
     printf("Creation of protocol object failed! Closing connection.\n");
     goto err;
@@ -194,8 +161,8 @@ simple_listener_cb(struct evconnlistener *evcl,
   if (conn->mode == LSN_SIMPLE_SERVER || conn->mode == LSN_SIMPLE_CLIENT) {
     /* Launch the connect attempt. */
     if (bufferevent_socket_connect(conn->output,
-                                   (struct sockaddr *) &lsn->target_address,
-                                   lsn->target_address_len)<0)
+                                   (struct sockaddr*)&lsn->proto_params->target_address,
+                                   lsn->proto_params->target_address_len)<0)
       goto err;
 
     bufferevent_enable(conn->output, EV_READ|EV_WRITE);

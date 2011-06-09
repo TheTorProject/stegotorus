@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <string.h>
 
 #include "protocol.h"
 #include "network.h"
@@ -8,52 +9,56 @@
 #include "protocols/obfs2.h"
 #include "protocols/dummy.h"
 
+/** 
+    All supported protocols should be put in this array.
+    It's used by main.c.
+*/
+char *supported_protocols[] = { "obfs2", "dummy" };
+int n_supported_protocols = 2;
+
 /**
-   This function initializes <protocol>. 
-   It's called once in the runtime of the program for each proto.
+   This function figures out which protocol we want to set up, and
+   gives 'n_options', 'options' and 'params' to the appropriate
+   protocol-specific initalization function.
+   This function is called once for every listener through the runtime
+   of obfsproxy.
 */
 int
-set_up_protocol(int protocol) {
-  if (protocol == OBFS2_PROTOCOL)
-    obfs2_init();
-  else if (protocol == DUMMY_PROTOCOL)
-    dummy_init();
+set_up_protocol(int n_options, char **options, 
+                struct protocol_params_t *params)
+{
+  if (!strcmp(*options,"dummy"))
+    return dummy_init(n_options, options, params);
+  else if (!strcmp(*options,"obfs2"))
+    return obfs2_init(n_options, options, params);
   else
     return -1;
-
-  return 1;
 }
 
 /**
-   This function creates a protocol object. It's called once
-   for every connection. It creates a new protocol_t structure
-   and fills it's vtable etc.
-   Return the protocol_t if successful, NULL otherwise.
+   This function creates a protocol object.
+   It's called once per connection. 
+   It creates a new protocol_t structure and fills it's vtable etc.
+   Return a 'protocol_t' if successful, NULL otherwise.
 */
 struct protocol_t *
-proto_new(int protocol, protocol_params_t *params) {
+proto_new(protocol_params_t *params) {
   struct protocol_t *proto = calloc(1, sizeof(struct protocol_t));
   if (!proto)
     return NULL;
 
-  proto->vtable = calloc(1, sizeof(struct protocol_vtable));
-  if (!proto->vtable)
-    return NULL;
-
-  if (protocol == OBFS2_PROTOCOL) {
-    proto->proto = protocol;
+  if (params->proto == OBFS2_PROTOCOL)
     proto->state = obfs2_new(proto, params);
-  } else if (protocol == DUMMY_PROTOCOL) {
-    proto->proto = protocol;
+  else if (params->proto == DUMMY_PROTOCOL)
     proto->state = dummy_new(proto, NULL);
-  }
 
-  if (proto->state)
-    return proto;
-  else
-    return NULL;
+  return proto->state ? proto : NULL;
 }
 
+/**
+   This function does the protocol handshake.
+   Not all protocols have a handshake.
+*/
 int
 proto_handshake(struct protocol_t *proto, void *buf) {
   assert(proto);
@@ -63,6 +68,9 @@ proto_handshake(struct protocol_t *proto, void *buf) {
     return 0;
 }
 
+/**
+   This function is responsible for sending protocol data.
+*/
 int
 proto_send(struct protocol_t *proto, void *source, void *dest) {
   assert(proto);
@@ -72,6 +80,9 @@ proto_send(struct protocol_t *proto, void *source, void *dest) {
     return -1;
 }
 
+/**
+   This function is responsible for receiving protocol data.
+*/
 enum recv_ret
 proto_recv(struct protocol_t *proto, void *source, void *dest) {
   assert(proto);
@@ -81,10 +92,31 @@ proto_recv(struct protocol_t *proto, void *source, void *dest) {
     return -1;
 }
 
-void proto_destroy(struct protocol_t *proto) {
+/**
+   This function destroys 'proto'.
+   It's called everytime we close a connection.
+*/
+void 
+proto_destroy(struct protocol_t *proto) {
   assert(proto);
   assert(proto->state);
 
   if (proto->vtable->destroy)
     proto->vtable->destroy(proto->state);
+
+  free(proto);
+}
+
+/**
+   This function destroys 'params'.
+   It's called everytime we free a listener.
+*/
+void
+proto_params_free(protocol_params_t *params)
+{
+  assert(params);
+
+  if (params->shared_secret)
+    free(params->shared_secret);
+  free(params);
 }

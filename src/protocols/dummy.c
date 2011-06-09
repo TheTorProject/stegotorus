@@ -9,6 +9,7 @@
 #include <event2/buffer.h>
 
 #include "dummy.h"
+#include "../network.h"
 #include "../util.h"
 #include "../protocol.h"
 #include "../network.h"
@@ -17,11 +18,55 @@ static int dummy_send(void *nothing,
                                 struct evbuffer *source, struct evbuffer *dest);
 static enum recv_ret dummy_recv(void *nothing, struct evbuffer *source,
                                 struct evbuffer *dest);
+static void usage(void);
 
 static protocol_vtable *vtable=NULL;
 
+/**
+   This function sets up the protocol and populates 'listner'
+   according to 'options'.
+
+   'options' is an array like this:
+   {"dummy","socks","127.0.0.1:6666"}
+*/   
 int
-dummy_init(void) {
+dummy_init(int n_options, char **options, 
+           struct protocol_params_t *params)
+{
+  struct sockaddr_storage ss_listen;
+  int sl_listen;
+  const char* defport;
+  
+  if (n_options != 3)
+    goto err;
+
+  assert(!strcmp(options[0],"dummy"));
+  params->proto = DUMMY_PROTOCOL;
+
+  if (!strcmp(options[1], "client")) {
+    defport = "48988"; /* bf5c */
+    params->mode = LSN_SIMPLE_CLIENT;
+  } else if (!strcmp(options[1], "socks")) {
+    defport = "23548"; /* 5bf5 */
+    params->mode = LSN_SOCKS_CLIENT;
+  } else if (!strcmp(options[1], "server")) {
+    defport = "11253"; /* 2bf5 */
+    params->mode = LSN_SIMPLE_SERVER;
+  } else
+    goto err;
+
+  if (resolve_address_port(options[2], 1, 1, 
+                           &ss_listen, &sl_listen, defport) < 0) {
+    printf("addr\n");
+    goto err;
+  }
+  assert(sl_listen <= sizeof(struct sockaddr_storage));
+  struct sockaddr *sa_listen=NULL;
+  sa_listen = (struct sockaddr *)&ss_listen;
+  memcpy(&params->on_address, sa_listen, sl_listen);
+  params->on_address_len = sl_listen;
+  
+  /* XXX memleak. */
   vtable = calloc(1, sizeof(protocol_vtable));
   if (!vtable)
     return -1;
@@ -33,11 +78,30 @@ dummy_init(void) {
   vtable->recv = dummy_recv;
 
   return 1;
+
+ err:
+  usage();
+  return -1;
 }
 
+static void
+usage(void)
+{
+  printf("Great... You can't even form a dummy protocol line:\n"
+         "dummy syntax:\n"
+         "\tdummy dummy_opts\n"
+         "\t'dummy_opts':\n"
+         "\t\tmode ~ server|client|socks\n"
+         "\t\tlisten address ~ host:port\n"
+         "Example:\n"
+         "\tobfsproxy dummy socks 127.0.0.1:5000\n");
+}
+    
+
+
 void *
-dummy_new(struct protocol_t *proto_struct, 
-          protocol_params_t *params)
+dummy_new(struct protocol_t *proto_struct,
+          struct protocol_params_t *params)
 {
   proto_struct->vtable = vtable;
 

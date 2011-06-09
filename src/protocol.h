@@ -1,10 +1,13 @@
+#include <event2/buffer.h>
+
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#define DUMMY_PROTOCOL      0
-#define OBFS2_PROTOCOL      1
-
 struct evbuffer;
+struct listener_t;
+
+#define DUMMY_PROTOCOL      1
+#define OBFS2_PROTOCOL      2
 
 /**
   This struct defines parameters of the protocol per-listener basis.
@@ -15,15 +18,17 @@ struct evbuffer;
 */
 typedef struct protocol_params_t {
   int is_initiator;
-  
-  const char *shared_secret;
+  struct sockaddr_storage target_address;
+  int target_address_len;
+  struct sockaddr on_address;
+  int on_address_len;
+  int mode;
+  int proto; /* Protocol that this listener can speak. */
+  char *shared_secret;
   size_t shared_secret_len;
 } protocol_params_t;
 
 struct protocol_t {
-  /* protocol */
-  int proto;
-
   /* protocol vtable */
   struct protocol_vtable *vtable;
   
@@ -39,17 +44,27 @@ struct protocol_t {
   */
   void *state;
 };
+int set_up_protocol(int n_options, char **options, 
+                    struct protocol_params_t *params);
+struct protocol_t *proto_new(struct protocol_params_t *params);
+void proto_destroy(struct protocol_t *proto);
+int proto_handshake(struct protocol_t *proto, void *buf);
+int proto_send(struct protocol_t *proto, void *source, void *dest);
+enum recv_ret proto_recv(struct protocol_t *proto, void *source, void *dest);
+
+void proto_params_free(protocol_params_t *params);
 
 
 typedef struct protocol_vtable {
   /* Initialization function: Fills in the protocol vtable. */
-  int (*init)(struct protocol_t *self);
+  int (*init)(int n_options, char **options, 
+              struct protocol_params_t *params);
   /* Destructor: Destroys the protocol state.  */
   void (*destroy)(void *state);
 
   /* Constructor: Creates a protocol object. */
-  void *(*create)(struct protocol_t *proto_struct,
-                  protocol_params_t *parameters);
+  void *(*create)(struct protocol_t *proto_params, 
+                  struct protocol_params_t *parameters);
 
   /* does handshake. Not all protocols have a handshake. */
   int (*handshake)(void *state,
@@ -66,13 +81,5 @@ typedef struct protocol_vtable {
                         struct evbuffer *dest);
 
 } protocol_vtable;
-
-int set_up_protocol(int protocol);
-struct protocol_t *proto_new(int protocol,
-                             protocol_params_t *params);
-void proto_destroy(struct protocol_t *proto);
-int proto_handshake(struct protocol_t *proto, void *buf);
-int proto_send(struct protocol_t *proto, void *source, void *dest);
-enum recv_ret proto_recv(struct protocol_t *proto, void *source, void *dest);
 
 #endif
