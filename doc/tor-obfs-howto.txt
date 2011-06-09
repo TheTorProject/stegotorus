@@ -50,11 +50,11 @@ Our port setup will be like this:
 
 This command will setup an obfsproxy socks client listening to the
 obfs2 protocol on localhost:1050:
-./obfsproxy socks obfs2 127.0.0.1:1050
+./obfsproxy obfs2 socks 127.0.0.1:1050
 
 This command will setup an obfsproxy server listening to the
-obfs2 protocol on localhost:5001:
-./obfsproxy server obfs2 127.0.0.1:1051 127.0.0.1:5001
+obfs2 protocol on localhost:1051:
+./obfsproxy obfs2 --dest 127.0.0.1:5001 server 127.0.0.1:1051
 
         Setting up Tor:
 

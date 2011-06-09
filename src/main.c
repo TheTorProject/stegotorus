@@ -112,8 +112,8 @@ main(int argc, const char **argv)
   /* This is an integer! It contains the number of protocols that we
      managed to recognize, by their protocol name.  Of course it's not
      the *actual* actual_protocols since some of them could have wrong
-     options or arguments, but this will be resolved by
-     set_up_protocol() and listener_new(). */
+     options or arguments, but this will be resolved per-protocol by
+     set_up_protocol(). */
   int actual_protocols=0;
 
   int start;
