@@ -34,6 +34,8 @@ static int obfs2_state_set_shared_secret(void *s,
                                          size_t secretlen);
 static int set_up_vtable(void);
 static void usage(void);
+static int parse_and_set_options(int n_options, char **options, 
+                                 struct protocol_params_t *params);
 
 
 static protocol_vtable *vtable=NULL;
@@ -49,6 +51,26 @@ int
 obfs2_init(int n_options, char **options, 
            struct protocol_params_t *params)
 {
+  if (parse_and_set_options(n_options,options,params) < 0) {
+    usage();
+    return -1;
+  }
+
+  if (set_up_vtable() < 0)
+    return -1;
+
+  if (initialize_crypto() < 0) {
+    fprintf(stderr, "Can't initialize crypto; failing\n");
+    return -1;
+  }
+
+  return 1;
+}
+
+static int
+parse_and_set_options(int n_options, char **options, 
+                      struct protocol_params_t *params)
+{
   struct sockaddr_storage ss_listen;
   int sl_listen;
   int got_dest=0;
@@ -57,7 +79,7 @@ obfs2_init(int n_options, char **options,
 
   if ((n_options < 3) || (n_options > 5)) {
     printf("wrong options number: %d\n", n_options);
-    goto err;
+    return -1;
   }
 
   assert(!strcmp(*options,"obfs2"));
@@ -68,13 +90,13 @@ obfs2_init(int n_options, char **options,
   while (!strncmp(*options,"--",2)) {
       if (!strncmp(*options,"--dest=",7)) {
         if (got_dest)
-          goto err;
+          return -1;
         struct sockaddr_storage ss_target;
         struct sockaddr *sa_target=NULL;
         int sl_target=0;
         if (resolve_address_port(*options+7, 1, 0, 
                                  &ss_target, &sl_target, NULL) < 0)
-          goto err;
+          return -1;
         assert(sl_target <= sizeof(struct sockaddr_storage));
         sa_target = (struct sockaddr *)&ss_target;
         memcpy(&params->target_address, sa_target, sl_target);
@@ -82,14 +104,14 @@ obfs2_init(int n_options, char **options,
         got_dest=1;
       } else if (!strncmp(*options,"--shared-secret=",16)) {
         if (got_ss)
-          goto err;
+          return -1;
         /* this is freed in protocol_params_free() */
         params->shared_secret = strdup(*options+16);
         params->shared_secret_len = strlen(*options+16);
         got_ss=1;
       } else {
         printf("Unknown argument.\n");
-        goto err;
+        return -1;
       }
       options++;
     }
@@ -105,7 +127,7 @@ obfs2_init(int n_options, char **options,
       params->mode = LSN_SIMPLE_SERVER;
     } else {
       printf("only client/socks/server modes supported.\n");
-      goto err;
+      return -1;
     }
     options++;
 
@@ -113,7 +135,7 @@ obfs2_init(int n_options, char **options,
 
     if (resolve_address_port(*options, 1, 1, 
                              &ss_listen, &sl_listen, defport) < 0)
-      goto err;
+      return -1;
     assert(sl_listen <= sizeof(struct sockaddr_storage));
     struct sockaddr *sa_listen=NULL;
     sa_listen = (struct sockaddr *)&ss_listen;
@@ -123,27 +145,15 @@ obfs2_init(int n_options, char **options,
     /* Validate option selection. */
     if (got_dest && (params->mode == LSN_SOCKS_CLIENT)) {
       printf("You can't be on socks mode and have --dest.\n");
-      goto err;
+      return -1;
     }
 
     if (!got_dest && (params->mode != LSN_SOCKS_CLIENT)) {
       printf("client/server mode needs --dest.\n");
-      goto err;
-    }
-  
-    if (set_up_vtable() < 0)
-      return -1;
-
-    if (initialize_crypto() < 0) {
-      fprintf(stderr, "Can't initialize crypto; failing\n");
       return -1;
     }
 
     return 1;
-
- err:
-    usage();
-    return -1;
 }
 
 /**

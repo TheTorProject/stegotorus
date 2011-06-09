@@ -19,9 +19,10 @@ static int dummy_send(void *nothing,
 static enum recv_ret dummy_recv(void *nothing, struct evbuffer *source,
                                 struct evbuffer *dest);
 static void usage(void);
+static int parse_and_set_options(int n_options, char **options, 
+                                 struct protocol_params_t *params);
 
 static protocol_vtable *vtable=NULL;
-
 /**
    This function sets up the protocol and populates 'listner'
    according to 'options'.
@@ -33,12 +34,35 @@ int
 dummy_init(int n_options, char **options, 
            struct protocol_params_t *params)
 {
+  if (parse_and_set_options(n_options,options,params) < 0) {
+    usage();
+    return -1;
+  }
+
+  /* XXX memleak. */
+  vtable = calloc(1, sizeof(protocol_vtable));
+  if (!vtable)
+    return -1;
+
+  vtable->destroy = NULL;
+  vtable->create = dummy_new;
+  vtable->handshake = NULL;
+  vtable->send = dummy_send;
+  vtable->recv = dummy_recv;
+
+  return 1;
+}
+
+static int
+parse_and_set_options(int n_options, char **options, 
+                      struct protocol_params_t *params)
+{
   struct sockaddr_storage ss_listen;
   int sl_listen;
   const char* defport;
   
   if (n_options != 3)
-    goto err;
+    return -1;
 
   assert(!strcmp(options[0],"dummy"));
   params->proto = DUMMY_PROTOCOL;
@@ -53,12 +77,12 @@ dummy_init(int n_options, char **options,
     defport = "11253"; /* 2bf5 */
     params->mode = LSN_SIMPLE_SERVER;
   } else
-    goto err;
+    return -1;
 
   if (resolve_address_port(options[2], 1, 1, 
                            &ss_listen, &sl_listen, defport) < 0) {
     printf("addr\n");
-    goto err;
+    return -1;
   }
   assert(sl_listen <= sizeof(struct sockaddr_storage));
   struct sockaddr *sa_listen=NULL;
@@ -66,22 +90,7 @@ dummy_init(int n_options, char **options,
   memcpy(&params->on_address, sa_listen, sl_listen);
   params->on_address_len = sl_listen;
   
-  /* XXX memleak. */
-  vtable = calloc(1, sizeof(protocol_vtable));
-  if (!vtable)
-    return -1;
-
-  vtable->destroy = NULL;
-  vtable->create = dummy_new;
-  vtable->handshake = NULL;
-  vtable->send = dummy_send;
-  vtable->recv = dummy_recv;
-
   return 1;
-
- err:
-  usage();
-  return -1;
 }
 
 static void
