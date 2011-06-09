@@ -25,6 +25,7 @@
 #define MAXPROTOCOLS 20
 
 static void usage(void) __attribute__((noreturn));
+static int handle_obfsproxy_args(const char **argv);
 
 /* protocol.c */
 extern char *supported_protocols[];
@@ -39,12 +40,15 @@ usage(void)
   int i;
   fprintf(stderr,
           "Usage: obfsproxy protocol_name [protocol_args] protocol_options %s protocol_name ...\n"
-          "Available protocols:",
+          "* Available protocols:\n",
           SEPARATOR);
   /* this is awful. */
   for (i=0;i<n_supported_protocols;i++)
-    fprintf(stderr," [%s]", supported_protocols[i]);
-  fprintf(stderr,"\n");
+    fprintf(stderr,"[%s] ", supported_protocols[i]);
+  fprintf(stderr, "\n* Available arguments:\n"
+          "--log-file=<file> ~ set logfile\n"
+          "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
+          "--no-log ~ disable logging\n");
 
   exit(1);
 }
@@ -59,6 +63,7 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
   struct event_base *base = arg;
   /* int signum = (int) fd; */
   
+  log_info("Caught SIGINT.");
   event_base_loopexit(base, NULL);
 }
 
@@ -91,7 +96,63 @@ is_supported_protocol(const char *name) {
   return 0;
 }
 
-#define STUPID_BEAUTIFIER "===========================\n"
+/**
+   Receives argv[1] as 'argv' and scans from thereafter for any
+   obfsproxy optional arguments and tries to set them in effect.
+   
+   If it succeeds it returns the number of argv arguments its caller
+   should skip to get past the optional arguments we already handled.
+   If it fails, it exits obfsproxy.
+*/
+static int
+handle_obfsproxy_args(const char **argv)
+{
+  int logmethod_set=0;
+  int logsev_set=0;
+  int i=0;
+
+  while (argv[i] && 
+         !strncmp(argv[i],"--",2)) {
+    if (!strncmp(argv[i], "--log-file=", 11)) {
+      if (logmethod_set) {
+        log_warn("You've already set a log file!"); 
+        exit(1);
+      }
+      if (log_set_method(LOG_METHOD_FILE, 
+                         (char *)argv[i]+11) < 0) {
+        log_warn("Failed creating logfile.");
+        exit(1);
+      }
+      logmethod_set=1;
+    } else if (!strncmp(argv[i], "--log-min-severity=", 19)) {
+      if (logsev_set) {
+        log_warn("You've already set a min. log severity!");
+        exit(1);
+      }
+      if (log_set_min_severity((char *)argv[i]+19) < 0) {
+        log_warn("Error at setting logging severity"); 
+        exit(1);
+      }
+      logsev_set=1;
+    } else if (!strncmp(argv[i], "--no-log", 9)) {
+        if (logsev_set) {
+          printf("You've already set a min. log severity!\n");
+          exit(1);
+        }
+        if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
+          printf("Error at setting logging severity.\n"); 
+          exit(1);
+        }
+        logsev_set=1;
+    } else {
+      log_warn("Unrecognizable obfsproxy argument '%s'", argv[i]);
+      exit(1);
+    }
+    i++;
+  }
+
+  return i;
+}
 
 int
 main(int argc, const char **argv)
@@ -128,19 +189,24 @@ main(int argc, const char **argv)
      options for each protocol. */
   unsigned int *protocols=NULL;
 
-
   if (argc < 2) {
     usage();
   }
+
+  /** "Points" to the first argv string after the optional obfsproxy
+      arguments. Normally this should be where the protocols start. */
+  int start_of_protocols;
+  /** Handle optional obfsproxy arguments. */
+  start_of_protocols = handle_obfsproxy_args(&argv[1]);
 
   protocols = malloc(sizeof(int)*(n_protocols+1));
   if (!protocols)
     exit(1);
 
-  protocols[0] = 0;
+  protocols[0] = start_of_protocols;
 
   /* Populate protocols and calculate n_protocols. */
-  for (i=0;i<argc;i++) {
+  for (i=protocols[0];i<argc;i++) {
     if (!strcmp(argv[i],SEPARATOR)) {
       protocols[n_protocols] = i;
       n_protocols++;
@@ -154,11 +220,11 @@ main(int argc, const char **argv)
 
   protocols[n_protocols] = argc;
 
-  if (n_protocols > 1)
-    dbg(("Found %d protocols.\n", n_protocols));
+  log_debug("Found %d protocol(s).", n_protocols);
 
   /* Iterate through protocols. */
   for (i=0;i<n_protocols;i++) {
+    log_debug("Parsing protocol %d.", i+1);
     /* This "points" to the first argument of this protocol in argv. */
     start = protocols[i]+1;
     /* This "points" to the last argument of this protocol in argv. */
@@ -166,12 +232,14 @@ main(int argc, const char **argv)
     /* This is the number of options of this protocol. */
     n_options = end-start+1;
 
-    if (start >= end)
-      usage();
+    if (start >= end) {
+      log_warn("No protocol options were given on protocol %d.", i+1);
+      continue;
+    }
 
     /* First option should be protocol_name. See if we support it. */
     if (!is_supported_protocol(argv[start])) {
-      printf("We don't support protocol: %s\n", argv[start]); 
+      log_warn("We don't support protocol: %s", argv[start]); 
       continue;
     }
 
@@ -214,13 +282,13 @@ main(int argc, const char **argv)
   /* Initialize libevent */
   base = event_base_new();
   if (!base) {
-    fprintf(stderr, "Can't initialize Libevent; failing\n");
+    log_warn("Can't initialize Libevent; failing");
     return 1;
   }
 
   /* ASN should this happen only when SOCKS is enabled? */
   if (init_evdns_base(base) < 0) {
-    fprintf(stderr, "Can't initialize evdns; failing\n");
+    log_warn("Can't initialize evdns; failing");
     return 1;
   }
   
@@ -229,7 +297,7 @@ main(int argc, const char **argv)
   sigevent = evsignal_new(base, SIGINT, 
                           handle_signal_cb, (void*) base);
   if (event_add(sigevent,NULL)) {
-    printf("We can't even add events for signals! Exiting.\n");
+    log_warn("We can't even add events for signals! Exiting.");
     return 1;
   }
 
@@ -241,11 +309,7 @@ main(int argc, const char **argv)
   protocol_params_t *proto_params=NULL;
   for (h=0;h<actual_protocols;h++) {
 
-    if (n_protocols > 1) {
-      dbg((STUPID_BEAUTIFIER
-           "Spawning listener %d!\n"
-           STUPID_BEAUTIFIER, h+1));
-    }
+    log_debug("Spawning listener %d!", h+1);
 
     /** normally free'd in listener_free() */
     proto_params = calloc(1, sizeof(protocol_params_t));
@@ -263,23 +327,25 @@ main(int argc, const char **argv)
     if (!temp_listener)
       continue;
     
-    dbg(("Succesfully created listener.\n"));
+    log_info("Succesfully created listener %d.", h+1);
     listeners[n_listeners] = temp_listener;
     
     n_listeners++;
   }
 
-  if (n_protocols > 1) {
-    dbg((STUPID_BEAUTIFIER           
-         "From the original %d protocols only %d were parsed from main.c. "
-         "In the end only %d survived.\n\nStarting up...\n"
-         STUPID_BEAUTIFIER, 
-         n_protocols, actual_protocols,n_listeners));
-  }
+  log_debug("From the original %d protocols only %d "
+            "were parsed from main.c. In the end only "
+            "%d survived.",
+            n_protocols, actual_protocols,n_listeners);
 
   /* run the event loop if at least a listener was created. */
   if (n_listeners)
     event_base_dispatch(base);
+
+  log_info("Exiting.\n");
+
+  if (close_obfsproxy_logfile() < 0)
+    printf("Failed closing logfile!\n");
 
   /* We are exiting. Clean everything. */
   for (h=0;h<n_listeners;h++)
@@ -290,5 +356,3 @@ main(int argc, const char **argv)
 
   return 0;
 }
-
-#undef STUPID_BEAUTIFIER
