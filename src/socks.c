@@ -48,6 +48,11 @@ static enum socks_ret socks5_do_negotiation(struct evbuffer *dest,
 
 typedef unsigned char uchar;
 
+/**
+   Creates a new SOCKS state.
+
+   Returns a 'socks_state_t' on success, NULL on fail.
+*/
 socks_state_t *
 socks_state_new(void)
 {
@@ -59,6 +64,9 @@ socks_state_new(void)
   return state;
 }
 
+/**
+   Deallocates memory of socks_state_t 's'.
+*/ 
 void
 socks_state_free(socks_state_t *s)
 {
@@ -108,17 +116,15 @@ socks_errno_to_reply(socks_state_t *state, int error)
 #undef ERR
 
 /**
-   Takes a command request from 'source', it evaluates it and if it's
-   legit it parses it into 'parsereq'.
+   Takes a SOCKS5 command request from 'source', it evaluates it and
+   if it's legit it parses it into 'parsereq'.
    
-   It returns '1' if everything went fine.
-   It returns '0' if we need more data from the client.
-   It returns '-1' if we didn't like something.
-   It returns '-2' if the client asked for something else than CONNECT.
-   If that's the case we should send a reply back to the client
-   telling him that we don't support it.
-   
-   Disclaimer: This is just a temporary documentation.  
+   It returns SOCKS_GOOD if everything went fine.
+   It returns SOCKS_INCOMPLETE if we need more data from the client.
+   It returns SOCKS_BROKEN if we didn't like something.
+   It returns SOCKS_CMD_NOT_CONNECT if the client asked for something
+   else other than CONNECT.  If that's the case we should send a reply
+   back to the client telling him that we don't support it.
    
    Client Request (Client -> Server)
 */
@@ -223,7 +229,8 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
 }
 
 /**
-   This sends the appropriate reply to the client on 'reply_dest'.
+   This sends the appropriate SOCKS5 reply to the client on
+   'reply_dest', according to 'status'.
 
    Server Reply (Server -> Client):
    | version | rep | rsv | atyp | destaddr           | destport
@@ -281,7 +288,7 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
 
 /**
    This function handles the initial SOCKS5 packet in 'source' sent by
-   the client, which negotiates the version and method of SOCKS.  If
+   the client which negotiates the version and method of SOCKS.  If
    the packet is actually valid, we reply to 'dest'.
 
    Method Negotiation Packet (Client -> Server):
@@ -351,7 +358,14 @@ socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
     return SOCKS_GOOD;
 }
 
-/* rename to socks4_handle_request or something. */
+/**
+   Takes a SOCKS4/SOCKS4a command request from 'source', it evaluates
+   it and if it's legit it parses it into 'parsereq'.
+   
+   It returns SOCKS_GOOD if everything went fine.
+   It returns SOCKS_INCOMPLETE if we need more data from the client.
+   It returns SOCKS_BROKEN if we didn't like something.
+*/   
 enum socks_ret
 socks4_read_request(struct evbuffer *source, socks_state_t *state)
 {
@@ -418,13 +432,18 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
   } else {
     struct in_addr in;
     in.s_addr = htonl(ipaddr);
-    if (evutil_inet_ntop(AF_INET, &in, state->parsereq.addr, sizeof(state->parsereq.addr)) == NULL)
+    if (evutil_inet_ntop(AF_INET, &in, state->parsereq.addr, 
+                         sizeof(state->parsereq.addr)) == NULL)
       return SOCKS_BROKEN;
   }
 
   return SOCKS_GOOD;
 }
 
+/**
+   This sends the appropriate SOCKS4 reply to the client on
+   'reply_dest', according to 'status'.
+*/
 int
 socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
 {
@@ -448,12 +467,15 @@ socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
 }
 
 /**
-   We are given data from the network.
-   If we haven't negotiated with the connection, we try to negotiate.
-   If we have already negotiated, we suppose it's a CONNECT request and
-   try to be helpful.
+   We are given SOCKS data from the network.
+   We figure out what what SOCKS version it is and act accordingly.
 
-   Returns 1 on done, -1 on unrecoverable error, 0 on "need more bytes
+   It returns SOCKS_GOOD if everything went fine.
+   It returns SOCKS_INCOMPLETE if we need more data from the client.
+   It returns SOCKS_BROKEN if we didn't like something.
+   It returns SOCKS_CMD_NOT_CONNECT if the client asked for something
+   else other than CONNECT.  If that's the case we should send a reply
+   back to the client telling him that we don't support it.
 */
 enum socks_ret
 handle_socks(struct evbuffer *source, struct evbuffer *dest,
@@ -533,12 +555,22 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
   return SOCKS_BROKEN;
 }
 
+/**
+   Returns the protocol status of the SOCKS state 'state'.
+*/
 enum socks_status_t
 socks_state_get_status(const socks_state_t *state)
 {
   return state->state;
 }
 
+/**
+   If we have previously parsed a SOCKS CONNECT request, this function
+   places the corresponding address/port to 'af_out', 'addr_out' and
+   'port_out'.
+   
+   It returns 0 on success and -1 if it was called unnecessarily.
+*/
 int
 socks_state_get_address(const socks_state_t *state,
                         int *af_out,
@@ -553,6 +585,10 @@ socks_state_get_address(const socks_state_t *state,
   return 0;
 }
 
+/**
+   Places the address/port in 'sa' into the SOCKS state 'state' for
+   later retrieval.
+*/
 int
 socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
 {
@@ -583,11 +619,12 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
 
 /**
    This function sends a SOCKS{5,4} "Server Reply" to 'dest'.
+
    'error' is 0 if no errors were encountered during the SOCKS
    operation (normally a CONNECT with no errors means that the
    connect() was successful).
    If 'error' is not 0, it means that an error was encountered and
-   error carries the errno(3) of the error.
+   error carries the errno(3).
 */
 int
 socks_send_reply(socks_state_t *state, struct evbuffer *dest, int error)

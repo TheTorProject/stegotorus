@@ -61,6 +61,9 @@ obfs2_init(int n_options, char **options,
   return 1;
 }
 
+/**
+   Helper: Parses 'options' and fills 'params'.
+*/
 int
 parse_and_set_options(int n_options, char **options, 
                       struct protocol_params_t *params)

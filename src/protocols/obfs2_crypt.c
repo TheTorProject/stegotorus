@@ -48,6 +48,9 @@ get_uint32(const void *ptr)
 #include "../sha256.c"
 #endif
 
+/**
+   Initializes the obfs2 crypto subsystem.
+*/
 int
 initialize_crypto(void)
 {
@@ -77,6 +80,9 @@ initialize_crypto(void)
 #endif
 }
 
+/**
+   Cleans up the obfs2 crypto subsystem.
+*/
 void
 cleanup_crypto(void)
 {
@@ -91,18 +97,33 @@ cleanup_crypto(void)
 struct digest_t {
   SHA256_CTX ctx;
 };
+
+/**
+   Returns a new SHA256 digest container, or NULL on failure.
+*/
 digest_t *
 digest_new(void)
 {
   digest_t *d = malloc(sizeof(digest_t));
+  if (!d)
+    return NULL;
   SHA256_Init(&d->ctx);
   return d;
 }
+
+/**
+   Updates the contents of the SHA256 container 'd' with the first
+   'len' bytes of 'buf'.
+*/ 
 void
 digest_update(digest_t *d, const uchar *buf, size_t len)
 {
   SHA256_Update(&d->ctx, buf, len);
 }
+
+/**
+   Returns the digest stored in 'd' into 'buf' of length 'len'.
+*/
 size_t
 digest_getdigest(digest_t *d, uchar *buf, size_t len)
 {
@@ -123,6 +144,8 @@ digest_t *
 digest_new(void)
 {
   digest_t *d = malloc(sizeof(digest_t));
+  if (!d)
+    return NULL;
   sha256_init(&d->ctx);
   return d;
 }
@@ -156,6 +179,9 @@ digest_free(digest_t *d)
    Stream crypto
    ===== */
 
+/**
+   Initializes the AES cipher with 'key'.
+*/ 
 crypt_t *
 crypt_new(const uchar *key, size_t keylen)
 {
@@ -171,12 +197,20 @@ crypt_new(const uchar *key, size_t keylen)
 
   return k;
 }
+
+/**
+   Sets the IV of 'key' to 'iv'.
+*/
 void
 crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
 {
   assert(ivlen == sizeof(key->ivec));
   memcpy(key->ivec, iv, ivlen);
 }
+
+/*
+  In-place encrypts 'buf' with 'key'.
+*/
 void
 stream_crypt(crypt_t *key, uchar *buf, size_t len)
 {
@@ -185,6 +219,10 @@ stream_crypt(crypt_t *key, uchar *buf, size_t len)
                      &key->key, key->ivec, key->ecount_buf,
                      &key->pos);
 }
+
+/**
+   Deallocates memory space of 'key'.
+*/
 void
 crypt_free(crypt_t *key)
 {
@@ -196,6 +234,10 @@ crypt_free(crypt_t *key)
    PRNG
    ===== */
 
+/**
+   Fills 'buf' with 'buflen' random bytes and returns 0 on success.
+   Returns -1 on failure.
+*/
 int
 random_bytes(uchar *buf, size_t buflen)
 {

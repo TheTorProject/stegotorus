@@ -80,7 +80,7 @@ populate_options(char **options_string,
 }
 
 /**
-   Returns 1 if 'name' is the nmae of a supported protocol, otherwise
+   Returns 1 if 'name' is the name of a supported protocol, otherwise
    it returns 0.
 */ 
 static int

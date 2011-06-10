@@ -40,9 +40,8 @@ set_up_protocol(int n_options, char **options,
 }
 
 /**
-   This function creates a protocol object.
-   It's called once per connection. 
-   It creates a new protocol_t structure and fills it's vtable etc.
+   This function is called once per connection and creates a protocol
+   object to be used during the session.
    Return a 'protocol_t' if successful, NULL otherwise.
 */
 struct protocol_t *
