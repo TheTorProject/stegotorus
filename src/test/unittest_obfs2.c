@@ -133,9 +133,9 @@ test_proto_setup(void *data)
   tt_assert(server_proto->state);
 
  end:
-  if (client_proto->state)
+  if (client_proto)
     proto_destroy(client_proto);
-  if (server_proto->state)
+  if (server_proto)
     proto_destroy(server_proto);
 }
 
@@ -200,10 +200,10 @@ test_proto_handshake(void *data)
                           sizeof(crypt_t)));
 
  end:
-  if (client_proto->state)
-    proto_destroy(client_proto);
-  if (server_proto->state)
-    proto_destroy(server_proto);
+  if (client_proto)
+      proto_destroy(client_proto);
+  if (server_proto)
+      proto_destroy(server_proto);
 
   if (proto_params_client)
     free(proto_params_client);
@@ -273,6 +273,7 @@ test_proto_transfer(void *data)
                                                     output_buffer, dummy_buffer));
 
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[0], 2);
+  tt_int_op(n, !=, -1);
 
   /* Let's check if it matches. */
   tt_int_op(0, ==, strncmp(msg1, v[0].iov_base, 54));
@@ -294,9 +295,9 @@ test_proto_transfer(void *data)
   (void) n; /* XXXX: use n for something, or remove it. */
 
  end:
-  if (client_proto->state)
+  if (client_proto)
     proto_destroy(client_proto);
-  if (server_proto->state)
+  if (server_proto)
     proto_destroy(server_proto);
 
   if (proto_params_client)

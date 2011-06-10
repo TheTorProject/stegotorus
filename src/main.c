@@ -3,6 +3,7 @@
 */
 
 #include <stdlib.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
@@ -251,6 +252,7 @@ main(int argc, const char **argv)
        Finally, we allocate space on the n_options_array so that we
        can put the number of options there.
     */ 
+    /*XXXX (Why not actually allocate this before the start of the loop?)*/
     temp = 
       realloc(protocol_options, sizeof(char**)*actual_protocols);
     if (!temp)
@@ -300,10 +302,16 @@ main(int argc, const char **argv)
 
   /*Let's open a new listener for each protocol. */ 
   int h;
-  listener_t *listeners[actual_protocols];
+  listener_t **listeners;
   listener_t *temp_listener;
   int n_listeners=0;
   protocol_params_t *proto_params=NULL;
+  listeners = calloc(sizeof(listener_t*), actual_protocols);
+  if (!listeners) {
+    log_warn("Allocation failure: %s", strerror(errno));
+    return 1;
+  }
+
   for (h=0;h<actual_protocols;h++) {
 
     log_debug("Spawning listener %d!", h+1);
