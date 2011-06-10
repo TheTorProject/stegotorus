@@ -43,21 +43,41 @@ int init_evdns_base(struct event_base *base);
 /** Any size_t larger than this amount is likely to be an underflow. */
 #define SIZE_T_CEILING  ((size_t)(SSIZE_T_MAX-16))
 
-int obfs_vsnprintf(char *str, size_t size, 
+#ifndef __GNUC__
+#define __attribute__(x)
+#endif
+
+int obfs_vsnprintf(char *str, size_t size,
                    const char *format, va_list args);
-int obfs_snprintf(char *str, size_t size, 
-                  const char *format, ...);
+int obfs_snprintf(char *str, size_t size,
+                  const char *format, ...)
+  __attribute__((format(printf, 3, 4)));
 
 /***** Logging subsystem stuff. *****/
 
-void log_fn(int severity, const char *format, ...);
-int log_set_method(int method, char *filename);
-int log_set_min_severity(char* sev_string);
+void log_fn(int severity, const char *format, ...)
+  __attribute__((format(printf, 2, 3)));
+int log_set_method(int method, const char *filename);
+int log_set_min_severity(const char* sev_string);
 int close_obfsproxy_logfile(void);
 
+#ifdef __GNUC__
 #define log_info(args...) log_fn(LOG_SEV_INFO, args)
 #define log_warn(args...) log_fn(LOG_SEV_WARN, args)
 #define log_debug(args...) log_fn(LOG_SEV_DEBUG, args)
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#define log_info(...) log_fn(LOG_SEV_INFO, __VA_ARGS__)
+#define log_warn(...) log_fn(LOG_SEV_WARN, __VA_ARGS__)
+#define log_debug(...) log_fn(LOG_SEV_DEBUG, __VA_ARGS__)
+#else
+#define NEED_LOG_WRAPPERS
+void log_info(const char *format, ...)
+  __attribute__((format(printf, 1, 2)));
+void log_warn(const char *format, ...)
+  __attribute__((format(printf, 1, 2)));
+void log_debug(const char *format, ...)
+  __attribute__((format(printf, 1, 2)));
+#endif
 
 /** Logging methods */
 

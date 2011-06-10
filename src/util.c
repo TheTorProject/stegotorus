@@ -24,9 +24,9 @@ static const char *sev_to_string(int severity);
 static int sev_is_valid(int severity);
 static int write_logfile_prologue(int fd);
 static int compose_logfile_prologue(char *buf, size_t buflen);
-static int string_to_sev(char *string);
-static int open_and_set_obfsproxy_logfile(char *filename);
-
+static int string_to_sev(const char *string);
+static int open_and_set_obfsproxy_logfile(const char *filename);
+static void logv(int severity, const char *format, va_list ap);
 
 /************************ Obfsproxy Network Routines *************************/
 
@@ -182,7 +182,7 @@ sev_to_string(int severity)
 /** If 'string' is a valid log severity, return the corresponding
  * numeric value.  Otherwise, return -1. */
 static int
-string_to_sev(char *string)
+string_to_sev(const char *string)
 {
   if (!strcasecmp(string, "warn"))
     return LOG_SEV_WARN;
@@ -212,7 +212,7 @@ sev_is_valid(int severity)
    It returns 1 on success and -1 on fail.
 */
 int
-log_set_method(int method, char *filename)
+log_set_method(int method, const char *filename)
 {
   
   logging_method = method;
@@ -230,7 +230,7 @@ log_set_method(int method, char *filename)
    On success it returns 1, on fail it returns -1.
 */
 static int
-open_and_set_obfsproxy_logfile(char *filename)
+open_and_set_obfsproxy_logfile(const char *filename)
 {
   if (!filename)
     return -1;
@@ -291,7 +291,7 @@ compose_logfile_prologue(char *buf, size_t buflen)
    not a valid severity, it returns -1.
 */
 int
-log_set_min_severity(char* sev_string) {
+log_set_min_severity(const char* sev_string) {
   int severity = string_to_sev(sev_string);
   if (!sev_is_valid(severity)) {
     log_warn("Severity '%s' makes no sense.", sev_string);
@@ -301,7 +301,7 @@ log_set_min_severity(char* sev_string) {
   return 1;
 }
 
-/** 
+/**
     Logging function of obfsproxy.
     Don't call this directly; use the log_* macros defined in util.h
     instead.
@@ -312,6 +312,18 @@ log_set_min_severity(char* sev_string) {
 */
 void
 log_fn(int severity, const char *format, ...)
+{
+
+  va_list ap;
+  va_start(ap,format);
+
+  logv(severity, format, ap);
+
+  va_end(ap);
+}
+
+static void
+logv(int severity, const char *format, va_list ap)
 {
   assert(sev_is_valid(severity));
 
@@ -328,9 +340,6 @@ log_fn(int severity, const char *format, ...)
 
   size_t buflen = MAX_LOG_ENTRY-2;
 
-  va_list ap;
-  va_start(ap,format);
-  
   r = obfs_snprintf(buf, buflen, "[%s] ", sev_to_string(severity));
   if (r < 0)
     n = strlen(buf);
@@ -351,8 +360,6 @@ log_fn(int severity, const char *format, ...)
 
   buf[n]='\n';
   buf[n+1]='\0';
-  
-  va_end(ap);
 
   if (logging_method == LOG_METHOD_STDOUT)
     fprintf(stdout, "%s", buf);
@@ -363,3 +370,36 @@ log_fn(int severity, const char *format, ...)
   } else
     assert(0);
 }
+
+#ifdef NEED_LOG_WRAPPERS
+void
+log_info(const char *format, ...)
+{
+  va_list ap;
+  va_start(ap,format);
+
+  logv(LOG_SEV_INFO, format, ap);
+
+  va_end(ap);
+}
+void
+log_warn(const char *format, ...)
+{
+  va_list ap;
+  va_start(ap,format);
+
+  logv(LOG_SEV_WARN, format, ap);
+
+  va_end(ap);
+}
+void
+log_debug(const char *format, ...)
+{
+  va_list ap;
+  va_start(ap,format);
+
+  logv(LOG_SEV_DEBUG, format, ap);
+
+  va_end(ap);
+}
+#endif
