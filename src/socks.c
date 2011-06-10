@@ -1,3 +1,7 @@
+/* Copyright 2011 Nick Mathewson, George Kadianakis
+   See LICENSE for other credits and copying information
+*/
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>

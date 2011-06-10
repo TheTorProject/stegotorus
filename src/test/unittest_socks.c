@@ -1,3 +1,6 @@
+/* Copyright 2011 Nick Mathewson, George Kadianakis
+   See LICENSE for other credits and copying information
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1,3 +1,7 @@
+/* Copyright 2011 Nick Mathewson, George Kadianakis
+   See LICENSE for other credits and copying information
+*/
+
 #include <event2/buffer.h>
 
 #ifndef PROTOCOL_H
