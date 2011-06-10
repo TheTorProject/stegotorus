@@ -342,7 +342,7 @@ main(int argc, const char **argv)
   if (n_listeners)
     event_base_dispatch(base);
 
-  log_info("Exiting.\n");
+  log_info("Exiting.");
 
   if (close_obfsproxy_logfile() < 0)
     printf("Failed closing logfile!\n");
