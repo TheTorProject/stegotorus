@@ -17,6 +17,8 @@ PKG_CHECK_MODULES([openssl], [openssl >= 0.9.7])
 # We don't need -lssl, only -lcrypto
 openssl_LIBS=`echo "$openssl_LIBS" | $SED -e 's/-lssl//'`
 
+AC_CHECK_SIZEOF(size_t)
+
 AC_CONFIG_FILES([Makefile])
 
 AC_OUTPUT

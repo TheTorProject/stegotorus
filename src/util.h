@@ -5,11 +5,13 @@
    in all redistributed copies and derived works.  There is no warranty.
 */
 
+#ifndef UTIL_H
+#define UTIL_H
+
 /* va_list definition */
 #include <stdarg.h>
 
-#ifndef UTIL_H
-#define UTIL_H
+#include "config.h"
 
 struct sockaddr_storage;
 struct event_base;
@@ -29,9 +31,6 @@ int init_evdns_base(struct event_base *base);
 /***** String functions stuff. *****/
 
 /* The sizeof a size_t, as computed by sizeof. */
-#ifndef SIZEOF_SIZE_T
-#define SIZEOF_SIZE_T 4
-#endif
 #ifndef SSIZE_T_MAX
 #if (SIZEOF_SIZE_T == 4)
 #define SSIZE_T_MAX INT32_MAX
