@@ -160,7 +160,7 @@ parse_and_set_options(int n_options, char **options,
 static void
 usage(void)
 {
-  printf("You failed at creating a correct obfs2 line.\n"
+  log_warn("You failed at creating a correct obfs2 line.\n"
          "obfs2 syntax:\n"
          "\tobfs2 [obfs2_args] obfs2_opts\n"
          "\t'obfs2_opts':\n"
@@ -171,7 +171,7 @@ usage(void)
          "\t\tShared Secret ~ --shared-secret=<secret>\n"
          "\tExample:\n"
          "\tobfsproxy --dest=127.0.0.1:666 --shared-secret=himitsu "
-         "\tobfs2 server 127.0.0.1:1026\n");
+         "\tobfs2 server 127.0.0.1:1026");
 }
 
 /**

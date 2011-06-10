@@ -30,6 +30,9 @@ test_proto_option_parsing(void *data)
   char *options[] = {"obfs2", "--shared-secret=a", "socks", "127.0.0.1:0"};
   int n_options = 4;
 
+  /* Suppress logs for the duration of this function. */
+  log_set_method(LOG_METHOD_NULL, NULL);
+
   tt_assert(set_up_protocol(n_options, options,
                             proto_params) == 1);
 
@@ -99,6 +102,8 @@ test_proto_option_parsing(void *data)
  end:
   if (proto_params)
     free(proto_params);
+  /* Unsuspend logging */
+  log_set_method(LOG_METHOD_STDOUT, NULL);
 }
 
 /* Make sure we can successfully set up a protocol state */
