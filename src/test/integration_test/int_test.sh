@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # replace this with your path to obfsproxy.
-OBFSPROXY="/torland/obfsproxy/obfsproxy"
+OBFSPROXY="../../../obfsproxy"
 # replace this with your path to ncat.
-NCAT="/usr/bin/ncat"
+NCAT=ncat
 
 ENTRY_PORT=4999
 SERVER_PORT=5000
@@ -13,7 +13,7 @@ DIR=inttemp_temp
 FILE1=$DIR/test1
 FILE2=$DIR/test2
 
-mkdir $DIR ; :>$FILE1
+mkdir -p $DIR ; :>$FILE1
 
 # TEST 1
 # We open a server and a client and transfer a file. Then we check if the output of the
@@ -21,6 +21,7 @@ mkdir $DIR ; :>$FILE1
 
 $NCAT -k -l -o $FILE1 -p $NCAT_PORT > /dev/null &
 ncat1_pid=$!
+
 
 $OBFSPROXY --log-min-severity=warn obfs2 --dest=127.0.0.1:$NCAT_PORT server 127.0.0.1:$SERVER_PORT \
     + obfs2 --dest=127.0.0.1:$SERVER_PORT client 127.0.0.1:$ENTRY_PORT &
