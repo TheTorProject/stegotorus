@@ -178,7 +178,7 @@ main(int argc, const char **argv)
   int start;
   int end;
   int n_options;
-  void *temp;
+  void *realloc_temp;
   int i;
 
   /* The number of protocols. */
@@ -186,6 +186,8 @@ main(int argc, const char **argv)
   /* An array which holds the position in argv of the command line
      options for each protocol. */
   unsigned int *protocols=NULL;
+  /* keeps track of allocated space for the protocols array */ 
+  unsigned int n_alloc;
 
   if (argc < 2) {
     usage();
@@ -197,28 +199,49 @@ main(int argc, const char **argv)
   /** Handle optional obfsproxy arguments. */
   start_of_protocols = handle_obfsproxy_args(&argv[1]);
 
-  protocols = malloc(sizeof(int)*(n_protocols+1));
+  protocols = calloc(1, sizeof(int)*(n_protocols+1));
   if (!protocols)
     exit(1);
-
-  protocols[0] = start_of_protocols;
+  n_alloc = n_protocols+1;
 
   /* Populate protocols and calculate n_protocols. */
-  for (i=protocols[0];i<argc;i++) {
+  for (i=start_of_protocols;i<argc;i++) {
     if (!strcmp(argv[i],SEPARATOR)) {
       protocols[n_protocols] = i;
       n_protocols++;
 
-      temp = realloc(protocols, sizeof(int)*(n_protocols+1));
-      if (!temp)
-        exit(1);
-      protocols = temp;
+      /* Do we need to expand the protocols array? */
+      if (n_alloc <= n_protocols) {
+        n_alloc *= 2;
+        realloc_temp = realloc(protocols, sizeof(int)*(n_alloc));
+        if (!realloc_temp)
+          exit(1);
+        protocols = realloc_temp;
+      }
     }
   }
 
+  /* protocols[0] points right before the first option of the first
+     protocol. */
+  protocols[0] = start_of_protocols;
+  /* protocols[n_protocols] points right after the last command line
+     option. */
   protocols[n_protocols] = argc;
 
   log_debug("Found %d protocol(s).", n_protocols);
+
+  /* We now allocate enough space for our parsing adventures.
+     We first allocate space for n_protocols pointers in protocol_options,
+     that point to arrays carrying the options of the protocols.
+     Finally, we allocate enough space on the n_options_array so that
+     we can put the number of options there.
+  */ 
+  protocol_options = calloc(1, sizeof(char**)*n_protocols);
+  if (!protocol_options)
+    exit(1);
+  n_options_array = calloc(1, sizeof(int)*n_protocols);
+  if (!n_options_array)
+    exit(1);
 
   /* Iterate through protocols. */
   for (i=0;i<n_protocols;i++) {
@@ -243,33 +266,16 @@ main(int argc, const char **argv)
 
     actual_protocols++;
 
-    /* We now allocate enough space for our parsing adventures.
-
-       We first allocate space for a pointer in protocol_options,
-       which points to an array carrying the options of this protocol.
-       We then allocate space for the array carrying the options of
-       this protocol.
-       Finally, we allocate space on the n_options_array so that we
-       can put the number of options there.
-    */ 
-    /*XXXX (Why not actually allocate this before the start of the loop?)*/
-    temp = 
-      realloc(protocol_options, sizeof(char**)*actual_protocols);
-    if (!temp)
-      exit(1);
-    protocol_options = temp;
-    /* We should now allocate some space for all the strings
-       carrying the protocol options. */
+    /* Allocate space for the array carrying the options of this
+       protocol. */
     protocol_options[actual_protocols-1] = 
-      malloc(sizeof(char*)*(n_options));
+      calloc(1, sizeof(char*)*(n_options));
     if (!protocol_options[actual_protocols-1])
       exit(1);
-    temp = realloc(n_options_array, sizeof(int)*actual_protocols);
-    if (!temp)
-      exit(1);
-    n_options_array = temp;
-    n_options_array[actual_protocols-1] = n_options;
 
+    /* Write the number of options to the correct place in n_options_array[]. */
+    n_options_array[actual_protocols-1] = n_options;
+  
     /* Finally! Let's fill protocol_options. */
     populate_options(protocol_options[actual_protocols-1],
                      &argv[start], n_options);
@@ -321,6 +327,7 @@ main(int argc, const char **argv)
     if (set_up_protocol(n_options_array[h],protocol_options[h],
                         proto_params)<0) {
       free(proto_params);
+      free(protocol_options[h]);
       continue;
     }
 
@@ -355,6 +362,7 @@ main(int argc, const char **argv)
   /* We are exiting. Clean everything. */
   for (h=0;h<n_listeners;h++)
     listener_free(listeners[h]);
+  free(listeners);
   free(protocol_options);
   free(n_options_array);
   free(protocols);
