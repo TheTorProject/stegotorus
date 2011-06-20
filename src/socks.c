@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #ifdef _WIN32
 #include <Winsock2.h>
+#include <Ws2tcpip.h>
 #else
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -53,38 +54,6 @@ static enum socks_ret socks5_do_negotiation(struct evbuffer *dest,
                                     unsigned int neg_was_success);
 
 typedef unsigned char uchar;
-
-/* 
-   Necessary definitions for platforms that don't support
-   sockaddr_in6 and u_int16_t
-*/
-#ifdef _WIN32
-typedef uint16_t sa_family_t;
-
-struct in6_addr
-{
-  union {
-    uint8_t u6_addr8[16];
-    uint16_t u6_addr16[8];
-    uint32_t u6_addr32[4];
-  } in6_u;
-#define s6_addr   in6_u.u6_addr8
-#define s6_addr16 in6_u.u6_addr16
-#define s6_addr32 in6_u.u6_addr32
-};
-
-/* Define struct sockaddr_in6 on platforms that do not have it. See notes
- * on struct in6_addr. */
-struct sockaddr_in6 {
-  sa_family_t sin6_family;
-  uint16_t sin6_port;
-  // uint32_t sin6_flowinfo;
-  struct in6_addr sin6_addr;
-  // uint32_t sin6_scope_id;
-};
-
-typedef unsigned short u_int16_t;
-#endif
 
 socks_state_t *
 socks_state_new(void)
@@ -166,7 +135,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   /** XXX: max FQDN size is 255. */
   /* #define MAXFQDN */
   char destaddr[255+1]; /* Dest address */
-  u_int16_t destport;    /* Dest port */
+  uint16_t destport;    /* Dest port */
 
   unsigned int buflength = evbuffer_get_length(source);
 
