@@ -306,7 +306,6 @@ main(int argc, const char **argv)
 #ifdef SIGPIPE
    signal(SIGPIPE, SIG_IGN);
 #endif
-  signal(SIGPIPE, SIG_IGN);
   sigevent = evsignal_new(base, SIGINT, 
                           handle_signal_cb, (void*) base);
   if (event_add(sigevent,NULL)) {
