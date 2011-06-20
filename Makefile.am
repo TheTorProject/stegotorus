@@ -18,7 +18,7 @@ libobfsproxy_a_SOURCES = \
 
 obfsproxy_SOURCES = \
 	src/main.c
-obfsproxy_LDADD = @libevent_LIBS@ @openssl_LIBS@ libobfsproxy.a
+obfsproxy_LDADD = libobfsproxy.a @libevent_LIBS@ @openssl_LIBS@ @LIB_WS32@
 
 unittests_SOURCES = \
 	src/test/tinytest.c \
@@ -26,7 +26,7 @@ unittests_SOURCES = \
 	src/test/unittest_obfs2.c \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c
-unittests_LDADD = @libevent_LIBS@ @openssl_LIBS@ libobfsproxy.a
+unittests_LDADD = libobfsproxy.a @libevent_LIBS@ @openssl_LIBS@ @LIB_WS32@
 
 noinst_HEADERS = \
 	src/network.h \

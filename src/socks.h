@@ -5,7 +5,11 @@
 #ifndef SOCKS_H
 #define SOCKS_H
 
+#ifdef _WIN32
+#include <Winsock2.h>
+#else
 #include <netdb.h>
+#endif
 
 typedef struct socks_state_t socks_state_t;
 struct evbuffer;

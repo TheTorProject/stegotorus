@@ -14,6 +14,10 @@
 
 #include "util.h"
 
+#ifdef _WIN32
+#include <Ws2tcpip.h>
+#endif
+
 #include <event2/util.h>
 #include <event2/dns.h>
 

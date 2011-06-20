@@ -16,6 +16,10 @@
 #include <errno.h>
 #include <event2/util.h>
 
+#ifdef _WIN32
+#include <WS2tcpip.h>
+#endif
+
 struct listener_t {
   struct evconnlistener *listener;
   protocol_params_t *proto_params;

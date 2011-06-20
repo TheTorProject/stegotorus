@@ -13,6 +13,10 @@
 #include "util.h"
 #include "protocol.h"
 
+#ifdef _WIN32
+#include <Ws2tcpip.h>
+#endif
+
 #ifndef __GNUC__
 #define __attribute__(x)
 #endif
@@ -278,6 +282,13 @@ main(int argc, const char **argv)
   /* Excellent. Now we should have protocol_options populated with all
      the protocol options we got from the user. */
 
+  /*  Ugly method to fix a Windows problem:
+      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
+#ifdef _WIN32
+  WSADATA wsaData;
+  WSAStartup(0x101, &wsaData);
+#endif
+
   /* Initialize libevent */
   base = event_base_new();
   if (!base) {
@@ -292,6 +303,9 @@ main(int argc, const char **argv)
   }
   
   /* Handle signals */
+#ifdef SIGPIPE
+   signal(SIGPIPE, SIG_IGN);
+#endif
   signal(SIGPIPE, SIG_IGN);
   sigevent = evsignal_new(base, SIGINT, 
                           handle_signal_cb, (void*) base);
