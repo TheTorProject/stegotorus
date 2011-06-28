@@ -8,6 +8,7 @@
 #include "socks.h"
 #include "protocol.h"
 #include "socks.h"
+#include "main.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -25,10 +26,31 @@ struct listener_t {
   protocol_params_t *proto_params;
 };
 
+/**
+   Linked list carrying all currently active connections.
+   [linked list code was copied off tor.]
+*/
+typedef struct conn_list_t {
+  conn_t *conn;
+  struct conn_list_t *next;
+} conn_list_t;
+
+/** First and last elements in the linked list of active
+    connections. */
+static conn_list_t *cl_list=NULL;
+static conn_list_t *cl_tail=NULL;
+/** Active connection counter */
+static int n_connections=0;
+
+/** Flag toggled when obfsproxy is shutting down. It blocks new
+    connections and shutdowns when the last connection is closed. */
+static int shutting_down=0;
+
 static void simple_listener_cb(struct evconnlistener *evcl,
    evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
 
 static void conn_free(conn_t *conn);
+static void close_all_connections(void);
 
 static void close_conn_on_flush(struct bufferevent *bev, void *arg);
 static void plaintext_read_cb(struct bufferevent *bev, void *arg);
@@ -39,6 +61,122 @@ static void obfuscated_read_cb(struct bufferevent *bev, void *arg);
 static void input_event_cb(struct bufferevent *bev, short what, void *arg);
 static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 
+/**
+   Puts obfsproxy's networking subsystem on "closing time" mode. This
+   means that we stop accepting new connections and we shutdown when
+   the last connection is closed.
+
+   If 'barbaric' is set, we forcefully close all open connections and
+   finish shutdown.
+*/
+void
+start_shutdown(int barbaric)
+{
+  if (!shutting_down)
+    shutting_down=1;
+
+  if (!n_connections) {
+    finish_shutdown();
+    return;
+  }
+
+  if (barbaric) {
+    if (n_connections)
+      close_all_connections();
+    finish_shutdown();
+    return;
+  }
+}  
+
+/**
+   Closes all open connections.
+*/ 
+static void
+close_all_connections(void)
+{
+  conn_t *conn;
+
+  while (cl_list) {
+    assert(cl_list->conn);
+    assert(n_connections > 0);
+    conn = cl_list->conn;
+    conn_free(conn);
+  }    
+}
+
+/** 
+    Places 'conn' to the end of the linked list of active connections.
+    Returns 1 on success, -1 on fail.
+*/
+static int
+cl_add(conn_t *conn)
+{
+  conn_list_t *cl;
+  
+  cl = calloc(1, sizeof(conn_list_t));
+  if (!cl)
+    return -1;
+
+  cl->conn = conn;
+  
+  if (!cl_tail) {
+    assert(!cl_list);
+    assert(!n_connections);
+    cl_list=cl;
+    cl_tail=cl;
+  } else {
+    assert(cl_list);
+    assert(!cl_tail->next);
+    cl_tail->next = cl;
+    cl_tail = cl;
+  }
+
+  n_connections++;
+
+  return 1;
+}
+
+/**
+   Removes 'conn' from the linked list of connections:
+   It frees the list node carrying 'conn', but leaves 'conn' itself intact.
+*/ 
+static void
+cl_remove(conn_t *conn)
+{
+  conn_list_t *tmpo, *victim;
+
+  if (!cl_list)
+    return; /* nothing here. */
+
+  /* first check to see if it's the first entry */
+  tmpo = cl_list;
+  if (tmpo->conn == conn) {
+    /* it's the first one. remove it from the list. */
+    cl_list = tmpo->next;
+    if (!cl_list)
+      cl_tail = NULL;
+    n_connections--;
+    victim = tmpo;
+  } else { /* we need to hunt through the rest of the list */
+    for ( ;tmpo->next && tmpo->next->conn != conn; tmpo=tmpo->next) ;
+    if (!tmpo->next) {
+      return;
+    }
+    /* now we know tmpo->next->conn == conn */
+    victim = tmpo->next;
+    tmpo->next = victim->next;
+    if (cl_tail == victim)
+      cl_tail = tmpo;
+    n_connections--;
+  }
+
+  assert(n_connections>=0);
+
+  /* now victim points to the element that needs to be removed */
+  free(victim);
+  victim = NULL;
+}
+  
 /**
    This function sets up the protocol defined by 'options' and
    attempts to bind a new listener for it.
@@ -91,13 +229,19 @@ static void
 simple_listener_cb(struct evconnlistener *evcl,
     evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg)
 {
+  if (shutting_down) {
+    if (fd >= 0)
+      evutil_closesocket(fd);
+    return ;
+  }
+
   listener_t *lsn = arg;
   struct event_base *base;
   conn_t *conn = calloc(1, sizeof(conn_t));
   if (!conn)
     goto err;
 
-  log_debug("Got a connection");
+  log_debug("Got a connection attempt.");
 
   conn->mode = lsn->proto_params->mode;
 
@@ -170,6 +314,13 @@ simple_listener_cb(struct evconnlistener *evcl,
     bufferevent_enable(conn->output, EV_READ|EV_WRITE);
   }
 
+  /* add conn to the linked list of connections */
+  if (cl_add(conn)<0)
+    goto err;
+
+  log_debug("Connection setup completed. "
+            "We currently have %d connections!", n_connections);
+
   return;
  err:
   if (conn)
@@ -190,7 +341,17 @@ conn_free(conn_t *conn)
   if (conn->output)
     bufferevent_free(conn->output);
   memset(conn, 0x99, sizeof(conn_t));
+  /* remove conn from the linked list of connections */
+  cl_remove(conn);
   free(conn);
+
+  log_debug("Connection destroyed. "
+            "We currently have %d connections!", n_connections);
+
+  /** If this was the last connection AND we are shutting down,
+      finish shutdown. */
+  if (!n_connections && shutting_down)
+    finish_shutdown();
 }
 
 static void

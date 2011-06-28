@@ -33,6 +33,8 @@ static int handle_obfsproxy_args(const char **argv);
 extern char *supported_protocols[];
 extern int n_supported_protocols;
 
+static struct event_base *the_event_base=NULL;
+
 /**
    Prints the obfsproxy usage instructions then exits.
 */
@@ -56,17 +58,46 @@ usage(void)
 }
 
 /**
-   This is called on SIGINT. It kills the event base loop, so that we
-   start exiting.
+   This is called when we receive a signal.
+   It figures out the signal type and acts accordingly.
+
+   Current behavior:
+   SIGINT: On a single SIGINT we stop accepting new connections,
+           keep the already existing connections open,
+           and terminate when they all close.
+           On a second SIGINT we shut down immediately but cleanly.
+   SIGTERM: Shut down obfsproxy immediately but cleanly.
 */
 static void
 handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 {
-  struct event_base *base = arg;
-  /* int signum = (int) fd; */
-  
-  log_info("Caught SIGINT.");
-  event_base_loopexit(base, NULL);
+  int signum = (int) fd;
+  static int got_sigint=0;
+
+  switch (signum) {
+  case SIGINT:
+    if (!got_sigint) {
+      start_shutdown(0);
+      got_sigint++;
+    } else {
+      start_shutdown(1);
+    }
+    break;
+  case SIGTERM:
+    start_shutdown(1);
+    break;
+  }
+}
+
+/**
+   Stops obfsproxy's event loop.
+
+   Final cleanup happens in main().
+*/ 
+void
+finish_shutdown(void)
+{
+  event_base_loopexit(the_event_base, NULL);
 }
 
 /**
@@ -159,8 +190,8 @@ handle_obfsproxy_args(const char **argv)
 int
 main(int argc, const char **argv)
 {
-  struct event_base *base;
-  struct event *sigevent;
+  struct event *sig_int;
+  struct event *sig_term;
 
   /* Yes, these are three stars right there. This is an array of
      arrays of strings! Every element of the array is an array of
@@ -290,14 +321,14 @@ main(int argc, const char **argv)
 #endif
 
   /* Initialize libevent */
-  base = event_base_new();
-  if (!base) {
+  the_event_base = event_base_new();
+  if (!the_event_base) {
     log_warn("Can't initialize Libevent; failing");
     return 1;
   }
 
   /* ASN should this happen only when SOCKS is enabled? */
-  if (init_evdns_base(base) < 0) {
+  if (init_evdns_base(the_event_base) < 0) {
     log_warn("Can't initialize evdns; failing");
     return 1;
   }
@@ -306,9 +337,11 @@ main(int argc, const char **argv)
 #ifdef SIGPIPE
    signal(SIGPIPE, SIG_IGN);
 #endif
-  sigevent = evsignal_new(base, SIGINT, 
-                          handle_signal_cb, (void*) base);
-  if (event_add(sigevent,NULL)) {
+  sig_int = evsignal_new(the_event_base, SIGINT,
+                         handle_signal_cb, NULL);
+  sig_term = evsignal_new(the_event_base, SIGTERM,
+                          handle_signal_cb, NULL);
+  if (event_add(sig_int,NULL) || event_add(sig_term,NULL)) {
     log_warn("We can't even add events for signals! Exiting.");
     return 1;
   }
@@ -337,7 +370,7 @@ main(int argc, const char **argv)
       continue;
     }
 
-    temp_listener = listener_new(base, proto_params);
+    temp_listener = listener_new(the_event_base, proto_params);
 
     /** Free the space allocated for this protocol's options. */
     free(protocol_options[h]);
@@ -358,7 +391,7 @@ main(int argc, const char **argv)
 
   /* run the event loop if at least a listener was created. */
   if (n_listeners)
-    event_base_dispatch(base);
+    event_base_dispatch(the_event_base);
 
   log_info("Exiting.");
 
@@ -368,6 +401,9 @@ main(int argc, const char **argv)
   /* We are exiting. Clean everything. */
   for (h=0;h<n_listeners;h++)
     listener_free(listeners[h]);
+  if (listeners)
+    free(listeners);
+
   free(protocol_options);
   free(n_options_array);
   free(protocols);

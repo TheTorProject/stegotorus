@@ -47,6 +47,8 @@ listener_t *listener_new(struct event_base *base,
                          struct protocol_params_t *params);
 void listener_free(listener_t *listener);
 
+void start_shutdown(int barbaric);
+
 #ifdef NETWORK_PRIVATE
 typedef struct conn_t {
   struct socks_state_t *socks_state;
