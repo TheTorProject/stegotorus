@@ -8,8 +8,6 @@
 /* va_list definition */
 #include <stdarg.h>
 
-#include "config.h"
-
 struct sockaddr_storage;
 struct event_base;
 struct evdns_base;
@@ -26,19 +24,6 @@ struct evdns_base *get_evdns_base(void);
 int init_evdns_base(struct event_base *base);
 
 /***** String functions stuff. *****/
-
-/* The sizeof a size_t, as computed by sizeof. */
-#ifndef SSIZE_T_MAX
-#if (SIZEOF_SIZE_T == 4)
-#define SSIZE_T_MAX INT32_MAX
-#elif (SIZEOF_SIZE_T == 8)
-#define SSIZE_T_MAX INT64_MAX
-#else
-#error "Can't define SSIZE_T_MAX"
-#endif
-#endif
-/** Any size_t larger than this amount is likely to be an underflow. */
-#define SIZE_T_CEILING  ((size_t)(SSIZE_T_MAX-16))
 
 #ifndef __GNUC__
 #define __attribute__(x)

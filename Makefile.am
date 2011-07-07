@@ -1,7 +1,7 @@
-AUTOMAKE_OPTIONS = foreign
-ACLOCAL_AMFLAGS = -I m4
-CFLAGS = -DDEBUG -g -Wall -O2 -Werror @libevent_CFLAGS@ @openssl_CFLAGS@
 
+ACLOCAL_AMFLAGS = -I m4
+AM_CFLAGS = -DDEBUG -Wall -Werror @libevent_CFLAGS@ @openssl_CFLAGS@
+LDADD = libobfsproxy.a @libevent_LIBS@ @openssl_LIBS@ @ws32_LIBS@
 
 bin_PROGRAMS = obfsproxy
 noinst_LIBRARIES = libobfsproxy.a
@@ -18,7 +18,6 @@ libobfsproxy_a_SOURCES = \
 
 obfsproxy_SOURCES = \
 	src/main.c
-obfsproxy_LDADD = libobfsproxy.a @libevent_LIBS@ @openssl_LIBS@ @LIB_WS32@
 
 unittests_SOURCES = \
 	src/test/tinytest.c \
@@ -26,7 +25,6 @@ unittests_SOURCES = \
 	src/test/unittest_obfs2.c \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c
-unittests_LDADD = libobfsproxy.a @libevent_LIBS@ @openssl_LIBS@ @LIB_WS32@
 
 noinst_HEADERS = \
 	src/network.h \

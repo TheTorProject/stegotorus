@@ -1,34 +1,30 @@
-AC_INIT
-AM_INIT_AUTOMAKE(obsproxy, 0.0)
-AM_CONFIG_HEADER(config.h)
+AC_PREREQ([2.67])dnl Possibly earlier will do, but this is what I have
+AC_INIT([obsproxy], [0.0])
+AC_CONFIG_SRCDIR([src/main.c])
 
-AC_CANONICAL_HOST
+AM_INIT_AUTOMAKE([foreign])
 
-AC_PROG_GCC_TRADITIONAL
-AC_PROG_SED
+AC_PROG_CC
+AC_PROG_CPP
 AC_PROG_RANLIB
 PKG_PROG_PKG_CONFIG
-
-AC_CHECK_HEADERS(stdint.h unistd.h fcntl.h)
 
 PKG_CHECK_MODULES([libevent], [libevent >= 2.0])
 PKG_CHECK_MODULES([openssl], [openssl >= 0.9.7])
 
-# We don't need -lssl, only -lcrypto
-openssl_LIBS=`echo "$openssl_LIBS" | $SED -e 's/-lssl//'`
-
-AC_CHECK_HEADERS([winsock2.h], HAVE_WINSOCK2_H=yes)
-AM_CONDITIONAL(HAVE_WINSOCK2_H, test "x$HAVE_WINSOCK2_H" = "xyes")
-if test "x$HAVE_WINSOCK2_H" = "xyes"; then
-  LIB_WS32=-lws2_32
-else
-  LIB_WS32=
-fi
-AC_SUBST(LIB_WS32)
-
-AC_CHECK_SIZEOF(size_t)
+AC_CACHE_CHECK([for winsock], [ac_cv_lib_winsock],
+  [AC_PREPROC_IFELSE(
+    [#ifndef _WIN32
+    #error "not windows"
+    #endif
+    ],
+    [ac_cv_lib_winsock=yes], [ac_cv_lib_winsock=no])
+])
+AS_IF([test "x$ac_cv_lib_winsock" = xyes],
+  [ws32_LIBS=-lws2_32],
+  [ws32_LIBS=])
+AC_SUBST(ws32_LIBS)
 
 AC_CONFIG_FILES([Makefile])
-
+AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT
-

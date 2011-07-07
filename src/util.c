@@ -7,6 +7,7 @@
 #include <stdlib.h>
 
 #include <assert.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -20,6 +21,9 @@
 
 #include <event2/util.h>
 #include <event2/dns.h>
+
+/** Any size_t larger than this amount is likely to be an underflow. */
+#define SIZE_T_CEILING  (SIZE_MAX/2 - 16)
 
 static const char *sev_to_string(int severity);
 static int sev_is_valid(int severity);
@@ -137,11 +141,7 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
     return -1; /* no place for the NUL */
   if (size > SIZE_T_CEILING)
     return -1;
-#ifdef MS_WINDOWS
-  r = _vsnprintf(str, size, format, args);
-#else
   r = vsnprintf(str, size, format, args);
-#endif
   str[size-1] = '\0';
   if (r < 0 || r >= (ssize_t)size)
     return -1;

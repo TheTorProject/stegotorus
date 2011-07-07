@@ -425,6 +425,7 @@ test_socks_socks4_request(void *data)
   /* First test:
      Correct SOCKS4 req packet with nothing in the optional field. */
   struct parsereq pr1;
+  memset(&pr1, 0, sizeof(struct parsereq));
   state->parsereq = pr1;
   uchar req1[8];
   req1[0] = 1;
