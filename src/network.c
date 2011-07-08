@@ -10,10 +10,13 @@
 #include "socks.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <errno.h>
+#include <event2/buffer.h>
+#include <event2/bufferevent.h>
+#include <event2/listener.h>
 #include <event2/util.h>
 
 #ifdef _WIN32
@@ -43,7 +46,7 @@ static void output_event_cb(struct bufferevent *bev, short what, void *arg);
    This function sets up the protocol defined by 'options' and
    attempts to bind a new listener for it.
 
-   Returns the listener on success, NULL on fail. 
+   Returns the listener on success, NULL on fail.
 */
 listener_t *
 listener_new(struct event_base *base,
@@ -60,7 +63,7 @@ listener_new(struct event_base *base,
   }
 
   lsn->proto_params = proto_params;
-  
+
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
                                           flags,
                                           -1,

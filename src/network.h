@@ -5,19 +5,7 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-#include <stdlib.h>
-
-#include <event2/buffer.h>
-#include <event2/bufferevent.h>
-#include <event2/listener.h>
-#include <event2/event.h>
-
-
-typedef struct listener_t *listener;
-
-struct sockaddr;
 struct event_base;
-struct socks_state_t;
 struct protocol_params_t;
 
 #define LSN_SIMPLE_CLIENT 1
@@ -41,13 +29,16 @@ enum recv_ret {
 };
 
 typedef struct listener_t listener_t;
-struct addrinfo;
 
 listener_t *listener_new(struct event_base *base,
                          struct protocol_params_t *params);
 void listener_free(listener_t *listener);
 
 #ifdef NETWORK_PRIVATE
+struct bufferevent;
+struct socks_state_t;
+struct protocol_t;
+
 typedef struct conn_t {
   struct socks_state_t *socks_state;
   struct protocol_t *proto; /* ASN Do we like this here? We probably don't.

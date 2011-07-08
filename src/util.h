@@ -5,8 +5,8 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-/* va_list definition */
-#include <stdarg.h>
+#include <stdarg.h> /* for va_list */
+#include <stddef.h> /* for size_t etc */
 
 struct sockaddr_storage;
 struct event_base;
