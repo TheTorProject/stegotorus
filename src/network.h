@@ -46,6 +46,7 @@ struct addrinfo;
 listener_t *listener_new(struct event_base *base,
                          struct protocol_params_t *params);
 void listener_free(listener_t *listener);
+void listener_disable(listener_t *lsn);
 
 void start_shutdown(int barbaric);
 

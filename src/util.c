@@ -148,6 +148,146 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
   return r;
 }
 
+/************************ Doubly Linked List (DLL) ******************/
+
+/**
+   Insert 'new_node' after 'node' in the doubly linked list 'list'.
+*/ 
+static void
+dll_insert_after(dll_t *list, dll_node_t *node, dll_node_t *new_node)
+{
+  assert(node);
+  assert(new_node);
+
+  if (!list)
+    return;
+
+  new_node->prev = node;
+  new_node->next = node->next;
+  if (!node->next)
+    list->tail = new_node;
+  else
+    node->next->prev = new_node;
+  node->next = new_node;
+}
+
+/**
+   Insert 'new_node' before 'node' in the doubly linked list 'list'.
+*/ 
+static void
+dll_insert_before(dll_t *list, dll_node_t *node, dll_node_t *new_node)
+{
+  assert(node);
+  assert(new_node);
+
+  if (!list)
+    return;
+
+  new_node->prev = node->prev;
+  new_node->next = node;
+  if (!node->prev)
+    list->head = new_node;
+  else
+    node->prev->next = new_node;
+  node->prev = new_node;
+}
+  
+/**
+   Insert 'node' in the beginning of the doubly linked 'list'.
+*/ 
+static void
+dll_insert_beginning(dll_t *list, dll_node_t *node)
+{
+  assert(node);
+
+  if (!list)
+    return;
+
+  if (!list->head) {
+    list->head = node;
+    list->tail = node;
+    node->prev = NULL;
+    node->next = NULL;
+  } else {
+    dll_insert_before(list, list->head, node);
+  }
+}
+  
+/** 
+    Appends 'data' to the end of the doubly linked 'list'.
+    Returns 1 on success, -1 on fail.
+*/
+int
+dll_append(dll_t *list, void *data)
+{
+  assert(data);
+
+  if (!list)
+    return -1;
+
+  dll_node_t *node;
+  
+  node = calloc(1, sizeof(dll_node_t));
+  if (!node)
+    return -1;
+  node->data = data;
+  
+  if (!list->tail)
+    dll_insert_beginning(list, node);
+  else
+    dll_insert_after(list, list->tail, node);
+      
+  return 1;
+}
+
+/**
+   Removes 'node' from the doubly linked list 'list'.
+   It frees the list node, but leaves its data intact.
+*/ 
+void
+dll_remove(dll_t *list, dll_node_t *node)
+{
+  assert(node);
+
+  if (!list)
+    return;
+
+  if (!node->prev)
+    list->head = node->next;
+  else
+    node->prev->next = node->next;
+  if (!node->next)
+    list->tail = node->prev;
+  else
+    node->next->prev = node->prev;
+
+  free(node);
+}
+
+/**
+   Removes node carrying 'data' from the doubly linked list 'list'.
+   It frees the list node, but leaves 'data' intact.
+*/
+void
+dll_remove_with_data(dll_t *list, void *data)
+{
+  assert(data);
+  
+  if (!list)
+    return;
+
+  dll_node_t *node = list->head;
+  while (node) {
+    if (node->data == data) {
+      dll_remove(list, node);
+      return;
+    } else {
+      node = node->next;
+    }
+  }
+  assert(0); /*too brutal?*/
+}
+
 /************************ Logging Subsystem *************************/
 /** The code of this section was to a great extend shamelessly copied
     off tor. It's basicaly a stripped down version of tor's logging
@@ -404,3 +544,4 @@ log_debug(const char *format, ...)
   va_end(ap);
 }
 #endif
+

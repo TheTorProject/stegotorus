@@ -50,6 +50,25 @@ int obfs_snprintf(char *str, size_t size,
                   const char *format, ...)
   __attribute__((format(printf, 3, 4)));
 
+/***** Doubly Linked List stuff. *****/
+
+/** A doubly linked list node.
+    [algorithms ripped off Wikipedia (Doubly_linked_list) ] */
+typedef struct dll_node_t {
+  struct dll_node_t *next, *prev;
+  void *data;
+} dll_node_t;
+
+/** A doubly linked list. */
+typedef struct dll_t {
+  struct dll_node_t *head;
+  struct dll_node_t *tail;
+} dll_t;
+
+int dll_append(dll_t *list, void *data);
+void dll_remove(dll_t *list, dll_node_t *node);
+void dll_remove_with_data(dll_t *list, void *data);
+
 /***** Logging subsystem stuff. *****/
 
 void log_fn(int severity, const char *format, ...)

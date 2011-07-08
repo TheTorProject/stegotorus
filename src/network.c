@@ -26,19 +26,8 @@ struct listener_t {
   protocol_params_t *proto_params;
 };
 
-/**
-   Linked list carrying all currently active connections.
-   [linked list code was copied off tor.]
-*/
-typedef struct conn_list_t {
-  conn_t *conn;
-  struct conn_list_t *next;
-} conn_list_t;
-
-/** First and last elements in the linked list of active
-    connections. */
-static conn_list_t *cl_list=NULL;
-static conn_list_t *cl_tail=NULL;
+/** Doubly linked list holding all connections. */
+static dll_t *cl=NULL;
 /** Active connection counter */
 static int n_connections=0;
 
@@ -68,6 +57,8 @@ static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 
    If 'barbaric' is set, we forcefully close all open connections and
    finish shutdown.
+   
+   (Only called by signal handlers)
 */
 void
 start_shutdown(int barbaric)
@@ -76,6 +67,8 @@ start_shutdown(int barbaric)
     shutting_down=1;
 
   if (!n_connections) {
+    if (cl)
+      free(cl);
     finish_shutdown();
     return;
   }
@@ -83,7 +76,6 @@ start_shutdown(int barbaric)
   if (barbaric) {
     if (n_connections)
       close_all_connections();
-    finish_shutdown();
     return;
   }
 }  
@@ -94,87 +86,18 @@ start_shutdown(int barbaric)
 static void
 close_all_connections(void)
 {
-  conn_t *conn;
+  /** Traverse the dll and close all connections */
+  dll_node_t *cl_node = cl->head;
+  while (cl_node) {
+    conn_free(cl_node->data);
 
-  while (cl_list) {
-    assert(cl_list->conn);
-    assert(n_connections > 0);
-    conn = cl_list->conn;
-    conn_free(conn);
-  }    
-}
-
-/** 
-    Places 'conn' to the end of the linked list of active connections.
-    Returns 1 on success, -1 on fail.
-*/
-static int
-cl_add(conn_t *conn)
-{
-  conn_list_t *cl;
-  
-  cl = calloc(1, sizeof(conn_list_t));
-  if (!cl)
-    return -1;
-
-  cl->conn = conn;
-  
-  if (!cl_tail) {
-    assert(!cl_list);
-    assert(!n_connections);
-    cl_list=cl;
-    cl_tail=cl;
-  } else {
-    assert(cl_list);
-    assert(!cl_tail->next);
-    cl_tail->next = cl;
-    cl_tail = cl;
-  }
-
-  n_connections++;
-
-  return 1;
-}
-
-/**
-   Removes 'conn' from the linked list of connections:
-   It frees the list node carrying 'conn', but leaves 'conn' itself intact.
-*/ 
-static void
-cl_remove(conn_t *conn)
-{
-  conn_list_t *tmpo, *victim;
-
-  if (!cl_list)
-    return; /* nothing here. */
-
-  /* first check to see if it's the first entry */
-  tmpo = cl_list;
-  if (tmpo->conn == conn) {
-    /* it's the first one. remove it from the list. */
-    cl_list = tmpo->next;
-    if (!cl_list)
-      cl_tail = NULL;
-    n_connections--;
-    victim = tmpo;
-  } else { /* we need to hunt through the rest of the list */
-    for ( ;tmpo->next && tmpo->next->conn != conn; tmpo=tmpo->next) ;
-    if (!tmpo->next) {
-      return;
+    if (cl) { /* last conn_free() wipes the cl. */
+      cl_node = cl->head; /* move to next connection */
+    } else {
+      assert(!n_connections);
+      return; /* connections are now all closed. */  
     }
-    /* now we know tmpo->next->conn == conn */
-    victim = tmpo->next;
-    tmpo->next = victim->next;
-    if (cl_tail == victim)
-      cl_tail = tmpo;
-    n_connections--;
-  }
-
-  assert(n_connections>=0);
-
-  /* now victim points to the element that needs to be removed */
-  free(victim);
-  victim = NULL;
+  }    
 }
   
 /**
@@ -197,6 +120,13 @@ listener_new(struct event_base *base,
     return NULL;
   }
 
+  /** If we don't have a connection dll, create one now. */
+  if (!cl) {
+    cl = calloc(1, sizeof(dll_t));
+    if (!cl)
+      return NULL;
+  }
+
   lsn->proto_params = proto_params;
   
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
@@ -214,6 +144,17 @@ listener_new(struct event_base *base,
   return lsn;
 }
 
+/**
+   Disable listener 'lsn'.
+*/
+void
+listener_disable(listener_t *lsn)
+{
+  assert(lsn);
+  
+  evconnlistener_disable(lsn->listener);  
+}
+
 void
 listener_free(listener_t *lsn)
 {
@@ -229,12 +170,6 @@ static void
 simple_listener_cb(struct evconnlistener *evcl,
     evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg)
 {
-  if (shutting_down) {
-    if (fd >= 0)
-      evutil_closesocket(fd);
-    return ;
-  }
-
   listener_t *lsn = arg;
   struct event_base *base;
   conn_t *conn = calloc(1, sizeof(conn_t));
@@ -315,8 +250,9 @@ simple_listener_cb(struct evconnlistener *evcl,
   }
 
   /* add conn to the linked list of connections */
-  if (cl_add(conn)<0)
+  if (dll_append(cl, conn)<0)
     goto err;
+  n_connections++;
 
   log_debug("Connection setup completed. "
             "We currently have %d connections!", n_connections);
@@ -340,18 +276,27 @@ conn_free(conn_t *conn)
     bufferevent_free(conn->input);
   if (conn->output)
     bufferevent_free(conn->output);
-  memset(conn, 0x99, sizeof(conn_t));
+
   /* remove conn from the linked list of connections */
-  cl_remove(conn);
+  dll_remove_with_data(cl, conn);
+  n_connections--;
+
+  memset(conn, 0x99, sizeof(conn_t));
   free(conn);
 
+  assert(n_connections>=0);
   log_debug("Connection destroyed. "
             "We currently have %d connections!", n_connections);
 
   /** If this was the last connection AND we are shutting down,
       finish shutdown. */
-  if (!n_connections && shutting_down)
+  if (!n_connections && shutting_down) {
+    if (cl) { /* free connection dll */ 
+      free(cl);
+      cl = NULL;
+    }
     finish_shutdown();
+  }
 }
 
 static void

@@ -35,6 +35,9 @@ extern int n_supported_protocols;
 
 static struct event_base *the_event_base=NULL;
 
+/** Doubly linked list holding all our listeners. */
+static dll_t *ll=NULL;
+
 /**
    Prints the obfsproxy usage instructions then exits.
 */
@@ -58,6 +61,24 @@ usage(void)
 }
 
 /**
+   Disables all active listeners.
+*/
+static void
+disable_all_listeners(void)
+{
+  if (!ll)
+    return;
+  log_info("Disabling all listeners.");
+
+  /* Iterate listener doubly linked list and disable them all. */ 
+  dll_node_t *ll_node = ll->head;
+  while (ll_node) {
+    listener_disable(ll_node->data);
+    ll_node = ll_node->next;
+  }
+}
+
+/**
    This is called when we receive a signal.
    It figures out the signal type and acts accordingly.
 
@@ -73,17 +94,29 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 {
   int signum = (int) fd;
   static int got_sigint=0;
+  static int disabled_listeners=0;
 
   switch (signum) {
   case SIGINT:
+    if (!disabled_listeners) {
+      disable_all_listeners();
+      disabled_listeners++;
+    }
     if (!got_sigint) {
+      log_info("Got SIGINT. Preparing shutdown.");
       start_shutdown(0);
       got_sigint++;
     } else {
+      log_info("Got SIGINT for the second time. Terminating.");
       start_shutdown(1);
     }
     break;
   case SIGTERM:
+    if (!disabled_listeners) {
+      disable_all_listeners();
+      disabled_listeners++;
+    }
+    log_info("Got SIGTERM. Terminating.");
     start_shutdown(1);
     break;
   }
@@ -348,18 +381,10 @@ main(int argc, const char **argv)
 
   /*Let's open a new listener for each protocol. */ 
   int h;
-  listener_t **listeners;
   listener_t *temp_listener;
   int n_listeners=0;
   protocol_params_t *proto_params=NULL;
-  listeners = calloc(sizeof(listener_t*), actual_protocols);
-  if (!listeners) {
-    log_warn("Allocation failure: %s", strerror(errno));
-    return 1;
-  }
-
   for (h=0;h<actual_protocols;h++) {
-
     log_debug("Spawning listener %d!", h+1);
 
     /** normally free'd in listener_free() */
@@ -379,8 +404,16 @@ main(int argc, const char **argv)
       continue;
     
     log_info("Succesfully created listener %d.", h+1);
-    listeners[n_listeners] = temp_listener;
-    
+
+    /* If we don't have a listener dll, create one now. */
+    if (!ll) {
+      ll = calloc(1, sizeof(dll_t));
+      if (!ll)
+        return 1;
+    }
+        
+    /* Append our new listener in the listener dll. */
+    dll_append(ll, temp_listener);
     n_listeners++;
   }
 
@@ -398,11 +431,17 @@ main(int argc, const char **argv)
   if (close_obfsproxy_logfile() < 0)
     printf("Failed closing logfile!\n");
 
-  /* We are exiting. Clean everything. */
-  for (h=0;h<n_listeners;h++)
-    listener_free(listeners[h]);
-  if (listeners)
-    free(listeners);
+  /* Free all listeners in our listener dll. */
+  if (ll) {
+    dll_node_t *ll_node = ll->head;
+    while (ll_node) {
+      listener_free(ll_node->data);
+      dll_remove(ll, ll_node);
+      ll_node = ll->head;
+    }
+    /* free dll memory */
+    free(ll);
+  }
 
   free(protocol_options);
   free(n_options_array);
