@@ -8,6 +8,10 @@
 #include <stdarg.h> /* for va_list */
 #include <stddef.h> /* for size_t etc */
 
+#ifndef __GNUC__
+#define __attribute__(x) /* nothing */
+#endif
+
 struct sockaddr;
 struct event_base;
 struct evdns_base;
@@ -25,10 +29,6 @@ int init_evdns_base(struct event_base *base);
 
 /***** String functions stuff. *****/
 
-#ifndef __GNUC__
-#define __attribute__(x)
-#endif
-
 int obfs_vsnprintf(char *str, size_t size,
                    const char *format, va_list args);
 int obfs_snprintf(char *str, size_t size,
@@ -37,30 +37,6 @@ int obfs_snprintf(char *str, size_t size,
 
 /***** Logging subsystem stuff. *****/
 
-void log_fn(int severity, const char *format, ...)
-  __attribute__((format(printf, 2, 3)));
-int log_set_method(int method, const char *filename);
-int log_set_min_severity(const char* sev_string);
-int close_obfsproxy_logfile(void);
-
-#ifdef __GNUC__
-#define log_info(args...) log_fn(LOG_SEV_INFO, args)
-#define log_warn(args...) log_fn(LOG_SEV_WARN, args)
-#define log_debug(args...) log_fn(LOG_SEV_DEBUG, args)
-#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
-#define log_info(...) log_fn(LOG_SEV_INFO, __VA_ARGS__)
-#define log_warn(...) log_fn(LOG_SEV_WARN, __VA_ARGS__)
-#define log_debug(...) log_fn(LOG_SEV_DEBUG, __VA_ARGS__)
-#else
-#define NEED_LOG_WRAPPERS
-void log_info(const char *format, ...)
-  __attribute__((format(printf, 1, 2)));
-void log_warn(const char *format, ...)
-  __attribute__((format(printf, 1, 2)));
-void log_debug(const char *format, ...)
-  __attribute__((format(printf, 1, 2)));
-#endif
-
 /** Logging methods */
 
 /** Spit log messages on stdout. */
@@ -68,17 +44,33 @@ void log_debug(const char *format, ...)
 /** Place log messages in a file. */
 #define LOG_METHOD_FILE 2
 /** We don't want no logs. */
-#define LOG_METHOD_NULL 3 
+#define LOG_METHOD_NULL 3
 
-/** Logging severities */
+/** Set the log method, and open the logfile 'filename' if appropriate. */
+int log_set_method(int method, const char *filename);
 
-/** Warn-level severity: for messages that only appear when something has gone  wrong. */
-#define LOG_SEV_WARN    3
+/** Set the minimum severity that will be logged.
+    'sev_string' may be "warn", "info", or "debug" (case-insensitively). */
+int log_set_min_severity(const char* sev_string);
+
+/** Close the logfile if it's open.  Ignores errors. */
+void close_obfsproxy_logfile(void);
+
+/** The actual log-emitting functions */
+
+/** Warn-level severity: for messages that only appear when something
+    has gone wrong. */
+void log_warn(const char *format, ...)
+  __attribute__((format(printf, 1, 2)));
+
 /** Info-level severity: for messages that should be sent to the user
     during normal operation. */
-#define LOG_SEV_INFO    2
+void log_info(const char *format, ...)
+  __attribute__((format(printf, 1, 2)));
+
 /** Debug-level severity: for hyper-verbose messages of no interest to
     anybody but developers. */
-#define LOG_SEV_DEBUG   1
+void log_debug(const char *format, ...)
+  __attribute__((format(printf, 1, 2)));
 
 #endif

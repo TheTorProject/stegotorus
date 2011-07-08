@@ -362,8 +362,7 @@ main(int argc, const char **argv)
 
   log_info("Exiting.");
 
-  if (close_obfsproxy_logfile() < 0)
-    printf("Failed closing logfile!\n");
+  close_obfsproxy_logfile();
 
   /* We are exiting. Clean everything. */
   for (h=0;h<n_listeners;h++)

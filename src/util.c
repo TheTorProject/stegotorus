@@ -25,14 +25,6 @@
 /** Any size_t larger than this amount is likely to be an underflow. */
 #define SIZE_T_CEILING  (SIZE_MAX/2 - 16)
 
-static const char *sev_to_string(int severity);
-static int sev_is_valid(int severity);
-static int write_logfile_prologue(int fd);
-static int compose_logfile_prologue(char *buf, size_t buflen);
-static int string_to_sev(const char *string);
-static int open_and_set_obfsproxy_logfile(const char *filename);
-static void logv(int severity, const char *format, va_list ap);
-
 /************************ Obfsproxy Network Routines *************************/
 
 int
@@ -146,7 +138,7 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
 }
 
 /************************ Logging Subsystem *************************/
-/** The code of this section was to a great extend shamelessly copied
+/** The code of this section was to a great extent shamelessly copied
     off tor. It's basicaly a stripped down version of tor's logging
     system. Thank you tor. */
 
@@ -156,6 +148,12 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
 #define TRUNCATED_STR "[...truncated]"
 /* strlen(TRUNCATED_STR) */
 #define TRUNCATED_STR_LEN 14
+
+/** Logging severities */
+
+#define LOG_SEV_WARN    3
+#define LOG_SEV_INFO    2
+#define LOG_SEV_DEBUG   1
 
 /* logging method */
 static int logging_method=LOG_METHOD_STDOUT;
@@ -199,28 +197,9 @@ string_to_sev(const char *string)
 static int
 sev_is_valid(int severity)
 {
-  return (severity == LOG_SEV_WARN || 
-          severity == LOG_SEV_INFO || 
+  return (severity == LOG_SEV_WARN ||
+          severity == LOG_SEV_INFO ||
           severity == LOG_SEV_DEBUG);
-}
-
-/**
-   Sets the global logging 'method' and also sets and open the logfile
-   'filename' in case we want to log into a file.
-   It returns 1 on success and -1 on fail.
-*/
-int
-log_set_method(int method, const char *filename)
-{
-  
-  logging_method = method;
-  if (method == LOG_METHOD_FILE) {
-    if (open_and_set_obfsproxy_logfile(filename) < 0)
-      return -1;
-    if (write_logfile_prologue(logging_logfile) < 0)
-      return -1;
-  }    
-  return 1;
 }
 
 /**
@@ -232,56 +211,55 @@ open_and_set_obfsproxy_logfile(const char *filename)
 {
   if (!filename)
     return -1;
-  logging_logfile = open(filename, 
+  logging_logfile = open(filename,
                          O_WRONLY|O_CREAT|O_APPEND,
                          0644);
   if (logging_logfile < 0)
     return -1;
-  return 1;
+  return 0;
 }
 
 /**
    Closes the obfsproxy logfile if it exists.
-   Returns 0 on success or if we weren't using a logfile (that's
-   close()'s success return value) and -1 on failure.
+   Ignores errors.
 */
-int
+void
 close_obfsproxy_logfile(void)
 {
-  if (logging_logfile < 0) /* no logfile. */
-    return 0;
-  else
-    return close(logging_logfile);
+  if (logging_logfile >= 0)
+    close(logging_logfile);
 }
 
 /**
-   Writes a small prologue in the logfile 'fd' that mentions the
-   obfsproxy version and helps separate log instances.
+   Writes a small prologue in the logfile 'fd' to separate log
+   instances.
 */
 static int
-write_logfile_prologue(int logfile) {
-  char buf[256];
-  if (compose_logfile_prologue(buf, sizeof(buf)) < 0)
+write_logfile_prologue(int logfile)
+{
+  static const char prologue[] = "\nBrand new obfsproxy log:\n";
+  if (write(logfile, prologue, strlen(prologue)) != strlen(prologue))
     return -1;
-  if (write(logfile, buf, strlen(buf)) < 0)
-    return -1;
-  return 1;
+  return 0;
 }
 
-#define TEMP_PROLOGUE "\nBrand new obfsproxy log:\n"
 /**
-   Helper: Composes the logfile prologue.
+   Sets the global logging 'method' and also sets and open the logfile
+   'filename' in case we want to log into a file.
+   It returns 1 on success and -1 on fail.
 */
-static int
-compose_logfile_prologue(char *buf, size_t buflen)
-{  
-  if (obfs_snprintf(buf, buflen, TEMP_PROLOGUE) < 0) {
-    log_warn("Logfile prologue couldn't be written.");
-    return -1;
+int
+log_set_method(int method, const char *filename)
+{
+  logging_method = method;
+  if (method == LOG_METHOD_FILE) {
+    if (open_and_set_obfsproxy_logfile(filename) < 0)
+      return -1;
+    if (write_logfile_prologue(logging_logfile) < 0)
+      return -1;
   }
-  return 1;
+  return 0;
 }
-#undef TEMP_PROLOGUE
 
 /**
    Sets the minimum logging severity of obfsproxy to the severity
@@ -289,37 +267,23 @@ compose_logfile_prologue(char *buf, size_t buflen)
    not a valid severity, it returns -1.
 */
 int
-log_set_min_severity(const char* sev_string) {
+log_set_min_severity(const char* sev_string)
+{
   int severity = string_to_sev(sev_string);
   if (!sev_is_valid(severity)) {
     log_warn("Severity '%s' makes no sense.", sev_string);
     return -1;
   }
   logging_min_sev = severity;
-  return 1;
+  return 0;
 }
 
 /**
-    Logging function of obfsproxy.
-    Don't call this directly; use the log_* macros defined in util.h
-    instead.
-
-    It accepts a logging 'severity' and a 'format' string and logs the
+    Logging worker function.
+    Accepts a logging 'severity' and a 'format' string and logs the
     message in 'format' according to the configured obfsproxy minimum
     logging severity and logging method.
 */
-void
-log_fn(int severity, const char *format, ...)
-{
-
-  va_list ap;
-  va_start(ap,format);
-
-  logv(severity, format, ap);
-
-  va_end(ap);
-}
-
 static void
 logv(int severity, const char *format, va_list ap)
 {
@@ -369,7 +333,8 @@ logv(int severity, const char *format, va_list ap)
     assert(0);
 }
 
-#ifdef NEED_LOG_WRAPPERS
+/**** Public logging API. ****/
+
 void
 log_info(const char *format, ...)
 {
@@ -380,6 +345,7 @@ log_info(const char *format, ...)
 
   va_end(ap);
 }
+
 void
 log_warn(const char *format, ...)
 {
@@ -390,6 +356,7 @@ log_warn(const char *format, ...)
 
   va_end(ap);
 }
+
 void
 log_debug(const char *format, ...)
 {
@@ -400,4 +367,3 @@ log_debug(const char *format, ...)
 
   va_end(ap);
 }
-#endif
