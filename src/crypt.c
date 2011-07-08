@@ -24,22 +24,7 @@
 #define USE_OPENSSL_SHA256 1
 #include <openssl/sha.h>
 #else
-#define STMT_BEGIN do {
-#define STMT_END } while (0)
-static void
-set_uint32(void *ptr, uint32_t val)
-{
-  memcpy(ptr, &val, 4);
-}
-static uint32_t
-get_uint32(const void *ptr)
-{
-  uint32_t val;
-  memcpy(&val, ptr, 4);
-  return val;
-}
-#define LTC_ARGCHK(x) assert((x))
-#include "../sha256.c"
+#include "sha256.h"
 #endif
 
 int

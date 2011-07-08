@@ -25,6 +25,12 @@ AS_IF([test "x$ac_cv_lib_winsock" = xyes],
   [ws32_LIBS=])
 AC_SUBST(ws32_LIBS)
 
+save_LIBS="$LIBS"
+LIBS="$openssl_LIBS"
+AC_CHECK_FUNC(SHA256_Init, [:], [:])
+LIBS="$save_LIBS"
+AM_CONDITIONAL(NEED_SHA256, [test x$ac_cv_func_SHA256_Init = xno])
+
 AC_CONFIG_FILES([Makefile])
 AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT
