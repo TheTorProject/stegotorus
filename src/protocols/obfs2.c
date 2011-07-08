@@ -10,14 +10,14 @@
 #include <openssl/rand.h>
 #include <event2/buffer.h>
 
-#define CRYPT_PROTOCOL_PRIVATE
-
-#include "obfs2_crypt.h"
-#include "obfs2.h"
+#include "../crypt.h"
 #include "../network.h"
 #include "../util.h"
 #include "../protocol.h"
 #include "../network.h"
+
+#define CRYPT_PROTOCOL_PRIVATE
+#include "obfs2.h"
 
 static void obfs2_state_free(void *state);
 static int obfs2_send_initial_message(void *state, struct evbuffer *buf);

@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #include "tinytest.h"
-#include "../protocols/obfs2_crypt.h"
+#include "../crypt.h"
 
 extern struct testcase_t crypt_tests[];
 extern struct testcase_t protocol_tests[];

@@ -9,7 +9,7 @@
 
 #include <openssl/aes.h>
 
-#include "../protocols/obfs2_crypt.h"
+#include "../crypt.h"
 
 struct crypt_t {
   AES_KEY key;

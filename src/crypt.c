@@ -7,15 +7,9 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
-#ifdef HAVE_UNISTD_H
 #include <unistd.h>
-#endif
-#ifdef HAVE_FCNTL_H
 #include <fcntl.h>
-#endif
-#ifdef HAVE_STDINT_H
 #include <stdint.h>
-#endif
 
 #include <openssl/opensslv.h>
 #include <openssl/aes.h>
@@ -23,7 +17,7 @@
 #include <openssl/err.h>
 
 #define CRYPT_PRIVATE
-#include "obfs2_crypt.h"
+#include "crypt.h"
 
 #if OPENSSL_VERSION_NUMBER >= 0x0090800f
 #define USE_OPENSSL_RANDPOLL 1

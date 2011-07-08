@@ -2,10 +2,8 @@
    See LICENSE for other credits and copying information
 */
 
-#ifndef OBFS2_CRYPT_H
-#define OBFS2_CRYPT_H
-
-#include <sys/types.h>
+#ifndef CRYPT_H
+#define CRYPT_H
 
 #define SHA256_LENGTH 32
 
