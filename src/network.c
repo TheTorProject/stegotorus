@@ -144,17 +144,6 @@ listener_new(struct event_base *base,
   return lsn;
 }
 
-/**
-   Disable listener 'lsn'.
-*/
-void
-listener_disable(listener_t *lsn)
-{
-  assert(lsn);
-  
-  evconnlistener_disable(lsn->listener);  
-}
-
 void
 listener_free(listener_t *lsn)
 {

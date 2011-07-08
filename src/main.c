@@ -61,21 +61,29 @@ usage(void)
 }
 
 /**
-   Disables all active listeners.
+   Frees all active listeners.
 */
 static void
-disable_all_listeners(void)
+free_all_listeners(void)
 {
+  static int called_already=0;
+
+  if (called_already)
+    return;
   if (!ll)
     return;
-  log_info("Disabling all listeners.");
 
-  /* Iterate listener doubly linked list and disable them all. */ 
+  log_info("Closing all listeners.");
+
+  /* Iterate listener doubly linked list and free them all. */ 
   dll_node_t *ll_node = ll->head;
   while (ll_node) {
-    listener_disable(ll_node->data);
-    ll_node = ll_node->next;
+    listener_free(ll_node->data);
+    dll_remove(ll, ll_node);
+    ll_node = ll->head;
   }
+
+  called_already++;
 }
 
 /**
@@ -94,14 +102,10 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 {
   int signum = (int) fd;
   static int got_sigint=0;
-  static int disabled_listeners=0;
 
   switch (signum) {
   case SIGINT:
-    if (!disabled_listeners) {
-      disable_all_listeners();
-      disabled_listeners++;
-    }
+    free_all_listeners();
     if (!got_sigint) {
       log_info("Got SIGINT. Preparing shutdown.");
       start_shutdown(0);
@@ -112,10 +116,6 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
     }
     break;
   case SIGTERM:
-    if (!disabled_listeners) {
-      disable_all_listeners();
-      disabled_listeners++;
-    }
     log_info("Got SIGTERM. Terminating.");
     start_shutdown(1);
     break;
@@ -431,17 +431,9 @@ main(int argc, const char **argv)
   if (close_obfsproxy_logfile() < 0)
     printf("Failed closing logfile!\n");
 
-  /* Free all listeners in our listener dll. */
-  if (ll) {
-    dll_node_t *ll_node = ll->head;
-    while (ll_node) {
-      listener_free(ll_node->data);
-      dll_remove(ll, ll_node);
-      ll_node = ll->head;
-    }
-    /* free dll memory */
+  free_all_listeners(); /* free all listeners in our listener dll */
+  if (ll) /* free listener dll */
     free(ll);
-  }
 
   free(protocol_options);
   free(n_options_array);
