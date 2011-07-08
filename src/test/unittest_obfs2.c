@@ -31,7 +31,7 @@ test_proto_option_parsing(void *data)
   log_set_method(LOG_METHOD_NULL, NULL);
 
   tt_assert(set_up_protocol(n_options, options,
-                            proto_params) == 1);
+                            proto_params) == 0);
 
   /** two --dest. */
   char *options2[] = {"obfs2", "--dest=127.0.0.1:5555", "--dest=a", 

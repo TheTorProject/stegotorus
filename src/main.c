@@ -72,8 +72,6 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 /**
    This function visits 'n_options' command line arguments off 'argv'
    and writes them in 'options_string'.
-
-   Returns 1 on success, -1 on fail.
 */
 static void
 populate_options(char **options_string, 
@@ -85,17 +83,17 @@ populate_options(char **options_string,
 }
 
 /**
-   Returns 1 if 'name' is the nmae of a supported protocol, otherwise
-   it returns 0.
+   Returns 0 if 'name' is the nmae of a supported protocol, otherwise
+   it returns -1.
 */ 
 static int
 is_supported_protocol(const char *name) {
   int f;
   for (f=0;f<n_supported_protocols;f++) {
     if (!strcmp(name,supported_protocols[f])) 
-      return 1;
+      return 0;
   }
-  return 0;
+  return -1;
 }
 
 /**
@@ -240,7 +238,7 @@ main(int argc, const char **argv)
     }
 
     /* First option should be protocol_name. See if we support it. */
-    if (!is_supported_protocol(argv[start])) {
+    if (is_supported_protocol(argv[start])<0) {
       log_warn("We don't support protocol: %s", argv[start]); 
       continue;
     }

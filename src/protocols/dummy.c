@@ -53,7 +53,7 @@ dummy_init(int n_options, char **options,
   vtable->send = dummy_send;
   vtable->recv = dummy_recv;
 
-  return 1;
+  return 0;
 }
 
 static int
@@ -93,7 +93,7 @@ parse_and_set_options(int n_options, char **options,
   memcpy(&params->on_address, sa_listen, sl_listen);
   params->on_address_len = sl_listen;
   
-  return 1;
+  return 0;
 }
 
 static void
