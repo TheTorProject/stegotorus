@@ -28,7 +28,7 @@ int n_supported_protocols = 2;
    of obfsproxy.
 */
 int
-set_up_protocol(int n_options, char **options, 
+set_up_protocol(int n_options, char **options,
                 struct protocol_params_t *params)
 {
   if (!strcmp(*options,"dummy"))
@@ -41,7 +41,7 @@ set_up_protocol(int n_options, char **options,
 
 /**
    This function creates a protocol object.
-   It's called once per connection. 
+   It's called once per connection.
    It creates a new protocol_t structure and fills it's vtable etc.
    Return a 'protocol_t' if successful, NULL otherwise.
 */
@@ -80,7 +80,7 @@ proto_send(struct protocol_t *proto, void *source, void *dest) {
   assert(proto);
   if (proto->vtable->send)
     return proto->vtable->send(proto->state, source, dest);
-  else 
+  else
     return -1;
 }
 
@@ -100,7 +100,7 @@ proto_recv(struct protocol_t *proto, void *source, void *dest) {
    This function destroys 'proto'.
    It's called everytime we close a connection.
 */
-void 
+void
 proto_destroy(struct protocol_t *proto) {
   assert(proto);
   assert(proto->state);
@@ -120,6 +120,10 @@ proto_params_free(protocol_params_t *params)
 {
   assert(params);
 
+  if (params->target_address)
+    free(params->target_address);
+  if (params->listen_address)
+    free(params->listen_address);
   if (params->shared_secret)
     free(params->shared_secret);
   free(params);

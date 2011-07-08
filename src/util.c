@@ -38,8 +38,8 @@ static void logv(int severity, const char *format, va_list ap);
 int
 resolve_address_port(const char *address,
                      int nodns, int passive,
-                     struct sockaddr_storage *addr_out,
-                     int *addrlen_out,
+                     struct sockaddr **addr_out,
+                     size_t *addrlen_out,
                      const char *default_port)
 {
   struct evutil_addrinfo *ai = NULL;
@@ -78,13 +78,10 @@ resolve_address_port(const char *address,
     log_warn("No result for address %s", address);
     goto done;
   }
-  if (ai->ai_addrlen > sizeof(struct sockaddr_storage)) {
-    log_warn("Result for address %s too long", address);
-    goto done;
-  }
-
-  memcpy(addr_out, ai->ai_addr, ai->ai_addrlen);
-  *addrlen_out = (int) ai->ai_addrlen;
+  struct sockaddr *addr = malloc(ai->ai_addrlen);
+  memcpy(addr, ai->ai_addr, ai->ai_addrlen);
+  *addr_out = addr;
+  *addrlen_out = ai->ai_addrlen;
   result = 0;
 
  done:

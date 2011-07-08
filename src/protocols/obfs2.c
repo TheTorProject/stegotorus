@@ -25,7 +25,7 @@ static int obfs2_send(void *state,
                       struct evbuffer *source, struct evbuffer *dest);
 static enum recv_ret obfs2_recv(void *state, struct evbuffer *source,
                                 struct evbuffer *dest);
-static void *obfs2_state_new(protocol_params_t *params); 
+static void *obfs2_state_new(protocol_params_t *params);
 static int obfs2_state_set_shared_secret(void *s,
                                          const char *secret,
                                          size_t secretlen);
@@ -34,7 +34,7 @@ static void usage(void);
 
 static protocol_vtable *vtable=NULL;
 
-/* 
+/*
    This function parses 'options' and fills the protocol parameters
    structure 'params'.
    It then fills the obfs2 vtable and initializes the crypto subsystem.
@@ -42,7 +42,7 @@ static protocol_vtable *vtable=NULL;
    Returns 0 on success, -1 on fail.
 */
 int
-obfs2_init(int n_options, char **options, 
+obfs2_init(int n_options, char **options,
            struct protocol_params_t *params)
 {
   if (parse_and_set_options(n_options,options,params) < 0) {
@@ -62,11 +62,9 @@ obfs2_init(int n_options, char **options,
 }
 
 int
-parse_and_set_options(int n_options, char **options, 
+parse_and_set_options(int n_options, char **options,
                       struct protocol_params_t *params)
 {
-  struct sockaddr_storage ss_listen;
-  int sl_listen;
   int got_dest=0;
   int got_ss=0;
   const char* defport;
@@ -85,21 +83,15 @@ parse_and_set_options(int n_options, char **options,
       if (!strncmp(*options,"--dest=",7)) {
         if (got_dest)
           return -1;
-        struct sockaddr_storage ss_target;
-        struct sockaddr *sa_target=NULL;
-        int sl_target=0;
         if (resolve_address_port(*options+7, 1, 0,
-                                 &ss_target, &sl_target, NULL) < 0)
+                                 &params->target_address,
+                                 &params->target_address_len, NULL) < 0)
           return -1;
-        assert(sl_target <= sizeof(struct sockaddr_storage));
-        sa_target = (struct sockaddr *)&ss_target;
-        memcpy(&params->target_address, sa_target, sl_target);
-        params->target_address_len = sl_target;
         got_dest=1;
       } else if (!strncmp(*options,"--shared-secret=",16)) {
         if (got_ss)
           return -1;
-        /* this is freed in protocol_params_free() */
+        /* this is freed in proto_params_free() */
         params->shared_secret = strdup(*options+16);
         params->shared_secret_len = strlen(*options+16);
         got_ss=1;
@@ -127,14 +119,10 @@ parse_and_set_options(int n_options, char **options,
 
     params->is_initiator = (params->mode != LSN_SIMPLE_SERVER);
 
-    if (resolve_address_port(*options, 1, 1, 
-                             &ss_listen, &sl_listen, defport) < 0)
+    if (resolve_address_port(*options, 1, 1,
+                             &params->listen_address,
+                             &params->listen_address_len, defport) < 0)
       return -1;
-    assert(sl_listen <= sizeof(struct sockaddr_storage));
-    struct sockaddr *sa_listen=NULL;
-    sa_listen = (struct sockaddr *)&ss_listen;
-    memcpy(&params->on_address, sa_listen, sl_listen);
-    params->on_address_len = sl_listen;
 
     /* Validate option selection. */
     if (got_dest && (params->mode == LSN_SOCKS_CLIENT)) {

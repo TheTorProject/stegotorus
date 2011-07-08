@@ -57,13 +57,11 @@ dummy_init(int n_options, char **options,
 }
 
 static int
-parse_and_set_options(int n_options, char **options, 
+parse_and_set_options(int n_options, char **options,
                       struct protocol_params_t *params)
 {
-  struct sockaddr_storage ss_listen;
-  int sl_listen;
   const char* defport;
-  
+
   if (n_options != 3)
     return -1;
 
@@ -82,17 +80,13 @@ parse_and_set_options(int n_options, char **options,
   } else
     return -1;
 
-  if (resolve_address_port(options[2], 1, 1, 
-                           &ss_listen, &sl_listen, defport) < 0) {
+  if (resolve_address_port(options[2], 1, 1,
+                           &params->listen_address,
+                           &params->listen_address_len, defport) < 0) {
     log_warn("addr");
     return -1;
   }
-  assert(sl_listen <= sizeof(struct sockaddr_storage));
-  struct sockaddr *sa_listen=NULL;
-  sa_listen = (struct sockaddr *)&ss_listen;
-  memcpy(&params->on_address, sa_listen, sl_listen);
-  params->on_address_len = sl_listen;
-  
+
   return 1;
 }
 
@@ -108,7 +102,6 @@ usage(void)
          "Example:\n"
          "\tobfsproxy dummy socks 127.0.0.1:5000\n");
 }
-    
 
 
 void *
@@ -117,7 +110,7 @@ dummy_new(struct protocol_t *proto_struct,
 {
   proto_struct->vtable = vtable;
 
-  /* Dodging state check. 
+  /* Dodging state check.
      This is terrible I know.*/
   return (void *)666U;
 }

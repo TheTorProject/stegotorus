@@ -5,10 +5,9 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#include <sys/socket.h> /* for sockaddr & sockaddr_storage - FIXME */
-
 struct evbuffer;
 struct listener_t;
+struct sockaddr;
 
 #define DUMMY_PROTOCOL      1
 #define OBFS2_PROTOCOL      2
@@ -21,15 +20,15 @@ struct listener_t;
   owns this protocol_params_t.
 */
 typedef struct protocol_params_t {
-  int is_initiator;
-  struct sockaddr_storage target_address;
-  int target_address_len;
-  struct sockaddr on_address;
-  int on_address_len;
-  int mode;
-  int proto; /* Protocol that this listener can speak. */
+  struct sockaddr *target_address;
+  struct sockaddr *listen_address;
   char *shared_secret;
   size_t shared_secret_len;
+  size_t target_address_len;
+  size_t listen_address_len;
+  int is_initiator;
+  int mode;
+  int proto; /* Protocol that this listener can speak. */
 } protocol_params_t;
 
 struct protocol_t {

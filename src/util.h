@@ -8,7 +8,7 @@
 #include <stdarg.h> /* for va_list */
 #include <stddef.h> /* for size_t etc */
 
-struct sockaddr_storage;
+struct sockaddr;
 struct event_base;
 struct evdns_base;
 
@@ -16,8 +16,8 @@ struct evdns_base;
 
 int resolve_address_port(const char *address,
                          int nodns, int passive,
-                         struct sockaddr_storage *addr_out,
-                         int *addrlen_out,
+                         struct sockaddr **addr_out,
+                         size_t *addrlen_out,
                          const char *default_port);
 
 struct evdns_base *get_evdns_base(void);
