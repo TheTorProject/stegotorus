@@ -7,6 +7,7 @@
 #include "sha256.h"
 #include <assert.h>
 #include <string.h>
+#include <arpa/inet.h> /* for htonl/ntohl */
 
 #define STMT_BEGIN do {
 #define STMT_END } while (0)
