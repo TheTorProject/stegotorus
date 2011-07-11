@@ -1,7 +1,7 @@
 
 ACLOCAL_AMFLAGS = -I m4
-AM_CFLAGS = -DDEBUG -Wall -Werror @libevent_CFLAGS@ @openssl_CFLAGS@
-LDADD = libobfsproxy.a @libevent_LIBS@ @openssl_LIBS@ @ws32_LIBS@
+AM_CFLAGS = -DDEBUG -Wall -Werror @libevent_CFLAGS@ @libcrypto_CFLAGS@
+LDADD = libobfsproxy.a @libevent_LIBS@ @libcrypto_LIBS@ @ws32_LIBS@
 
 bin_PROGRAMS = obfsproxy
 noinst_LIBRARIES = libobfsproxy.a
