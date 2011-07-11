@@ -14,6 +14,10 @@
 
 #include <event2/buffer.h>
 
+#ifdef _WIN32
+#include <ws2tcpip.h> /* sockaddr_in6 */
+#endif
+
 /**
    General SOCKS5 idea:
 

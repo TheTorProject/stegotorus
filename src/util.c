@@ -15,6 +15,10 @@
 #include <event2/dns.h>
 #include <event2/util.h>
 
+#ifdef _WIN32
+#include <ws2tcpip.h> /* addrinfo */
+#endif
+
 /** Any size_t larger than this amount is likely to be an underflow. */
 #define SIZE_T_CEILING  (SIZE_MAX/2 - 16)
 

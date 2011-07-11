@@ -19,6 +19,10 @@
 #include <event2/listener.h>
 #include <event2/util.h>
 
+#ifdef _WIN32
+#include <ws2tcpip.h>  /* socklen_t */
+#endif
+
 struct listener_t {
   struct evconnlistener *listener;
   protocol_params_t *proto_params;
@@ -391,7 +395,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
          * socks client */
         socks_state_set_address(conn->socks_state, sa);
       }
-      socks_send_reply(conn->socks_state, 
+      socks_send_reply(conn->socks_state,
                        bufferevent_get_output(conn->input), 0);
       /* we sent a socks reply.  We can finally move over to being a regular
          input bufferevent. */
