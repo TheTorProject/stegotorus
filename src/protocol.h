@@ -5,8 +5,10 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
+#include <stddef.h>   /* for size_t */
+#include "network.h"  /* for recv_ret */
+
 struct evbuffer;
-struct listener_t;
 struct sockaddr;
 
 #define DUMMY_PROTOCOL      1

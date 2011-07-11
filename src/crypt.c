@@ -2,22 +2,18 @@
    See LICENSE for other credits and copying information
 */
 
-#include "config.h"
-
-#include <assert.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdint.h>
-
-#include <openssl/opensslv.h>
-#include <openssl/aes.h>
-#include <openssl/rand.h>
-#include <openssl/err.h>
-
 #define CRYPT_PRIVATE
 #include "crypt.h"
+
+#include <assert.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <openssl/opensslv.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x0090800f
 #define USE_OPENSSL_RANDPOLL 1

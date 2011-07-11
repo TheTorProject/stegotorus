@@ -1,40 +1,36 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
    See LICENSE for other credits and copying information
 */
-#include <assert.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-
-#include <unistd.h>
-
-#include <openssl/rand.h>
-#include <event2/buffer.h>
 
 #include "dummy.h"
-#include "../network.h"
-#include "../util.h"
 #include "../protocol.h"
-#include "../network.h"
+#include "../util.h"
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <event2/buffer.h>
 
 static int dummy_send(void *nothing,
-                                struct evbuffer *source, struct evbuffer *dest);
+                      struct evbuffer *source, struct evbuffer *dest);
 static enum recv_ret dummy_recv(void *nothing, struct evbuffer *source,
                                 struct evbuffer *dest);
 static void usage(void);
-static int parse_and_set_options(int n_options, char **options, 
+static int parse_and_set_options(int n_options, char **options,
                                  struct protocol_params_t *params);
 
 static protocol_vtable *vtable=NULL;
 /**
-   This function sets up the protocol and populates 'listner'
+   This function sets up the protocol and populates 'params'
    according to 'options'.
 
    'options' is an array like this:
    {"dummy","socks","127.0.0.1:6666"}
-*/   
+*/
 int
-dummy_init(int n_options, char **options, 
+dummy_init(int n_options, char **options,
            struct protocol_params_t *params)
 {
   if (parse_and_set_options(n_options,options,params) < 0) {
@@ -127,7 +123,7 @@ static enum recv_ret
 dummy_recv(void *nothing,
            struct evbuffer *source, struct evbuffer *dest) {
   (void)nothing;
-  
+
   if (evbuffer_add_buffer(dest,source)<0)
     return RECV_BAD;
   else

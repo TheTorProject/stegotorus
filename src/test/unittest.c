@@ -1,7 +1,6 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
    See LICENSE for other credits and copying information
 */
-#include <stdlib.h>
 
 #include "tinytest.h"
 #include "../crypt.h"

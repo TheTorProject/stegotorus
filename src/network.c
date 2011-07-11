@@ -4,10 +4,10 @@
 
 #define NETWORK_PRIVATE
 #include "network.h"
+
 #include "util.h"
 #include "socks.h"
 #include "protocol.h"
-#include "socks.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -18,10 +18,6 @@
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
 #include <event2/util.h>
-
-#ifdef _WIN32
-#include <WS2tcpip.h>
-#endif
 
 struct listener_t {
   struct evconnlistener *listener;
@@ -63,12 +59,11 @@ listener_new(struct event_base *base,
   }
 
   lsn->proto_params = proto_params;
-
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
                                           flags,
                                           -1,
-                                          lsn->proto_params->listen_address,
-                                          lsn->proto_params->listen_address_len);
+                                          proto_params->listen_address,
+                                          proto_params->listen_address_len);
 
   if (!lsn->listener) {
     log_warn("Failed to create listener!");
@@ -286,11 +281,11 @@ obfuscated_read_cb(struct bufferevent *bev, void *arg)
   r = proto_recv(conn->proto,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other));
-  
+
   if (r == RECV_BAD)
     conn_free(conn);
   else if (r == RECV_SEND_PENDING)
-    proto_send(conn->proto, 
+    proto_send(conn->proto,
                bufferevent_get_input(conn->input),
                bufferevent_get_output(conn->output));
 }
@@ -346,7 +341,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
      client and terminate the connection.
   */
   if (what & BEV_EVENT_ERROR) {
-    if ((conn->mode == LSN_SOCKS_CLIENT) && 
+    if ((conn->mode == LSN_SOCKS_CLIENT) &&
         (conn->socks_state) &&
         (socks_state_get_status(conn->socks_state) == ST_HAVE_ADDR)) {
       log_debug("Connection failed") ;

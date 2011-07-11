@@ -1,20 +1,19 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
    See LICENSE for other credits and copying information
 */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "tinytest.h"
 #include "tinytest_macros.h"
 
-#include <event2/buffer.h>
-
 #define SOCKS_PRIVATE
 #include "../socks.h"
 #include "../crypt.h"
-#include "../util.h"
-#include "../protocols/obfs2.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#include <event2/buffer.h>
+
 
 /**
    This function tests the negotiation phase of the SOCKS5 protocol.

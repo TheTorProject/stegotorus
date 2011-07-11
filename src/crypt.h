@@ -5,6 +5,8 @@
 #ifndef CRYPT_H
 #define CRYPT_H
 
+#include <stddef.h> /* for size_t */
+
 #define SHA256_LENGTH 32
 
 /* Stream cipher state */
@@ -43,6 +45,9 @@ void crypt_free(crypt_t *);
 int random_bytes(uchar *b, size_t n);
 
 #ifdef CRYPT_PRIVATE
+
+#include <openssl/aes.h>
+
 /* ==========
    These definitions are not part of the crypt interface.
    They're exposed here so that the unit tests can use them.

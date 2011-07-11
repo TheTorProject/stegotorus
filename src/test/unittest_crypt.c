@@ -1,22 +1,15 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
    See LICENSE for other credits and copying information
 */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+
 #include "tinytest.h"
 #include "tinytest_macros.h"
 
-#include <openssl/aes.h>
-
+#define CRYPT_PRIVATE
 #include "../crypt.h"
 
-struct crypt_t {
-  AES_KEY key;
-  uchar ivec[AES_BLOCK_SIZE];
-  uchar ecount_buf[AES_BLOCK_SIZE];
-  unsigned int pos;
-};
+#include <stdio.h>
+#include <string.h>
 
 /* Test vectors for sha256 */
 static void
@@ -169,5 +162,3 @@ struct testcase_t crypt_tests[] = {
   T(rng,0),
   END_OF_TESTCASES
 };
-
-

@@ -13,10 +13,6 @@
 #include "util.h"
 #include "protocol.h"
 
-#ifdef _WIN32
-#include <Ws2tcpip.h>
-#endif
-
 #ifndef __GNUC__
 #define __attribute__(x)
 #endif
