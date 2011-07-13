@@ -28,7 +28,7 @@ downcast(struct protocol_t *proto)
 }
 
 static void
-test_proto_option_parsing(void *data)
+test_obfs2_option_parsing(void *data)
 {
   /* Suppress logs for the duration of this function. */
   log_set_method(LOG_METHOD_NULL, NULL);
@@ -77,7 +77,7 @@ test_proto_option_parsing(void *data)
 
 /* Make sure we can successfully set up a protocol state */
 static void
-test_proto_setup(void *data)
+test_obfs2_setup(void *data)
 {
   struct protocol_t *client_proto = NULL;
   struct protocol_t *server_proto = NULL;
@@ -114,7 +114,7 @@ test_proto_setup(void *data)
 }
 
 static void
-test_proto_handshake(void *data)
+test_obfs2_handshake(void *data)
 {
   struct evbuffer *output_buffer = NULL;
   struct evbuffer *dummy_buffer = NULL;
@@ -188,7 +188,7 @@ test_proto_handshake(void *data)
 }
 
 static void
-test_proto_transfer(void *data)
+test_obfs2_transfer(void *data)
 {
   struct evbuffer *output_buffer = NULL;
   struct evbuffer *dummy_buffer = NULL;
@@ -286,7 +286,7 @@ test_proto_transfer(void *data)
    Afterwards we will verify that they both got the correct keys.
    That's right, this unit test is loco . */
 static void
-test_proto_split_handshake(void *data)
+test_obfs2_split_handshake(void *data)
 {
   obfs2_protocol_t *client_state = NULL;
   obfs2_protocol_t *server_state = NULL;
@@ -447,7 +447,7 @@ test_proto_split_handshake(void *data)
   Wrong magic value.
 */
 static void
-test_proto_wrong_handshake_magic(void *data)
+test_obfs2_wrong_handshake_magic(void *data)
 {
   obfs2_protocol_t *client_state = NULL;
   obfs2_protocol_t *server_state = NULL;
@@ -528,7 +528,7 @@ test_proto_wrong_handshake_magic(void *data)
    plength field larger than OBFUSCATE_MAX_PADDING
 */
 static void
-test_proto_wrong_handshake_plength(void *data)
+test_obfs2_wrong_handshake_plength(void *data)
 {
   obfs2_protocol_t *client_state = NULL;
   obfs2_protocol_t *server_state = NULL;
@@ -604,16 +604,16 @@ test_proto_wrong_handshake_plength(void *data)
     evbuffer_free(dummy_buffer);
 }
 
-#define T(name, flags) \
-  { #name, test_proto_##name, (flags), NULL, NULL }
+#define T(name) \
+  { #name, test_obfs2_##name, 0, NULL, NULL }
 
-struct testcase_t protocol_tests[] = {
-  T(option_parsing,0),
-  T(setup, 0),
-  T(handshake, 0),
-  T(transfer, 0),
-  T(split_handshake, 0),
-  T(wrong_handshake_magic, 0),
-  T(wrong_handshake_plength, 0),
+struct testcase_t obfs2_tests[] = {
+  T(option_parsing),
+  T(setup),
+  T(handshake),
+  T(transfer),
+  T(split_handshake),
+  T(wrong_handshake_magic),
+  T(wrong_handshake_plength),
   END_OF_TESTCASES
 };
