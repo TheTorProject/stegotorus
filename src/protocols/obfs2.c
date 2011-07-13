@@ -2,34 +2,28 @@
    See LICENSE for other credits and copying information
 */
 
-#define CRYPT_PROTOCOL_PRIVATE
+#define PROTOCOL_OBFS2_PRIVATE
 #include "obfs2.h"
 
-#include "../protocol.h"
 #include "../util.h"
 
 #include <assert.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <event2/buffer.h>
 
-
-static void obfs2_state_free(void *state);
-static int obfs2_send_initial_message(void *state, struct evbuffer *buf);
-static int obfs2_send(void *state,
-                      struct evbuffer *source, struct evbuffer *dest);
-static enum recv_ret obfs2_recv(void *state, struct evbuffer *source,
-                                struct evbuffer *dest);
-static void *obfs2_state_new(protocol_params_t *params);
-static int obfs2_state_set_shared_secret(void *s,
-                                         const char *secret,
-                                         size_t secretlen);
-static int set_up_vtable(void);
 static void usage(void);
+static int parse_and_set_options(int n_options,
+                                 const char *const *options,
+                                 struct protocol_params_t *params);
 
-static protocol_vtable *vtable=NULL;
+static inline obfs2_protocol_t *
+downcast(struct protocol_t *proto)
+{
+  return (obfs2_protocol_t *)
+    ((char *)proto - offsetof(obfs2_protocol_t, super));
+}
 
 /*
    This function parses 'options' and fills the protocol parameters
@@ -38,31 +32,34 @@ static protocol_vtable *vtable=NULL;
 
    Returns 0 on success, -1 on fail.
 */
-int
-obfs2_init(int n_options, char **options,
-           struct protocol_params_t *params)
+static struct protocol_params_t *
+obfs2_init(int n_options, const char *const *options)
 {
-  if (parse_and_set_options(n_options,options,params) < 0) {
-    usage();
-    return -1;
-  }
+  struct protocol_params_t *params
+    = calloc(1, sizeof(struct protocol_params_t));
+  if (!params)
+    return NULL;
 
-  if (set_up_vtable() < 0)
-    return -1;
+  if (parse_and_set_options(n_options, options, params) < 0) {
+    usage();
+    free(params);
+    return NULL;
+  }
 
   if (initialize_crypto() < 0) {
-    fprintf(stderr, "Can't initialize crypto; failing\n");
-    return -1;
+    log_warn("Can't initialize crypto; failing");
+    free(params);
+    return NULL;
   }
 
-  return 0;
+  return params;
 }
 
 /**
    Helper: Parses 'options' and fills 'params'.
 */
 int
-parse_and_set_options(int n_options, char **options,
+parse_and_set_options(int n_options, const char *const *options,
                       struct protocol_params_t *params)
 {
   int got_dest=0;
@@ -75,7 +72,6 @@ parse_and_set_options(int n_options, char **options,
   }
 
   assert(!strcmp(*options,"obfs2"));
-  params->proto = OBFS2_PROTOCOL;
   options++;
 
   /* Now parse the optional arguments */
@@ -136,6 +132,8 @@ parse_and_set_options(int n_options, char **options,
     }
 
     log_debug("%s(): Parsed obfs2 options nicely!", __func__);
+
+    params->vtable = &obfs2_vtable;
     return 0;
 }
 
@@ -159,28 +157,6 @@ usage(void)
          "\tobfs2 server 127.0.0.1:1026");
 }
 
-/**
-   Helper: Allocates space for the protocol vtable and populates it's
-   function pointers.
-   Returns 0 on success, -1 on fail.
-*/
-static int
-set_up_vtable(void)
-{
-  /* XXX memleak. */
-  vtable = calloc(1, sizeof(protocol_vtable));
-  if (!vtable)
-    return -1;
-
-  vtable->destroy = obfs2_state_free;
-  vtable->create = obfs2_new;
-  vtable->handshake = obfs2_send_initial_message;
-  vtable->send = obfs2_send;
-  vtable->recv = obfs2_recv;
-
-  return 0;
-}
-
 /** Return true iff the OBFUSCATE_SEED_LENGTH-byte seed in 'seed' is nonzero */
 static int
 seed_nonzero(const uchar *seed)
@@ -195,7 +171,7 @@ seed_nonzero(const uchar *seed)
 static crypt_t *
 derive_key(void *s, const char *keytype)
 {
-  obfs2_state_t *state = s;
+  obfs2_protocol_t *state = s;
   crypt_t *cryptstate;
   uchar buf[SHA256_LENGTH];
   digest_t *c = digest_new();
@@ -235,7 +211,7 @@ static crypt_t *
 derive_padding_key(void *s, const uchar *seed,
                    const char *keytype)
 {
-  obfs2_state_t *state = s;
+  obfs2_protocol_t *state = s;
 
   crypt_t *cryptstate;
   uchar buf[SHA256_LENGTH];
@@ -274,95 +250,84 @@ derive_padding_key(void *s, const uchar *seed,
    to create and return a protocol state according to the protocol
    parameters 'params'.
 */
-void *
-obfs2_new(struct protocol_t *proto_struct,
-          protocol_params_t *params)
+static struct protocol_t *
+obfs2_create(protocol_params_t *params)
 {
-  assert(vtable);
-  proto_struct->vtable = vtable;
-
-  return obfs2_state_new(params);
-}
-
-/**
-   Returns an obfs2 state according to the protocol parameters
-   'params'. If something goes wrong it returns NULL.
- */
-static void *
-obfs2_state_new(protocol_params_t *params)
-{
-  obfs2_state_t *state = calloc(1, sizeof(obfs2_state_t));
+  obfs2_protocol_t *proto = calloc(1, sizeof(obfs2_protocol_t));
   uchar *seed;
   const char *send_pad_type;
 
-  if (!state)
+  if (!proto)
     return NULL;
-  state->state = ST_WAIT_FOR_KEY;
-  state->we_are_initiator = params->is_initiator;
-  if (state->we_are_initiator) {
+  proto->state = ST_WAIT_FOR_KEY;
+  proto->we_are_initiator = params->is_initiator;
+  if (proto->we_are_initiator) {
     send_pad_type = INITIATOR_PAD_TYPE;
-    seed = state->initiator_seed;
+    seed = proto->initiator_seed;
   } else {
     send_pad_type = RESPONDER_PAD_TYPE;
-    seed = state->responder_seed;
+    seed = proto->responder_seed;
   }
 
   /* Generate our seed */
   if (random_bytes(seed, OBFUSCATE_SEED_LENGTH) < 0) {
-    free(state);
+    free(proto);
     return NULL;
   }
 
-  if (params->shared_secret)
-    if (obfs2_state_set_shared_secret(state,
-                                      params->shared_secret,
-                                      params->shared_secret_len)<0)
+  if (params->shared_secret) {
+    /* ASN we must say in spec that we hash command line shared secret. */
+    digest_t *c = digest_new();
+    if (!c) {
+      free(proto);
       return NULL;
+    }
+    digest_update(c, (uchar*)params->shared_secret, params->shared_secret_len);
+    digest_getdigest(c, proto->secret_seed, SHARED_SECRET_LENGTH);
+    digest_free(c);
+  }
 
   /* Derive the key for what we're sending */
-  state->send_padding_crypto = derive_padding_key(state, seed, send_pad_type);
-  if (state->send_padding_crypto == NULL) {
-    free(state);
+  proto->send_padding_crypto = derive_padding_key(proto, seed, send_pad_type);
+  if (proto->send_padding_crypto == NULL) {
+    free(proto);
     return NULL;
   }
 
-  return state;
+  proto->super.vtable = &obfs2_vtable;
+  return &proto->super;
 }
 
 /**
-    Sets the shared 'secret' to be used, on the protocol state 's'.
+    Frees obfs2 state 's'
 */
-static int
-obfs2_state_set_shared_secret(void *s, const char *secret,
-                              size_t secretlen)
+static void
+obfs2_destroy(struct protocol_t *s)
 {
-  assert(secret);
-  assert(secretlen);
-
-  uchar buf[SHARED_SECRET_LENGTH];
-  obfs2_state_t *state = s;
-
-  /* ASN we must say in spec that we hash command line shared secret. */
-  digest_t *c = digest_new();
-  digest_update(c, (uchar*)secret, secretlen);
-  digest_getdigest(c, buf, sizeof(buf));
-
-  memcpy(state->secret_seed, buf, SHARED_SECRET_LENGTH);
-
-  memset(buf,0,SHARED_SECRET_LENGTH);
-  digest_free(c);
-
-  return 0;
+  obfs2_protocol_t *state = downcast(s);
+  if (state->send_crypto)
+    crypt_free(state->send_crypto);
+  if (state->send_padding_crypto)
+    crypt_free(state->send_padding_crypto);
+  if (state->recv_crypto)
+    crypt_free(state->recv_crypto);
+  if (state->recv_padding_crypto)
+    crypt_free(state->recv_padding_crypto);
+  if (state->pending_data_to_send)
+    evbuffer_free(state->pending_data_to_send);
+  memset(state, 0x0a, sizeof(obfs2_protocol_t));
+  free(state);
 }
+
 
 /**
    Write the initial protocol setup and padding message for state 's' to
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
  */
 static int
-obfs2_send_initial_message(void *s, struct evbuffer *buf)
+obfs2_handshake(struct protocol_t *s, struct evbuffer *buf)
 {
-  obfs2_state_t *state = s;
+  obfs2_protocol_t *state = downcast(s);
 
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE), plength, send_plength;
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
@@ -426,10 +391,10 @@ crypt_and_transmit(crypt_t *crypto,
    using the state in 'state'.  Returns 0 on success, -1 on failure.
  */
 static int
-obfs2_send(void *s,
+obfs2_send(struct protocol_t *s,
           struct evbuffer *source, struct evbuffer *dest)
 {
-  obfs2_state_t *state = s;
+  obfs2_protocol_t *state = downcast(s);
 
   if (state->send_crypto) {
     /* First of all, send any data that we've been waiting to send. */
@@ -460,7 +425,7 @@ obfs2_send(void *s,
 static int
 init_crypto(void *s)
 {
-  obfs2_state_t *state = s;
+  obfs2_protocol_t *state = s;
 
   const char *send_keytype;
   const char *recv_keytype;
@@ -503,10 +468,10 @@ init_crypto(void *s)
  *  our callers that they must call obfs2_send() immediately.
  */
 static enum recv_ret
-obfs2_recv(void *s, struct evbuffer *source,
+obfs2_recv(struct protocol_t *s, struct evbuffer *source,
            struct evbuffer *dest)
 {
-  obfs2_state_t *state = s;
+  obfs2_protocol_t *state = downcast(s);
   enum recv_ret r=0;
 
   if (state->state == ST_WAIT_FOR_KEY) {
@@ -587,23 +552,4 @@ obfs2_recv(void *s, struct evbuffer *source,
   return r;
 }
 
-/**
-    Frees obfs2 state 's'
-*/
-static void
-obfs2_state_free(void *s)
-{
-  obfs2_state_t *state = s;
-  if (state->send_crypto)
-    crypt_free(state->send_crypto);
-  if (state->send_padding_crypto)
-    crypt_free(state->send_padding_crypto);
-  if (state->recv_crypto)
-    crypt_free(state->recv_crypto);
-  if (state->recv_padding_crypto)
-    crypt_free(state->recv_padding_crypto);
-  if (state->pending_data_to_send)
-    evbuffer_free(state->pending_data_to_send);
-  memset(state, 0x0a, sizeof(obfs2_state_t));
-  free(state);
-}
+DEFINE_PROTOCOL_VTABLE(obfs2);

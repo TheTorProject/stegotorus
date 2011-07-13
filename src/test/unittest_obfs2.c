@@ -5,12 +5,11 @@
 #include "tinytest.h"
 #include "tinytest_macros.h"
 
-#define CRYPT_PROTOCOL_PRIVATE
+#define PROTOCOL_OBFS2_PRIVATE
 #define CRYPT_PRIVATE
 #include "../protocols/obfs2.h"
 #include "../crypt.h"
 #include "../util.h"
-#include "../protocol.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,86 +17,60 @@
 
 #include <event2/buffer.h>
 
+#define ALEN(x) (sizeof x/sizeof x[0])
+#define OPTV(name) static const char *const name[]
+
+static inline obfs2_protocol_t *
+downcast(struct protocol_t *proto)
+{
+  return (obfs2_protocol_t *)
+    ((char *)proto - offsetof(obfs2_protocol_t, super));
+}
 
 static void
 test_proto_option_parsing(void *data)
 {
-  protocol_params_t *proto_params = calloc(1, sizeof(protocol_params_t));
-  char *options[] = {"obfs2", "--shared-secret=a", "socks", "127.0.0.1:0"};
-  int n_options = 4;
-
   /* Suppress logs for the duration of this function. */
   log_set_method(LOG_METHOD_NULL, NULL);
 
-  tt_assert(set_up_protocol(n_options, options,
-                            proto_params) == 0);
+  /** good option list */
+  OPTV(options1) = {"obfs2", "--shared-secret=a", "socks", "127.0.0.1:0"};
+  tt_assert(proto_params_init(ALEN(options1), options1) != NULL);
 
   /** two --dest. */
-  char *options2[] = {"obfs2", "--dest=127.0.0.1:5555", "--dest=a",
-                      "server", "127.0.0.1:5552"};
-  n_options = 5;
-
-  tt_assert(set_up_protocol(n_options, options2,
-                            proto_params) == -1);
+  OPTV(options2) = {"obfs2", "--dest=127.0.0.1:5555", "--dest=a",
+                    "server", "127.0.0.1:5552"};
+  tt_assert(proto_params_init(ALEN(options2), options2) == NULL);
 
   /** unknown arg */
-  char *options3[] = {"obfs2", "--gabura=a",
-                      "server", "127.0.0.1:5552"};
-  n_options = 4;
-
-  tt_assert(set_up_protocol(n_options, options3,
-                            proto_params) == -1);
+  OPTV(options3) = {"obfs2", "--gabura=a", "server", "127.0.0.1:5552"};
+  tt_assert(proto_params_init(ALEN(options3), options3) == NULL)
 
   /** too many args */
-  char *options4[] = {"obfs2", "1", "2", "3", "4", "5" };
-  n_options = 6;
-
-  tt_assert(set_up_protocol(n_options, options4,
-                            proto_params) == -1);
+  OPTV(options4) = {"obfs2", "1", "2", "3", "4", "5" };
+  tt_assert(proto_params_init(ALEN(options4), options4) == NULL)
 
   /** wrong mode  */
-  char *options5[] = {"obfs2", "--dest=1:1",
-                      "gladiator", "127.0.0.1:5552"};
-  n_options = 4;
+  OPTV(options5) = {"obfs2", "--dest=1:1", "gladiator", "127.0.0.1:5552"};
+  tt_assert(proto_params_init(ALEN(options5), options5) == NULL)
 
-  tt_assert(set_up_protocol(n_options, options5,
-                            proto_params) == -1);
+  /** bad listen addr.  */
+  OPTV(options6) = {"obfs2", "--dest=1:1", "server", "127.0.0.1:a"};
+  tt_assert(proto_params_init(ALEN(options6), options6) == NULL)
 
-  /** stupid listen addr.  */
-  char *options6[] = {"obfs2", "--dest=1:1",
-                      "server", "127.0.0.1:a"};
-  n_options = 4;
-
-  tt_assert(set_up_protocol(n_options, options6,
-                            proto_params) == -1);
-
-  /** stupid dest addr.  */
-  char *options7[] = {"obfs2", "--dest=1:b",
-                      "server", "127.0.0.1:1"};
-  n_options = 4;
-
-  tt_assert(set_up_protocol(n_options, options7,
-                            proto_params) == -1);
+  /** bad dest addr.  */
+  OPTV(options7) = {"obfs2", "--dest=1:b", "server", "127.0.0.1:1"};
+  tt_assert(proto_params_init(ALEN(options7), options7) == NULL)
 
   /** socks with dest.  */
-  char *options8[] = {"obfs2", "--dest=1:2",
-                      "socks", "127.0.0.1:1"};
-  n_options = 4;
-
-  tt_assert(set_up_protocol(n_options, options8,
-                            proto_params) == -1);
+  OPTV(options8) = {"obfs2", "--dest=1:2", "socks", "127.0.0.1:1"};
+  tt_assert(proto_params_init(ALEN(options8), options8) == NULL)
 
   /** socks with dest.  */
-  char *options9[] = {"obfs2", "--shared-secret=a",
-                      "server", "127.0.0.1:1"};
-  n_options = 4;
-
-  tt_assert(set_up_protocol(n_options, options9,
-                            proto_params) == -1);
+  OPTV(options9) = {"obfs2", "--shared-secret=a", "server", "127.0.0.1:1"};
+  tt_assert(proto_params_init(ALEN(options9), options9) == NULL)
 
  end:
-  if (proto_params)
-    free(proto_params);
   /* Unsuspend logging */
   log_set_method(LOG_METHOD_STDOUT, NULL);
 }
@@ -108,36 +81,36 @@ test_proto_setup(void *data)
 {
   struct protocol_t *client_proto = NULL;
   struct protocol_t *server_proto = NULL;
+  struct protocol_params_t *proto_params_client = NULL;
+  struct protocol_params_t *proto_params_server = NULL;
 
-  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
-                            "socks", "127.0.0.1:1800"};
-  int n_options_client = 4;
+  OPTV(options_client) = {"obfs2", "--shared-secret=hahaha",
+                          "socks", "127.0.0.1:1800"};
+  proto_params_client = proto_params_init(ALEN(options_client), options_client);
+  tt_assert(proto_params_client);
 
-  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
-                            "--dest=127.0.0.1:1500",
-                           "server", "127.0.0.1:1800"};
-  int n_options_server = 5;
+  OPTV(options_server) = {"obfs2", "--shared-secret=hahaha",
+                          "--dest=127.0.0.1:1500",
+                          "server", "127.0.0.1:1800"};
+  proto_params_server = proto_params_init(ALEN(options_server), options_server);
+  tt_assert(proto_params_server);
 
-  tt_assert(set_up_protocol(n_options_client, options_client,
-                            proto_params_client) >= 0);
-  tt_assert(set_up_protocol(n_options_server, options_server,
-                            proto_params_serv) >= 0);
-
-  client_proto = proto_new(proto_params_serv);
-  server_proto = proto_new(proto_params_client);
-
+  client_proto = proto_create(proto_params_client);
   tt_assert(client_proto);
-  tt_assert(server_proto);
-  tt_assert(client_proto->state);
-  tt_assert(server_proto->state);
 
- end:
+  server_proto = proto_create(proto_params_server);
+  tt_assert(server_proto);
+
+ end:;
   if (client_proto)
-    proto_destroy(client_proto);
+      proto_destroy(client_proto);
   if (server_proto)
-    proto_destroy(server_proto);
+      proto_destroy(server_proto);
+
+  if (proto_params_client)
+    proto_params_free(proto_params_client);
+  if (proto_params_server)
+    proto_params_free(proto_params_server);
 }
 
 static void
@@ -150,33 +123,28 @@ test_proto_handshake(void *data)
 
   struct protocol_t *client_proto = NULL;
   struct protocol_t *server_proto = NULL;
+  struct protocol_params_t *proto_params_client = NULL;
+  struct protocol_params_t *proto_params_server = NULL;
 
-  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
-                            "socks", "127.0.0.1:1800"};
-  int n_options_client = 4;
+  OPTV(options_client) = {"obfs2", "--shared-secret=hahaha",
+                          "socks", "127.0.0.1:1800"};
+  proto_params_client = proto_params_init(ALEN(options_client), options_client);
+  tt_assert(proto_params_client);
 
-  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
-                            "--dest=127.0.0.1:1500",
-                            "server", "127.0.0.1:1800"};
-  int n_options_server = 5;
+  OPTV(options_server) = {"obfs2", "--shared-secret=hahaha",
+                          "--dest=127.0.0.1:1500",
+                          "server", "127.0.0.1:1800"};
+  proto_params_server = proto_params_init(ALEN(options_server), options_server);
+  tt_assert(proto_params_server);
 
-  tt_assert(set_up_protocol(n_options_client, options_client,
-                            proto_params_client) >= 0);
-  tt_assert(set_up_protocol(n_options_server, options_server,
-                            proto_params_serv) >= 0);
-
-  client_proto = proto_new(proto_params_client);
-  server_proto = proto_new(proto_params_serv);
-
+  client_proto = proto_create(proto_params_client);
   tt_assert(client_proto);
-  tt_assert(server_proto);
-  tt_assert(client_proto->state);
-  tt_assert(server_proto->state);
 
-  obfs2_state_t *client_state = client_proto->state;
-  obfs2_state_t *server_state = server_proto->state;
+  server_proto = proto_create(proto_params_server);
+  tt_assert(server_proto);
+
+  obfs2_protocol_t *client_state = downcast(client_proto);
+  obfs2_protocol_t *server_state = downcast(server_proto);
 
   /* We create a client handshake message and pass it to output_buffer */
   tt_int_op(0, <=, proto_handshake(client_proto, output_buffer));
@@ -209,9 +177,9 @@ test_proto_handshake(void *data)
       proto_destroy(server_proto);
 
   if (proto_params_client)
-    free(proto_params_client);
-  if (proto_params_serv)
-    free(proto_params_serv);
+    proto_params_free(proto_params_client);
+  if (proto_params_server)
+    proto_params_free(proto_params_server);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -229,30 +197,25 @@ test_proto_transfer(void *data)
 
   struct protocol_t *client_proto = NULL;
   struct protocol_t *server_proto = NULL;
+  struct protocol_params_t *proto_params_client = NULL;
+  struct protocol_params_t *proto_params_server = NULL;
 
-  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
-                            "socks", "127.0.0.1:1800"};
-  int n_options_client = 4;
+  OPTV(options_client) = {"obfs2", "--shared-secret=hahaha",
+                          "socks", "127.0.0.1:1800"};
+  proto_params_client = proto_params_init(ALEN(options_client), options_client);
+  tt_assert(proto_params_client);
 
-  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
-                            "--dest=127.0.0.1:1500",
-                            "server", "127.0.0.1:1800"};
-  int n_options_server = 5;
+  OPTV(options_server) = {"obfs2", "--shared-secret=hahaha",
+                          "--dest=127.0.0.1:1500",
+                          "server", "127.0.0.1:1800"};
+  proto_params_server = proto_params_init(ALEN(options_server), options_server);
+  tt_assert(proto_params_server);
 
-  tt_assert(set_up_protocol(n_options_client, options_client,
-                            proto_params_client) >= 0);
-  tt_assert(set_up_protocol(n_options_server, options_server,
-                            proto_params_serv) >= 0);
-
-  client_proto = proto_new(proto_params_client);
-  server_proto = proto_new(proto_params_serv);
-
+  client_proto = proto_create(proto_params_client);
   tt_assert(client_proto);
+
+  server_proto = proto_create(proto_params_server);
   tt_assert(server_proto);
-  tt_assert(client_proto->state);
-  tt_assert(server_proto->state);
 
   int n;
   struct evbuffer_iovec v[2];
@@ -302,9 +265,9 @@ test_proto_transfer(void *data)
     proto_destroy(server_proto);
 
   if (proto_params_client)
-    free(proto_params_client);
-  if (proto_params_serv)
-    free(proto_params_serv);
+    proto_params_free(proto_params_client);
+  if (proto_params_server)
+    proto_params_free(proto_params_server);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -325,8 +288,8 @@ test_proto_transfer(void *data)
 static void
 test_proto_split_handshake(void *data)
 {
-  obfs2_state_t *client_state = NULL;
-  obfs2_state_t *server_state = NULL;
+  obfs2_protocol_t *client_state = NULL;
+  obfs2_protocol_t *server_state = NULL;
 
   struct evbuffer *output_buffer = NULL;
   struct evbuffer *dummy_buffer = NULL;
@@ -335,33 +298,28 @@ test_proto_split_handshake(void *data)
 
   struct protocol_t *client_proto = NULL;
   struct protocol_t *server_proto = NULL;
+  struct protocol_params_t *proto_params_client = NULL;
+  struct protocol_params_t *proto_params_server = NULL;
 
-  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
-                            "socks", "127.0.0.1:1800"};
-  int n_options_client = 4;
+  OPTV(options_client) = {"obfs2", "--shared-secret=hahaha",
+                          "socks", "127.0.0.1:1800"};
+  proto_params_client = proto_params_init(ALEN(options_client), options_client);
+  tt_assert(proto_params_client);
 
-  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
-                            "--dest=127.0.0.1:1500",
-                            "server", "127.0.0.1:1800"};
-  int n_options_server = 5;
+  OPTV(options_server) = {"obfs2", "--shared-secret=hahaha",
+                          "--dest=127.0.0.1:1500",
+                          "server", "127.0.0.1:1800"};
+  proto_params_server = proto_params_init(ALEN(options_server), options_server);
+  tt_assert(proto_params_server);
 
-  tt_assert(set_up_protocol(n_options_client, options_client,
-                            proto_params_client) >= 0);
-  tt_assert(set_up_protocol(n_options_server, options_server,
-                            proto_params_serv) >= 0);
-
-  client_proto = proto_new(proto_params_client);
-  server_proto = proto_new(proto_params_serv);
-
+  client_proto = proto_create(proto_params_client);
   tt_assert(client_proto);
-  tt_assert(server_proto);
-  tt_assert(client_proto->state);
-  tt_assert(server_proto->state);
 
-  client_state = client_proto->state;
-  server_state = server_proto->state;
+  server_proto = proto_create(proto_params_server);
+  tt_assert(server_proto);
+
+  client_state = downcast(client_proto);
+  server_state = downcast(server_proto);
 
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);
   uint32_t plength1, plength1_msg1, plength1_msg2, send_plength1;
@@ -474,9 +432,9 @@ test_proto_split_handshake(void *data)
     proto_destroy(server_proto);
 
   if (proto_params_client)
-    free(proto_params_client);
-  if (proto_params_serv)
-    free(proto_params_serv);
+    proto_params_free(proto_params_client);
+  if (proto_params_server)
+    proto_params_free(proto_params_server);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -491,8 +449,8 @@ test_proto_split_handshake(void *data)
 static void
 test_proto_wrong_handshake_magic(void *data)
 {
-  obfs2_state_t *client_state = NULL;
-  obfs2_state_t *server_state = NULL;
+  obfs2_protocol_t *client_state = NULL;
+  obfs2_protocol_t *server_state = NULL;
 
   struct evbuffer *output_buffer = NULL;
   struct evbuffer *dummy_buffer = NULL;
@@ -501,33 +459,28 @@ test_proto_wrong_handshake_magic(void *data)
 
   struct protocol_t *client_proto = NULL;
   struct protocol_t *server_proto = NULL;
+  struct protocol_params_t *proto_params_client = NULL;
+  struct protocol_params_t *proto_params_server = NULL;
 
-  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
-                            "socks", "127.0.0.1:1800"};
-  int n_options_client = 4;
+  OPTV(options_client) = {"obfs2", "--shared-secret=hahaha",
+                          "socks", "127.0.0.1:1800"};
+  proto_params_client = proto_params_init(ALEN(options_client), options_client);
+  tt_assert(proto_params_client);
 
-  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
-                            "--dest=127.0.0.1:1500",
-                            "server", "127.0.0.1:1800"};
-  int n_options_server = 5;
+  OPTV(options_server) = {"obfs2", "--shared-secret=hahaha",
+                          "--dest=127.0.0.1:1500",
+                          "server", "127.0.0.1:1800"};
+  proto_params_server = proto_params_init(ALEN(options_server), options_server);
+  tt_assert(proto_params_server);
 
-  tt_assert(set_up_protocol(n_options_client, options_client,
-                            proto_params_client) >= 0);
-  tt_assert(set_up_protocol(n_options_server, options_server,
-                            proto_params_serv) >= 0);
-
-  client_proto = proto_new(proto_params_client);
-  server_proto = proto_new(proto_params_serv);
-
+  client_proto = proto_create(proto_params_client);
   tt_assert(client_proto);
-  tt_assert(server_proto);
-  tt_assert(client_proto->state);
-  tt_assert(server_proto->state);
 
-  client_state = client_proto->state;
-  server_state = server_proto->state;
+  server_proto = proto_create(proto_params_server);
+  tt_assert(server_proto);
+
+  client_state = downcast(client_proto);
+  server_state = downcast(server_proto);
 
   uint32_t wrong_magic = 0xD15EA5E;
 
@@ -561,9 +514,9 @@ test_proto_wrong_handshake_magic(void *data)
     proto_destroy(server_proto);
 
   if (proto_params_client)
-    free(proto_params_client);
-  if (proto_params_serv)
-    free(proto_params_serv);
+    proto_params_free(proto_params_client);
+  if (proto_params_server)
+    proto_params_free(proto_params_server);
 
   if (output_buffer)
     evbuffer_free(output_buffer);
@@ -577,8 +530,8 @@ test_proto_wrong_handshake_magic(void *data)
 static void
 test_proto_wrong_handshake_plength(void *data)
 {
-  obfs2_state_t *client_state = NULL;
-  obfs2_state_t *server_state = NULL;
+  obfs2_protocol_t *client_state = NULL;
+  obfs2_protocol_t *server_state = NULL;
 
   struct evbuffer *output_buffer = NULL;
   struct evbuffer *dummy_buffer = NULL;
@@ -587,34 +540,28 @@ test_proto_wrong_handshake_plength(void *data)
 
   struct protocol_t *client_proto = NULL;
   struct protocol_t *server_proto = NULL;
+  struct protocol_params_t *proto_params_client = NULL;
+  struct protocol_params_t *proto_params_server = NULL;
 
+  OPTV(options_client) = {"obfs2", "--shared-secret=hahaha",
+                          "socks", "127.0.0.1:1800"};
+  proto_params_client = proto_params_init(ALEN(options_client), options_client);
+  tt_assert(proto_params_client);
 
-  protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
-                            "socks", "127.0.0.1:1800"};
-  int n_options_client = 4;
+  OPTV(options_server) = {"obfs2", "--shared-secret=hahaha",
+                          "--dest=127.0.0.1:1500",
+                          "server", "127.0.0.1:1800"};
+  proto_params_server = proto_params_init(ALEN(options_server), options_server);
+  tt_assert(proto_params_server);
 
-  protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
-                            "--dest=127.0.0.1:1500",
-                            "server", "127.0.0.1:1800"};
-  int n_options_server = 5;
-
-  tt_assert(set_up_protocol(n_options_client, options_client,
-                            proto_params_client) >= 0);
-  tt_assert(set_up_protocol(n_options_server, options_server,
-                            proto_params_serv) >= 0);
-
-  client_proto = proto_new(proto_params_client);
-  server_proto = proto_new(proto_params_serv);
-
+  client_proto = proto_create(proto_params_client);
   tt_assert(client_proto);
-  tt_assert(server_proto);
-  tt_assert(client_proto->state);
-  tt_assert(server_proto->state);
 
-  client_state = client_proto->state;
-  server_state = server_proto->state;
+  server_proto = proto_create(proto_params_server);
+  tt_assert(server_proto);
+
+  client_state = downcast(client_proto);
+  server_state = downcast(server_proto);
 
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8 + 1];
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);
@@ -641,15 +588,15 @@ test_proto_wrong_handshake_plength(void *data)
   tt_assert(server_state->state == ST_WAIT_FOR_KEY);
 
  end:
-  if (client_state)
+  if (client_proto)
     proto_destroy(client_proto);
-  if (server_state)
+  if (server_proto)
     proto_destroy(server_proto);
 
   if (proto_params_client)
-    free(proto_params_client);
-  if (proto_params_serv)
-    free(proto_params_serv);
+    proto_params_free(proto_params_client);
+  if (proto_params_server)
+    proto_params_free(proto_params_server);
 
   if (output_buffer)
     evbuffer_free(output_buffer);

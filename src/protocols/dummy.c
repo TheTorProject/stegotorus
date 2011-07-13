@@ -7,21 +7,15 @@
 #include "../util.h"
 
 #include <assert.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <event2/buffer.h>
 
-static int dummy_send(void *nothing,
-                      struct evbuffer *source, struct evbuffer *dest);
-static enum recv_ret dummy_recv(void *nothing, struct evbuffer *source,
-                                struct evbuffer *dest);
 static void usage(void);
-static int parse_and_set_options(int n_options, char **options,
+static int parse_and_set_options(int n_options,
+                                 const char *const *options,
                                  struct protocol_params_t *params);
-
-static protocol_vtable *vtable=NULL;
 
 /**
    This function populates 'params' according to 'options' and sets up
@@ -30,34 +24,28 @@ static protocol_vtable *vtable=NULL;
    'options' is an array like this:
    {"dummy","socks","127.0.0.1:6666"}
 */
-int
-dummy_init(int n_options, char **options,
-           struct protocol_params_t *params)
+static struct protocol_params_t *
+dummy_init(int n_options, const char *const *options)
 {
-  if (parse_and_set_options(n_options,options,params) < 0) {
+  struct protocol_params_t *params
+    = calloc(1, sizeof(struct protocol_params_t));
+  if (!params)
+    return NULL;
+
+  if (parse_and_set_options(n_options, options, params) < 0) {
+    free(params);
     usage();
-    return -1;
+    return NULL;
   }
 
-  /* XXX memleak. */
-  vtable = calloc(1, sizeof(protocol_vtable));
-  if (!vtable)
-    return -1;
-
-  vtable->destroy = NULL;
-  vtable->create = dummy_new;
-  vtable->handshake = NULL;
-  vtable->send = dummy_send;
-  vtable->recv = dummy_recv;
-
-  return 0;
+  return params;
 }
 
 /**
    Helper: Parses 'options' and fills 'params'.
-*/ 
+*/
 static int
-parse_and_set_options(int n_options, char **options,
+parse_and_set_options(int n_options, const char *const *options,
                       struct protocol_params_t *params)
 {
   const char* defport;
@@ -66,7 +54,6 @@ parse_and_set_options(int n_options, char **options,
     return -1;
 
   assert(!strcmp(options[0],"dummy"));
-  params->proto = DUMMY_PROTOCOL;
 
   if (!strcmp(options[1], "client")) {
     defport = "48988"; /* bf5c */
@@ -87,7 +74,8 @@ parse_and_set_options(int n_options, char **options,
     return -1;
   }
 
-  return 1;
+  params->vtable = &dummy_vtable;
+  return 0;
 }
 
 /**
@@ -96,31 +84,34 @@ parse_and_set_options(int n_options, char **options,
 static void
 usage(void)
 {
-  printf("Great... You can't even form a dummy protocol line:\n"
-         "dummy syntax:\n"
-         "\tdummy dummy_opts\n"
-         "\t'dummy_opts':\n"
-         "\t\tmode ~ server|client|socks\n"
-         "\t\tlisten address ~ host:port\n"
-         "Example:\n"
-         "\tobfsproxy dummy socks 127.0.0.1:5000\n");
+  log_warn("Great... You can't even form a dummy protocol line:\n"
+           "dummy syntax:\n"
+           "\tdummy dummy_opts\n"
+           "\t'dummy_opts':\n"
+           "\t\tmode ~ server|client|socks\n"
+           "\t\tlisten address ~ host:port\n"
+           "Example:\n"
+           "\tobfsproxy dummy socks 127.0.0.1:5000");
 }
 
 /*
   This is called everytime we get a connection for the dummy
   protocol.
-
-  It sets up the protocol vtable in 'proto_struct'.
 */
-void *
-dummy_new(struct protocol_t *proto_struct,
-          struct protocol_params_t *params)
-{
-  proto_struct->vtable = vtable;
 
-  /* Dodging state check.
-     This is terrible I know.*/
-  return (void *)666U;
+static struct protocol_t *
+dummy_create(struct protocol_params_t *params)
+{
+  /* Dummy needs no per-connection protocol-specific state. */
+  struct protocol_t *proto = calloc(1, sizeof(struct protocol_t));
+  proto->vtable = &dummy_vtable;
+  return proto;
+}
+
+static void
+dummy_destroy(struct protocol_t *proto)
+{
+  free(proto);
 }
 
 /**
@@ -129,10 +120,16 @@ dummy_new(struct protocol_t *proto_struct,
    The dummy protocol just puts the data of 'source' in 'dest'.
 */
 static int
-dummy_send(void *nothing,
-           struct evbuffer *source, struct evbuffer *dest) {
-  (void)nothing;
+dummy_handshake(struct protocol_t *proto __attribute__((unused)),
+                struct evbuffer *buf __attribute__((unused)))
+{
+  return 0;
+}
 
+static int
+dummy_send(struct protocol_t *proto __attribute__((unused)),
+           struct evbuffer *source, struct evbuffer *dest)
+{
   return evbuffer_add_buffer(dest,source);
 }
 
@@ -142,12 +139,13 @@ dummy_send(void *nothing,
   The dummy protocol just puts the data of 'source' into 'dest'.
 */
 static enum recv_ret
-dummy_recv(void *nothing,
-           struct evbuffer *source, struct evbuffer *dest) {
-  (void)nothing;
-
+dummy_recv(struct protocol_t *proto __attribute__((unused)),
+           struct evbuffer *source, struct evbuffer *dest)
+{
   if (evbuffer_add_buffer(dest,source)<0)
     return RECV_BAD;
   else
     return RECV_GOOD;
 }
+
+DEFINE_PROTOCOL_VTABLE(dummy);

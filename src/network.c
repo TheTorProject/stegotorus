@@ -202,7 +202,7 @@ simple_listener_cb(struct evconnlistener *evcl,
 
   conn->mode = lsn->proto_params->mode;
 
-  conn->proto = proto_new(lsn->proto_params);
+  conn->proto = proto_create(lsn->proto_params);
   if (!conn->proto) {
     log_warn("Creation of protocol object failed! Closing connection.");
     goto err;
