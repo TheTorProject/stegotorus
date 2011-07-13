@@ -44,31 +44,31 @@ test_obfs2_option_parsing(void *data)
 
   /** unknown arg */
   OPTV(options3) = {"obfs2", "--gabura=a", "server", "127.0.0.1:5552"};
-  tt_assert(proto_params_init(ALEN(options3), options3) == NULL)
+  tt_assert(proto_params_init(ALEN(options3), options3) == NULL);
 
   /** too many args */
   OPTV(options4) = {"obfs2", "1", "2", "3", "4", "5" };
-  tt_assert(proto_params_init(ALEN(options4), options4) == NULL)
+  tt_assert(proto_params_init(ALEN(options4), options4) == NULL);
 
   /** wrong mode  */
   OPTV(options5) = {"obfs2", "--dest=1:1", "gladiator", "127.0.0.1:5552"};
-  tt_assert(proto_params_init(ALEN(options5), options5) == NULL)
+  tt_assert(proto_params_init(ALEN(options5), options5) == NULL);
 
   /** bad listen addr.  */
   OPTV(options6) = {"obfs2", "--dest=1:1", "server", "127.0.0.1:a"};
-  tt_assert(proto_params_init(ALEN(options6), options6) == NULL)
+  tt_assert(proto_params_init(ALEN(options6), options6) == NULL);
 
   /** bad dest addr.  */
   OPTV(options7) = {"obfs2", "--dest=1:b", "server", "127.0.0.1:1"};
-  tt_assert(proto_params_init(ALEN(options7), options7) == NULL)
+  tt_assert(proto_params_init(ALEN(options7), options7) == NULL);
 
   /** socks with dest.  */
   OPTV(options8) = {"obfs2", "--dest=1:2", "socks", "127.0.0.1:1"};
-  tt_assert(proto_params_init(ALEN(options8), options8) == NULL)
+  tt_assert(proto_params_init(ALEN(options8), options8) == NULL);
 
   /** socks with dest.  */
   OPTV(options9) = {"obfs2", "--shared-secret=a", "server", "127.0.0.1:1"};
-  tt_assert(proto_params_init(ALEN(options9), options9) == NULL)
+  tt_assert(proto_params_init(ALEN(options9), options9) == NULL);
 
  end:
   /* Unsuspend logging */

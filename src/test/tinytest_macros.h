@@ -99,11 +99,11 @@
 
 /* Assert b, but do not stop the test if b fails.  Log msg on failure. */
 #define tt_want_msg(b, msg)			\
-	_tt_want(b, msg, );
+	_tt_want(b, msg, )
 
 /* Assert b and stop the test if b fails.  Log msg on failure. */
 #define tt_assert_msg(b, msg)			\
-	_tt_want(b, msg, TT_EXIT_TEST_FUNCTION);
+	_tt_want(b, msg, TT_EXIT_TEST_FUNCTION)
 
 /* Assert b, but do not stop the test if b fails. */
 #define tt_want(b)   tt_want_msg( (b), "want("#b")")
