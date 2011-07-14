@@ -152,7 +152,7 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
 
 /**
    Insert 'new_node' after 'node' in the doubly linked list 'list'.
-*/ 
+*/
 static void
 dll_insert_after(dll_t *list, dll_node_t *node, dll_node_t *new_node)
 {
@@ -191,6 +191,13 @@ dll_insert_before(dll_t *list, dll_node_t *node, dll_node_t *new_node)
     node->prev->next = new_node;
   node->prev = new_node;
 }
+
+/** Initialize <b>list</b> as an empty list. */
+void
+dll_init(dll_t *list)
+{
+  list->head = list->tail = NULL;
+}
   
 /**
    Insert 'node' in the beginning of the doubly linked 'list'.
@@ -218,25 +225,16 @@ dll_insert_beginning(dll_t *list, dll_node_t *node)
     Returns 1 on success, -1 on fail.
 */
 int
-dll_append(dll_t *list, void *data)
+dll_append(dll_t *list, dll_node_t *node)
 {
-  assert(data);
+  assert(list);
+  assert(node);
 
-  if (!list)
-    return -1;
-
-  dll_node_t *node;
-  
-  node = calloc(1, sizeof(dll_node_t));
-  if (!node)
-    return -1;
-  node->data = data;
-  
   if (!list->tail)
     dll_insert_beginning(list, node);
   else
     dll_insert_after(list, list->tail, node);
-      
+
   return 1;
 }
 
@@ -260,32 +258,6 @@ dll_remove(dll_t *list, dll_node_t *node)
     list->tail = node->prev;
   else
     node->next->prev = node->prev;
-
-  free(node);
-}
-
-/**
-   Removes node carrying 'data' from the doubly linked list 'list'.
-   It frees the list node, but leaves 'data' intact.
-*/
-void
-dll_remove_with_data(dll_t *list, void *data)
-{
-  assert(data);
-  
-  if (!list)
-    return;
-
-  dll_node_t *node = list->head;
-  while (node) {
-    if (node->data == data) {
-      dll_remove(list, node);
-      return;
-    } else {
-      node = node->next;
-    }
-  }
-  assert(0); /*too brutal?*/
 }
 
 /************************ Logging Subsystem *************************/

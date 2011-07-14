@@ -52,11 +52,19 @@ int obfs_snprintf(char *str, size_t size,
 
 /***** Doubly Linked List stuff. *****/
 
+#define OFFSETOF(container_type, element) \
+  (((char*)&((container_type*)0)->element) - ((char*) ((container_type*)0)))
+
+#define UPCAST(container_type, element, ptr) \
+  (container_type*) (                                                   \
+         ((char*)ptr) - OFFSETOF(container_type, element)   \
+                    )
+
+
 /** A doubly linked list node.
     [algorithms ripped off Wikipedia (Doubly_linked_list) ] */
 typedef struct dll_node_t {
   struct dll_node_t *next, *prev;
-  void *data;
 } dll_node_t;
 
 /** A doubly linked list. */
@@ -65,9 +73,10 @@ typedef struct dll_t {
   struct dll_node_t *tail;
 } dll_t;
 
-int dll_append(dll_t *list, void *data);
+void dll_init(dll_t *list);
+int dll_append(dll_t *list, dll_node_t *node);
 void dll_remove(dll_t *list, dll_node_t *node);
-void dll_remove_with_data(dll_t *list, void *data);
+#define DLL_INIT() { NULL, NULL }
 
 /***** Logging subsystem stuff. *****/
 

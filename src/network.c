@@ -21,13 +21,17 @@
 #include <WS2tcpip.h>
 #endif
 
+/** Doubly linked list holding all our listeners. */
+static dll_t listener_list = DLL_INIT();
+
 struct listener_t {
+  dll_node_t dll_node;
   struct evconnlistener *listener;
   protocol_params_t *proto_params;
 };
 
 /** Doubly linked list holding all connections. */
-static dll_t *cl=NULL;
+static dll_t conn_list = DLL_INIT();
 /** Active connection counter */
 static int n_connections=0;
 
@@ -67,8 +71,6 @@ start_shutdown(int barbaric)
     shutting_down=1;
 
   if (!n_connections) {
-    if (cl)
-      free(cl);
     finish_shutdown();
     return;
   }
@@ -87,17 +89,13 @@ static void
 close_all_connections(void)
 {
   /** Traverse the dll and close all connections */
-  dll_node_t *cl_node = cl->head;
-  while (cl_node) {
-    conn_free(cl_node->data);
+  while (conn_list.head) {
+    conn_t *conn = UPCAST(conn_t, dll_node, conn_list.head);
+    conn_free(conn); /* removes it */
 
-    if (cl) { /* last conn_free() wipes the cl. */
-      cl_node = cl->head; /* move to next connection */
-    } else {
-      assert(!n_connections);
-      return; /* connections are now all closed. */  
-    }
-  }    
+    return; /* connections are now all closed. */
+  }
+  assert(!n_connections);
 }
   
 /**
@@ -121,14 +119,8 @@ listener_new(struct event_base *base,
   }
 
   /** If we don't have a connection dll, create one now. */
-  if (!cl) {
-    cl = calloc(1, sizeof(dll_t));
-    if (!cl)
-      return NULL;
-  }
-
   lsn->proto_params = proto_params;
-  
+
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
                                           flags,
                                           -1,
@@ -141,6 +133,8 @@ listener_new(struct event_base *base,
     return NULL;
   }
 
+  dll_append(&listener_list, &lsn->dll_node);
+
   return lsn;
 }
 
@@ -151,8 +145,33 @@ listener_free(listener_t *lsn)
     evconnlistener_free(lsn->listener);
   if (lsn->proto_params)
     proto_params_free(lsn->proto_params);
+
+  dll_remove(&listener_list, &lsn->dll_node);
+
   memset(lsn, 0xb0, sizeof(listener_t));
   free(lsn);
+}
+
+/**
+   Frees all active listeners.
+*/
+void
+free_all_listeners(void)
+{
+  static int called_already=0;
+
+  if (called_already)
+    return;
+
+  log_info("Closing all listeners.");
+
+  /* Iterate listener doubly linked list and free them all. */
+  while (listener_list.head) {
+    listener_t *listener = UPCAST(listener_t, dll_node, listener_list.head);
+    listener_free(listener);
+  }
+
+  called_already++;
 }
 
 static void
@@ -239,7 +258,7 @@ simple_listener_cb(struct evconnlistener *evcl,
   }
 
   /* add conn to the linked list of connections */
-  if (dll_append(cl, conn)<0)
+  if (dll_append(&conn_list, &conn->dll_node)<0)
     goto err;
   n_connections++;
 
@@ -267,7 +286,7 @@ conn_free(conn_t *conn)
     bufferevent_free(conn->output);
 
   /* remove conn from the linked list of connections */
-  dll_remove_with_data(cl, conn);
+  dll_remove(&conn_list, &conn->dll_node);
   n_connections--;
 
   memset(conn, 0x99, sizeof(conn_t));
@@ -280,10 +299,6 @@ conn_free(conn_t *conn)
   /** If this was the last connection AND we are shutting down,
       finish shutdown. */
   if (!n_connections && shutting_down) {
-    if (cl) { /* free connection dll */ 
-      free(cl);
-      cl = NULL;
-    }
     finish_shutdown();
   }
 }

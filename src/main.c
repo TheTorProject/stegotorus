@@ -35,9 +35,6 @@ extern int n_supported_protocols;
 
 static struct event_base *the_event_base=NULL;
 
-/** Doubly linked list holding all our listeners. */
-static dll_t *ll=NULL;
-
 /**
    Prints the obfsproxy usage instructions then exits.
 */
@@ -58,32 +55,6 @@ usage(void)
           "--no-log ~ disable logging\n");
 
   exit(1);
-}
-
-/**
-   Frees all active listeners.
-*/
-static void
-free_all_listeners(void)
-{
-  static int called_already=0;
-
-  if (called_already)
-    return;
-  if (!ll)
-    return;
-
-  log_info("Closing all listeners.");
-
-  /* Iterate listener doubly linked list and free them all. */ 
-  dll_node_t *ll_node = ll->head;
-  while (ll_node) {
-    listener_free(ll_node->data);
-    dll_remove(ll, ll_node);
-    ll_node = ll->head;
-  }
-
-  called_already++;
 }
 
 /**
@@ -402,18 +373,9 @@ main(int argc, const char **argv)
 
     if (!temp_listener)
       continue;
-    
+
     log_info("Succesfully created listener %d.", h+1);
 
-    /* If we don't have a listener dll, create one now. */
-    if (!ll) {
-      ll = calloc(1, sizeof(dll_t));
-      if (!ll)
-        return 1;
-    }
-        
-    /* Append our new listener in the listener dll. */
-    dll_append(ll, temp_listener);
     n_listeners++;
   }
 
@@ -432,8 +394,6 @@ main(int argc, const char **argv)
     printf("Failed closing logfile!\n");
 
   free_all_listeners(); /* free all listeners in our listener dll */
-  if (ll) /* free listener dll */
-    free(ll);
 
   free(protocol_options);
   free(n_options_array);
