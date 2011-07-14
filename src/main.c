@@ -152,6 +152,13 @@ handle_obfsproxy_args(const char **argv)
   return i;
 }
 
+static void
+die_oom(void)
+{
+  log_warn("Memory allocation failed: %s",strerror(errno));
+  exit(1);
+}
+
 int
 main(int argc, const char **argv)
 {
@@ -201,7 +208,7 @@ main(int argc, const char **argv)
 
   protocols = calloc(sizeof(int), (n_protocols+1));
   if (!protocols)
-    exit(1);
+    die_oom();
   n_alloc = n_protocols+1;
 
   /* Populate protocols and calculate n_protocols. */
@@ -215,7 +222,7 @@ main(int argc, const char **argv)
         n_alloc *= 2;
         realloc_temp = realloc(protocols, sizeof(int)*(n_alloc));
         if (!realloc_temp)
-          exit(1);
+          die_oom();
         protocols = realloc_temp;
       }
     }
@@ -238,10 +245,10 @@ main(int argc, const char **argv)
   */ 
   protocol_options = calloc(sizeof(char**), n_protocols);
   if (!protocol_options)
-    exit(1);
+    die_oom();
   n_options_array = calloc(sizeof(int), n_protocols);
   if (!n_options_array)
-    exit(1);
+    die_oom();
 
   /* Iterate through protocols. */
   for (i=0;i<n_protocols;i++) {
@@ -271,7 +278,7 @@ main(int argc, const char **argv)
     protocol_options[actual_protocols-1] = 
       calloc(sizeof(char*), (n_options));
     if (!protocol_options[actual_protocols-1])
-      exit(1);
+      die_oom();
 
     /* Write the number of options to the correct place in n_options_array[]. */
     n_options_array[actual_protocols-1] = n_options;
