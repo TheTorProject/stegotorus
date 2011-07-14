@@ -66,13 +66,10 @@ parse_and_set_options(int n_options, const char *const *options,
   int got_ss=0;
   const char* defport;
 
-  if ((n_options < 3) || (n_options > 5)) {
-    log_warn("%s(): wrong options number: %d", __func__, n_options);
+  if ((n_options < 2) || (n_options > 4)) {
+    log_warn("obfs2: wrong number of options: %d", n_options);
     return -1;
   }
-
-  assert(!strcmp(*options,"obfs2"));
-  options++;
 
   /* Now parse the optional arguments */
   while (!strncmp(*options,"--",2)) {
@@ -92,7 +89,7 @@ parse_and_set_options(int n_options, const char *const *options,
         params->shared_secret_len = strlen(*options+16);
         got_ss=1;
       } else {
-        log_warn("%s(): Unknown argument.", __func__);
+        log_warn("obfs2: Unknown argument.");
         return -1;
       }
       options++;
@@ -108,7 +105,7 @@ parse_and_set_options(int n_options, const char *const *options,
       defport = "11253"; /* 2bf5 */
       params->mode = LSN_SIMPLE_SERVER;
     } else {
-      log_warn("%s(): only client/socks/server modes supported.", __func__);
+      log_warn("obfs2: only client/socks/server modes supported.");
       return -1;
     }
     options++;
@@ -122,16 +119,16 @@ parse_and_set_options(int n_options, const char *const *options,
 
     /* Validate option selection. */
     if (got_dest && (params->mode == LSN_SOCKS_CLIENT)) {
-      log_warn("%s(): You can't be on socks mode and have --dest.", __func__);
+      log_warn("obfs2: You can't be on socks mode and have --dest.");
       return -1;
     }
 
     if (!got_dest && (params->mode != LSN_SOCKS_CLIENT)) {
-      log_warn("%s(): client/server mode needs --dest.", __func__);
+      log_warn("obfs2: client/server mode needs --dest.");
       return -1;
     }
 
-    log_debug("%s(): Parsed obfs2 options nicely!", __func__);
+    log_debug("obfs2: Parsed options nicely!");
 
     params->vtable = &obfs2_vtable;
     return 0;
@@ -371,8 +368,8 @@ obfs2_handshake(struct protocol_t *s, struct evbuffer *buf)
    and write those bytes onto 'dest'.  Return 0 on success, -1 on failure.
  */
 static int
-crypt_and_transmit(crypt_t *crypto,
-                   struct evbuffer *source, struct evbuffer *dest)
+obfs2_crypt_and_transmit(crypt_t *crypto,
+                         struct evbuffer *source, struct evbuffer *dest)
 {
   uchar data[1024];
   while (1) {
@@ -399,12 +396,13 @@ obfs2_send(struct protocol_t *s,
   if (state->send_crypto) {
     /* First of all, send any data that we've been waiting to send. */
     if (state->pending_data_to_send) {
-      crypt_and_transmit(state->send_crypto, state->pending_data_to_send, dest);
+      obfs2_crypt_and_transmit(state->send_crypto, state->pending_data_to_send,
+                               dest);
       evbuffer_free(state->pending_data_to_send);
       state->pending_data_to_send = NULL;
     }
     /* Our crypto is set up; just relay the bytes */
-    return crypt_and_transmit(state->send_crypto, source, dest);
+    return obfs2_crypt_and_transmit(state->send_crypto, source, dest);
   } else {
     /* Our crypto isn't set up yet, we'll have to queue the data */
     if (evbuffer_get_length(source)) {
@@ -544,7 +542,7 @@ obfs2_recv(struct protocol_t *s, struct evbuffer *source,
 
   log_debug("%s(): Processing %d bytes data onto destination buffer",
             __func__, (int) evbuffer_get_length(source));
-  crypt_and_transmit(state->recv_crypto, source, dest);
+  obfs2_crypt_and_transmit(state->recv_crypto, source, dest);
 
   if (r != RECV_SEND_PENDING)
     r = RECV_GOOD;

@@ -50,24 +50,22 @@ parse_and_set_options(int n_options, const char *const *options,
 {
   const char* defport;
 
-  if (n_options != 3)
+  if (n_options != 2)
     return -1;
 
-  assert(!strcmp(options[0],"dummy"));
-
-  if (!strcmp(options[1], "client")) {
+  if (!strcmp(options[0], "client")) {
     defport = "48988"; /* bf5c */
     params->mode = LSN_SIMPLE_CLIENT;
-  } else if (!strcmp(options[1], "socks")) {
+  } else if (!strcmp(options[0], "socks")) {
     defport = "23548"; /* 5bf5 */
     params->mode = LSN_SOCKS_CLIENT;
-  } else if (!strcmp(options[1], "server")) {
+  } else if (!strcmp(options[0], "server")) {
     defport = "11253"; /* 2bf5 */
     params->mode = LSN_SIMPLE_SERVER;
   } else
     return -1;
 
-  if (resolve_address_port(options[2], 1, 1,
+  if (resolve_address_port(options[1], 1, 1,
                            &params->listen_address,
                            &params->listen_address_len, defport) < 0) {
     log_warn("addr");

@@ -36,7 +36,9 @@ proto_params_init(int n_options, const char *const *options)
   size_t i;
   for (i = 0; i < n_supported_protocols; i++)
     if (!strcmp(*options, supported_protocols[i]->name))
-      return supported_protocols[i]->init(n_options, options);
+      /* Remove the first element of 'options' (which is always the
+         protocol name) from the list passed to the init method. */
+      return supported_protocols[i]->init(n_options - 1, options + 1);
 
   return NULL;
 }
