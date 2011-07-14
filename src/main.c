@@ -118,9 +118,9 @@ populate_options(char **options_string,
 }
 
 /**
-   Returns 0 if 'name' is the nmae of a supported protocol, otherwise
-   it returns -1.
-*/ 
+   Return 0 if 'name' is the nmae of a supported protocol, otherwise
+   return -1.
+*/
 static int
 is_supported_protocol(const char *name) {
   int f;

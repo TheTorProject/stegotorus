@@ -97,12 +97,10 @@ close_all_connections(void)
   }
   assert(!n_connections);
 }
-  
 /**
-   This function sets up the protocol defined by 'options' and
-   attempts to bind a new listener for it.
+   This function spawns a listener according to the 'proto_params'.
 
-   Returns the listener on success, NULL on fail. 
+   Returns the listener on success and NULL on fail.
 */
 listener_t *
 listener_new(struct event_base *base,
@@ -138,6 +136,9 @@ listener_new(struct event_base *base,
   return lsn;
 }
 
+/**
+   Deallocates listener_t 'lsn'.
+*/
 void
 listener_free(listener_t *lsn)
 {
@@ -174,9 +175,16 @@ free_all_listeners(void)
   called_already++;
 }
 
+/**
+   This function is called when a new connection is received.
+
+   It initializes the protocol we are using, sets up the necessary
+   callbacks for input/output and does the protocol handshake.
+*/
 static void
 simple_listener_cb(struct evconnlistener *evcl,
-    evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg)
+                   evutil_socket_t fd, struct sockaddr *sourceaddr, 
+                   int socklen, void *arg)
 {
   listener_t *lsn = arg;
   struct event_base *base;
@@ -277,6 +285,9 @@ simple_listener_cb(struct evconnlistener *evcl,
     evutil_closesocket(fd);
 }
 
+/**
+   Deallocates conn_t 'conn'.
+*/
 static void
 conn_free(conn_t *conn)
 {
@@ -307,6 +318,10 @@ conn_free(conn_t *conn)
   }
 }
 
+/**
+   Closes associated connection if the output evbuffer of 'bev' is
+   empty.
+*/ 
 static void
 close_conn_on_flush(struct bufferevent *bev, void *arg)
 {
@@ -316,7 +331,9 @@ close_conn_on_flush(struct bufferevent *bev, void *arg)
     conn_free(conn);
 }
 
-/** This is only used in the input bufferevent of clients. */
+/** 
+    This callback is responsible for handling SOCKS traffic. 
+*/
 static void
 socks_read_cb(struct bufferevent *bev, void *arg)
 {
@@ -371,6 +388,9 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   }
 }
 
+/**
+   This callback is responsible for handling plaintext traffic.
+*/
 static void
 plaintext_read_cb(struct bufferevent *bev, void *arg)
 {
@@ -385,6 +405,11 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
     conn_free(conn);
 }
 
+/**
+   This callback is responsible for handling obfusacted 
+   traffic -- traffic that has already been obfuscated 
+   by our protocol.
+*/
 static void
 obfuscated_read_cb(struct bufferevent *bev, void *arg)
 {
@@ -406,6 +431,10 @@ obfuscated_read_cb(struct bufferevent *bev, void *arg)
                bufferevent_get_output(conn->output));
 }
 
+/**
+   Something broke in our connection or we reached EOF.
+   We prepare the connection to be closed ASAP.
+*/
 static void
 error_or_eof(conn_t *conn,
              struct bufferevent *bev_err, struct bufferevent *bev_flush)
@@ -429,6 +458,9 @@ error_or_eof(conn_t *conn,
   bufferevent_enable(bev_flush, EV_WRITE);
 }
 
+/**
+   We land in here when an event happens on conn->input.
+*/
 static void
 input_event_cb(struct bufferevent *bev, short what, void *arg)
 {
@@ -443,6 +475,9 @@ input_event_cb(struct bufferevent *bev, short what, void *arg)
   /* XXX we don't expect any other events */
 }
 
+/**
+   We land in here when an event happens on conn->output.
+*/
 static void
 output_event_cb(struct bufferevent *bev, short what, void *arg)
 {

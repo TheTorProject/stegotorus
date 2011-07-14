@@ -31,6 +31,17 @@ static void logv(int severity, const char *format, va_list ap);
 
 /************************ Obfsproxy Network Routines *************************/
 
+/**
+   Accepts a string 'address' of the form ADDRESS:PORT and attempts to
+   parse it into 'addr_out' and put it's length into 'addrlen_out'.
+
+   If 'nodns' is set it means that 'address' was an IP address.
+   If 'passive' is set it means that the address is destined for
+   listening and not for connecting.
+
+   If no port was given in 'address', we set 'default_port' as the
+   port.
+*/
 int
 resolve_address_port(const char *address,
                      int nodns, int passive,
@@ -487,6 +498,10 @@ logv(int severity, const char *format, va_list ap)
 }
 
 #ifdef NEED_LOG_WRAPPERS
+/**
+   If our platform doesn't support the log_* macros defined in
+   util.h, we use these functions. 
+*/
 void
 log_info(const char *format, ...)
 {
@@ -517,5 +532,6 @@ log_debug(const char *format, ...)
 
   va_end(ap);
 }
+
 #endif
 

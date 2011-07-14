@@ -26,9 +26,10 @@ static int parse_and_set_options(int n_options, char **options,
                                  struct protocol_params_t *params);
 
 static protocol_vtable *vtable=NULL;
+
 /**
-   This function sets up the protocol and populates 'listner'
-   according to 'options'.
+   This function populates 'params' according to 'options' and sets up
+   the protocol vtable.
 
    'options' is an array like this:
    {"dummy","socks","127.0.0.1:6666"}
@@ -56,6 +57,9 @@ dummy_init(int n_options, char **options,
   return 0;
 }
 
+/**
+   Helper: Parses 'options' and fills 'params'.
+*/ 
 static int
 parse_and_set_options(int n_options, char **options, 
                       struct protocol_params_t *params)
@@ -96,6 +100,9 @@ parse_and_set_options(int n_options, char **options,
   return 0;
 }
 
+/**
+   Prints dummy protocol usage information.
+*/
 static void
 usage(void)
 {
@@ -109,8 +116,12 @@ usage(void)
          "\tobfsproxy dummy socks 127.0.0.1:5000\n");
 }
     
-
-
+/*
+  This is called everytime we get a connection for the dummy
+  protocol.
+  
+  It sets up the protocol vtable in 'proto_struct'.
+*/
 void *
 dummy_new(struct protocol_t *proto_struct,
           struct protocol_params_t *params)
@@ -122,6 +133,11 @@ dummy_new(struct protocol_t *proto_struct,
   return (void *)666U;
 }
 
+/**
+   Responsible for sending data according to the dummy protocol.
+
+   The dummy protocol just puts the data of 'source' in 'dest'.
+*/
 static int
 dummy_send(void *nothing,
            struct evbuffer *source, struct evbuffer *dest) {
@@ -130,6 +146,11 @@ dummy_send(void *nothing,
   return evbuffer_add_buffer(dest,source);
 }
 
+/*
+  Responsible for receiving data according to the dummy protocol.
+
+  The dummy protocol just puts the data of 'source' into 'dest'.
+*/
 static enum recv_ret
 dummy_recv(void *nothing,
            struct evbuffer *source, struct evbuffer *dest) {
