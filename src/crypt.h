@@ -2,10 +2,10 @@
    See LICENSE for other credits and copying information
 */
 
-#ifndef OBFS2_CRYPT_H
-#define OBFS2_CRYPT_H
+#ifndef CRYPT_H
+#define CRYPT_H
 
-#include <sys/types.h>
+#include <stddef.h> /* for size_t */
 
 #define SHA256_LENGTH 32
 
@@ -45,6 +45,9 @@ void crypt_free(crypt_t *);
 int random_bytes(uchar *b, size_t n);
 
 #ifdef CRYPT_PRIVATE
+
+#include <openssl/aes.h>
+
 /* ==========
    These definitions are not part of the crypt interface.
    They're exposed here so that the unit tests can use them.

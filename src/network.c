@@ -4,21 +4,24 @@
 
 #define NETWORK_PRIVATE
 #include "network.h"
+
 #include "util.h"
+#include "main.h"
 #include "socks.h"
 #include "protocol.h"
-#include "socks.h"
-#include "main.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <errno.h>
+#include <event2/buffer.h>
+#include <event2/bufferevent.h>
+#include <event2/listener.h>
 #include <event2/util.h>
 
 #ifdef _WIN32
-#include <WS2tcpip.h>
+#include <ws2tcpip.h>  /* socklen_t */
 #endif
 
 /** Doubly linked list holding all our listeners. */
@@ -98,7 +101,7 @@ close_all_connections(void)
 /**
    This function spawns a listener according to the 'proto_params'.
 
-   Returns the listener on success and NULL on fail.
+   Returns the listener on success, NULL on fail.
 */
 listener_t *
 listener_new(struct event_base *base,
@@ -120,8 +123,8 @@ listener_new(struct event_base *base,
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
                                           flags,
                                           -1,
-                                          &lsn->proto_params->on_address,
-                                          lsn->proto_params->on_address_len);
+                                          proto_params->listen_address,
+                                          proto_params->listen_address_len);
 
   if (!lsn->listener) {
     log_warn("Failed to create listener!");
@@ -261,7 +264,7 @@ simple_listener_cb(struct evconnlistener *evcl,
   if (conn->mode == LSN_SIMPLE_SERVER || conn->mode == LSN_SIMPLE_CLIENT) {
     /* Launch the connect attempt. */
     if (bufferevent_socket_connect(conn->output,
-                                   (struct sockaddr*)&lsn->proto_params->target_address,
+                                   lsn->proto_params->target_address,
                                    lsn->proto_params->target_address_len)<0)
       goto err;
 
@@ -420,11 +423,11 @@ obfuscated_read_cb(struct bufferevent *bev, void *arg)
   r = proto_recv(conn->proto,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other));
-  
+
   if (r == RECV_BAD)
     conn_free(conn);
   else if (r == RECV_SEND_PENDING)
-    proto_send(conn->proto, 
+    proto_send(conn->proto,
                bufferevent_get_input(conn->input),
                bufferevent_get_output(conn->output));
 }
@@ -490,7 +493,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
      client and terminate the connection.
   */
   if (what & BEV_EVENT_ERROR) {
-    if ((conn->mode == LSN_SOCKS_CLIENT) && 
+    if ((conn->mode == LSN_SOCKS_CLIENT) &&
         (conn->socks_state) &&
         (socks_state_get_status(conn->socks_state) == ST_HAVE_ADDR)) {
       log_debug("Connection failed") ;
@@ -540,7 +543,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
          * socks client */
         socks_state_set_address(conn->socks_state, sa);
       }
-      socks_send_reply(conn->socks_state, 
+      socks_send_reply(conn->socks_state,
                        bufferevent_get_output(conn->input), 0);
       /* we sent a socks reply.  We can finally move over to being a regular
          input bufferevent. */

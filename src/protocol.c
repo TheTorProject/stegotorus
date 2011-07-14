@@ -2,18 +2,16 @@
    See LICENSE for other credits and copying information
 */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <assert.h>
-#include <string.h>
-
 #include "protocol.h"
-#include "network.h"
-
 #include "protocols/obfs2.h"
 #include "protocols/dummy.h"
 
-/** 
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+
+
+/**
     All supported protocols should be put in this array.
     It's used by main.c.
 */
@@ -28,7 +26,7 @@ int n_supported_protocols = 2;
    of obfsproxy.
 */
 int
-set_up_protocol(int n_options, char **options, 
+set_up_protocol(int n_options, char **options,
                 struct protocol_params_t *params)
 {
   if (!strcmp(*options,"dummy"))
@@ -42,6 +40,7 @@ set_up_protocol(int n_options, char **options,
 /**
    This function is called once per connection and creates a protocol
    object to be used during the session.
+
    Return a 'protocol_t' if successful, NULL otherwise.
 */
 struct protocol_t *
@@ -79,7 +78,7 @@ proto_send(struct protocol_t *proto, void *source, void *dest) {
   assert(proto);
   if (proto->vtable->send)
     return proto->vtable->send(proto->state, source, dest);
-  else 
+  else
     return -1;
 }
 
@@ -99,7 +98,7 @@ proto_recv(struct protocol_t *proto, void *source, void *dest) {
    This function destroys 'proto'.
    It's called everytime we close a connection.
 */
-void 
+void
 proto_destroy(struct protocol_t *proto) {
   assert(proto);
   assert(proto->state);
@@ -119,6 +118,10 @@ proto_params_free(protocol_params_t *params)
 {
   assert(params);
 
+  if (params->target_address)
+    free(params->target_address);
+  if (params->listen_address)
+    free(params->listen_address);
   if (params->shared_secret)
     free(params->shared_secret);
   free(params);

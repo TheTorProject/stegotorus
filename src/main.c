@@ -13,10 +13,6 @@
 #include "util.h"
 #include "protocol.h"
 
-#ifdef _WIN32
-#include <Ws2tcpip.h>
-#endif
-
 #ifndef __GNUC__
 #define __attribute__(x)
 #endif
@@ -402,8 +398,7 @@ main(int argc, const char **argv)
 
   log_info("Exiting.");
 
-  if (close_obfsproxy_logfile() < 0)
-    printf("Failed closing logfile!\n");
+  close_obfsproxy_logfile();
 
   free_all_listeners(); /* free all listeners in our listener dll */
 

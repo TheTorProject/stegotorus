@@ -1,34 +1,33 @@
-AC_INIT
-AM_INIT_AUTOMAKE(obsproxy, 0.0)
-AM_CONFIG_HEADER(config.h)
+AC_PREREQ([2.61])dnl Possibly earlier will do, but this is what I have
+AC_INIT([obsproxy], [0.0])
+AC_CONFIG_SRCDIR([src/main.c])
 
-AC_CANONICAL_HOST
+AM_INIT_AUTOMAKE([foreign])
 
-AC_PROG_GCC_TRADITIONAL
-AC_PROG_SED
+AC_PROG_CC
 AC_PROG_RANLIB
 PKG_PROG_PKG_CONFIG
 
-AC_CHECK_HEADERS(stdint.h unistd.h fcntl.h)
-
 PKG_CHECK_MODULES([libevent], [libevent >= 2.0])
-PKG_CHECK_MODULES([openssl], [openssl >= 0.9.7])
+# Presently no need for libssl, only libcrypto.
+PKG_CHECK_MODULES([libcrypto], [libcrypto >= 0.9.7])
 
-# We don't need -lssl, only -lcrypto
-openssl_LIBS=`echo "$openssl_LIBS" | $SED -e 's/-lssl//'`
+# We permit the use of openssl 0.9.7, which doesn't have sha256.
+# Check whether a replacement is required.
+save_LIBS="$LIBS"
+LIBS="$libcrypto_LIBS"
+AC_CHECK_FUNC(SHA256_Init, [:], [:])
+LIBS="$save_LIBS"
+AM_CONDITIONAL(NEED_SHA256, [test x$ac_cv_func_SHA256_Init = xno])
 
-AC_CHECK_HEADERS([winsock2.h], HAVE_WINSOCK2_H=yes)
-AM_CONDITIONAL(HAVE_WINSOCK2_H, test "x$HAVE_WINSOCK2_H" = "xyes")
-if test "x$HAVE_WINSOCK2_H" = "xyes"; then
-  LIB_WS32=-lws2_32
-else
-  LIB_WS32=
-fi
-AC_SUBST(LIB_WS32)
-
-AC_CHECK_SIZEOF(size_t)
+# ntohl and a bunch of related functions require a special library on Windows.
+# It is possible that libevent or libcrypto has hooked us up already.
+# This can't be done with AC_SEARCH_LIBS -- see m4/winsock.m4 for gory details.
+save_LIBS="$LIBS"
+LIBS="$libevent_LIBS $libcrypto_LIBS"
+AX_LIB_WINSOCK2
+LIBS="$save_LIBS"
 
 AC_CONFIG_FILES([Makefile])
-
+AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT
-

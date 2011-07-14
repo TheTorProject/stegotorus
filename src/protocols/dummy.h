@@ -5,7 +5,6 @@
 #define DUMMY_H
 
 struct protocol_t;
-struct evbuffer;
 struct protocol_params_t;
 
 int dummy_init(int n_options, char **options, struct protocol_params_t *lsn);

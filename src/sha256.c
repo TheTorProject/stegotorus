@@ -4,12 +4,26 @@
    LibTomCrypt, version 1.6.  Tor uses it on platforms where OpenSSL doesn't
    have a SHA256. */
 
+#include "sha256.h"
+#include <assert.h>
+#include <string.h>
+#include <arpa/inet.h> /* for htonl/ntohl */
 
-typedef struct sha256_state {
-    uint64_t length;
-    uint32_t state[8], curlen;
-    unsigned char buf[64];
-} sha256_state;
+#define STMT_BEGIN do {
+#define STMT_END } while (0)
+static void
+set_uint32(void *ptr, uint32_t val)
+{
+  memcpy(ptr, &val, 4);
+}
+static uint32_t
+get_uint32(const void *ptr)
+{
+  uint32_t val;
+  memcpy(&val, ptr, 4);
+  return val;
+}
+#define LTC_ARGCHK(x) assert((x))
 
 #define CRYPT_OK 0
 #define CRYPT_NOP -1
@@ -43,26 +57,6 @@ typedef struct sha256_state {
   SHA256 by Tom St Denis
 */
 
-
-#ifdef LTC_SMALL_CODE
-/* the K array */
-static const uint32_t K[64] = {
-    0x428a2f98UL, 0x71374491UL, 0xb5c0fbcfUL, 0xe9b5dba5UL, 0x3956c25bUL,
-    0x59f111f1UL, 0x923f82a4UL, 0xab1c5ed5UL, 0xd807aa98UL, 0x12835b01UL,
-    0x243185beUL, 0x550c7dc3UL, 0x72be5d74UL, 0x80deb1feUL, 0x9bdc06a7UL,
-    0xc19bf174UL, 0xe49b69c1UL, 0xefbe4786UL, 0x0fc19dc6UL, 0x240ca1ccUL,
-    0x2de92c6fUL, 0x4a7484aaUL, 0x5cb0a9dcUL, 0x76f988daUL, 0x983e5152UL,
-    0xa831c66dUL, 0xb00327c8UL, 0xbf597fc7UL, 0xc6e00bf3UL, 0xd5a79147UL,
-    0x06ca6351UL, 0x14292967UL, 0x27b70a85UL, 0x2e1b2138UL, 0x4d2c6dfcUL,
-    0x53380d13UL, 0x650a7354UL, 0x766a0abbUL, 0x81c2c92eUL, 0x92722c85UL,
-    0xa2bfe8a1UL, 0xa81a664bUL, 0xc24b8b70UL, 0xc76c51a3UL, 0xd192e819UL,
-    0xd6990624UL, 0xf40e3585UL, 0x106aa070UL, 0x19a4c116UL, 0x1e376c08UL,
-    0x2748774cUL, 0x34b0bcb5UL, 0x391c0cb3UL, 0x4ed8aa4aUL, 0x5b9cca4fUL,
-    0x682e6ff3UL, 0x748f82eeUL, 0x78a5636fUL, 0x84c87814UL, 0x8cc70208UL,
-    0x90befffaUL, 0xa4506cebUL, 0xbef9a3f7UL, 0xc67178f2UL
-};
-#endif
-
 /* Various logical functions */
 #define Ch(x,y,z)       (z ^ (x & (y ^ z)))
 #define Maj(x,y,z)      (((x | y) & z) | (x & y))
@@ -74,16 +68,9 @@ static const uint32_t K[64] = {
 #define Gamma1(x)       (S(x, 17) ^ S(x, 19) ^ R(x, 10))
 
 /* compress 512-bits */
-#ifdef LTC_CLEAN_STACK
-static int _sha256_compress(sha256_state * md, unsigned char *buf)
-#else
 static int  sha256_compress(sha256_state * md, unsigned char *buf)
-#endif
 {
     uint32_t S[8], W[64], t0, t1;
-#ifdef LTC_SMALL_CODE
-    uint32_t t;
-#endif
     int i;
 
     /* copy state into S */
@@ -102,19 +89,6 @@ static int  sha256_compress(sha256_state * md, unsigned char *buf)
     }
 
     /* Compress */
-#ifdef LTC_SMALL_CODE
-#define RND(a,b,c,d,e,f,g,h,i)                         \
-     t0 = h + Sigma1(e) + Ch(e, f, g) + K[i] + W[i];   \
-     t1 = Sigma0(a) + Maj(a, b, c);                    \
-     d += t0;                                          \
-     h  = t0 + t1;
-
-     for (i = 0; i < 64; ++i) {
-         RND(S[0],S[1],S[2],S[3],S[4],S[5],S[6],S[7],i);
-         t = S[7]; S[7] = S[6]; S[6] = S[5]; S[5] = S[4];
-         S[4] = S[3]; S[3] = S[2]; S[2] = S[1]; S[1] = S[0]; S[0] = t;
-     }
-#else
 #define RND(a,b,c,d,e,f,g,h,i,ki)                    \
      t0 = h + Sigma1(e) + Ch(e, f, g) + ki + W[i];   \
      t1 = Sigma0(a) + Maj(a, b, c);                  \
@@ -188,8 +162,6 @@ static int  sha256_compress(sha256_state * md, unsigned char *buf)
 
 #undef RND
 
-#endif
-
     /* feedback */
     for (i = 0; i < 8; i++) {
         md->state[i] = md->state[i] + S[i];
@@ -197,22 +169,12 @@ static int  sha256_compress(sha256_state * md, unsigned char *buf)
     return CRYPT_OK;
 }
 
-#ifdef LTC_CLEAN_STACK
-static int sha256_compress(sha256_state * md, unsigned char *buf)
-{
-    int err;
-    err = _sha256_compress(md, buf);
-    burn_stack(sizeof(uint32_t) * 74);
-    return err;
-}
-#endif
-
 /**
    Initialize the hash state
    @param md   The hash state you wish to initialize
    @return CRYPT_OK if successful
 */
-static int sha256_init(sha256_state * md)
+int sha256_init(sha256_state * md)
 {
     LTC_ARGCHK(md != NULL);
 
@@ -236,7 +198,8 @@ static int sha256_init(sha256_state * md)
    @param inlen  The length of the data (octets)
    @return CRYPT_OK if successful
 */
-static int sha256_process (sha256_state * md, const unsigned char *in, unsigned long inlen)
+int sha256_process (sha256_state * md, const unsigned char *in,
+                    unsigned long inlen)
 {
     unsigned long n;
     int           err;
@@ -277,7 +240,7 @@ static int sha256_process (sha256_state * md, const unsigned char *in, unsigned 
    @param out [out] The destination of the hash (32 bytes)
    @return CRYPT_OK if successful
 */
-static int sha256_done(sha256_state * md, unsigned char *out)
+int sha256_done(sha256_state * md, unsigned char *out)
 {
     int i;
 
@@ -287,7 +250,6 @@ static int sha256_done(sha256_state * md, unsigned char *out)
     if (md->curlen >= sizeof(md->buf)) {
        return CRYPT_INVALID_ARG;
     }
-
 
     /* increase the length of the message */
     md->length += md->curlen * 8;
@@ -320,9 +282,6 @@ static int sha256_done(sha256_state * md, unsigned char *out)
     for (i = 0; i < 8; i++) {
         STORE32H(md->state[i], out+(4*i));
     }
-#ifdef LTC_CLEAN_STACK
-    zeromem(md, sizeof(sha256_state));
-#endif
     return CRYPT_OK;
 }
 

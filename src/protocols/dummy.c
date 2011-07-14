@@ -1,28 +1,24 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
    See LICENSE for other credits and copying information
 */
-#include <assert.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-
-#include <unistd.h>
-
-#include <openssl/rand.h>
-#include <event2/buffer.h>
 
 #include "dummy.h"
-#include "../network.h"
-#include "../util.h"
 #include "../protocol.h"
-#include "../network.h"
+#include "../util.h"
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <event2/buffer.h>
 
 static int dummy_send(void *nothing,
-                                struct evbuffer *source, struct evbuffer *dest);
+                      struct evbuffer *source, struct evbuffer *dest);
 static enum recv_ret dummy_recv(void *nothing, struct evbuffer *source,
                                 struct evbuffer *dest);
 static void usage(void);
-static int parse_and_set_options(int n_options, char **options, 
+static int parse_and_set_options(int n_options, char **options,
                                  struct protocol_params_t *params);
 
 static protocol_vtable *vtable=NULL;
@@ -33,9 +29,9 @@ static protocol_vtable *vtable=NULL;
 
    'options' is an array like this:
    {"dummy","socks","127.0.0.1:6666"}
-*/   
+*/
 int
-dummy_init(int n_options, char **options, 
+dummy_init(int n_options, char **options,
            struct protocol_params_t *params)
 {
   if (parse_and_set_options(n_options,options,params) < 0) {
@@ -61,13 +57,11 @@ dummy_init(int n_options, char **options,
    Helper: Parses 'options' and fills 'params'.
 */ 
 static int
-parse_and_set_options(int n_options, char **options, 
+parse_and_set_options(int n_options, char **options,
                       struct protocol_params_t *params)
 {
-  struct sockaddr_storage ss_listen;
-  int sl_listen;
   const char* defport;
-  
+
   if (n_options != 3)
     return -1;
 
@@ -86,18 +80,14 @@ parse_and_set_options(int n_options, char **options,
   } else
     return -1;
 
-  if (resolve_address_port(options[2], 1, 1, 
-                           &ss_listen, &sl_listen, defport) < 0) {
+  if (resolve_address_port(options[2], 1, 1,
+                           &params->listen_address,
+                           &params->listen_address_len, defport) < 0) {
     log_warn("addr");
     return -1;
   }
-  assert(sl_listen <= sizeof(struct sockaddr_storage));
-  struct sockaddr *sa_listen=NULL;
-  sa_listen = (struct sockaddr *)&ss_listen;
-  memcpy(&params->on_address, sa_listen, sl_listen);
-  params->on_address_len = sl_listen;
-  
-  return 0;
+
+  return 1;
 }
 
 /**
@@ -115,11 +105,11 @@ usage(void)
          "Example:\n"
          "\tobfsproxy dummy socks 127.0.0.1:5000\n");
 }
-    
+
 /*
   This is called everytime we get a connection for the dummy
   protocol.
-  
+
   It sets up the protocol vtable in 'proto_struct'.
 */
 void *
@@ -128,7 +118,7 @@ dummy_new(struct protocol_t *proto_struct,
 {
   proto_struct->vtable = vtable;
 
-  /* Dodging state check. 
+  /* Dodging state check.
      This is terrible I know.*/
   return (void *)666U;
 }
@@ -155,7 +145,7 @@ static enum recv_ret
 dummy_recv(void *nothing,
            struct evbuffer *source, struct evbuffer *dest) {
   (void)nothing;
-  
+
   if (evbuffer_add_buffer(dest,source)<0)
     return RECV_BAD;
   else

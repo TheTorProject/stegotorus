@@ -2,22 +2,19 @@
    See LICENSE for other credits and copying information
 */
 
-#include <assert.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
+#define CRYPT_PROTOCOL_PRIVATE
+#include "obfs2.h"
 
-#include <openssl/rand.h>
+#include "../protocol.h"
+#include "../util.h"
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include <event2/buffer.h>
 
-#define CRYPT_PROTOCOL_PRIVATE
-
-#include "obfs2_crypt.h"
-#include "obfs2.h"
-#include "../network.h"
-#include "../util.h"
-#include "../protocol.h"
-#include "../network.h"
 
 static void obfs2_state_free(void *state);
 static int obfs2_send_initial_message(void *state, struct evbuffer *buf);
@@ -25,7 +22,7 @@ static int obfs2_send(void *state,
                       struct evbuffer *source, struct evbuffer *dest);
 static enum recv_ret obfs2_recv(void *state, struct evbuffer *source,
                                 struct evbuffer *dest);
-static void *obfs2_state_new(protocol_params_t *params); 
+static void *obfs2_state_new(protocol_params_t *params);
 static int obfs2_state_set_shared_secret(void *s,
                                          const char *secret,
                                          size_t secretlen);
@@ -34,7 +31,7 @@ static void usage(void);
 
 static protocol_vtable *vtable=NULL;
 
-/* 
+/*
    This function parses 'options' and fills the protocol parameters
    structure 'params'.
    It then fills the obfs2 vtable and initializes the crypto subsystem.
@@ -42,7 +39,7 @@ static protocol_vtable *vtable=NULL;
    Returns 0 on success, -1 on fail.
 */
 int
-obfs2_init(int n_options, char **options, 
+obfs2_init(int n_options, char **options,
            struct protocol_params_t *params)
 {
   if (parse_and_set_options(n_options,options,params) < 0) {
@@ -65,11 +62,9 @@ obfs2_init(int n_options, char **options,
    Helper: Parses 'options' and fills 'params'.
 */
 int
-parse_and_set_options(int n_options, char **options, 
+parse_and_set_options(int n_options, char **options,
                       struct protocol_params_t *params)
 {
-  struct sockaddr_storage ss_listen;
-  int sl_listen;
   int got_dest=0;
   int got_ss=0;
   const char* defport;
@@ -88,21 +83,15 @@ parse_and_set_options(int n_options, char **options,
       if (!strncmp(*options,"--dest=",7)) {
         if (got_dest)
           return -1;
-        struct sockaddr_storage ss_target;
-        struct sockaddr *sa_target=NULL;
-        int sl_target=0;
         if (resolve_address_port(*options+7, 1, 0,
-                                 &ss_target, &sl_target, NULL) < 0)
+                                 &params->target_address,
+                                 &params->target_address_len, NULL) < 0)
           return -1;
-        assert(sl_target <= sizeof(struct sockaddr_storage));
-        sa_target = (struct sockaddr *)&ss_target;
-        memcpy(&params->target_address, sa_target, sl_target);
-        params->target_address_len = sl_target;
         got_dest=1;
       } else if (!strncmp(*options,"--shared-secret=",16)) {
         if (got_ss)
           return -1;
-        /* this is freed in protocol_params_free() */
+        /* this is freed in proto_params_free() */
         params->shared_secret = strdup(*options+16);
         params->shared_secret_len = strlen(*options+16);
         got_ss=1;
@@ -130,14 +119,10 @@ parse_and_set_options(int n_options, char **options,
 
     params->is_initiator = (params->mode != LSN_SIMPLE_SERVER);
 
-    if (resolve_address_port(*options, 1, 1, 
-                             &ss_listen, &sl_listen, defport) < 0)
+    if (resolve_address_port(*options, 1, 1,
+                             &params->listen_address,
+                             &params->listen_address_len, defport) < 0)
       return -1;
-    assert(sl_listen <= sizeof(struct sockaddr_storage));
-    struct sockaddr *sa_listen=NULL;
-    sa_listen = (struct sockaddr *)&ss_listen;
-    memcpy(&params->on_address, sa_listen, sl_listen);
-    params->on_address_len = sl_listen;
 
     /* Validate option selection. */
     if (got_dest && (params->mode == LSN_SOCKS_CLIENT)) {
@@ -186,13 +171,13 @@ set_up_vtable(void)
   vtable = calloc(1, sizeof(protocol_vtable));
   if (!vtable)
     return -1;
-  
+
   vtable->destroy = obfs2_state_free;
   vtable->create = obfs2_new;
   vtable->handshake = obfs2_send_initial_message;
   vtable->send = obfs2_send;
   vtable->recv = obfs2_recv;
-  
+
   return 0;
 }
 
@@ -245,7 +230,7 @@ derive_key(void *s, const char *keytype)
 /**
    Derive and return padding key of type 'keytype' from the seeds
    currently set in state 's'.  Returns NULL on failure.
-*/   
+*/
 static crypt_t *
 derive_padding_key(void *s, const uchar *seed,
                    const char *keytype)
@@ -284,7 +269,7 @@ derive_padding_key(void *s, const uchar *seed,
 /**
    This is called everytime we get a connection for the obfs2
    protocol.
-   
+
    It sets up the protocol vtable in 'proto_struct' and then attempts
    to create and return a protocol state according to the protocol
    parameters 'params'.
@@ -295,10 +280,10 @@ obfs2_new(struct protocol_t *proto_struct,
 {
   assert(vtable);
   proto_struct->vtable = vtable;
-  
+
   return obfs2_state_new(params);
 }
-  
+
 /**
    Returns an obfs2 state according to the protocol parameters
    'params'. If something goes wrong it returns NULL.
@@ -329,8 +314,8 @@ obfs2_state_new(protocol_params_t *params)
   }
 
   if (params->shared_secret)
-    if (obfs2_state_set_shared_secret(state, 
-                                      params->shared_secret, 
+    if (obfs2_state_set_shared_secret(state,
+                                      params->shared_secret,
                                       params->shared_secret_len)<0)
       return NULL;
 
@@ -344,11 +329,11 @@ obfs2_state_new(protocol_params_t *params)
   return state;
 }
 
-/** 
+/**
     Sets the shared 'secret' to be used, on the protocol state 's'.
 */
 static int
-obfs2_state_set_shared_secret(void *s, const char *secret, 
+obfs2_state_set_shared_secret(void *s, const char *secret,
                               size_t secretlen)
 {
   assert(secret);
@@ -509,7 +494,7 @@ init_crypto(void *s)
 /* Called when we receive data in an evbuffer 'source': deobfuscates that data
  * and writes it to 'dest', by using protocol state 's' to get crypto keys.
  *
- * It returns: 
+ * It returns:
  * RECV_GOOD to say that everything went fine.
  * RECV_BAD to say that something went bad.
  * RECV_INCOMPLETE to say that we need more data to form an opinion.
@@ -564,12 +549,13 @@ obfs2_recv(void *s, struct evbuffer *source,
 
     /* Fall through here: if there is padding data waiting on the buffer, pull
        it off immediately. */
-    log_debug("%s(): Received key, expecting %d bytes of padding", __func__, plength);
+    log_debug("%s(): Received key, expecting %d bytes of padding",
+              __func__, plength);
   }
 
   /* If we have pending data to send, we set the return code
   appropriately so that we call proto_send() right after we get out of
-  here! */  
+  here! */
   if (state->pending_data_to_send)
     r = RECV_SEND_PENDING;
 
@@ -584,7 +570,7 @@ obfs2_recv(void *s, struct evbuffer *source,
       n = evbuffer_get_length(source);
     evbuffer_drain(source, n);
     state->padding_left_to_read -= n;
-    log_debug("%s(): Received %d bytes of padding; %d left to read", 
+    log_debug("%s(): Received %d bytes of padding; %d left to read",
               __func__, n, state->padding_left_to_read);
   }
 
@@ -601,8 +587,8 @@ obfs2_recv(void *s, struct evbuffer *source,
   return r;
 }
 
-/** 
-    Frees obfs2 state 's' 
+/**
+    Frees obfs2 state 's'
 */
 static void
 obfs2_state_free(void *s)

@@ -2,31 +2,21 @@
    See LICENSE for other credits and copying information
 */
 
-#include <sys/types.h>
-#ifdef _WIN32
-#include <Winsock2.h>
-#include <Ws2tcpip.h>
-#else
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#endif
-
-
-#include <assert.h>
-
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-
 #define SOCKS_PRIVATE
 #include "socks.h"
+
 #include "util.h"
 
-#include <event2/buffer.h>
-#include <event2/event.h>
-#include <event2/bufferevent.h>
+#include <assert.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include <event2/buffer.h>
+
+#ifdef _WIN32
+#include <ws2tcpip.h> /* sockaddr_in6 */
+#endif
 
 /**
    General SOCKS5 idea:
@@ -49,9 +39,6 @@
    "Server reply" is done by: socks5_send_reply()
 */
 
-
-static enum socks_ret socks5_do_negotiation(struct evbuffer *dest,
-                                    unsigned int neg_was_success);
 
 typedef unsigned char uchar;
 
@@ -106,7 +93,7 @@ socks_errno_to_reply(socks_state_t *state, int error)
       return SOCKS5_SUCCESS;
     else {
       switch (error) {
-      case ERR(ENETUNREACH): 
+      case ERR(ENETUNREACH):
         return SOCKS5_FAILED_NETUNREACH;
       case ERR(EHOSTUNREACH):
         return SOCKS5_FAILED_HOSTUNREACH;
@@ -114,7 +101,7 @@ socks_errno_to_reply(socks_state_t *state, int error)
         return SOCKS5_FAILED_REFUSED;
       default:
         return SOCKS5_FAILED_GENERAL;
-      }      
+      }
     }
   } else
     return -1;
@@ -133,7 +120,6 @@ socks_errno_to_reply(socks_state_t *state, int error)
    else other than CONNECT.  If that's the case we should send a reply
    back to the client telling him that we don't support it.
    
-   Client Request (Client -> Server)
 */
 enum socks_ret
 socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
@@ -222,7 +208,8 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     char a[16];
     assert(addrlen <= 16);
     memcpy(a, destaddr, addrlen);
-    if (evutil_inet_ntop(af, destaddr, parsereq->addr, sizeof(parsereq->addr)) == NULL)
+    if (evutil_inet_ntop(af, destaddr, parsereq->addr,
+                         sizeof(parsereq->addr)) == NULL)
       goto err;
   }
 
@@ -276,7 +263,8 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
       p[3] = SOCKS5_ATYP_FQDN;
     } else {
       addrlen = (state->parsereq.af == AF_INET) ? 4 : 16;
-      p[3] = (state->parsereq.af == AF_INET) ? SOCKS5_ATYP_IPV4 : SOCKS5_ATYP_IPV6;
+      p[3] = (state->parsereq.af == AF_INET)
+        ? SOCKS5_ATYP_IPV4 : SOCKS5_ATYP_IPV6;
       evutil_inet_pton(state->parsereq.af, state->parsereq.addr, addr);
     }
     port = htons(state->parsereq.port);
@@ -289,6 +277,31 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
   evbuffer_add(reply_dest, &port, 2);
 
   state->state = ST_SENT_REPLY; /* SOCKS phase is now done. */
+}
+
+/**
+   This function sends a method negotiation reply to 'dest'.
+   If 'neg_was_success' is true send a positive response,
+   otherwise send a negative one.
+   It returns -1 if no suitable negotiation methods were found,
+   or if there was an error during replying.
+
+   Method Negotiation Reply (Server -> Client):
+   | version | method selected |
+       1b           1b
+*/
+static enum socks_ret
+socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
+{
+  uchar reply[2];
+  reply[0] = SOCKS5_VERSION;
+
+  reply[1] = neg_was_success ? SOCKS5_METHOD_NOAUTH : SOCKS5_METHOD_FAIL;
+
+  if (evbuffer_add(dest, reply, 2) == -1 || !neg_was_success)
+    return SOCKS_BROKEN;
+  else
+    return SOCKS_GOOD;
 }
 
 /**
@@ -339,31 +352,6 @@ socks5_handle_negotiation(struct evbuffer *source,
 }
 
 /**
-   This function sends a method negotiation reply to 'dest'.
-   If 'neg_was_success' is true send a positive response,
-   otherwise send a negative one.
-   It returns -1 if no suitable negotiation methods were found,
-   or if there was an error during replying.
-
-   Method Negotiation Reply (Server -> Client):
-   | version | method selected |
-       1b           1b
-*/
-static enum socks_ret
-socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
-{
-  uchar reply[2];
-  reply[0] = SOCKS5_VERSION;
-
-  reply[1] = neg_was_success ? SOCKS5_METHOD_NOAUTH : SOCKS5_METHOD_FAIL;
-
-  if (evbuffer_add(dest, reply, 2) == -1 || !neg_was_success)
-    return SOCKS_BROKEN;
-  else
-    return SOCKS_GOOD;
-}
-
-/**
    Takes a SOCKS4/SOCKS4a command request from 'source', it evaluates
    it and if it's legit it parses it into 'parsereq'.
    
@@ -371,6 +359,8 @@ socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
    It returns SOCKS_INCOMPLETE if we need more data from the client.
    It returns SOCKS_BROKEN if we didn't like something.
 */   
+
+/* XXXX rename to socks4_handle_request or something. */
 enum socks_ret
 socks4_read_request(struct evbuffer *source, socks_state_t *state)
 {
@@ -437,7 +427,7 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
   } else {
     struct in_addr in;
     in.s_addr = htonl(ipaddr);
-    if (evutil_inet_ntop(AF_INET, &in, state->parsereq.addr, 
+    if (evutil_inet_ntop(AF_INET, &in, state->parsereq.addr,
                          sizeof(state->parsereq.addr)) == NULL)
       return SOCKS_BROKEN;
   }
@@ -538,7 +528,7 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
       if (r == SOCKS_GOOD) {
         socks_state->state = ST_HAVE_ADDR;
         return SOCKS_GOOD;
-      } else if (r == SOCKS_INCOMPLETE) 
+      } else if (r == SOCKS_INCOMPLETE)
         return SOCKS_INCOMPLETE;
       else if (r == SOCKS_CMD_NOT_CONNECT) {
         socks_state->broken = 1;
@@ -599,7 +589,8 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
   if (sa->sa_family == AF_INET) {
     const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
     port = sin->sin_port;
-    if (evutil_inet_ntop(AF_INET, &sin->sin_addr, state->parsereq.addr, sizeof(state->parsereq.addr)) == NULL)
+    if (evutil_inet_ntop(AF_INET, &sin->sin_addr, state->parsereq.addr,
+                         sizeof(state->parsereq.addr)) == NULL)
       return -1;
   } else if (sa->sa_family == AF_INET6) {
     if (state->version == 4) {
@@ -608,7 +599,8 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
     }
     const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
     port = sin6->sin6_port;
-    if (evutil_inet_ntop(AF_INET6, &sin6->sin6_addr, state->parsereq.addr, sizeof(state->parsereq.addr)) == NULL)
+    if (evutil_inet_ntop(AF_INET6, &sin6->sin6_addr, state->parsereq.addr,
+                         sizeof(state->parsereq.addr)) == NULL)
       return -1;
   } else {
     log_debug("Unknown address family %d", sa->sa_family);

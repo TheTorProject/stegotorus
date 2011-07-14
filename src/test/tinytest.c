@@ -23,15 +23,18 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "tinytest.h"
+#include "tinytest_macros.h"
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -39,9 +42,6 @@
 #ifndef __GNUC__
 #define __attribute__(x)
 #endif
-
-#include "tinytest.h"
-#include "tinytest_macros.h"
 
 #define LONGEST_TEST_NAME 16384
 

@@ -2,50 +2,25 @@
    See LICENSE for other credits and copying information
 */
 
-#include "config.h"
+#define CRYPT_PRIVATE
+#include "crypt.h"
 
 #include <assert.h>
-#include <string.h>
-#include <stdlib.h>
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
-#ifdef HAVE_FCNTL_H
 #include <fcntl.h>
-#endif
-#ifdef HAVE_STDINT_H
-#include <stdint.h>
-#endif
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include <openssl/opensslv.h>
-#include <openssl/aes.h>
-#include <openssl/rand.h>
 #include <openssl/err.h>
-
-#define CRYPT_PRIVATE
-#include "obfs2_crypt.h"
+#include <openssl/rand.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x0090800f
 #define USE_OPENSSL_RANDPOLL 1
 #define USE_OPENSSL_SHA256 1
 #include <openssl/sha.h>
 #else
-#define STMT_BEGIN do {
-#define STMT_END } while (0)
-static void
-set_uint32(void *ptr, uint32_t val)
-{
-  memcpy(ptr, &val, 4);
-}
-static uint32_t
-get_uint32(const void *ptr)
-{
-  uint32_t val;
-  memcpy(&val, ptr, 4);
-  return val;
-}
-#define LTC_ARGCHK(x) assert((x))
-#include "../sha256.c"
+#include "sha256.h"
 #endif
 
 /**

@@ -1,29 +1,28 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
    See LICENSE for other credits and copying information
 */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "tinytest.h"
 #include "tinytest_macros.h"
 
-#include <event2/buffer.h>
-#include <openssl/aes.h>
-
-
 #define CRYPT_PROTOCOL_PRIVATE
 #define CRYPT_PRIVATE
-#include "../protocols/obfs2_crypt.h"
+#include "../protocols/obfs2.h"
+#include "../crypt.h"
 #include "../util.h"
 #include "../protocol.h"
-#include "../protocols/obfs2.h"
-#include "../network.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <event2/buffer.h>
+
 
 static void
 test_proto_option_parsing(void *data)
 {
-  protocol_params_t *proto_params = calloc(1, sizeof(protocol_params_t));  
+  protocol_params_t *proto_params = calloc(1, sizeof(protocol_params_t));
   char *options[] = {"obfs2", "--shared-secret=a", "socks", "127.0.0.1:0"};
   int n_options = 4;
 
@@ -34,7 +33,7 @@ test_proto_option_parsing(void *data)
                             proto_params) == 0);
 
   /** two --dest. */
-  char *options2[] = {"obfs2", "--dest=127.0.0.1:5555", "--dest=a", 
+  char *options2[] = {"obfs2", "--dest=127.0.0.1:5555", "--dest=a",
                       "server", "127.0.0.1:5552"};
   n_options = 5;
 
@@ -42,7 +41,7 @@ test_proto_option_parsing(void *data)
                             proto_params) == -1);
 
   /** unknown arg */
-  char *options3[] = {"obfs2", "--gabura=a", 
+  char *options3[] = {"obfs2", "--gabura=a",
                       "server", "127.0.0.1:5552"};
   n_options = 4;
 
@@ -57,7 +56,7 @@ test_proto_option_parsing(void *data)
                             proto_params) == -1);
 
   /** wrong mode  */
-  char *options5[] = {"obfs2", "--dest=1:1", 
+  char *options5[] = {"obfs2", "--dest=1:1",
                       "gladiator", "127.0.0.1:5552"};
   n_options = 4;
 
@@ -65,7 +64,7 @@ test_proto_option_parsing(void *data)
                             proto_params) == -1);
 
   /** stupid listen addr.  */
-  char *options6[] = {"obfs2", "--dest=1:1", 
+  char *options6[] = {"obfs2", "--dest=1:1",
                       "server", "127.0.0.1:a"};
   n_options = 4;
 
@@ -73,7 +72,7 @@ test_proto_option_parsing(void *data)
                             proto_params) == -1);
 
   /** stupid dest addr.  */
-  char *options7[] = {"obfs2", "--dest=1:b", 
+  char *options7[] = {"obfs2", "--dest=1:b",
                       "server", "127.0.0.1:1"};
   n_options = 4;
 
@@ -81,7 +80,7 @@ test_proto_option_parsing(void *data)
                             proto_params) == -1);
 
   /** socks with dest.  */
-  char *options8[] = {"obfs2", "--dest=1:2", 
+  char *options8[] = {"obfs2", "--dest=1:2",
                       "socks", "127.0.0.1:1"};
   n_options = 4;
 
@@ -89,7 +88,7 @@ test_proto_option_parsing(void *data)
                             proto_params) == -1);
 
   /** socks with dest.  */
-  char *options9[] = {"obfs2", "--shared-secret=a", 
+  char *options9[] = {"obfs2", "--shared-secret=a",
                       "server", "127.0.0.1:1"};
   n_options = 4;
 
@@ -111,11 +110,13 @@ test_proto_setup(void *data)
   struct protocol_t *server_proto = NULL;
 
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha", "socks", "127.0.0.1:1800"};
+  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
+                            "socks", "127.0.0.1:1800"};
   int n_options_client = 4;
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha", "--dest=127.0.0.1:1500", 
+  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
+                            "--dest=127.0.0.1:1500",
                            "server", "127.0.0.1:1800"};
   int n_options_server = 5;
 
@@ -151,12 +152,14 @@ test_proto_handshake(void *data)
   struct protocol_t *server_proto = NULL;
 
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha", "socks", "127.0.0.1:1800"};
+  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
+                            "socks", "127.0.0.1:1800"};
   int n_options_client = 4;
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha", "--dest=127.0.0.1:1500", 
-                           "server", "127.0.0.1:1800"};
+  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
+                            "--dest=127.0.0.1:1500",
+                            "server", "127.0.0.1:1800"};
   int n_options_server = 5;
 
   tt_assert(set_up_protocol(n_options_client, options_client,
@@ -178,8 +181,8 @@ test_proto_handshake(void *data)
   /* We create a client handshake message and pass it to output_buffer */
   tt_int_op(0, <=, proto_handshake(client_proto, output_buffer));
 
-  /* We simulate the server receiving and processing the client's handshake message,
-     by using proto_recv() on the output_buffer */
+  /* We simulate the server receiving and processing the client's
+     handshake message, by using proto_recv() on the output_buffer */
   tt_assert(RECV_GOOD == proto_recv(server_proto, output_buffer, dummy_buffer));
 
   /* Now, we create the server's handshake and pass it to output_buffer */
@@ -223,17 +226,19 @@ test_proto_transfer(void *data)
   struct evbuffer *dummy_buffer = NULL;
   output_buffer = evbuffer_new();
   dummy_buffer = evbuffer_new();
-  
+
   struct protocol_t *client_proto = NULL;
   struct protocol_t *server_proto = NULL;
 
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha", "socks", "127.0.0.1:1800"};
+  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
+                            "socks", "127.0.0.1:1800"};
   int n_options_client = 4;
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha", "--dest=127.0.0.1:1500", 
-                           "server", "127.0.0.1:1800"};
+  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
+                            "--dest=127.0.0.1:1500",
+                            "server", "127.0.0.1:1800"};
   int n_options_server = 5;
 
   tt_assert(set_up_protocol(n_options_client, options_client,
@@ -254,11 +259,9 @@ test_proto_transfer(void *data)
 
   /* Handshake */
   tt_int_op(0, <=, proto_handshake(client_proto, output_buffer));
-  tt_assert(RECV_GOOD == proto_recv(server_proto, 
-                                                    output_buffer, dummy_buffer));
+  tt_assert(RECV_GOOD == proto_recv(server_proto, output_buffer, dummy_buffer));
   tt_int_op(0, <=, proto_handshake(server_proto, output_buffer));
-  tt_assert(RECV_GOOD == proto_recv(client_proto, 
-                                                    output_buffer, dummy_buffer));
+  tt_assert(RECV_GOOD == proto_recv(client_proto, output_buffer, dummy_buffer));
   /* End of Handshake */
 
   /* Now let's pass some data around. */
@@ -269,8 +272,7 @@ test_proto_transfer(void *data)
   evbuffer_add(dummy_buffer, msg1, 54);
   proto_send(client_proto, dummy_buffer, output_buffer);
 
-  tt_assert(RECV_GOOD == proto_recv(server_proto, 
-                                                    output_buffer, dummy_buffer));
+  tt_assert(RECV_GOOD == proto_recv(server_proto, output_buffer, dummy_buffer));
 
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[0], 2);
   tt_int_op(n, !=, -1);
@@ -286,8 +288,7 @@ test_proto_transfer(void *data)
   evbuffer_add(dummy_buffer, msg2, 55);
   tt_int_op(0, <=, proto_send(server_proto, dummy_buffer, output_buffer));
 
-  tt_assert(RECV_GOOD == proto_recv(client_proto, 
-                                                    output_buffer, dummy_buffer));
+  tt_assert(RECV_GOOD == proto_recv(client_proto, output_buffer, dummy_buffer));
 
   n = evbuffer_peek(dummy_buffer, -1, NULL, &v[1], 2);
   tt_int_op(0, ==, strncmp(msg2, v[1].iov_base, 55));
@@ -322,7 +323,7 @@ test_proto_transfer(void *data)
    Afterwards we will verify that they both got the correct keys.
    That's right, this unit test is loco . */
 static void
-test_proto_splitted_handshake(void *data)
+test_proto_split_handshake(void *data)
 {
   obfs2_state_t *client_state = NULL;
   obfs2_state_t *server_state = NULL;
@@ -336,12 +337,14 @@ test_proto_splitted_handshake(void *data)
   struct protocol_t *server_proto = NULL;
 
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha", "socks", "127.0.0.1:1800"};
+  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
+                            "socks", "127.0.0.1:1800"};
   int n_options_client = 4;
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha", "--dest=127.0.0.1:1500", 
-                           "server", "127.0.0.1:1800"};
+  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
+                            "--dest=127.0.0.1:1500",
+                            "server", "127.0.0.1:1800"};
   int n_options_server = 5;
 
   tt_assert(set_up_protocol(n_options_client, options_client,
@@ -382,16 +385,19 @@ test_proto_splitted_handshake(void *data)
   memcpy(msgclient_1, seed1, OBFUSCATE_SEED_LENGTH);
   memcpy(msgclient_1+OBFUSCATE_SEED_LENGTH, &magic, 4);
   memcpy(msgclient_1+OBFUSCATE_SEED_LENGTH+4, &send_plength1, 4);
-  tt_int_op(0, <=, random_bytes(msgclient_1+OBFUSCATE_SEED_LENGTH+8, plength1_msg1));
+  tt_int_op(0, <=, random_bytes(msgclient_1+OBFUSCATE_SEED_LENGTH+8,
+                                plength1_msg1));
 
-  stream_crypt(client_state->send_padding_crypto, msgclient_1+OBFUSCATE_SEED_LENGTH, 8+plength1_msg1);
+  stream_crypt(client_state->send_padding_crypto,
+               msgclient_1+OBFUSCATE_SEED_LENGTH, 8+plength1_msg1);
 
   /* Client sends handshake part 1 */
-  evbuffer_add(output_buffer, msgclient_1, OBFUSCATE_SEED_LENGTH+8+plength1_msg1);
+  evbuffer_add(output_buffer, msgclient_1,
+               OBFUSCATE_SEED_LENGTH+8+plength1_msg1);
 
   /* Server receives handshake part 1 */
   tt_assert(RECV_INCOMPLETE == proto_recv(server_proto,
-                                                          output_buffer, dummy_buffer));
+                                          output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_PADDING);
 
@@ -403,8 +409,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgclient_2, plength1_msg2);
 
   /* Server receives handshake part 2 */
-  tt_assert(RECV_GOOD == proto_recv(server_proto, 
-                                                    output_buffer, dummy_buffer));
+  tt_assert(RECV_GOOD == proto_recv(server_proto, output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_OPEN);
 
@@ -427,14 +432,15 @@ test_proto_splitted_handshake(void *data)
   memcpy(msgserver_1+OBFUSCATE_SEED_LENGTH, &magic, 4);
   memcpy(msgserver_1+OBFUSCATE_SEED_LENGTH+4, &send_plength2, 4);
 
-  stream_crypt(server_state->send_padding_crypto, msgserver_1+OBFUSCATE_SEED_LENGTH, 8);
+  stream_crypt(server_state->send_padding_crypto,
+               msgserver_1+OBFUSCATE_SEED_LENGTH, 8);
 
   /* Server sends handshake part 1 */
   evbuffer_add(output_buffer, msgserver_1, OBFUSCATE_SEED_LENGTH+8);
 
   /* Client receives handshake part 1 */
-  tt_assert(RECV_INCOMPLETE == proto_recv(client_proto, 
-                                                    output_buffer, dummy_buffer));
+  tt_assert(RECV_INCOMPLETE == proto_recv(client_proto,
+                                          output_buffer, dummy_buffer));
 
   tt_assert(client_state->state == ST_WAIT_FOR_PADDING);
 
@@ -446,8 +452,7 @@ test_proto_splitted_handshake(void *data)
   evbuffer_add(output_buffer, msgserver_2, plength2);
 
   /* Client receives handshake part 2 */
-  tt_assert(RECV_GOOD == proto_recv(client_proto, 
-                                                    output_buffer, dummy_buffer));
+  tt_assert(RECV_GOOD == proto_recv(client_proto, output_buffer, dummy_buffer));
 
   tt_assert(client_state->state == ST_OPEN);
 
@@ -498,12 +503,14 @@ test_proto_wrong_handshake_magic(void *data)
   struct protocol_t *server_proto = NULL;
 
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha", "socks", "127.0.0.1:1800"};
+  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
+                            "socks", "127.0.0.1:1800"};
   int n_options_client = 4;
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha", "--dest=127.0.0.1:1500", 
-                           "server", "127.0.0.1:1800"};
+  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
+                            "--dest=127.0.0.1:1500",
+                            "server", "127.0.0.1:1800"};
   int n_options_server = 5;
 
   tt_assert(set_up_protocol(n_options_client, options_client,
@@ -543,8 +550,7 @@ test_proto_wrong_handshake_magic(void *data)
 
   evbuffer_add(output_buffer, msg, OBFUSCATE_SEED_LENGTH+8+plength);
 
-  tt_assert(RECV_BAD == proto_recv(server_proto, 
-                                                   output_buffer, dummy_buffer));
+  tt_assert(RECV_BAD == proto_recv(server_proto, output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_KEY);
 
@@ -584,12 +590,14 @@ test_proto_wrong_handshake_plength(void *data)
 
 
   protocol_params_t *proto_params_client = calloc(1, sizeof(protocol_params_t));
-  char *options_client[] = {"obfs2", "--shared-secret=hahaha", "socks", "127.0.0.1:1800"};
+  char *options_client[] = {"obfs2", "--shared-secret=hahaha",
+                            "socks", "127.0.0.1:1800"};
   int n_options_client = 4;
 
   protocol_params_t *proto_params_serv = calloc(1, sizeof(protocol_params_t));
-  char *options_server[] = {"obfs2", "--shared-secret=hahaha", "--dest=127.0.0.1:1500", 
-                           "server", "127.0.0.1:1800"};
+  char *options_server[] = {"obfs2", "--shared-secret=hahaha",
+                            "--dest=127.0.0.1:1500",
+                            "server", "127.0.0.1:1800"};
   int n_options_server = 5;
 
   tt_assert(set_up_protocol(n_options_client, options_client,
@@ -628,8 +636,7 @@ test_proto_wrong_handshake_plength(void *data)
   evbuffer_add(output_buffer, msg, OBFUSCATE_SEED_LENGTH+8+plength);
 
 
-  tt_assert(RECV_BAD == proto_recv(server_proto, 
-                                                   output_buffer, dummy_buffer));
+  tt_assert(RECV_BAD == proto_recv(server_proto, output_buffer, dummy_buffer));
 
   tt_assert(server_state->state == ST_WAIT_FOR_KEY);
 
@@ -658,7 +665,7 @@ struct testcase_t protocol_tests[] = {
   T(setup, 0),
   T(handshake, 0),
   T(transfer, 0),
-  T(splitted_handshake, 0),
+  T(split_handshake, 0),
   T(wrong_handshake_magic, 0),
   T(wrong_handshake_plength, 0),
   END_OF_TESTCASES

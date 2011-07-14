@@ -5,25 +5,22 @@
 #ifndef OBFS2_H
 #define OBFS2_H
 
-#include <sys/types.h>
-
 typedef struct obfs2_state_t obfs2_state_t;
 struct evbuffer;
 struct protocol_t;
 struct protocol_params_t;
 struct listener_t;
 
-#define SHARED_SECRET_LENGTH SHA256_LENGTH
-
 int obfs2_init(int n_options, char **options, struct protocol_params_t *params);
 void *obfs2_new(struct protocol_t *proto_struct,
                 struct protocol_params_t *params);
-int parse_and_set_options(int n_options, char **options, 
+int parse_and_set_options(int n_options, char **options,
                           struct protocol_params_t *params);
 
-
-
 #ifdef CRYPT_PROTOCOL_PRIVATE
+
+#include "../crypt.h"
+
 /* ==========
    These definitions are not part of the crypt_protocol interface.
    They're exposed here so that the unit tests can use them.
@@ -43,6 +40,8 @@ int parse_and_set_options(int n_options, char **options,
 #define RESPONDER_PAD_TYPE "Responder obfuscation padding"
 #define INITIATOR_SEND_TYPE "Initiator obfuscated data"
 #define RESPONDER_SEND_TYPE "Responder obfuscated data"
+
+#define SHARED_SECRET_LENGTH SHA256_LENGTH
 
 struct obfs2_state_t {
   /** Current protocol state.  We start out waiting for key information.  Then

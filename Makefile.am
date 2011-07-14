@@ -1,44 +1,46 @@
-AUTOMAKE_OPTIONS = foreign
-ACLOCAL_AMFLAGS = -I m4
-CFLAGS = -DDEBUG -g -Wall -O2 -Werror @libevent_CFLAGS@ @openssl_CFLAGS@
 
+ACLOCAL_AMFLAGS = -I m4
+AM_CFLAGS = -DDEBUG -Wall -Werror @libevent_CFLAGS@ @libcrypto_CFLAGS@
+LDADD = libobfsproxy.a @libevent_LIBS@ @libcrypto_LIBS@ @ws32_LIBS@
 
 bin_PROGRAMS = obfsproxy
 noinst_LIBRARIES = libobfsproxy.a
 noinst_PROGRAMS = unittests
 
 libobfsproxy_a_SOURCES = \
+	src/crypt.c \
 	src/network.c \
 	src/protocol.c \
-	src/socks.c  \
-	src/util.c   \
-	src/protocols/obfs2.c \
-	src/protocols/obfs2_crypt.c \
-	src/protocols/dummy.c
+	src/socks.c \
+	src/util.c \
+	src/protocols/dummy.c \
+	src/protocols/obfs2.c
+if NEED_SHA256
+libobfsproxy_a_SOURCES += src/sha256.c
+endif
 
 obfsproxy_SOURCES = \
 	src/main.c
-obfsproxy_LDADD = libobfsproxy.a @libevent_LIBS@ @openssl_LIBS@ @LIB_WS32@
 
 unittests_SOURCES = \
 	src/test/tinytest.c \
 	src/test/unittest.c \
-	src/test/unittest_obfs2.c \
 	src/test/unittest_crypt.c \
+	src/test/unittest_obfs2.c \
 	src/test/unittest_socks.c
-unittests_LDADD = libobfsproxy.a @libevent_LIBS@ @openssl_LIBS@ @LIB_WS32@
 
 noinst_HEADERS = \
+	src/crypt.h \
 	src/network.h \
 	src/protocol.h \
+	src/sha256.h \
 	src/socks.h \
 	src/util.h \
-	src/test/tinytest.h \
-	src/test/tinytest_macros.h \
+	src/protocols/dummy.h \
 	src/protocols/obfs2.h \
-	src/protocols/obfs2_crypt.h \
-	src/protocols/dummy.h
+	src/test/tinytest.h \
+	src/test/tinytest_macros.h
 
-EXTRA_DIST = doc/protocol-spec.txt src/sha256.c
+EXTRA_DIST = doc/protocol-spec.txt
 
 TESTS = unittests

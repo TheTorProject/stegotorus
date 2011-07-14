@@ -5,14 +5,9 @@
 #ifndef SOCKS_H
 #define SOCKS_H
 
-#ifdef _WIN32
-#include <Winsock2.h>
-#else
-#include <netdb.h>
-#endif
-
 typedef struct socks_state_t socks_state_t;
 struct evbuffer;
+struct sockaddr;
 
 enum socks_status_t {
   /* Waiting for initial socks4 or socks5 message */
@@ -33,7 +28,8 @@ enum socks_ret {
 };
 
 enum socks_ret handle_socks(struct evbuffer *source,
-                             struct evbuffer *dest, socks_state_t *socks_state);
+                            struct evbuffer *dest,
+                            socks_state_t *socks_state);
 socks_state_t *socks_state_new(void);
 void socks_state_free(socks_state_t *s);
 
@@ -44,9 +40,8 @@ int socks_state_get_address(const socks_state_t *state,
                             int *port_out);
 int socks_state_set_address(socks_state_t *state, const struct sockaddr *sa);
 void socks_send_reply(socks_state_t *state, struct evbuffer *dest, int error);
-void socks5_send_reply(struct evbuffer *reply_dest, 
+void socks5_send_reply(struct evbuffer *reply_dest,
                        socks_state_t *state, int status);
-
 
 #define SOCKS5_SUCCESS            0x00
 #define SOCKS5_FAILED_GENERAL     0x01
@@ -108,9 +103,12 @@ enum socks_ret socks5_handle_negotiation(struct evbuffer *source,
                               struct evbuffer *dest, socks_state_t *state);
 enum socks_ret socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq);
 
-enum socks_ret socks4_read_request(struct evbuffer *source, socks_state_t *state);
-void socks4_send_reply(struct evbuffer *dest, 
-                       socks_state_t *state, int status);
-#endif
 
-#endif
+enum socks_ret socks4_read_request(struct evbuffer *source,
+                                   socks_state_t *state);
+void socks4_send_reply(struct evbuffer *dest,
+                       socks_state_t *state, int status);
+
+#endif /* SOCKS_PRIVATE */
+
+#endif /* socks.h */

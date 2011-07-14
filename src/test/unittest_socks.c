@@ -1,20 +1,19 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
    See LICENSE for other credits and copying information
 */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "tinytest.h"
 #include "tinytest_macros.h"
 
-#include <event2/buffer.h>
-
 #define SOCKS_PRIVATE
 #include "../socks.h"
-#include "../protocols/obfs2_crypt.h"
-#include "../util.h"
-#include "../protocols/obfs2.h"
+#include "../crypt.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#include <event2/buffer.h>
+
 
 /**
    This function tests the negotiation phase of the SOCKS5 protocol.
@@ -421,6 +420,7 @@ test_socks_socks4_request(void *data)
   /* First test:
      Correct SOCKS4 req packet with nothing in the optional field. */
   struct parsereq pr1;
+  memset(&pr1, 0, sizeof(struct parsereq));
   state->parsereq = pr1;
   uchar req1[8];
   req1[0] = 1;

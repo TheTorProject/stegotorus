@@ -1,10 +1,9 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
    See LICENSE for other credits and copying information
 */
-#include <stdlib.h>
 
 #include "tinytest.h"
-#include "../protocols/obfs2_crypt.h"
+#include "../crypt.h"
 
 extern struct testcase_t crypt_tests[];
 extern struct testcase_t protocol_tests[];
