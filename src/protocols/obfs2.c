@@ -58,7 +58,7 @@ obfs2_init(int n_options, char **options,
     return -1;
   }
 
-  return 1;
+  return 0;
 }
 
 int
@@ -148,7 +148,7 @@ parse_and_set_options(int n_options, char **options,
     }
 
     log_debug("%s(): Parsed obfs2 options nicely!", __func__);
-    return 1;
+    return 0;
 }
 
 /**
@@ -174,7 +174,7 @@ usage(void)
 /**
    Helper: Allocates space for the protocol vtable and populates it's
    function pointers.
-   Returns 1 on success, -1 on fail.
+   Returns 0 on success, -1 on fail.
 */
 static int
 set_up_vtable(void)
@@ -190,7 +190,7 @@ set_up_vtable(void)
   vtable->send = obfs2_send;
   vtable->recv = obfs2_recv;
   
-  return 1;
+  return 0;
 }
 
 /** Return true iff the OBFUSCATE_SEED_LENGTH-byte seed in 'seed' is nonzero */

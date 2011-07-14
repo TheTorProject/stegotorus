@@ -236,7 +236,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
    | version | rep | rsv | atyp | destaddr           | destport
      1b         1b    1b    1b       4b/16b/1+Nb         2b
 */
-int
+void
 socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                   int status)
 {
@@ -282,8 +282,6 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
   evbuffer_add(reply_dest, &port, 2);
 
   state->state = ST_SENT_REPLY; /* SOCKS phase is now done. */
-
-  return 1;
 }
 
 /**
@@ -432,7 +430,7 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
   return SOCKS_GOOD;
 }
 
-int
+void
 socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
 {
   uint16_t portnum;
@@ -450,8 +448,6 @@ socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
   /* ASN: What should we do here in the case of an FQDN request? */
   memcpy(msg+4, &in.s_addr, 4);
   evbuffer_add(dest, msg, 8);
-
-  return 1;
 }
 
 /**
@@ -596,14 +592,12 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
    If 'error' is not 0, it means that an error was encountered and
    error carries the errno(3) of the error.
 */
-int
+void
 socks_send_reply(socks_state_t *state, struct evbuffer *dest, int error)
 {
   int status = socks_errno_to_reply(state, error);
   if (state->version == SOCKS5_VERSION)
-    return socks5_send_reply(dest, state, status);
+    socks5_send_reply(dest, state, status);
   else if (state->version == SOCKS4_VERSION)
-    return socks4_send_reply(dest, state, status);
-  else
-    return -1;
+    socks4_send_reply(dest, state, status);
 }

@@ -322,7 +322,7 @@ sev_is_valid(int severity)
 /**
    Sets the global logging 'method' and also sets and open the logfile
    'filename' in case we want to log into a file.
-   It returns 1 on success and -1 on fail.
+   It returns 0 on success and -1 on fail.
 */
 int
 log_set_method(int method, const char *filename)
@@ -335,12 +335,12 @@ log_set_method(int method, const char *filename)
     if (write_logfile_prologue(logging_logfile) < 0)
       return -1;
   }    
-  return 1;
+  return 0;
 }
 
 /**
    Helper: Opens 'filename' and sets it as the obfsproxy logfile.
-   On success it returns 1, on fail it returns -1.
+   On success it returns 0, on fail it returns -1.
 */
 static int
 open_and_set_obfsproxy_logfile(const char *filename)
@@ -352,7 +352,7 @@ open_and_set_obfsproxy_logfile(const char *filename)
                          0644);
   if (logging_logfile < 0)
     return -1;
-  return 1;
+  return 0;
 }
 
 /**
@@ -372,6 +372,8 @@ close_obfsproxy_logfile(void)
 /**
    Writes a small prologue in the logfile 'fd' that mentions the
    obfsproxy version and helps separate log instances.
+
+   Returns 0 on success, -1 on failure.
 */
 static int
 write_logfile_prologue(int logfile) {
@@ -380,7 +382,7 @@ write_logfile_prologue(int logfile) {
     return -1;
   if (write(logfile, buf, strlen(buf)) < 0)
     return -1;
-  return 1;
+  return 0;
 }
 
 #define TEMP_PROLOGUE "\nBrand new obfsproxy log:\n"
@@ -394,13 +396,13 @@ compose_logfile_prologue(char *buf, size_t buflen)
     log_warn("Logfile prologue couldn't be written.");
     return -1;
   }
-  return 1;
+  return 0;
 }
 #undef TEMP_PROLOGUE
 
 /**
    Sets the minimum logging severity of obfsproxy to the severity
-   described by 'sev_string', then it returns 1.  If 'sev_string' is
+   described by 'sev_string', then it returns 0.  If 'sev_string' is
    not a valid severity, it returns -1.
 */
 int
@@ -411,7 +413,7 @@ log_set_min_severity(const char* sev_string) {
     return -1;
   }
   logging_min_sev = severity;
-  return 1;
+  return 0;
 }
 
 /**

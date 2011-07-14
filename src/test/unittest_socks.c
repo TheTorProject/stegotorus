@@ -318,8 +318,7 @@ test_socks_socks5_request_reply(void *data)
   /* First test:
      We ask the server to send us a reply on an IPv4 request with
      succesful status. */
-  tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS5_SUCCESS));
+  socks5_send_reply(reply_dest,state, SOCKS5_SUCCESS);
 
   uchar rep1[255];
   evbuffer_remove(reply_dest,rep1,255); /* yes, this is dirty */
@@ -340,8 +339,7 @@ test_socks_socks5_request_reply(void *data)
   state->parsereq.af = AF_INET6;
   strcpy(state->parsereq.addr, "d:1:5:e:a:5:e:0");
   
-  tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS5_SUCCESS));
+  socks5_send_reply(reply_dest,state, SOCKS5_SUCCESS);
 
   uchar rep2[255];
   evbuffer_remove(reply_dest,rep2,255);
@@ -365,8 +363,7 @@ test_socks_socks5_request_reply(void *data)
   state->parsereq.af = AF_UNSPEC;
   strcpy(state->parsereq.addr, fqdn);
 
-  tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS5_FAILED_GENERAL));
+  socks5_send_reply(reply_dest,state, SOCKS5_FAILED_GENERAL);
 
   uchar rep3[255];
   evbuffer_remove(reply_dest,rep3,255);
@@ -383,8 +380,7 @@ test_socks_socks5_request_reply(void *data)
      SOCKS5_FAILED_UNSUPPORTED status. */  
   memset(&state->parsereq,'\x00',sizeof(struct parsereq));
   
-  tt_int_op(1, ==, socks5_send_reply(reply_dest,
-                                     state, SOCKS5_FAILED_UNSUPPORTED));
+  socks5_send_reply(reply_dest,state, SOCKS5_FAILED_UNSUPPORTED);
   uchar rep4[255];
   evbuffer_remove(reply_dest,rep4,255);
 
@@ -565,8 +561,7 @@ test_socks_socks4_request_reply(void *data)
   /* First test:
      We ask the server to send us a reply on an IPv4 request with
      succesful status. */
-  tt_int_op(1, ==, socks4_send_reply(reply_dest,
-                                     state, SOCKS4_SUCCESS));
+  socks4_send_reply(reply_dest,state, SOCKS4_SUCCESS);
   
   uchar rep1[255];
   evbuffer_remove(reply_dest,rep1,255); /* yes, this is dirty */
@@ -589,8 +584,7 @@ test_socks_socks4_request_reply(void *data)
   state->parsereq.af = AF_UNSPEC;
   strcpy(state->parsereq.addr, fqdn);
 
-  tt_int_op(1, ==, socks4_send_reply(reply_dest,
-                                      state, SOCKS4_FAILED));
+  socks4_send_reply(reply_dest,state, SOCKS4_FAILED);
 
   uchar rep2[255];
   evbuffer_remove(reply_dest,rep2,255);
