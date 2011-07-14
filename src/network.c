@@ -92,8 +92,6 @@ close_all_connections(void)
   while (conn_list.head) {
     conn_t *conn = UPCAST(conn_t, dll_node, conn_list.head);
     conn_free(conn); /* removes it */
-
-    return; /* connections are now all closed. */
   }
   assert(!n_connections);
 }
