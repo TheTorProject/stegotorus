@@ -181,6 +181,11 @@ simple_listener_cb(struct evconnlistener *evcl,
   listener_t *lsn = arg;
   struct event_base *base;
   conn_t *conn = calloc(1, sizeof(conn_t));
+
+  n_connections++; /* If we call conn_free() later on error, it will decrement
+                    * n_connections.  Therefore, we had better increment it at
+                    * the start. */
+
   if (!conn)
     goto err;
 
@@ -260,7 +265,6 @@ simple_listener_cb(struct evconnlistener *evcl,
   /* add conn to the linked list of connections */
   if (dll_append(&conn_list, &conn->dll_node)<0)
     goto err;
-  n_connections++;
 
   log_debug("Connection setup completed. "
             "We currently have %d connections!", n_connections);
