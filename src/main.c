@@ -199,7 +199,7 @@ main(int argc, const char **argv)
   /** Handle optional obfsproxy arguments. */
   start_of_protocols = handle_obfsproxy_args(&argv[1]);
 
-  protocols = calloc(1, sizeof(int)*(n_protocols+1));
+  protocols = calloc(sizeof(int), (n_protocols+1));
   if (!protocols)
     exit(1);
   n_alloc = n_protocols+1;
@@ -236,10 +236,10 @@ main(int argc, const char **argv)
      Finally, we allocate enough space on the n_options_array so that
      we can put the number of options there.
   */ 
-  protocol_options = calloc(1, sizeof(char**)*n_protocols);
+  protocol_options = calloc(sizeof(char**), n_protocols);
   if (!protocol_options)
     exit(1);
-  n_options_array = calloc(1, sizeof(int)*n_protocols);
+  n_options_array = calloc(sizeof(int), n_protocols);
   if (!n_options_array)
     exit(1);
 
@@ -269,7 +269,7 @@ main(int argc, const char **argv)
     /* Allocate space for the array carrying the options of this
        protocol. */
     protocol_options[actual_protocols-1] = 
-      calloc(1, sizeof(char*)*(n_options));
+      calloc(sizeof(char*), (n_options));
     if (!protocol_options[actual_protocols-1])
       exit(1);
 
