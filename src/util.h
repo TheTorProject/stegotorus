@@ -6,7 +6,7 @@
 #define UTIL_H
 
 #include <stdarg.h> /* for va_list */
-#include <stddef.h> /* for size_t etc */
+#include <stddef.h> /* size_t, offsetof, NULL, etc */
 
 #ifndef __GNUC__
 #define __attribute__(x) /* nothing */
@@ -37,14 +37,8 @@ int obfs_snprintf(char *str, size_t size,
 
 /***** Doubly Linked List stuff. *****/
 
-#define OFFSETOF(container_type, element) \
-  (((char*)&((container_type*)0)->element) - ((char*) ((container_type*)0)))
-
-#define UPCAST(container_type, element, ptr) \
-  (container_type*) (                                                   \
-         ((char*)ptr) - OFFSETOF(container_type, element)   \
-                    )
-
+#define DOWNCAST(container_type, element, ptr) \
+  (container_type*)( ((char*)ptr) - offsetof(container_type, element) )
 
 /** A doubly linked list node.
     [algorithms ripped off Wikipedia (Doubly_linked_list) ] */

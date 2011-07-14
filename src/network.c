@@ -93,7 +93,7 @@ close_all_connections(void)
 {
   /** Traverse the dll and close all connections */
   while (conn_list.head) {
-    conn_t *conn = UPCAST(conn_t, dll_node, conn_list.head);
+    conn_t *conn = DOWNCAST(conn_t, dll_node, conn_list.head);
     conn_free(conn); /* removes it */
   }
   assert(!n_connections);
@@ -169,7 +169,7 @@ free_all_listeners(void)
 
   /* Iterate listener doubly linked list and free them all. */
   while (listener_list.head) {
-    listener_t *listener = UPCAST(listener_t, dll_node, listener_list.head);
+    listener_t *listener = DOWNCAST(listener_t, dll_node, listener_list.head);
     listener_free(listener);
   }
 
