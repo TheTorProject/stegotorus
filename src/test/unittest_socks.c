@@ -331,9 +331,9 @@ test_socks_socks5_request_reply(void *data)
 
   tt_assert(rep1[3] == SOCKS5_ATYP_IPV4);
   /* check address */
-  tt_int_op(0, ==, memcmp(rep1+4, "\x7f\x00\x00\x01", 4));
+  tt_mem_op(rep1+4, ==, "\x7f\x00\x00\x01", 4);
   /* check port */
-  tt_int_op(0, ==, memcmp(rep1+4+4,"\x1c\xbd",2));
+  tt_mem_op(rep1+4+4, ==, "\x1c\xbd", 2);
 
   /* emptying s->dest buffer before next test  */
   size_t buffer_len = evbuffer_get_length(s->dest);
@@ -352,11 +352,11 @@ test_socks_socks5_request_reply(void *data)
   
   tt_assert(rep2[3] = SOCKS5_ATYP_IPV6);
   /* Test returned address against inet_pton(d:1:5:e:a:5:e:0) */
-  tt_int_op(0, ==, memcmp(rep2+4,
-                          "\x00\x0d\x00\x01\x00\x05\x00\x0e\x00"
-                          "\x0a\x00\x05\x00\x0e\x00\x00",  
-                          16));
-  tt_int_op(0, ==, memcmp(rep2+4+16, "\x1c\xbd", 2));
+  tt_mem_op(rep2+4, ==,
+            "\x00\x0d\x00\x01\x00\x05\x00\x0e\x00"
+            "\x0a\x00\x05\x00\x0e\x00\x00",
+            16);
+  tt_mem_op(rep2+4+16, ==, "\x1c\xbd", 2);
 
   /* emptying dest buffer before next test  */
   buffer_len = evbuffer_get_length(s->dest);
@@ -377,9 +377,9 @@ test_socks_socks5_request_reply(void *data)
   tt_assert(rep3[3] == SOCKS5_ATYP_FQDN);
   tt_assert(rep3[4] == strlen(fqdn));
   /* check fqdn */
-  tt_int_op(0, ==, memcmp(rep3+5,fqdn,strlen(fqdn)));
+  tt_mem_op(rep3+5, ==, fqdn,strlen(fqdn));
   /* check port */
-  tt_int_op(0, ==, memcmp(rep3+5+strlen(fqdn),"\x1c\xbd",2));
+  tt_mem_op(rep3+5+strlen(fqdn), ==, "\x1c\xbd",2);
 
   /* Fourth test: 
      We ask the server while having an empty parsereq and with a
@@ -391,8 +391,8 @@ test_socks_socks5_request_reply(void *data)
   evbuffer_remove(s->dest,rep4,255);
 
   tt_assert(rep4[3] == SOCKS5_ATYP_IPV4);
-  tt_int_op(0, ==, memcmp(rep4+4,"\x00\x00\x00\x00",4));
-  tt_int_op(0, ==, memcmp(rep4+4+4, "\x00\x00", 2));
+  tt_mem_op(rep4+4, ==, "\x00\x00\x00\x00",4);
+  tt_mem_op(rep4+4+4, ==, "\x00\x00", 2);
   
  end:;
 }
@@ -552,9 +552,9 @@ test_socks_socks4_request_reply(void *data)
   tt_assert(rep1[0] == '\x00');
   tt_assert(rep1[1] == SOCKS4_SUCCESS);
   /* check port */
-  tt_int_op(0, ==, memcmp(rep1+2,"\x1c\xbd",2));
+  tt_mem_op(rep1+2, ==, "\x1c\xbd",2);
   /* check address */
-  tt_int_op(0, ==, memcmp(rep1+2+2,"\x7f\x00\x00\x01", 4));
+  tt_mem_op(rep1+2+2, ==, "\x7f\x00\x00\x01", 4);
 
   /* emptying dest buffer before next test  */
   size_t buffer_len = evbuffer_get_length(s->dest);
@@ -574,7 +574,7 @@ test_socks_socks4_request_reply(void *data)
 
   tt_assert(rep2[1] == SOCKS4_FAILED);
   /* check port */
-  tt_int_op(0, ==, memcmp(rep2+2,"\x1c\xbd",2));
+  tt_mem_op(rep2+2, ==, "\x1c\xbd", 2);
   /* check address */
   /*  tt_str_op(rep1+2+2, ==, "www.test.example"); */
 

@@ -26,6 +26,8 @@
 #ifndef _TINYTEST_H
 #define _TINYTEST_H
 
+#include <stddef.h> /* size_t */
+
 /** Flag for a test that needs to run in a subprocess. */
 #define TT_FORK  (1<<0)
 /** Runtime flag for a test we've decided to skip. */
@@ -73,6 +75,8 @@ int _tinytest_get_verbosity(void);
 /** Implementation: Set a flag on tests matching a name; returns number
  * of tests that matched. */
 int _tinytest_set_flag(struct testgroup_t *, const char *, unsigned long);
+/** Implementation: Helper function for tt_mem_op. */
+char * tt_base16_encode(const char *value, size_t vlen);
 
 /** Set all tests in 'groups' matching the name 'named' to be skipped. */
 #define tinytest_skip(groups, named) \

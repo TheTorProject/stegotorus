@@ -20,10 +20,10 @@ test_crypt_hashvec(void *data)
   d = digest_new();
   digest_update(d, (unsigned char*)"", 0);
   digest_getdigest(d, output, 32);
-  tt_int_op(0, ==, memcmp(output,
-                          "\xe3\xb0\xc4\x42\x98\xfc\x1c\x14\x9a\xfb\xf4\xc8"
-                          "\x99\x6f\xb9\x24\x27\xae\x41\xe4\x64\x9b\x93\x4c"
-                          "\xa4\x95\x99\x1b\x78\x52\xb8\x55", 32));
+  tt_mem_op(output, ==,
+            "\xe3\xb0\xc4\x42\x98\xfc\x1c\x14\x9a\xfb\xf4\xc8"
+            "\x99\x6f\xb9\x24\x27\xae\x41\xe4\x64\x9b\x93\x4c"
+            "\xa4\x95\x99\x1b\x78\x52\xb8\x55", 32);
 
   /* Second SHA256 test vector:
      Test for the 256-bit entry of:
@@ -34,10 +34,10 @@ test_crypt_hashvec(void *data)
                 "\x10\xb4\x70\xb1\x44\x78\x44\x11\xc9\x3a\x4d\x50\x45\x56\x83"
                 "\x4d\xae\x3e\xa4\xa5\xbb", 32);
   digest_getdigest(d, output, 32);
-  tt_int_op(0, ==, memcmp(output,
-                          "\x56\x05\x9e\x8c\xb3\xc2\x97\x8b\x19\x82\x08\xbf"
-                          "\x5c\xa1\xe1\xea\x56\x59\xb7\x37\xa5\x06\x32\x4b"
-                          "\x7c\xec\x75\xb5\xeb\xaf\x05\x7d", 32));
+  tt_mem_op(output, ==,
+            "\x56\x05\x9e\x8c\xb3\xc2\x97\x8b\x19\x82\x08\xbf"
+            "\x5c\xa1\xe1\xea\x56\x59\xb7\x37\xa5\x06\x32\x4b"
+            "\x7c\xec\x75\xb5\xeb\xaf\x05\x7d", 32);
 
   /* Third SHA test vector:
      Test for the 1304-bit entry of:
@@ -57,10 +57,10 @@ test_crypt_hashvec(void *data)
                 "\x8a\x19\xc8\x18\xc2\xea\x2e\x9d\x4e\x2d\xe9\x19\x0c\x9d\xdd"
                 "\xb8\x06", 163);
   digest_getdigest(d, output, 32);
-  tt_int_op(0, ==, memcmp(output,
-                          "\xc9\x07\x18\x04\x43\xde\xe3\xcb\xcc\xb4\xc3\x13"
-                          "\x28\xe6\x25\x15\x85\x27\xa5\x93\xb8\x78\xde\x1b"
-                          "\x8e\x4b\xa3\x7f\x1d\x69\xfb\x66", 32));
+  tt_mem_op(output, ==,
+            "\xc9\x07\x18\x04\x43\xde\xe3\xcb\xcc\xb4\xc3\x13"
+            "\x28\xe6\x25\x15\x85\x27\xa5\x93\xb8\x78\xde\x1b"
+            "\x8e\x4b\xa3\x7f\x1d\x69\xfb\x66", 32);
 
   /* XXX Try doing init, update, update, output. */
   /* XXX add a base16-decode function so we can implement a tt_mem_op or
@@ -114,13 +114,13 @@ test_crypt_aes1(void *data)
 
   for (i = 0; i < 4; i++) {
     tt_int_op(0, ==, crypt->pos);
-    tt_int_op(0, ==, memcmp(crypt->ivec, testvec[i].counter, 16));
+    tt_mem_op(crypt->ivec, ==, testvec[i].counter, 16);
 
     memcpy(vec, testvec[i].plaintext, 16);
     stream_crypt(crypt, vec, 16);
 
-    tt_int_op(0, ==, memcmp(crypt->ecount_buf, testvec[i].keystream, 16));
-    tt_int_op(0, ==, memcmp(vec, testvec[i].ciphertext, 16));
+    tt_mem_op(crypt->ecount_buf, ==, testvec[i].keystream, 16);
+    tt_mem_op(vec, ==, testvec[i].ciphertext, 16);
   }
 
  end:
@@ -147,7 +147,7 @@ test_crypt_aes2(void *data)
   stream_crypt(crypt1, res1, 16);
   stream_crypt(crypt2, res2, 16);
 
-  tt_int_op(0, !=, memcmp(res1, res2, 16));
+  tt_mem_op(res1, !=, res2, 16);
 
  end:
   if (crypt1)
@@ -169,7 +169,7 @@ test_crypt_rng(void *data)
   tt_int_op(0, ==, random_bytes(data1, 100));
   tt_int_op(0, ==, random_bytes(data2, 100));
 
-  tt_int_op(0, !=, memcmp(data1, data2, 100));
+  tt_mem_op(data1, !=, data2, 100);
 
  end:
   ;

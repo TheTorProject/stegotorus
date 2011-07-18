@@ -177,13 +177,11 @@ test_obfs2_handshake(void *state)
   /* The handshake is now complete. We should have:
      client's send_crypto == server's recv_crypto
      server's send_crypto == client's recv_crypto . */
-  tt_int_op(0, ==, memcmp(client_state->send_crypto,
-                          server_state->recv_crypto,
-                          sizeof(crypt_t)));
+  tt_mem_op(client_state->send_crypto, ==, server_state->recv_crypto,
+            sizeof(crypt_t));
 
-  tt_int_op(0, ==, memcmp(client_state->recv_crypto,
-                          server_state->send_crypto,
-                          sizeof(crypt_t)));
+  tt_mem_op(client_state->recv_crypto, ==, server_state->send_crypto,
+            sizeof(crypt_t));
 
  end:;
 }
@@ -353,13 +351,11 @@ test_obfs2_split_handshake(void *state)
   /* The handshake is finally complete. We should have: */
   /*    client's send_crypto == server's recv_crypto */
   /*    server's send_crypto == client's recv_crypto . */
-  tt_int_op(0, ==, memcmp(client_state->send_crypto,
-                          server_state->recv_crypto,
-                          sizeof(crypt_t)));
+  tt_mem_op(client_state->send_crypto, ==, server_state->recv_crypto,
+            sizeof(crypt_t));
 
-  tt_int_op(0, ==, memcmp(client_state->recv_crypto,
-                          server_state->send_crypto,
-                          sizeof(crypt_t)));
+  tt_mem_op(client_state->recv_crypto, ==, server_state->send_crypto,
+            sizeof(crypt_t));
 
  end:;
 }
