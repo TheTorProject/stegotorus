@@ -4,8 +4,9 @@
    LibTomCrypt, version 1.6.  Tor uses it on platforms where OpenSSL doesn't
    have a SHA256. */
 
-#include "sha256.h"
 #include "util.h"
+
+#include "sha256.h"
 #include <string.h>
 #include <arpa/inet.h> /* for htonl/ntohl */
 

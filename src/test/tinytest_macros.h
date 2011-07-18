@@ -26,6 +26,11 @@
 #ifndef _TINYTEST_MACROS_H
 #define _TINYTEST_MACROS_H
 
+#include "tinytest.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 /* Helpers for defining statement-like macros */
 #define TT_STMT_BEGIN do {
 #define TT_STMT_END } while(0)

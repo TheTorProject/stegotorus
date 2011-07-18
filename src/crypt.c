@@ -2,9 +2,10 @@
    See LICENSE for other credits and copying information
 */
 
+#include "util.h"
+
 #define CRYPT_PRIVATE
 #include "crypt.h"
-#include "util.h"
 
 #include <fcntl.h>
 #include <limits.h>

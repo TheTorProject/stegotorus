@@ -5,6 +5,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include "config.h"
 #include <stdarg.h> /* for va_list */
 #include <stddef.h> /* size_t, offsetof, NULL, etc */
 

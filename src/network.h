@@ -39,8 +39,6 @@ void start_shutdown(int barbaric);
 
 #ifdef NETWORK_PRIVATE
 
-#include "util.h"
-
 struct bufferevent;
 struct socks_state_t;
 struct protocol_t;

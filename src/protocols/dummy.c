@@ -2,9 +2,10 @@
    See LICENSE for other credits and copying information
 */
 
+#include "../util.h"
+
 #include "dummy.h"
 #include "../protocol.h"
-#include "../util.h"
 
 #include <stdlib.h>
 #include <string.h>

@@ -2,10 +2,10 @@
    See LICENSE for other credits and copying information
 */
 
+#include "util.h"
+
 #define SOCKS_PRIVATE
 #include "socks.h"
-
-#include "util.h"
 
 #include <errno.h>
 #include <stdlib.h>

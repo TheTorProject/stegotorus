@@ -2,10 +2,10 @@
    See LICENSE for other credits and copying information
 */
 
+#include "../util.h"
+
 #define PROTOCOL_OBFS2_PRIVATE
 #include "obfs2.h"
-
-#include "../util.h"
 
 #include <stdlib.h>
 #include <string.h>

@@ -2,10 +2,11 @@
    See LICENSE for other credits and copying information
 */
 
+#include "util.h"
+
 #define NETWORK_PRIVATE
 #include "network.h"
 
-#include "util.h"
 #include "main.h"
 #include "socks.h"
 #include "protocol.h"
