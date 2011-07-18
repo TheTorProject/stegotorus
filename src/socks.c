@@ -7,7 +7,6 @@
 
 #include "util.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -189,19 +188,19 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
       goto err;
 
   if (evbuffer_remove(source, destaddr, addrlen) != addrlen)
-    assert(0);
+    obfs_abort();
 
   if (evbuffer_remove(source, (char *)&destport, 2) != 2)
-    assert(0);
+    obfs_abort();
 
   destaddr[addrlen] = '\0';
 
   if (af == AF_UNSPEC) {
-    assert(addrlen < sizeof(parsereq->addr));
+    obfs_assert(addrlen < sizeof(parsereq->addr));
     memcpy(parsereq->addr, destaddr, addrlen+1);
   } else {
     char a[16];
-    assert(addrlen <= 16);
+    obfs_assert(addrlen <= 16);
     memcpy(a, destaddr, addrlen);
     if (evutil_inet_ntop(af, destaddr, parsereq->addr,
                          sizeof(parsereq->addr)) == NULL)
@@ -331,7 +330,7 @@ socks5_handle_negotiation(struct evbuffer *source,
   }
 
   if (evbuffer_remove(source, methods, nmethods) < 0)
-    assert(0);
+    obfs_abort();
 
   for (found_noauth=0, i=0; i<nmethods ; i++) {
     if (methods[i] == SOCKS5_METHOD_NOAUTH) {
@@ -477,7 +476,7 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
   }
 
   /* ST_SENT_REPLY connections shouldn't be here! */
-  assert(socks_state->state != ST_SENT_REPLY &&
+  obfs_assert(socks_state->state != ST_SENT_REPLY &&
          socks_state->state != ST_HAVE_ADDR);
 
   if (socks_state->version == 0) {
@@ -527,7 +526,7 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
         return SOCKS_CMD_NOT_CONNECT;
       } else if (r == SOCKS_BROKEN)
         goto broken;
-      assert(0);
+      obfs_abort();
     }
     break;
   default:

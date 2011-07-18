@@ -6,7 +6,6 @@
 #include "../protocol.h"
 #include "../util.h"
 
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 

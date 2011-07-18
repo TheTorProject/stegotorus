@@ -10,7 +10,6 @@
 #include "socks.h"
 #include "protocol.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -96,7 +95,7 @@ close_all_connections(void)
     conn_t *conn = DOWNCAST(conn_t, dll_node, conn_list.head);
     conn_free(conn); /* removes it */
   }
-  assert(!n_connections);
+  obfs_assert(!n_connections);
 }
 /**
    This function spawns a listener configured according to the
@@ -226,7 +225,7 @@ simple_listener_cb(struct evconnlistener *evcl,
     bufferevent_setcb(conn->input,
                       plaintext_read_cb, NULL, input_event_cb, conn);
   } else {
-    assert(conn->mode == LSN_SOCKS_CLIENT);
+    obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
     bufferevent_setcb(conn->input,
                       socks_read_cb, NULL, input_event_cb, conn);
   }
@@ -303,7 +302,7 @@ conn_free(conn_t *conn)
   memset(conn, 0x99, sizeof(conn_t));
   free(conn);
 
-  assert(n_connections>=0);
+  obfs_assert(n_connections>=0);
   log_debug("Connection destroyed. "
             "We currently have %d connections!", n_connections);
 
@@ -336,19 +335,19 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   conn_t *conn = arg;
   //struct bufferevent *other;
   enum socks_ret socks_ret;
-  assert(bev == conn->input); /* socks must be on the initial bufferevent */
+  obfs_assert(bev == conn->input); /* socks must be on the initial bufferevent */
 
 
   do {
     enum socks_status_t status = socks_state_get_status(conn->socks_state);
     if (status == ST_SENT_REPLY) {
       /* We shouldn't be here. */
-      assert(0);
+      obfs_abort();
     } else if (status == ST_HAVE_ADDR) {
       int af, r, port;
       const char *addr=NULL;
       r = socks_state_get_address(conn->socks_state, &af, &addr, &port);
-      assert(r==0);
+      obfs_assert(r==0);
       r = bufferevent_socket_connect_hostname(conn->output,
                                               get_evdns_base(),
                                               af, addr, port);
@@ -461,7 +460,7 @@ static void
 input_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
-  assert(bev == conn->input);
+  obfs_assert(bev == conn->input);
 
   if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
     log_warn("Got error: %s",
@@ -478,7 +477,7 @@ static void
 output_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
-  assert(bev == conn->output);
+  obfs_assert(bev == conn->output);
 
   /**
      If we got the BEV_EVENT_ERROR flag *AND* we are in socks mode
@@ -532,7 +531,7 @@ output_event_cb(struct bufferevent *bev, short what, void *arg)
       struct sockaddr_storage ss;
       struct sockaddr *sa = (struct sockaddr*)&ss;
       socklen_t slen = sizeof(&ss);
-      assert(conn->socks_state);
+      obfs_assert(conn->socks_state);
       if (getpeername(bufferevent_getfd(bev), sa, &slen) == 0) {
         /* Figure out where we actually connected to so that we can tell the
          * socks client */

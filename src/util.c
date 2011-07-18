@@ -4,7 +4,6 @@
 
 #include "util.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -28,8 +27,7 @@
 static void ATTR_NORETURN
 die_oom(void)
 {
-  log_warn("Memory allocation failed: %s",strerror(errno));
-  exit(1);
+  log_error("Memory allocation failed: %s",strerror(errno));
 }
 
 void *
@@ -37,7 +35,7 @@ xmalloc(size_t size)
 {
   void *result;
 
-  assert(size < SIZE_T_CEILING);
+  obfs_assert(size < SIZE_T_CEILING);
 
   /* Some malloc() implementations return NULL when the input argument
      is zero. We don't bother detecting whether the implementation we're
@@ -57,7 +55,7 @@ void *
 xrealloc(void *ptr, size_t size)
 {
   void *result;
-  assert (size < SIZE_T_CEILING);
+  obfs_assert (size < SIZE_T_CEILING);
   if (size == 0)
     size = 1;
 
@@ -217,8 +215,8 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
 static void
 dll_insert_after(dll_t *list, dll_node_t *node, dll_node_t *new_node)
 {
-  assert(node);
-  assert(new_node);
+  obfs_assert(node);
+  obfs_assert(new_node);
 
   if (!list)
     return;
@@ -238,8 +236,8 @@ dll_insert_after(dll_t *list, dll_node_t *node, dll_node_t *new_node)
 static void
 dll_insert_before(dll_t *list, dll_node_t *node, dll_node_t *new_node)
 {
-  assert(node);
-  assert(new_node);
+  obfs_assert(node);
+  obfs_assert(new_node);
 
   if (!list)
     return;
@@ -266,7 +264,7 @@ dll_init(dll_t *list)
 static void
 dll_insert_beginning(dll_t *list, dll_node_t *node)
 {
-  assert(node);
+  obfs_assert(node);
 
   if (!list)
     return;
@@ -288,8 +286,8 @@ dll_insert_beginning(dll_t *list, dll_node_t *node)
 int
 dll_append(dll_t *list, dll_node_t *node)
 {
-  assert(list);
-  assert(node);
+  obfs_assert(list);
+  obfs_assert(node);
 
   if (!list->tail)
     dll_insert_beginning(list, node);
@@ -306,7 +304,7 @@ dll_append(dll_t *list, dll_node_t *node)
 void
 dll_remove(dll_t *list, dll_node_t *node)
 {
-  assert(node);
+  obfs_assert(node);
 
   if (!list)
     return;
@@ -326,6 +324,10 @@ dll_remove(dll_t *list, dll_node_t *node)
     off tor. It's basicaly a stripped down version of tor's logging
     system. Thank you tor. */
 
+/* Note: obfs_assert and obfs_abort cannot be used anywhere in the
+   logging system, as they will recurse into the logging system and
+   cause an infinite loop.  We use plain old abort(3) instead. */
+
 /* Size of maximum log entry, including newline and NULL byte. */
 #define MAX_LOG_ENTRY 1024
 /* String to append when a log entry doesn't fit in MAX_LOG_ENTRY. */
@@ -335,6 +337,7 @@ dll_remove(dll_t *list, dll_node_t *node)
 
 /** Logging severities */
 
+#define LOG_SEV_ERR     4
 #define LOG_SEV_WARN    3
 #define LOG_SEV_INFO    2
 #define LOG_SEV_DEBUG   1
@@ -351,11 +354,12 @@ static const char *
 sev_to_string(int severity)
 {
   switch (severity) {
+  case LOG_SEV_ERR:     return "error";
   case LOG_SEV_WARN:    return "warn";
   case LOG_SEV_INFO:    return "info";
   case LOG_SEV_DEBUG:   return "debug";
   default:
-    assert(0); return "UNKNOWN";
+    abort();
   }
 }
 
@@ -364,6 +368,8 @@ sev_to_string(int severity)
 static int
 string_to_sev(const char *string)
 {
+  if (!strcasecmp(string, "error"))
+    return LOG_SEV_ERR;
   if (!strcasecmp(string, "warn"))
     return LOG_SEV_WARN;
   else if (!strcasecmp(string, "info"))
@@ -381,7 +387,8 @@ string_to_sev(const char *string)
 static int
 sev_is_valid(int severity)
 {
-  return (severity == LOG_SEV_WARN ||
+  return (severity == LOG_SEV_ERR  ||
+          severity == LOG_SEV_WARN ||
           severity == LOG_SEV_INFO ||
           severity == LOG_SEV_DEBUG);
 }
@@ -473,7 +480,8 @@ log_set_min_severity(const char* sev_string)
 static void
 logv(int severity, const char *format, va_list ap)
 {
-  assert(sev_is_valid(severity));
+  if (!sev_is_valid(severity))
+    abort();
 
   if (logging_method == LOG_METHOD_NULL)
     return;
@@ -500,7 +508,8 @@ logv(int severity, const char *format, va_list ap)
       size_t offset = buflen-TRUNCATED_STR_LEN;
       r = obfs_snprintf(buf+offset, TRUNCATED_STR_LEN+1,
                         "%s", TRUNCATED_STR);
-      if (r < 0) assert(0);
+      if (r < 0)
+        abort();
     }
     n = buflen;
   } else
@@ -512,24 +521,26 @@ logv(int severity, const char *format, va_list ap)
   if (logging_method == LOG_METHOD_STDOUT)
     fprintf(stdout, "%s", buf);
   else if (logging_method == LOG_METHOD_FILE) {
-    assert(logging_logfile);
+    if (!logging_logfile)
+      abort();
     if (write(logging_logfile, buf, strlen(buf)) < 0)
-      printf("%s(): Terrible write() error!!!\n", __func__);
+      abort();
   } else
-    assert(0);
+    abort();
 }
 
 /**** Public logging API. ****/
 
 void
-log_info(const char *format, ...)
+log_error(const char *format, ...)
 {
   va_list ap;
   va_start(ap,format);
 
-  logv(LOG_SEV_INFO, format, ap);
+  logv(LOG_SEV_ERR, format, ap);
 
   va_end(ap);
+  exit(1);
 }
 
 void
@@ -539,6 +550,17 @@ log_warn(const char *format, ...)
   va_start(ap,format);
 
   logv(LOG_SEV_WARN, format, ap);
+
+  va_end(ap);
+}
+
+void
+log_info(const char *format, ...)
+{
+  va_list ap;
+  va_start(ap,format);
+
+  logv(LOG_SEV_INFO, format, ap);
 
   va_end(ap);
 }

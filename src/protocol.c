@@ -5,8 +5,8 @@
 #include "protocol.h"
 #include "protocols/obfs2.h"
 #include "protocols/dummy.h"
+#include "util.h"
 
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -50,7 +50,7 @@ proto_params_init(int n_options, const char *const *options)
 void
 proto_params_free(protocol_params_t *params)
 {
-  assert(params);
+  obfs_assert(params);
 
   if (params->target_address)
     free(params->target_address);
@@ -70,9 +70,9 @@ proto_params_free(protocol_params_t *params)
 struct protocol_t *
 proto_create(protocol_params_t *params)
 {
-  assert(params);
-  assert(params->vtable);
-  assert(params->vtable->create);
+  obfs_assert(params);
+  obfs_assert(params->vtable);
+  obfs_assert(params->vtable->create);
   return params->vtable->create(params);
 }
 
@@ -82,9 +82,9 @@ proto_create(protocol_params_t *params)
 */
 int
 proto_handshake(struct protocol_t *proto, void *buf) {
-  assert(proto);
-  assert(proto->vtable);
-  assert(proto->vtable->handshake);
+  obfs_assert(proto);
+  obfs_assert(proto->vtable);
+  obfs_assert(proto->vtable->handshake);
   return proto->vtable->handshake(proto, buf);
 }
 
@@ -93,9 +93,9 @@ proto_handshake(struct protocol_t *proto, void *buf) {
 */
 int
 proto_send(struct protocol_t *proto, void *source, void *dest) {
-  assert(proto);
-  assert(proto->vtable);
-  assert(proto->vtable->send);
+  obfs_assert(proto);
+  obfs_assert(proto->vtable);
+  obfs_assert(proto->vtable->send);
   return proto->vtable->send(proto, source, dest);
 }
 
@@ -104,9 +104,9 @@ proto_send(struct protocol_t *proto, void *source, void *dest) {
 */
 enum recv_ret
 proto_recv(struct protocol_t *proto, void *source, void *dest) {
-  assert(proto);
-  assert(proto->vtable);
-  assert(proto->vtable->recv);
+  obfs_assert(proto);
+  obfs_assert(proto->vtable);
+  obfs_assert(proto->vtable->recv);
   return proto->vtable->recv(proto, source, dest);
 }
 
@@ -116,8 +116,8 @@ proto_recv(struct protocol_t *proto, void *source, void *dest) {
 */
 void
 proto_destroy(struct protocol_t *proto) {
-  assert(proto);
-  assert(proto->vtable);
-  assert(proto->vtable->destroy);
+  obfs_assert(proto);
+  obfs_assert(proto->vtable);
+  obfs_assert(proto->vtable->destroy);
   proto->vtable->destroy(proto);
 }

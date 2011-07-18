@@ -7,7 +7,6 @@
 
 #include "../util.h"
 
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -322,7 +321,7 @@ obfs2_handshake(struct protocol_t *s, struct evbuffer *buf)
       SEED | E_PAD_KEY( UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN) )
   */
 
-  assert(sizeof(magic) == 4);
+  obfs_assert(sizeof(magic) == 4);
 
   /* generate padlen */
   if (random_bytes((uchar*)&plength, 4) < 0)

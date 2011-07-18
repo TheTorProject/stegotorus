@@ -6,7 +6,6 @@
 #include "crypt.h"
 #include "util.h"
 
-#include <assert.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -160,7 +159,7 @@ crypt_new(const uchar *key, size_t keylen)
 {
   crypt_t *k;
 
-  assert(keylen == AES_BLOCK_SIZE);
+  obfs_assert(keylen == AES_BLOCK_SIZE);
   k = xzalloc(sizeof(crypt_t));
   AES_set_encrypt_key(key, AES_BLOCK_SIZE * CHAR_BIT, &k->key);
 
@@ -173,7 +172,7 @@ crypt_new(const uchar *key, size_t keylen)
 void
 crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
 {
-  assert(ivlen == sizeof(key->ivec));
+  obfs_assert(ivlen == sizeof(key->ivec));
   memcpy(key->ivec, iv, ivlen);
 }
 
