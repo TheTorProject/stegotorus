@@ -77,27 +77,54 @@ test_crypt_hashvec(void *data)
 static void
 test_crypt_aes1(void *data)
 {
-  /* Trying AES_ctr128_encrypt(x,x,...) to see if in-place encryption works.
-     Seems like it's working alright.
-     Test vector taken from:
-     http://www.inconteam.com/software-development/41-encryption/55-aes-test-vectors
-     maybe we should find something a bit more NIST-ish */
-  uchar key[16] = "\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c";
-  uchar iv[16] = "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff";
-  uchar vec[16] = "\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a";
+  /* In-place encryption of the test vectors from
+     http://csrc.nist.gov/publications/nistpubs/800-38a/sp800-38a.pdf
+     for AES128 in counter mode (section F.5.1) */
+  const uchar key[16] =
+    "\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c";
+  const uchar iv[16] =
+    "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff";
+  struct testblock {
+    const uchar counter[16];
+    const uchar keystream[16];
+    const uchar plaintext[16];
+    const uchar ciphertext[16];
+  };
+  const struct testblock testvec[4] = {
+    { "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff",
+      "\xec\x8c\xdf\x73\x98\x60\x7c\xb0\xf2\xd2\x16\x75\xea\x9e\xa1\xe4",
+      "\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a",
+      "\x87\x4d\x61\x91\xb6\x20\xe3\x26\x1b\xef\x68\x64\x99\x0d\xb6\xce" },
+    { "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xff\x00",
+      "\x36\x2b\x7c\x3c\x67\x73\x51\x63\x18\xa0\x77\xd7\xfc\x50\x73\xae",
+      "\xae\x2d\x8a\x57\x1e\x03\xac\x9c\x9e\xb7\x6f\xac\x45\xaf\x8e\x51",
+      "\x98\x06\xf6\x6b\x79\x70\xfd\xff\x86\x17\x18\x7b\xb9\xff\xfd\xff" },
+    { "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xff\x01",
+      "\x6a\x2c\xc3\x78\x78\x89\x37\x4f\xbe\xb4\xc8\x1b\x17\xba\x6c\x44",
+      "\x30\xc8\x1c\x46\xa3\x5c\xe4\x11\xe5\xfb\xc1\x19\x1a\x0a\x52\xef",
+      "\x5a\xe4\xdf\x3e\xdb\xd5\xd3\x5e\x5b\x4f\x09\x02\x0d\xb0\x3e\xab", },
+    { "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xff\x02",
+      "\xe8\x9c\x39\x9f\xf0\xf1\x98\xc6\xd4\x0a\x31\xdb\x15\x6c\xab\xfe",
+      "\xf6\x9f\x24\x45\xdf\x4f\x9b\x17\xad\x2b\x41\x7b\xe6\x6c\x37\x10",
+      "\x1e\x03\x1d\xda\x2f\xbe\x03\xd1\x79\x21\x70\xa0\xf3\x00\x9c\xee" }
+  };
 
-  crypt_t *crypt;
+  uchar vec[16];
+  unsigned int i;
 
-  crypt = crypt_new(key, sizeof(key));
+  crypt_t *crypt = crypt_new(key, sizeof(key));
   crypt_set_iv(crypt, iv, sizeof(iv));
-  stream_crypt(crypt, vec, sizeof(vec));
 
-  tt_int_op(0, ==, memcmp(vec,
-                          "\x87\x4d\x61\x91\xb6\x20\xe3\x26\x1b\xef\x68\x64\x99\x0d"
-                          "\xb6\xce", 16));
+  for (i = 0; i < 4; i++) {
+    tt_int_op(0, ==, crypt->pos);
+    tt_int_op(0, ==, memcmp(crypt->ivec, testvec[i].counter, 16));
 
-  /* XXX test longer streams too; the failure modes for stream crypto are not
-   * visible in a single block. */
+    memcpy(vec, testvec[i].plaintext, 16);
+    stream_crypt(crypt, vec, 16);
+
+    tt_int_op(0, ==, memcmp(crypt->ecount_buf, testvec[i].keystream, 16));
+    tt_int_op(0, ==, memcmp(vec, testvec[i].ciphertext, 16));
+  }
 
  end:
   if (crypt)
@@ -152,13 +179,13 @@ test_crypt_rng(void *data)
 }
 
 
-#define T(name, flags) \
-  { #name, test_crypt_##name, (flags), NULL, NULL }
+#define T(name) \
+  { #name, test_crypt_##name, 0, NULL, NULL }
 
 struct testcase_t crypt_tests[] = {
-  T(hashvec, 0),
-  T(aes1,0),
-  T(aes2,0),
-  T(rng,0),
+  T(hashvec),
+  T(aes1),
+  T(aes2),
+  T(rng),
   END_OF_TESTCASES
 };

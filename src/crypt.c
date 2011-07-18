@@ -183,8 +183,7 @@ crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
 void
 stream_crypt(crypt_t *key, uchar *buf, size_t len)
 {
-  AES_ctr128_encrypt(buf, buf, /* XXX make sure this is okay to do. */
-                     len,
+  AES_ctr128_encrypt(buf, buf, len,
                      &key->key, key->ivec, key->ecount_buf,
                      &key->pos);
 }
