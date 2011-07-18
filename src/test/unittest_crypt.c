@@ -80,9 +80,9 @@ test_crypt_aes1(void *data)
   /* In-place encryption of the test vectors from
      http://csrc.nist.gov/publications/nistpubs/800-38a/sp800-38a.pdf
      for AES128 in counter mode (section F.5.1) */
-  const uchar key[16] =
+  static const uchar key[16] =
     "\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c";
-  const uchar iv[16] =
+  static const uchar iv[16] =
     "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff";
   struct testblock {
     const uchar counter[16];
@@ -90,7 +90,7 @@ test_crypt_aes1(void *data)
     const uchar plaintext[16];
     const uchar ciphertext[16];
   };
-  const struct testblock testvec[4] = {
+  static const struct testblock testvec[4] = {
     { "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff",
       "\xec\x8c\xdf\x73\x98\x60\x7c\xb0\xf2\xd2\x16\x75\xea\x9e\xa1\xe4",
       "\x6b\xc1\xbe\xe2\x2e\x40\x9f\x96\xe9\x3d\x7e\x11\x73\x93\x17\x2a",

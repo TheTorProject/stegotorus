@@ -150,9 +150,8 @@ setup_obfs2_state(const struct testcase_t *unused)
   return s;
 
  end:
-  if (s)
-    cleanup_obfs2_state(NULL, s);
-  return 0;
+  cleanup_obfs2_state(NULL, s);
+  return NULL;
 }
 
 static const struct testcase_setup_t obfs2_fixture =
