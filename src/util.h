@@ -11,6 +11,11 @@
 #ifndef __GNUC__
 #define __attribute__(x) /* nothing */
 #endif
+#define ATTR_MALLOC   __attribute__((malloc))
+#define ATTR_NORETURN __attribute__((noreturn))
+#define ATTR_PRINTF_1 __attribute__((format(printf, 1, 2)))
+#define ATTR_PRINTF_3 __attribute__((format(printf, 3, 4)))
+#define ATTR_PURE     __attribute__((pure))
 
 struct sockaddr;
 struct event_base;
@@ -23,11 +28,11 @@ struct evdns_base;
    allocate-memory-or-crash functions "xwhatever". Also, at this time
    I do not see a need for a free() wrapper. */
 
-void *xmalloc(size_t size) __attribute__((malloc)); /* does not clear memory */
-void *xzalloc(size_t size) __attribute__((malloc)); /* clears memory */
+void *xmalloc(size_t size) ATTR_MALLOC; /* does not clear memory */
+void *xzalloc(size_t size) ATTR_MALLOC; /* clears memory */
 void *xrealloc(void *ptr, size_t size);
-void *xmemdup(const void *ptr, size_t size) __attribute__((malloc));
-char *xstrdup(const char *s) __attribute__((malloc));
+void *xmemdup(const void *ptr, size_t size) ATTR_MALLOC;
+char *xstrdup(const char *s) ATTR_MALLOC;
 
 /***** Network functions stuff. *****/
 
@@ -46,7 +51,7 @@ int obfs_vsnprintf(char *str, size_t size,
                    const char *format, va_list args);
 int obfs_snprintf(char *str, size_t size,
                   const char *format, ...)
-  __attribute__((format(printf, 3, 4)));
+  ATTR_PRINTF_3;
 
 /***** Doubly Linked List stuff. *****/
 
@@ -96,16 +101,16 @@ void close_obfsproxy_logfile(void);
 /** Warn-level severity: for messages that only appear when something
     has gone wrong. */
 void log_warn(const char *format, ...)
-  __attribute__((format(printf, 1, 2)));
+  ATTR_PRINTF_1;
 
 /** Info-level severity: for messages that should be sent to the user
     during normal operation. */
 void log_info(const char *format, ...)
-  __attribute__((format(printf, 1, 2)));
+  ATTR_PRINTF_1;
 
 /** Debug-level severity: for hyper-verbose messages of no interest to
     anybody but developers. */
 void log_debug(const char *format, ...)
-  __attribute__((format(printf, 1, 2)));
+  ATTR_PRINTF_1;
 
 #endif

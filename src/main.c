@@ -2,27 +2,24 @@
    See LICENSE for other credits and copying information
 */
 
-#include <stdlib.h>
-#include <errno.h>
-#include <stdio.h>
-#include <string.h>
-#include <signal.h>
-
-#include <event2/event.h>
-#include "network.h"
 #include "util.h"
+#include "network.h"
 #include "protocol.h"
 
-#ifndef __GNUC__
-#define __attribute__(x)
-#endif
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <event2/event.h>
 
 /* The character that seperates multiple listeners in the cli */
 #define SEPARATOR "+"
 /* Totally arbitrary. */
 #define MAXPROTOCOLS 20
 
-static void usage(void) __attribute__((noreturn));
+static void usage(void) ATTR_NORETURN;
 static int handle_obfsproxy_args(const char **argv);
 
 static struct event_base *the_event_base=NULL;

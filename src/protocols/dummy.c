@@ -116,14 +116,13 @@ dummy_destroy(struct protocol_t *proto)
    The dummy protocol just puts the data of 'source' in 'dest'.
 */
 static int
-dummy_handshake(struct protocol_t *proto __attribute__((unused)),
-                struct evbuffer *buf __attribute__((unused)))
+dummy_handshake(struct protocol_t *proto, struct evbuffer *buf)
 {
   return 0;
 }
 
 static int
-dummy_send(struct protocol_t *proto __attribute__((unused)),
+dummy_send(struct protocol_t *proto,
            struct evbuffer *source, struct evbuffer *dest)
 {
   return evbuffer_add_buffer(dest,source);
@@ -135,7 +134,7 @@ dummy_send(struct protocol_t *proto __attribute__((unused)),
   The dummy protocol just puts the data of 'source' into 'dest'.
 */
 static enum recv_ret
-dummy_recv(struct protocol_t *proto __attribute__((unused)),
+dummy_recv(struct protocol_t *proto,
            struct evbuffer *source, struct evbuffer *dest)
 {
   if (evbuffer_add_buffer(dest,source)<0)

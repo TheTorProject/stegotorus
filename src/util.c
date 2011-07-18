@@ -25,7 +25,7 @@
 
 /**************************** Memory Allocation ******************************/
 
-static void __attribute__((noreturn))
+static void ATTR_NORETURN
 die_oom(void)
 {
   log_warn("Memory allocation failed: %s",strerror(errno));
