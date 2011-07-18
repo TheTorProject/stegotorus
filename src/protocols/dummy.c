@@ -28,9 +28,7 @@ static struct protocol_params_t *
 dummy_init(int n_options, const char *const *options)
 {
   struct protocol_params_t *params
-    = calloc(1, sizeof(struct protocol_params_t));
-  if (!params)
-    return NULL;
+    = xzalloc(sizeof(struct protocol_params_t));
 
   if (parse_and_set_options(n_options, options, params) < 0) {
     free(params);
@@ -101,7 +99,7 @@ static struct protocol_t *
 dummy_create(struct protocol_params_t *params)
 {
   /* Dummy needs no per-connection protocol-specific state. */
-  struct protocol_t *proto = calloc(1, sizeof(struct protocol_t));
+  struct protocol_t *proto = xzalloc(sizeof(struct protocol_t));
   proto->vtable = &dummy_vtable;
   return proto;
 }

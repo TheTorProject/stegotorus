@@ -30,7 +30,7 @@ enum socks_ret {
 enum socks_ret handle_socks(struct evbuffer *source,
                             struct evbuffer *dest,
                             socks_state_t *socks_state);
-socks_state_t *socks_state_new(void);
+socks_state_t *socks_state_new(void); /* cannot fail */
 void socks_state_free(socks_state_t *s);
 
 enum socks_status_t socks_state_get_status(const socks_state_t *state);

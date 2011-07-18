@@ -4,9 +4,11 @@
 
 #define CRYPT_PRIVATE
 #include "crypt.h"
+#include "util.h"
 
 #include <assert.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -74,14 +76,12 @@ struct digest_t {
 };
 
 /**
-   Returns a new SHA256 digest container, or NULL on failure.
+   Returns a new SHA256 digest container.
 */
 digest_t *
 digest_new(void)
 {
-  digest_t *d = malloc(sizeof(digest_t));
-  if (!d)
-    return NULL;
+  digest_t *d = xmalloc(sizeof(digest_t));
   SHA256_Init(&d->ctx);
   return d;
 }
@@ -89,7 +89,7 @@ digest_new(void)
 /**
    Updates the contents of the SHA256 container 'd' with the first
    'len' bytes of 'buf'.
-*/ 
+*/
 void
 digest_update(digest_t *d, const uchar *buf, size_t len)
 {
@@ -118,9 +118,7 @@ struct digest_t {
 digest_t *
 digest_new(void)
 {
-  digest_t *d = malloc(sizeof(digest_t));
-  if (!d)
-    return NULL;
+  digest_t *d = xmalloc(sizeof(digest_t));
   sha256_init(&d->ctx);
   return d;
 }
@@ -156,19 +154,15 @@ digest_free(digest_t *d)
 
 /**
    Initializes the AES cipher with 'key'.
-*/ 
+*/
 crypt_t *
 crypt_new(const uchar *key, size_t keylen)
 {
   crypt_t *k;
-  if (keylen < AES_BLOCK_SIZE)
-    return NULL;
 
-  k = calloc(1, sizeof(crypt_t));
-  if (k == NULL)
-    return NULL;
-
-  AES_set_encrypt_key(key, 128, &k->key);
+  assert(keylen == AES_BLOCK_SIZE);
+  k = xzalloc(sizeof(crypt_t));
+  AES_set_encrypt_key(key, AES_BLOCK_SIZE * CHAR_BIT, &k->key);
 
   return k;
 }

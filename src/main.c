@@ -181,13 +181,6 @@ handle_obfsproxy_args(const char **argv)
   return i;
 }
 
-static void
-die_oom(void)
-{
-  log_warn("Memory allocation failed: %s",strerror(errno));
-  exit(1);
-}
-
 int
 main(int argc, const char **argv)
 {
@@ -214,7 +207,6 @@ main(int argc, const char **argv)
   int start;
   int end;
   int n_options;
-  void *realloc_temp;
   int i;
 
   /* The number of protocols. */
@@ -222,7 +214,7 @@ main(int argc, const char **argv)
   /* An array which holds the position in argv of the command line
      options for each protocol. */
   unsigned int *protocols=NULL;
-  /* keeps track of allocated space for the protocols array */ 
+  /* keeps track of allocated space for the protocols array */
   unsigned int n_alloc;
 
   if (argc < 2) {
@@ -235,9 +227,7 @@ main(int argc, const char **argv)
   /** Handle optional obfsproxy arguments. */
   start_of_protocols = handle_obfsproxy_args(&argv[1]);
 
-  protocols = calloc(sizeof(int), (n_protocols+1));
-  if (!protocols)
-    die_oom();
+  protocols = xzalloc((n_protocols + 1) * sizeof(int));
   n_alloc = n_protocols+1;
 
   /* Populate protocols and calculate n_protocols. */
@@ -249,10 +239,7 @@ main(int argc, const char **argv)
       /* Do we need to expand the protocols array? */
       if (n_alloc <= n_protocols) {
         n_alloc *= 2;
-        realloc_temp = realloc(protocols, sizeof(int)*(n_alloc));
-        if (!realloc_temp)
-          die_oom();
-        protocols = realloc_temp;
+        protocols = xrealloc(protocols, sizeof(int)*(n_alloc));
       }
     }
   }
@@ -271,13 +258,9 @@ main(int argc, const char **argv)
      that point to arrays carrying the options of the protocols.
      Finally, we allocate enough space on the n_options_array so that
      we can put the number of options there.
-  */ 
-  protocol_options = calloc(sizeof(char**), n_protocols);
-  if (!protocol_options)
-    die_oom();
-  n_options_array = calloc(sizeof(int), n_protocols);
-  if (!n_options_array)
-    die_oom();
+  */
+  protocol_options = xzalloc(n_protocols * sizeof(char**));
+  n_options_array = xzalloc(n_protocols * sizeof(int));
 
   /* Iterate through protocols. */
   for (i=0;i<n_protocols;i++) {
@@ -304,10 +287,7 @@ main(int argc, const char **argv)
 
     /* Allocate space for the array carrying the options of this
        protocol. */
-    protocol_options[actual_protocols-1] =
-      calloc(sizeof(char*), (n_options));
-    if (!protocol_options[actual_protocols-1])
-      die_oom();
+    protocol_options[actual_protocols-1] = xzalloc(n_options * sizeof(char*));
 
     /* Write the number of options to the correct place in n_options_array[]. */
     n_options_array[actual_protocols-1] = n_options;

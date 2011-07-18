@@ -125,8 +125,7 @@ static const char *const options_server[] =
 static void *
 setup_obfs2_state(const struct testcase_t *unused)
 {
-  struct test_obfs2_state *s = calloc(1, sizeof(struct test_obfs2_state));
-  tt_assert(s);
+  struct test_obfs2_state *s = xzalloc(sizeof(struct test_obfs2_state));
 
   s->proto_params_client =
     proto_params_init(ALEN(options_client), options_client);

@@ -31,7 +31,6 @@ test_socks_socks5_send_negotiation(void *data)
 
   socks_state_t *state;
   state = socks_state_new();
-  tt_assert(state);
 
   /* First test:
      Only one method: NOAUTH.
@@ -143,7 +142,6 @@ test_socks_socks5_request(void *data)
 
   socks_state_t *state;
   state = socks_state_new();
-  tt_assert(state);
 
   const uint32_t addr_ipv4 = htonl(0x7f000001); /* 127.0.0.1 */
   const uint8_t addr_ipv6[16] = {0,13,0,1,0,5,0,14,0,10,0,5,0,14,0,0}; /* d:1:5:e:a:5:e:0 */
@@ -308,7 +306,6 @@ test_socks_socks5_request_reply(void *data)
 
   socks_state_t *state;
   state = socks_state_new();
-  tt_assert(state);
 
   state->parsereq.af = AF_INET;
   strcpy(state->parsereq.addr, "127.0.0.1");
@@ -415,7 +412,6 @@ test_socks_socks4_request(void *data)
 
   socks_state_t *state;
   state = socks_state_new();
-  tt_assert(state);
 
   /* First test:
      Correct SOCKS4 req packet with nothing in the optional field. */
@@ -552,7 +548,6 @@ test_socks_socks4_request_reply(void *data)
 
   socks_state_t *state;
   state = socks_state_new();
-  tt_assert(state);
 
   state->parsereq.af = AF_INET;
   strcpy(state->parsereq.addr, "127.0.0.1");

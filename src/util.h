@@ -16,6 +16,19 @@ struct sockaddr;
 struct event_base;
 struct evdns_base;
 
+/***** Memory allocation. *****/
+
+/* Because this isn't Tor and functions named "tor_whatever" would be
+   confusing, I am instead following the GNU convention of naming
+   allocate-memory-or-crash functions "xwhatever". Also, at this time
+   I do not see a need for a free() wrapper. */
+
+void *xmalloc(size_t size) __attribute__((malloc)); /* does not clear memory */
+void *xzalloc(size_t size) __attribute__((malloc)); /* clears memory */
+void *xrealloc(void *ptr, size_t size);
+void *xmemdup(const void *ptr, size_t size) __attribute__((malloc));
+char *xstrdup(const char *s) __attribute__((malloc));
+
 /***** Network functions stuff. *****/
 
 int resolve_address_port(const char *address,

@@ -43,24 +43,19 @@
 typedef unsigned char uchar;
 
 /**
-   Creates a new SOCKS state.
-
-   Returns a 'socks_state_t' on success, NULL on fail.
+   Creates a new 'socks_state_t' object.
 */
 socks_state_t *
 socks_state_new(void)
 {
-  socks_state_t *state = calloc(1, sizeof(socks_state_t));
-  if (!state)
-    return NULL;
+  socks_state_t *state = xzalloc(sizeof(socks_state_t));
   state->state = ST_WAITING;
-
   return state;
 }
 
 /**
    Deallocates memory of socks_state_t 's'.
-*/ 
+*/
 void
 socks_state_free(socks_state_t *s)
 {
@@ -318,8 +313,8 @@ socks5_handle_negotiation(struct evbuffer *source,
                           struct evbuffer *dest, socks_state_t *state)
 {
   unsigned int found_noauth, i;
-
   uchar nmethods;
+  uchar methods[0xFF];
 
   evbuffer_copyout(source, &nmethods, 1);
 
@@ -329,24 +324,21 @@ socks5_handle_negotiation(struct evbuffer *source,
 
   evbuffer_drain(source, 1);
 
-  uchar *p;
-  /* XXX user controlled malloc(). range should be: 0x00-0xff */
-  p = malloc(nmethods);
-  if (!p) {
-    log_warn("malloc failed!");
+  /* this should be impossible, but we check it anyway for great defensiveness */
+  if (nmethods > 0xFF) {
+    log_warn("too many methods!");
     return SOCKS_BROKEN;
   }
-  if (evbuffer_remove(source, p, nmethods) < 0)
+
+  if (evbuffer_remove(source, methods, nmethods) < 0)
     assert(0);
 
   for (found_noauth=0, i=0; i<nmethods ; i++) {
-    if (p[i] == SOCKS5_METHOD_NOAUTH) {
+    if (methods[i] == SOCKS5_METHOD_NOAUTH) {
       found_noauth = 1;
       break;
     }
   }
-
-  free(p);
 
   return socks5_do_negotiation(dest,found_noauth);
 }

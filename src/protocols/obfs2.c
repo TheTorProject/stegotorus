@@ -36,9 +36,7 @@ static struct protocol_params_t *
 obfs2_init(int n_options, const char *const *options)
 {
   struct protocol_params_t *params
-    = calloc(1, sizeof(struct protocol_params_t));
-  if (!params)
-    return NULL;
+    = xzalloc(sizeof(struct protocol_params_t));
 
   if (parse_and_set_options(n_options, options, params) < 0) {
     usage();
@@ -85,8 +83,9 @@ parse_and_set_options(int n_options, const char *const *options,
         if (got_ss)
           return -1;
         /* this is freed in proto_params_free() */
-        params->shared_secret = strdup(*options+16);
         params->shared_secret_len = strlen(*options+16);
+        params->shared_secret = xmemdup(*options+16,
+                                        params->shared_secret_len + 1);
         got_ss=1;
       } else {
         log_warn("obfs2: Unknown argument.");
@@ -163,7 +162,7 @@ seed_nonzero(const uchar *seed)
 
 /**
    Derive and return key of type 'keytype' from the seeds currently set in
-   'state'.  Returns NULL on failure.
+   'state'.
  */
 static crypt_t *
 derive_key(void *s, const char *keytype)
@@ -202,7 +201,7 @@ derive_key(void *s, const char *keytype)
 
 /**
    Derive and return padding key of type 'keytype' from the seeds
-   currently set in state 's'.  Returns NULL on failure.
+   currently set in state 's'.
 */
 static crypt_t *
 derive_padding_key(void *s, const uchar *seed,
@@ -250,12 +249,10 @@ derive_padding_key(void *s, const uchar *seed,
 static struct protocol_t *
 obfs2_create(protocol_params_t *params)
 {
-  obfs2_protocol_t *proto = calloc(1, sizeof(obfs2_protocol_t));
+  obfs2_protocol_t *proto = xzalloc(sizeof(obfs2_protocol_t));
   uchar *seed;
   const char *send_pad_type;
 
-  if (!proto)
-    return NULL;
   proto->state = ST_WAIT_FOR_KEY;
   proto->we_are_initiator = params->is_initiator;
   if (proto->we_are_initiator) {
@@ -275,10 +272,6 @@ obfs2_create(protocol_params_t *params)
   if (params->shared_secret) {
     /* ASN we must say in spec that we hash command line shared secret. */
     digest_t *c = digest_new();
-    if (!c) {
-      free(proto);
-      return NULL;
-    }
     digest_update(c, (uchar*)params->shared_secret, params->shared_secret_len);
     digest_getdigest(c, proto->secret_seed, SHARED_SECRET_LENGTH);
     digest_free(c);
@@ -286,11 +279,6 @@ obfs2_create(protocol_params_t *params)
 
   /* Derive the key for what we're sending */
   proto->send_padding_crypto = derive_padding_key(proto, seed, send_pad_type);
-  if (proto->send_padding_crypto == NULL) {
-    free(proto);
-    return NULL;
-  }
-
   proto->super.vtable = &obfs2_vtable;
   return &proto->super;
 }
@@ -420,7 +408,7 @@ obfs2_send(struct protocol_t *s,
    Helper: called after reciving our partner's setup message.  Initializes all
    keys.  Returns 0 on success, -1 on failure.
  */
-static int
+static void
 init_crypto(void *s)
 {
   obfs2_protocol_t *state = s;
@@ -447,11 +435,6 @@ init_crypto(void *s)
   state->recv_crypto = derive_key(state, recv_keytype);
   state->recv_padding_crypto =
     derive_padding_key(state, recv_seed, recv_pad_keytype);
-
-  if (state->send_crypto && state->recv_crypto && state->recv_padding_crypto)
-    return 0;
-  else
-    return -1;
 }
 
 /* Called when we receive data in an evbuffer 'source': deobfuscates that data
@@ -491,8 +474,7 @@ obfs2_recv(struct protocol_t *s, struct evbuffer *source,
     memcpy(other_seed, buf, OBFUSCATE_SEED_LENGTH);
 
     /* Now we can set up all the keys from the seed */
-    if (init_crypto(state) < 0)
-      return RECV_BAD;
+    init_crypto(state);
 
     /* Decrypt the next 8 bytes */
     stream_crypt(state->recv_padding_crypto, buf+OBFUSCATE_SEED_LENGTH, 8);

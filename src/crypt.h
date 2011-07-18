@@ -21,7 +21,7 @@ int initialize_crypto(void);
 /** Clean up global crypto state */
 void cleanup_crypto(void);
 
-/** Return a newly allocated digest state, or NULL on failure. */
+/** Return a newly allocated digest state; cannot fail. */
 digest_t *digest_new(void);
 /** Add n bytes from b to the digest state. */
 void digest_update(digest_t *, const uchar *b, size_t n);
@@ -31,10 +31,11 @@ size_t digest_getdigest(digest_t *, uchar *b, size_t n);
 /** Clear and free a digest state */
 void digest_free(digest_t *);
 
-/** Return a new stream cipher state taking key and IV from the data provided.
- * The data length must be exactly 32 */
-crypt_t *crypt_new(const uchar *, size_t);
-void crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen);
+/** Return a new stream cipher state using 'key' as the symmetric key.
+ * The data length must be exactly 16 bytes. Cannot fail. */
+crypt_t *crypt_new(const uchar *key, size_t);
+/* Set the IV of a stream-cipher state.  Cannot fail. */
+void crypt_set_iv(crypt_t *, const uchar *iv, size_t ivlen);
 
 /** Encrypt n bytes of data in the buffer b, in place. */
 void stream_crypt(crypt_t *, uchar *b, size_t n);

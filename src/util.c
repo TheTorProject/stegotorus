@@ -5,6 +5,7 @@
 #include "util.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
@@ -21,6 +22,73 @@
 
 /** Any size_t larger than this amount is likely to be an underflow. */
 #define SIZE_T_CEILING  (SIZE_MAX/2 - 16)
+
+/**************************** Memory Allocation ******************************/
+
+static void __attribute__((noreturn))
+die_oom(void)
+{
+  log_warn("Memory allocation failed: %s",strerror(errno));
+  exit(1);
+}
+
+void *
+xmalloc(size_t size)
+{
+  void *result;
+
+  assert(size < SIZE_T_CEILING);
+
+  /* Some malloc() implementations return NULL when the input argument
+     is zero. We don't bother detecting whether the implementation we're
+     being compiled for does that, because it should hardly ever come up,
+     and avoiding it unconditionally does no harm. */
+  if (size == 0)
+    size = 1;
+
+  result = malloc(size);
+  if (result == NULL)
+    die_oom();
+
+  return result;
+}
+
+void *
+xrealloc(void *ptr, size_t size)
+{
+  void *result;
+  assert (size < SIZE_T_CEILING);
+  if (size == 0)
+    size = 1;
+
+  result = realloc(ptr, size);
+  if (result == NULL)
+    die_oom();
+
+  return result;
+}
+
+void *
+xzalloc(size_t size)
+{
+  void *result = xmalloc(size);
+  memset(result, 0, size);
+  return result;
+}
+
+void *
+xmemdup(const void *ptr, size_t size)
+{
+  void *copy = xmalloc(size);
+  memcpy(copy, ptr, size);
+  return copy;
+}
+
+char *
+xstrdup(const char *s)
+{
+  return xmemdup(s, strlen(s) + 1);
+}
 
 /************************ Obfsproxy Network Routines *************************/
 
@@ -45,10 +113,8 @@ resolve_address_port(const char *address,
   struct evutil_addrinfo *ai = NULL;
   struct evutil_addrinfo ai_hints;
   int result = -1, ai_res;
-  char *a = strdup(address), *cp;
+  char *a = xstrdup(address), *cp;
   const char *portstr;
-  if (!a)
-    return -1;
 
   if ((cp = strchr(a, ':'))) {
     portstr = cp+1;
@@ -78,10 +144,8 @@ resolve_address_port(const char *address,
     log_warn("No result for address %s", address);
     goto done;
   }
-  struct sockaddr *addr = malloc(ai->ai_addrlen);
-  memcpy(addr, ai->ai_addr, ai->ai_addrlen);
-  *addr_out = addr;
   *addrlen_out = ai->ai_addrlen;
+  *addr_out = xmemdup(ai->ai_addr, ai->ai_addrlen);
   result = 0;
 
  done:

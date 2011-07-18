@@ -99,10 +99,15 @@ close_all_connections(void)
   assert(!n_connections);
 }
 /**
-   This function spawns a listener according to the 'proto_params'.
+   This function spawns a listener configured according to the
+   provided 'protocol_params_t' object'.  Returns the listener on
+   success, NULL on fail.
 
-   Returns the listener on success, NULL on fail.
+   If it succeeds, the new listener object takes ownership of the
+   protocol_params_t object provided; if it fails, the protocol_params_t
+   object is deallocated.
 */
+
 listener_t *
 listener_new(struct event_base *base,
              protocol_params_t *proto_params)
@@ -110,14 +115,8 @@ listener_new(struct event_base *base,
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
 
-  listener_t *lsn = calloc(1, sizeof(listener_t));
-  if (!lsn) {
-    if (proto_params)
-      free(proto_params);
-    return NULL;
-  }
+  listener_t *lsn = xzalloc(sizeof(listener_t));
 
-  /** If we don't have a connection dll, create one now. */
   lsn->proto_params = proto_params;
 
   lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
@@ -132,6 +131,7 @@ listener_new(struct event_base *base,
     return NULL;
   }
 
+  /** If we don't have a connection dll, create one now. */
   dll_append(&listener_list, &lsn->dll_node);
 
   return lsn;
@@ -189,14 +189,11 @@ simple_listener_cb(struct evconnlistener *evcl,
 {
   listener_t *lsn = arg;
   struct event_base *base;
-  conn_t *conn = calloc(1, sizeof(conn_t));
+  conn_t *conn = xzalloc(sizeof(conn_t));
 
   n_connections++; /* If we call conn_free() later on error, it will decrement
                     * n_connections.  Therefore, we had better increment it at
                     * the start. */
-
-  if (!conn)
-    goto err;
 
   log_debug("Got a connection attempt.");
 
@@ -211,8 +208,6 @@ simple_listener_cb(struct evconnlistener *evcl,
   if (conn->mode == LSN_SOCKS_CLIENT) {
     /* Construct SOCKS state. */
     conn->socks_state = socks_state_new();
-    if (!conn->socks_state)
-      goto err;
   }
 
   /* New bufferevent to wrap socket we received. */
