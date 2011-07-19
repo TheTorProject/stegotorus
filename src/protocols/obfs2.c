@@ -6,6 +6,7 @@
 
 #define PROTOCOL_OBFS2_PRIVATE
 #include "obfs2.h"
+#include "../protocol.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -37,8 +38,8 @@ obfs2_init(int n_options, const char *const *options)
     = xzalloc(sizeof(struct protocol_params_t));
 
   if (parse_and_set_options(n_options, options, params) < 0) {
+    proto_params_free(params);
     usage();
-    free(params);
     return NULL;
   }
 
@@ -181,6 +182,7 @@ derive_key(void *s, const char *keytype)
       d = digest_new();
       digest_update(d, buf, sizeof(buf));
       digest_getdigest(d, buf, sizeof(buf));
+      digest_free(d);
     }
   }
 

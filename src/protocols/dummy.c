@@ -31,7 +31,7 @@ dummy_init(int n_options, const char *const *options)
     = xzalloc(sizeof(struct protocol_params_t));
 
   if (parse_and_set_options(n_options, options, params) < 0) {
-    free(params);
+    proto_params_free(params);
     usage();
     return NULL;
   }
