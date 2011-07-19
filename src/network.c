@@ -7,6 +7,7 @@
 #define NETWORK_PRIVATE
 #include "network.h"
 
+#include "container.h"
 #include "main.h"
 #include "socks.h"
 #include "protocol.h"
@@ -24,19 +25,16 @@
 #include <ws2tcpip.h>  /* socklen_t */
 #endif
 
-/** Doubly linked list holding all our listeners. */
-static dll_t listener_list = DLL_INIT();
+/** All our listeners. */
+static smartlist_t *listeners;
 
 struct listener_t {
-  dll_node_t dll_node;
   struct evconnlistener *listener;
   protocol_params_t *proto_params;
 };
 
-/** Doubly linked list holding all connections. */
-static dll_t conn_list = DLL_INIT();
-/** Active connection counter */
-static int n_connections=0;
+/** All active connections.  */
+static smartlist_t *connections;
 
 /** Flag toggled when obfsproxy is shutting down. It blocks new
     connections and shutdowns when the last connection is closed. */
@@ -64,7 +62,7 @@ static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 
    If 'barbaric' is set, we forcefully close all open connections and
    finish shutdown.
-   
+
    (Only called by signal handlers)
 */
 void
@@ -73,31 +71,32 @@ start_shutdown(int barbaric)
   if (!shutting_down)
     shutting_down=1;
 
-  if (!n_connections) {
-    finish_shutdown();
-    return;
+  if (barbaric)
+    close_all_connections();
+
+  if (connections && smartlist_len(connections) == 0) {
+    smartlist_free(connections);
+    connections = NULL;
   }
 
-  if (barbaric) {
-    if (n_connections)
-      close_all_connections();
-    return;
-  }
-}  
+  if (!connections)
+    finish_shutdown();
+}
 
 /**
    Closes all open connections.
-*/ 
+*/
 static void
 close_all_connections(void)
 {
-  /** Traverse the dll and close all connections */
-  while (conn_list.head) {
-    conn_t *conn = DOWNCAST(conn_t, dll_node, conn_list.head);
-    conn_free(conn); /* removes it */
-  }
-  obfs_assert(!n_connections);
+  if (!connections)
+    return;
+  SMARTLIST_FOREACH(connections, conn_t *, conn,
+                    { conn_free(conn); });
+  smartlist_free(connections);
+  connections = NULL;
 }
+
 /**
    This function spawns a listener configured according to the
    provided 'protocol_params_t' object'.  Returns the listener on
@@ -107,7 +106,6 @@ close_all_connections(void)
    protocol_params_t object provided; if it fails, the protocol_params_t
    object is deallocated.
 */
-
 listener_t *
 listener_new(struct event_base *base,
              protocol_params_t *proto_params)
@@ -127,12 +125,15 @@ listener_new(struct event_base *base,
 
   if (!lsn->listener) {
     log_warn("Failed to create listener!");
-    listener_free(lsn);
+    proto_params_free(lsn->proto_params);
+    free(lsn);
     return NULL;
   }
 
-  /** If we don't have a connection dll, create one now. */
-  dll_append(&listener_list, &lsn->dll_node);
+  /* If we don't have a listener list, create one now. */
+  if (!listeners)
+    listeners = smartlist_create();
+  smartlist_add(listeners, lsn);
 
   return lsn;
 }
@@ -140,17 +141,13 @@ listener_new(struct event_base *base,
 /**
    Deallocates listener_t 'lsn'.
 */
-void
+static void
 listener_free(listener_t *lsn)
 {
   if (lsn->listener)
     evconnlistener_free(lsn->listener);
   if (lsn->proto_params)
     proto_params_free(lsn->proto_params);
-
-  dll_remove(&listener_list, &lsn->dll_node);
-
-  memset(lsn, 0xb0, sizeof(listener_t));
   free(lsn);
 }
 
@@ -160,20 +157,14 @@ listener_free(listener_t *lsn)
 void
 free_all_listeners(void)
 {
-  static int called_already=0;
-
-  if (called_already)
+  if (!listeners)
     return;
-
   log_info("Closing all listeners.");
 
-  /* Iterate listener doubly linked list and free them all. */
-  while (listener_list.head) {
-    listener_t *listener = DOWNCAST(listener_t, dll_node, listener_list.head);
-    listener_free(listener);
-  }
-
-  called_already++;
+  SMARTLIST_FOREACH(listeners, listener_t *, lsn,
+                    { listener_free(lsn); });
+  smartlist_free(listeners);
+  listeners = NULL;
 }
 
 /**
@@ -184,16 +175,12 @@ free_all_listeners(void)
 */
 static void
 simple_listener_cb(struct evconnlistener *evcl,
-                   evutil_socket_t fd, struct sockaddr *sourceaddr, 
+                   evutil_socket_t fd, struct sockaddr *sourceaddr,
                    int socklen, void *arg)
 {
   listener_t *lsn = arg;
   struct event_base *base;
   conn_t *conn = xzalloc(sizeof(conn_t));
-
-  n_connections++; /* If we call conn_free() later on error, it will decrement
-                    * n_connections.  Therefore, we had better increment it at
-                    * the start. */
 
   log_debug("Got a connection attempt.");
 
@@ -266,14 +253,15 @@ simple_listener_cb(struct evconnlistener *evcl,
     bufferevent_enable(conn->output, EV_READ|EV_WRITE);
   }
 
-  /* add conn to the linked list of connections */
-  if (dll_append(&conn_list, &conn->dll_node)<0)
-    goto err;
+  /* add conn to the connection list */
+  if (!connections)
+    connections = smartlist_create();
+  smartlist_add(connections, conn);
 
   log_debug("Connection setup completed. "
-            "We currently have %d connections!", n_connections);
-
+            "We currently have %d connections!", smartlist_len(connections));
   return;
+
  err:
   if (conn)
     conn_free(conn);
@@ -296,39 +284,48 @@ conn_free(conn_t *conn)
   if (conn->output)
     bufferevent_free(conn->output);
 
-  /* remove conn from the linked list of connections */
-  dll_remove(&conn_list, &conn->dll_node);
-  n_connections--;
-
   memset(conn, 0x99, sizeof(conn_t));
   free(conn);
+}
 
-  obfs_assert(n_connections>=0);
+/**
+   Closes a fully open connection.
+*/
+static void
+close_conn(conn_t *conn)
+{
+  obfs_assert(connections);
+  smartlist_remove(connections, conn);
+  conn_free(conn);
   log_debug("Connection destroyed. "
-            "We currently have %d connections!", n_connections);
+            "We currently have %d connections!", smartlist_len(connections));
 
   /** If this was the last connection AND we are shutting down,
       finish shutdown. */
-  if (!n_connections && shutting_down) {
-    finish_shutdown();
+  if (smartlist_len(connections) == 0) {
+    smartlist_free(connections);
+    connections = NULL;
   }
+
+  if (!connections && shutting_down)
+    finish_shutdown();
 }
 
 /**
    Closes associated connection if the output evbuffer of 'bev' is
    empty.
-*/ 
+*/
 static void
 close_conn_on_flush(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
 
-  if (0 == evbuffer_get_length(bufferevent_get_output(bev)))
-    conn_free(conn);
+  if (evbuffer_get_length(bufferevent_get_output(bev)) == 0)
+    close_conn(conn);
 }
 
-/** 
-    This callback is responsible for handling SOCKS traffic. 
+/**
+    This callback is responsible for handling SOCKS traffic.
 */
 static void
 socks_read_cb(struct bufferevent *bev, void *arg)
@@ -357,7 +354,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 
       if (r < 0) {
         /* XXXX send socks reply */
-        conn_free(conn);
+        close_conn(conn);
         return;
       }
       bufferevent_disable(conn->input, EV_READ|EV_WRITE);
@@ -372,7 +369,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   if (socks_ret == SOCKS_INCOMPLETE)
     return; /* need to read more data. */
   else if (socks_ret == SOCKS_BROKEN)
-    conn_free(conn); /* XXXX maybe send socks reply */
+    close_conn(conn); /* XXXX maybe send socks reply */
   else if (socks_ret == SOCKS_CMD_NOT_CONNECT) {
     bufferevent_enable(bev, EV_WRITE);
     bufferevent_disable(bev, EV_READ);
@@ -398,7 +395,7 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
   if (proto_send(conn->proto,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
-    conn_free(conn);
+    close_conn(conn);
 }
 
 /**
@@ -420,7 +417,7 @@ obfuscated_read_cb(struct bufferevent *bev, void *arg)
                  bufferevent_get_output(other));
 
   if (r == RECV_BAD)
-    conn_free(conn);
+    close_conn(conn);
   else if (r == RECV_SEND_PENDING)
     proto_send(conn->proto,
                bufferevent_get_input(conn->input),
@@ -439,7 +436,7 @@ error_or_eof(conn_t *conn,
 
   if (conn->flushing || ! conn->is_open ||
       0 == evbuffer_get_length(bufferevent_get_output(bev_flush))) {
-    conn_free(conn);
+    close_conn(conn);
     return;
   }
 

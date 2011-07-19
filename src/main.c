@@ -372,10 +372,7 @@ main(int argc, const char **argv)
   log_info("Exiting.");
 
   close_obfsproxy_logfile();
-
-  free_all_listeners(); /* free all listeners in our listener dll */
-
-  /* We are exiting. Clean everything. */
+  free_all_listeners();
   free(protocol_options);
   free(n_options_array);
   free(protocols);

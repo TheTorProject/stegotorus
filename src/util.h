@@ -6,9 +6,15 @@
 #define UTIL_H
 
 #include "config.h"
-#include <stdarg.h> /* for va_list */
-#include <stddef.h> /* size_t, offsetof, NULL, etc */
+#include <stdarg.h> /* va_list */
+#include <stddef.h> /* size_t, ptrdiff_t, offsetof, NULL */
 #include <stdint.h> /* intN_t, uintN_t */
+
+struct sockaddr;
+struct event_base;
+struct evdns_base;
+
+/***** Type annotations. *****/
 
 #ifndef __GNUC__
 #define __attribute__(x) /* nothing */
@@ -18,10 +24,6 @@
 #define ATTR_PRINTF_1 __attribute__((format(printf, 1, 2)))
 #define ATTR_PRINTF_3 __attribute__((format(printf, 3, 4)))
 #define ATTR_PURE     __attribute__((pure))
-
-struct sockaddr;
-struct event_base;
-struct evdns_base;
 
 /***** Memory allocation. *****/
 
@@ -37,11 +39,16 @@ void *xmemdup(const void *ptr, size_t size) ATTR_MALLOC;
 char *xstrdup(const char *s) ATTR_MALLOC;
 char *xstrndup(const char *s, size_t maxsize) ATTR_MALLOC;
 
+/***** Pseudo-inheritance. *****/
+
+#define DOWNCAST(container_type, element, ptr) \
+  (container_type*)( ((char*)ptr) - offsetof(container_type, element) )
+
 /***** Math. *****/
 
 unsigned int ui64_log2(uint64_t u64);
 
-/***** Network functions stuff. *****/
+/***** Network functions. *****/
 
 int resolve_address_port(const char *address,
                          int nodns, int passive,
@@ -52,7 +59,7 @@ int resolve_address_port(const char *address,
 struct evdns_base *get_evdns_base(void);
 int init_evdns_base(struct event_base *base);
 
-/***** String functions stuff. *****/
+/***** String functions. *****/
 
 static inline int ascii_isspace(unsigned char c)
 {
@@ -72,31 +79,9 @@ int obfs_snprintf(char *str, size_t size,
                   const char *format, ...)
   ATTR_PRINTF_3;
 
-/***** Doubly Linked List stuff. *****/
+/***** Logging. *****/
 
-#define DOWNCAST(container_type, element, ptr) \
-  (container_type*)( ((char*)ptr) - offsetof(container_type, element) )
-
-/** A doubly linked list node.
-    [algorithms ripped off Wikipedia (Doubly_linked_list) ] */
-typedef struct dll_node_t {
-  struct dll_node_t *next, *prev;
-} dll_node_t;
-
-/** A doubly linked list. */
-typedef struct dll_t {
-  struct dll_node_t *head;
-  struct dll_node_t *tail;
-} dll_t;
-
-void dll_init(dll_t *list);
-int dll_append(dll_t *list, dll_node_t *node);
-void dll_remove(dll_t *list, dll_node_t *node);
-#define DLL_INIT() { NULL, NULL }
-
-/***** Logging subsystem stuff. *****/
-
-/** Logging methods */
+/** Log destinations */
 
 /** Spit log messages on stdout. */
 #define LOG_METHOD_STDOUT 1

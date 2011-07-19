@@ -32,7 +32,6 @@ typedef struct listener_t listener_t;
 
 listener_t *listener_new(struct event_base *base,
                          struct protocol_params_t *params);
-void listener_free(listener_t *listener);
 void free_all_listeners(void);
 
 void start_shutdown(int barbaric);
@@ -44,7 +43,6 @@ struct socks_state_t;
 struct protocol_t;
 
 typedef struct conn_t {
-  dll_node_t dll_node;
   struct socks_state_t *socks_state;
   struct protocol_t *proto; /* ASN Do we like this here? We probably don't.
                                But it's so convenient!! So convenient! */
@@ -54,6 +52,7 @@ typedef struct conn_t {
   unsigned int flushing : 1;
   unsigned int is_open : 1;
 } conn_t;
+
 #endif
 
 #endif
