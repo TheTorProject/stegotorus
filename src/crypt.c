@@ -70,7 +70,13 @@ cleanup_crypto(void)
    Digests
    ===== */
 
-#ifdef USE_OPENSSL_SHA256
+#ifndef USE_OPENSSL_SHA256
+#define SHA256_CTX sha256_state
+#define SHA256_Init(ctx) sha256_init(ctx)
+#define SHA256_Update(ctx, buf, len) sha256_process(ctx, buf, len)
+#define SHA256_Final(buf, ctx) sha256_done(ctx, buf)
+#endif
+
 struct digest_t {
   SHA256_CTX ctx;
 };
@@ -102,44 +108,17 @@ digest_update(digest_t *d, const uchar *buf, size_t len)
 size_t
 digest_getdigest(digest_t *d, uchar *buf, size_t len)
 {
-  uchar tmp[SHA256_LENGTH];
-  int n = 32;
-  SHA256_Final(tmp, &d->ctx);
-  if (len < 32)
-    n = len;
-  memcpy(buf, tmp, n);
-  memset(tmp, 0, sizeof(tmp));
-  return n;
+  if (len >= SHA256_LENGTH) {
+    SHA256_Final(buf, &d->ctx);
+    return SHA256_LENGTH;
+  } else {
+    uchar tmp[SHA256_LENGTH];
+    SHA256_Final(tmp, &d->ctx);
+    memcpy(buf, tmp, len);
+    memset(tmp, 0, SHA256_LENGTH);
+    return len;
+  }
 }
-#else
-struct digest_t {
-  sha256_state ctx;
-};
-digest_t *
-digest_new(void)
-{
-  digest_t *d = xmalloc(sizeof(digest_t));
-  sha256_init(&d->ctx);
-  return d;
-}
-void
-digest_update(digest_t *d, const uchar *buf, size_t len)
-{
-  sha256_process(&d->ctx, buf, len);
-}
-size_t
-digest_getdigest(digest_t *d, uchar *buf, size_t len)
-{
-  uchar tmp[SHA256_LENGTH];
-  int n = 32;
-  sha256_done(&d->ctx, tmp);
-  if (len < 32)
-    n = len;
-  memcpy(buf, tmp, n);
-  memset(tmp, 0, sizeof(tmp));
-  return n;
-}
-#endif
 
 void
 digest_free(digest_t *d)

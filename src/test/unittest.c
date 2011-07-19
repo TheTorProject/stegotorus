@@ -21,6 +21,9 @@ struct testgroup_t groups[] = {
 int
 main(int argc, const char **argv)
 {
+  int rv;
   initialize_crypto();
-  return tinytest_main(argc, argv, groups);
+  rv = tinytest_main(argc, argv, groups);
+  cleanup_crypto();
+  return rv;
 }
