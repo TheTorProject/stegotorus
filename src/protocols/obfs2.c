@@ -27,7 +27,6 @@ downcast(struct protocol_t *proto)
 /*
    This function parses 'options' and fills the protocol parameters
    structure 'params'.
-   It then fills the obfs2 vtable and initializes the crypto subsystem.
 
    Returns 0 on success, -1 on fail.
 */
@@ -39,12 +38,6 @@ obfs2_init(int n_options, const char *const *options)
 
   if (parse_and_set_options(n_options, options, params) < 0) {
     usage();
-    free(params);
-    return NULL;
-  }
-
-  if (initialize_crypto() < 0) {
-    log_warn("Can't initialize crypto; failing");
     free(params);
     return NULL;
   }
@@ -219,6 +212,7 @@ derive_padding_key(void *s, const uchar *seed,
     digest_update(c, state->secret_seed, OBFUSCATE_SEED_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
+  digest_free(c);
 
   if (seed_nonzero(state->secret_seed)) {
     digest_t *d;
@@ -227,13 +221,13 @@ derive_padding_key(void *s, const uchar *seed,
       d = digest_new();
       digest_update(d, buf, sizeof(buf));
       digest_getdigest(d, buf, sizeof(buf));
+      digest_free(d);
     }
   }
 
   cryptstate = crypt_new(buf, 16);
   crypt_set_iv(cryptstate, buf+16, 16);
   memset(buf, 0, 16);
-  digest_free(c);
   return cryptstate;
 }
 

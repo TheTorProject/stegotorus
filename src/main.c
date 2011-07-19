@@ -4,6 +4,7 @@
 
 #include "util.h"
 
+#include "crypt.h"
 #include "network.h"
 #include "protocol.h"
 
@@ -14,6 +15,7 @@
 #include <string.h>
 
 #include <event2/event.h>
+#include <event2/dns.h>
 
 /* The character that seperates multiple listeners in the cli */
 #define SEPARATOR "+"
@@ -305,6 +307,12 @@ main(int argc, const char **argv)
   WSAStartup(0x101, &wsaData);
 #endif
 
+  /* Initialize crypto */
+  if (initialize_crypto() < 0) {
+    log_warn("Can't initialize crypto; failing");
+    return 1;
+  }
+
   /* Initialize libevent */
   the_event_base = event_base_new();
   if (!the_event_base) {
@@ -365,14 +373,21 @@ main(int argc, const char **argv)
             "%d survived.",
             n_protocols, actual_protocols,n_listeners);
 
-  /* run the event loop if at least a listener was created. */
+  /* run the event loop if at least one listener was created. */
   if (n_listeners)
     event_base_dispatch(the_event_base);
 
   log_info("Exiting.");
 
-  close_obfsproxy_logfile();
   free_all_listeners();
+  evdns_base_free(get_evdns_base(), 0);
+  event_free(sig_int);
+  event_free(sig_term);
+  event_base_free(the_event_base);
+
+  cleanup_crypto();
+
+  close_obfsproxy_logfile();
   free(protocol_options);
   free(n_options_array);
   free(protocols);

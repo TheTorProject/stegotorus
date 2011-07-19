@@ -26,7 +26,7 @@
 #endif
 
 /**
-   Initializes the obfs2 crypto subsystem.
+   Initializes the crypto subsystem.
 */
 int
 initialize_crypto(void)
@@ -58,7 +58,7 @@ initialize_crypto(void)
 }
 
 /**
-   Cleans up the obfs2 crypto subsystem.
+   Cleans up the crypto subsystem.
 */
 void
 cleanup_crypto(void)
