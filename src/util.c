@@ -88,6 +88,55 @@ xstrdup(const char *s)
   return xmemdup(s, strlen(s) + 1);
 }
 
+char *
+xstrndup(const char *s, size_t maxsize)
+{
+  char *copy;
+  size_t size;
+  /* strnlen is not in any standard :-( */
+  for (size = 0; size < maxsize; size++)
+    if (s[size] == '\0')
+      break;
+
+  copy = xmalloc(size + 1);
+  memcpy(copy, s, size);
+  copy[size] = '\0';
+  return copy;
+}
+
+/******************************** Mathematics ********************************/
+
+unsigned int
+ui64_log2(uint64_t u64)
+{
+  unsigned int r = 0;
+  if (u64 >= (((uint64_t)1)<<32)) {
+    u64 >>= 32;
+    r = 32;
+  }
+  if (u64 >= (((uint64_t)1)<<16)) {
+    u64 >>= 16;
+    r += 16;
+  }
+  if (u64 >= (((uint64_t)1)<<8)) {
+    u64 >>= 8;
+    r += 8;
+  }
+  if (u64 >= (((uint64_t)1)<<4)) {
+    u64 >>= 4;
+    r += 4;
+  }
+  if (u64 >= (((uint64_t)1)<<2)) {
+    u64 >>= 2;
+    r += 2;
+  }
+  if (u64 >= (((uint64_t)1)<<1)) {
+    u64 >>= 1;
+    r += 1;
+  }
+  return r;
+}
+
 /************************ Obfsproxy Network Routines *************************/
 
 /**
@@ -205,6 +254,31 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
   if (r < 0 || r >= (ssize_t)size)
     return -1;
   return r;
+}
+/** Remove from the string <b>s</b> every character which appears in
+ * <b>strip</b>. */
+void
+ascii_strstrip(char *s, const char *strip)
+{
+  char *read = s;
+  while (*read) {
+    if (strchr(strip, *read)) {
+      ++read;
+    } else {
+      *s++ = *read++;
+    }
+  }
+  *s = '\0';
+}
+
+void
+ascii_strlower(char *s)
+{
+  while (*s) {
+    if (*s >= 'A' && *s <= 'Z')
+      *s = *s - 'A' + 'a';
+    ++s;
+  }
 }
 
 /************************ Doubly Linked List (DLL) ******************/

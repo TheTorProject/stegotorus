@@ -45,6 +45,11 @@ void crypt_free(crypt_t *);
 /** Set b to contain n random bytes. */
 int random_bytes(uchar *b, size_t n);
 
+/** Return a random integer in the range [0, max).
+ * 'max' must be between 1 and INT_MAX+1, inclusive.
+ */
+int random_int(unsigned int max);
+
 #ifdef CRYPT_PRIVATE
 
 #include <openssl/aes.h>

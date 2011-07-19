@@ -211,3 +211,27 @@ random_bytes(uchar *buf, size_t buflen)
 {
   return RAND_bytes(buf, buflen) == 1 ? 0 : -1;
 }
+
+
+/** Return a pseudorandom integer, chosen uniformly from the values
+ * between 0 and <b>max</b>-1 inclusive.  <b>max</b> must be between 1 and
+ * INT_MAX+1, inclusive. */
+int
+random_int(unsigned int max)
+{
+  unsigned int val;
+  unsigned int cutoff;
+  obfs_assert(max <= ((unsigned int)INT_MAX)+1);
+  obfs_assert(max > 0); /* don't div by 0 */
+
+  /* We ignore any values that are >= 'cutoff,' to avoid biasing the
+   * distribution with clipping at the upper end of unsigned int's
+   * range.
+   */
+  cutoff = UINT_MAX - (UINT_MAX%max);
+  while (1) {
+    random_bytes((uchar*)&val, sizeof(val));
+    if (val < cutoff)
+      return val % max;
+  }
+}

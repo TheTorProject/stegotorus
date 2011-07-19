@@ -9,6 +9,7 @@ noinst_LIBRARIES = libobfsproxy.a
 noinst_PROGRAMS = unittests
 
 libobfsproxy_a_SOURCES = \
+	src/container.c \
 	src/crypt.c \
 	src/network.c \
 	src/protocol.c \
@@ -26,12 +27,16 @@ obfsproxy_SOURCES = \
 unittests_SOURCES = \
 	src/test/tinytest.c \
 	src/test/unittest.c \
+	src/test/unittest_container.c \
 	src/test/unittest_crypt.c \
 	src/test/unittest_obfs2.c \
 	src/test/unittest_socks.c
 
 noinst_HEADERS = \
+	src/container.h \
 	src/crypt.h \
+	src/ht.h \
+	src/main.h \
 	src/network.h \
 	src/protocol.h \
 	src/sha256.h \

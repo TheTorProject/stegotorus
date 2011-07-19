@@ -5,11 +5,13 @@
 #include "tinytest.h"
 #include "../crypt.h"
 
+extern struct testcase_t container_tests[];
 extern struct testcase_t crypt_tests[];
 extern struct testcase_t obfs2_tests[];
 extern struct testcase_t socks_tests[];
 
 struct testgroup_t groups[] = {
+  { "container/", container_tests },
   { "crypt/", crypt_tests },
   { "obfs2/", obfs2_tests },
   { "socks/", socks_tests },

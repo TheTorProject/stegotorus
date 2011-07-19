@@ -8,6 +8,7 @@
 #include "config.h"
 #include <stdarg.h> /* for va_list */
 #include <stddef.h> /* size_t, offsetof, NULL, etc */
+#include <stdint.h> /* intN_t, uintN_t */
 
 #ifndef __GNUC__
 #define __attribute__(x) /* nothing */
@@ -34,6 +35,11 @@ void *xzalloc(size_t size) ATTR_MALLOC; /* clears memory */
 void *xrealloc(void *ptr, size_t size);
 void *xmemdup(const void *ptr, size_t size) ATTR_MALLOC;
 char *xstrdup(const char *s) ATTR_MALLOC;
+char *xstrndup(const char *s, size_t maxsize) ATTR_MALLOC;
+
+/***** Math. *****/
+
+unsigned int ui64_log2(uint64_t u64);
 
 /***** Network functions stuff. *****/
 
@@ -47,6 +53,18 @@ struct evdns_base *get_evdns_base(void);
 int init_evdns_base(struct event_base *base);
 
 /***** String functions stuff. *****/
+
+static inline int ascii_isspace(unsigned char c)
+{
+  return (c == ' ' ||
+          c == '\t' ||
+          c == '\r' ||
+          c == '\n' ||
+          c == '\v' ||
+          c == '\f');
+}
+void ascii_strstrip(char *s, const char *kill);
+void ascii_strlower(char *s);
 
 int obfs_vsnprintf(char *str, size_t size,
                    const char *format, va_list args);
@@ -132,6 +150,5 @@ void log_debug(const char *format, ...)
   do {                                                  \
     log_error("aborted at %s:%d", __FILE__, __LINE__);  \
   } while (0)
-
 
 #endif
