@@ -29,8 +29,9 @@ unittests_SOURCES = \
 	src/test/unittest.c \
 	src/test/unittest_container.c \
 	src/test/unittest_crypt.c \
-	src/test/unittest_obfs2.c \
-	src/test/unittest_socks.c
+	src/test/unittest_socks.c \
+	src/test/unittest_dummy.c \
+	src/test/unittest_obfs2.c
 
 noinst_HEADERS = \
 	src/container.h \
