@@ -106,14 +106,14 @@ socks_errno_to_reply(socks_state_t *state, int error)
 /**
    Takes a SOCKS5 command request from 'source', it evaluates it and
    if it's legit it parses it into 'parsereq'.
-   
+
    It returns SOCKS_GOOD if everything went fine.
    It returns SOCKS_INCOMPLETE if we need more data from the client.
    It returns SOCKS_BROKEN if we didn't like something.
    It returns SOCKS_CMD_NOT_CONNECT if the client asked for something
    else other than CONNECT.  If that's the case we should send a reply
    back to the client telling him that we don't support it.
-   
+
 */
 enum socks_ret
 socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
@@ -345,11 +345,11 @@ socks5_handle_negotiation(struct evbuffer *source,
 /**
    Takes a SOCKS4/SOCKS4a command request from 'source', it evaluates
    it and if it's legit it parses it into 'parsereq'.
-   
+
    It returns SOCKS_GOOD if everything went fine.
    It returns SOCKS_INCOMPLETE if we need more data from the client.
    It returns SOCKS_BROKEN if we didn't like something.
-*/   
+*/
 
 /* XXXX rename to socks4_handle_request or something. */
 enum socks_ret
@@ -552,7 +552,7 @@ socks_state_get_status(const socks_state_t *state)
    If we have previously parsed a SOCKS CONNECT request, this function
    places the corresponding address/port to 'af_out', 'addr_out' and
    'port_out'.
-   
+
    It returns 0 on success and -1 if it was called unnecessarily.
 */
 int

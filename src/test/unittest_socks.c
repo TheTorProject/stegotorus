@@ -299,7 +299,7 @@ test_socks_socks5_request(void *data)
 
   evbuffer_add(s->source, "\x05", 1);
   evbuffer_add(s->source, req8, 9);
-  /* '-2' means that we don't support the requested command. */ 
+  /* '-2' means that we don't support the requested command. */
   tt_int_op(SOCKS_CMD_NOT_CONNECT, ==, socks5_handle_request(s->source,&pr1));
 
  end:;
@@ -340,16 +340,16 @@ test_socks_socks5_request_reply(void *data)
   tt_int_op(0, ==, evbuffer_drain(s->dest, buffer_len));
 
   /* Second test:
-     We ask the server to send us a reply on an IPv6 request with 
+     We ask the server to send us a reply on an IPv6 request with
      succesful status. */
   s->state->parsereq.af = AF_INET6;
   strcpy(s->state->parsereq.addr, "d:1:5:e:a:5:e:0");
-  
+
   socks5_send_reply(s->dest,s->state, SOCKS5_SUCCESS);
 
   uchar rep2[255];
   evbuffer_remove(s->dest,rep2,255);
-  
+
   tt_assert(rep2[3] = SOCKS5_ATYP_IPV6);
   /* Test returned address against inet_pton(d:1:5:e:a:5:e:0) */
   tt_mem_op(rep2+4, ==,
@@ -381,11 +381,11 @@ test_socks_socks5_request_reply(void *data)
   /* check port */
   tt_mem_op(rep3+5+strlen(fqdn), ==, "\x1c\xbd",2);
 
-  /* Fourth test: 
+  /* Fourth test:
      We ask the server while having an empty parsereq and with a
-     SOCKS5_FAILED_UNSUPPORTED status. */  
+     SOCKS5_FAILED_UNSUPPORTED status. */
   memset(&s->state->parsereq,'\x00',sizeof(struct parsereq));
-  
+
   socks5_send_reply(s->dest,s->state, SOCKS5_FAILED_UNSUPPORTED);
   uchar rep4[255];
   evbuffer_remove(s->dest,rep4,255);
@@ -393,13 +393,13 @@ test_socks_socks5_request_reply(void *data)
   tt_assert(rep4[3] == SOCKS5_ATYP_IPV4);
   tt_mem_op(rep4+4, ==, "\x00\x00\x00\x00",4);
   tt_mem_op(rep4+4+4, ==, "\x00\x00", 2);
-  
+
  end:;
 }
 
 /**
    This function tests the 'Server reply' phase of the SOCKS4
-   *and* SOCKS4a protocol.  
+   *and* SOCKS4a protocol.
    It sends broken client request packets and it verifies that the
    SOCKS server detected the errors. It also sends some correct
    packets and it expects the server to like them.
@@ -440,7 +440,7 @@ test_socks_socks4_request(void *data)
   memcpy(req2+1,&port,2);
   memcpy(req2+3,&addr,4);
   strcpy(req2+7,"KO");
-  
+
   evbuffer_add(s->source,req2,9);
 
   tt_int_op(SOCKS_INCOMPLETE, ==, socks4_read_request(s->source,s->state));
@@ -448,7 +448,7 @@ test_socks_socks4_request(void *data)
   /* emptying source buffer before next test  */
   buffer_len = evbuffer_get_length(s->source);
   tt_int_op(0, ==, evbuffer_drain(s->source, buffer_len));
-  
+
   /* Third test:
      Correct SOCKS4 req packet with optional field. */
   char req3[16];
@@ -476,7 +476,7 @@ test_socks_socks4_request(void *data)
   memcpy(req4+3,&addr_4a,4);
   strcpy(req4+7,"iamalive");
   strcpy(req4+16, "www.test.example");
-  
+
   evbuffer_add(s->source,req4,33);
 
   tt_int_op(SOCKS_GOOD, ==, socks4_read_request(s->source,s->state));
@@ -495,7 +495,7 @@ test_socks_socks4_request(void *data)
   memcpy(req5+3,&addr_4a,4);
   strcpy(req5+7,"iamalive");
   strcpy(req5+16, "www.test.example");
-  
+
   /* Don't send it all. */
   evbuffer_add(s->source,req5,28);
 
@@ -516,7 +516,7 @@ test_socks_socks4_request(void *data)
   strcpy(req6+7,"iamalive");
   memset(req6+16,'2', HUGE);
   req6[16+HUGE] = '\x00';
-  
+
   evbuffer_add(s->source,req6,16+HUGE+1);
 
   tt_int_op(SOCKS_BROKEN, ==, socks4_read_request(s->source,s->state));
@@ -545,7 +545,7 @@ test_socks_socks4_request_reply(void *data)
      We ask the server to send us a reply on an IPv4 request with
      succesful status. */
   socks4_send_reply(s->dest,s->state, SOCKS4_SUCCESS);
-  
+
   uchar rep1[255];
   evbuffer_remove(s->dest,rep1,255); /* yes, this is dirty */
 

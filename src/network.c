@@ -399,8 +399,8 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
 }
 
 /**
-   This callback is responsible for handling obfusacted 
-   traffic -- traffic that has already been obfuscated 
+   This callback is responsible for handling obfuscated
+   traffic -- traffic that has already been obfuscated
    by our protocol.
 */
 static void

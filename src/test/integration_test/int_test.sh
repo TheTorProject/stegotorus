@@ -36,7 +36,7 @@ sleep 2
 if cmp -s alpha $FILE1
 then echo "GREAT SUCCESS 1!" ; rm $FILE1
 else echo "GREAT FAIL 1!"
-fi 
+fi
 
 kill -9 $ncat1_pid
 kill -9 $obfsproxy_pid
@@ -66,7 +66,7 @@ sleep 2
 if cmp -s alpha $FILE2
 then echo "GREAT SUCCESS 2!" ; rm $FILE2
 else echo "GREAT FAIL 2!"
-fi 
+fi
 
 kill -9 $ncat1_pid
 kill -9 $obfsproxy_pid
