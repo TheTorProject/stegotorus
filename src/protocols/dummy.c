@@ -49,7 +49,7 @@ parse_and_set_options(int n_options, const char *const *options,
 {
   const char* defport;
 
-  if (n_options != 2)
+  if (n_options < 1)
     return -1;
 
   if (!strcmp(options[0], "client")) {
@@ -64,9 +64,18 @@ parse_and_set_options(int n_options, const char *const *options,
   } else
     return -1;
 
+  if (n_options != (params->mode == LSN_SOCKS_CLIENT ? 2 : 3))
+      return -1;
+
   params->listen_addr = resolve_address_port(options[1], 1, 1, defport);
   if (!params->listen_addr)
     return -1;
+
+  if (params->mode != LSN_SOCKS_CLIENT) {
+    params->target_addr = resolve_address_port(options[2], 1, 0, NULL);
+    if (!params->target_addr)
+      return -1;
+  }
 
   params->vtable = &dummy_vtable;
   return 0;
@@ -78,14 +87,16 @@ parse_and_set_options(int n_options, const char *const *options,
 static void
 usage(void)
 {
-  log_warn("Great... You can't even form a dummy protocol line:\n"
-           "dummy syntax:\n"
-           "\tdummy dummy_opts\n"
-           "\t'dummy_opts':\n"
+  log_warn("dummy syntax:\n"
+           "\tdummy <mode> <listen_address> [<target_address>]\n"
            "\t\tmode ~ server|client|socks\n"
-           "\t\tlisten address ~ host:port\n"
-           "Example:\n"
-           "\tobfsproxy dummy socks 127.0.0.1:5000");
+           "\t\tlisten_address, target_address ~ host:port\n"
+           "\ttarget_address is required for server and client mode,\n"
+           "\tand forbidden for socks mode.\n"
+           "Examples:\n"
+           "\tobfsproxy dummy socks 127.0.0.1:5000\n"
+           "\tobfsproxy dummy client 127.0.0.1:5000 192.168.1.99:11253\n"
+           "\tobfsproxy dummy server 192.168.1.99:11253 127.0.0.1:9005");
 }
 
 static void

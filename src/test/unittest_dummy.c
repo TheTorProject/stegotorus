@@ -21,17 +21,20 @@ test_dummy_option_parsing(void *unused)
     /* wrong number of options */
     { 0, 0, 1, {"dummy"} },
     { 0, 0, 2, {"dummy", "client"} },
-    { 0, 0, 4, {"dummy", "client", "127.0.0.1:5552", "oops"} },
-    { 0, 0, 4, {"dummy", "--frobozz", "client", "127.0.0.1:5552"} },
+    { 0, 0, 3, {"dummy", "client", "127.0.0.1:5552"} },
+    { 0, 0, 3, {"dummy", "server", "127.0.0.1:5552"} },
+    { 0, 0, 4, {"dummy", "socks", "127.0.0.1:5552", "192.168.1.99:11253"} },
     /* unrecognized mode */
     { 0, 0, 3, {"dummy", "floodcontrol", "127.0.0.1:5552" } },
+    { 0, 0, 4, {"dummy", "--frobozz", "client", "127.0.0.1:5552"} },
+    { 0, 0, 4, {"dummy", "client", "--frobozz", "127.0.0.1:5552"} },
     /* bad address */
-    { 0, 0, 3, {"dummy", "client", "@:5552"} },
-    { 0, 0, 3, {"dummy", "client", "127.0.0.1:notanumber"} },
+    { 0, 0, 3, {"dummy", "socks", "@:5552"} },
+    { 0, 0, 3, {"dummy", "socks", "127.0.0.1:notanumber"} },
     /* should succeed */
-    { 0, 1, 3, {"dummy", "client", "127.0.0.1:5552" } },
-    { 0, 1, 3, {"dummy", "client", "127.0.0.1" } },
-    { 0, 1, 3, {"dummy", "server", "127.0.0.1:5552" } },
+    { 0, 1, 4, {"dummy", "client", "127.0.0.1:5552", "192.168.1.99:11253" } },
+    { 0, 1, 4, {"dummy", "client", "127.0.0.1", "192.168.1.99:11253" } },
+    { 0, 1, 4, {"dummy", "server", "127.0.0.1:5552", "192.168.1.99:11253" } },
     { 0, 1, 3, {"dummy", "socks", "127.0.0.1:5552" } },
 
     { 0, 0, 0, {0} }
@@ -99,7 +102,7 @@ static const char *const options_client[] =
   {"dummy", "socks", "127.0.0.1:1800"};
 
 static const char *const options_server[] =
-  {"dummy", "server", "127.0.0.1:1800"};
+  {"dummy", "server", "127.0.0.1:1800", "127.0.0.1:1801"};
 
 static void *
 setup_dummy_state(const struct testcase_t *unused)
