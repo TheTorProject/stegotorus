@@ -9,6 +9,7 @@
 #include <stdarg.h> /* va_list */
 #include <stddef.h> /* size_t, ptrdiff_t, offsetof, NULL */
 #include <stdint.h> /* intN_t, uintN_t */
+#include <event2/util.h> /* evutil_addrinfo */
 
 struct sockaddr;
 struct event_base;
@@ -50,11 +51,9 @@ unsigned int ui64_log2(uint64_t u64);
 
 /***** Network functions. *****/
 
-int resolve_address_port(const char *address,
-                         int nodns, int passive,
-                         struct sockaddr **addr_out,
-                         size_t *addrlen_out,
-                         const char *default_port);
+struct evutil_addrinfo *resolve_address_port(const char *address,
+                                             int nodns, int passive,
+                                             const char *default_port);
 
 struct evdns_base *get_evdns_base(void);
 int init_evdns_base(struct event_base *base);

@@ -63,12 +63,9 @@ parse_and_set_options(int n_options, const char *const *options,
   } else
     return -1;
 
-  if (resolve_address_port(options[1], 1, 1,
-                           &params->listen_address,
-                           &params->listen_address_len, defport) < 0) {
-    log_warn("addr");
+  params->listen_addr = resolve_address_port(options[1], 1, 1, defport);
+  if (!params->listen_addr)
     return -1;
-  }
 
   params->vtable = &dummy_vtable;
   return 0;

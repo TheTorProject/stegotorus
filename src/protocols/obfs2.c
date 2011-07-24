@@ -67,9 +67,8 @@ parse_and_set_options(int n_options, const char *const *options,
       if (!strncmp(*options,"--dest=",7)) {
         if (got_dest)
           return -1;
-        if (resolve_address_port(*options+7, 1, 0,
-                                 &params->target_address,
-                                 &params->target_address_len, NULL) < 0)
+        params->target_addr = resolve_address_port(*options+7, 1, 0, NULL);
+        if (!params->target_addr)
           return -1;
         got_dest=1;
       } else if (!strncmp(*options,"--shared-secret=",16)) {
@@ -102,9 +101,8 @@ parse_and_set_options(int n_options, const char *const *options,
     }
     options++;
 
-    if (resolve_address_port(*options, 1, 1,
-                             &params->listen_address,
-                             &params->listen_address_len, defport) < 0)
+    params->listen_addr = resolve_address_port(*options, 1, 1, defport);
+    if (!params->listen_addr)
       return -1;
 
     /* Validate option selection. */

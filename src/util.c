@@ -141,7 +141,7 @@ ui64_log2(uint64_t u64)
 
 /**
    Accepts a string 'address' of the form ADDRESS:PORT and attempts to
-   parse it into 'addr_out' and put it's length into 'addrlen_out'.
+   parse it into an 'evutil_addrinfo' structure.
 
    If 'nodns' is set it means that 'address' was an IP address.
    If 'passive' is set it means that the address is destined for
@@ -150,16 +150,13 @@ ui64_log2(uint64_t u64)
    If no port was given in 'address', we set 'default_port' as the
    port.
 */
-int
-resolve_address_port(const char *address,
-                     int nodns, int passive,
-                     struct sockaddr **addr_out,
-                     size_t *addrlen_out,
+struct evutil_addrinfo *
+resolve_address_port(const char *address, int nodns, int passive,
                      const char *default_port)
 {
   struct evutil_addrinfo *ai = NULL;
   struct evutil_addrinfo ai_hints;
-  int result = -1, ai_res;
+  int ai_res, ai_errno;
   char *a = xstrdup(address), *cp;
   const char *portstr;
 
@@ -170,7 +167,8 @@ resolve_address_port(const char *address,
     portstr = default_port;
   } else {
     log_debug("Error in address %s: port required.", address);
-    goto done;
+    free(a);
+    return NULL;
   }
 
   memset(&ai_hints, 0, sizeof(ai_hints));
@@ -182,24 +180,27 @@ resolve_address_port(const char *address,
   if (nodns)
     ai_hints.ai_flags |= EVUTIL_AI_NUMERICHOST;
 
-  if ((ai_res = evutil_getaddrinfo(a, portstr, &ai_hints, &ai))) {
-    log_warn("Error resolving %s (%s) (%s): %s",
-             address,  a, portstr, evutil_gai_strerror(ai_res));
-    goto done;
-  }
-  if (ai == NULL) {
-    log_warn("No result for address %s", address);
-    goto done;
-  }
-  *addrlen_out = ai->ai_addrlen;
-  *addr_out = xmemdup(ai->ai_addr, ai->ai_addrlen);
-  result = 0;
+  ai_res = evutil_getaddrinfo(a, portstr, &ai_hints, &ai);
+  ai_errno = errno;
 
- done:
   free(a);
-  if (ai)
-    evutil_freeaddrinfo(ai);
-  return result;
+
+  if (ai_res) {
+    if (ai_res == EAI_SYSTEM)
+      log_warn("Error resolving %s: %s [%s]",
+               address, evutil_gai_strerror(ai_res), strerror(ai_errno));
+    else
+      log_warn("Error resolving %s: %s", address, evutil_gai_strerror(ai_res));
+
+    if (ai) {
+      evutil_freeaddrinfo(ai);
+      ai = NULL;
+    }
+  } else if (ai == NULL) {
+    log_warn("No result for address %s", address);
+  }
+
+  return ai;
 }
 
 static struct evdns_base *the_evdns_base = NULL;

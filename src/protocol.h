@@ -5,11 +5,10 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#include <stddef.h>   /* for size_t */
 #include "network.h"  /* for recv_ret */
+#include <event2/util.h> /* for evutil_addrinfo */
 
 struct evbuffer;
-struct sockaddr;
 
 /**
   This struct defines parameters of a protocol on a per-listener basis.
@@ -20,12 +19,10 @@ struct sockaddr;
 */
 typedef struct protocol_params_t {
   const struct protocol_vtable *vtable;
-  struct sockaddr *target_address;
-  struct sockaddr *listen_address;
+  struct evutil_addrinfo *target_addr;
+  struct evutil_addrinfo *listen_addr;
   char *shared_secret;
   size_t shared_secret_len;
-  size_t target_address_len;
-  size_t listen_address_len;
   int mode;
 } protocol_params_t;
 

@@ -117,11 +117,10 @@ listener_new(struct event_base *base,
 
   lsn->proto_params = proto_params;
 
-  lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
-                                          flags,
-                                          -1,
-                                          proto_params->listen_address,
-                                          proto_params->listen_address_len);
+  lsn->listener =
+    evconnlistener_new_bind(base, simple_listener_cb, lsn, flags, -1,
+                            proto_params->listen_addr->ai_addr,
+                            proto_params->listen_addr->ai_addrlen);
 
   if (!lsn->listener) {
     log_warn("Failed to create listener!");
@@ -246,8 +245,9 @@ simple_listener_cb(struct evconnlistener *evcl,
   if (conn->mode == LSN_SIMPLE_SERVER || conn->mode == LSN_SIMPLE_CLIENT) {
     /* Launch the connect attempt. */
     if (bufferevent_socket_connect(conn->output,
-                                   lsn->proto_params->target_address,
-                                   lsn->proto_params->target_address_len)<0)
+                                   lsn->proto_params->target_addr->ai_addr,
+                                   lsn->proto_params->target_addr->ai_addrlen)
+        < 0)
       goto err;
 
     bufferevent_enable(conn->output, EV_READ|EV_WRITE);

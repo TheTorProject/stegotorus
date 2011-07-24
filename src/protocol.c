@@ -53,10 +53,10 @@ proto_params_free(protocol_params_t *params)
 {
   obfs_assert(params);
 
-  if (params->target_address)
-    free(params->target_address);
-  if (params->listen_address)
-    free(params->listen_address);
+  if (params->target_addr)
+    evutil_freeaddrinfo(params->target_addr);
+  if (params->listen_addr)
+    evutil_freeaddrinfo(params->listen_addr);
   if (params->shared_secret)
     free(params->shared_secret);
   free(params);
