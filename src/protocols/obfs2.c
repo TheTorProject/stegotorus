@@ -16,13 +16,22 @@
 static void usage(void);
 static int parse_and_set_options(int n_options,
                                  const char *const *options,
-                                 struct protocol_params_t *params);
+                                 obfs2_params_t *params);
 
-static inline obfs2_protocol_t *
-downcast(struct protocol_t *proto)
+/** Return true iff the OBFUSCATE_SEED_LENGTH-byte seed in 'seed' is nonzero */
+static inline int
+seed_nonzero(const uchar *seed)
 {
-  return (obfs2_protocol_t *)
-    ((char *)proto - offsetof(obfs2_protocol_t, super));
+  static const uchar OBFUSCATE_ZERO_SEED[OBFUSCATE_SEED_LENGTH] = {0};
+  return memcmp(seed, OBFUSCATE_ZERO_SEED, OBFUSCATE_SEED_LENGTH) != 0;
+}
+
+/** Return true iff the SHARED_SECRET_LENGTH-byte seed in 'seed' is nonzero */
+static inline int
+shared_seed_nonzero(const uchar *seed)
+{
+  static const uchar SHARED_ZERO_SEED[SHARED_SECRET_LENGTH] = {0};
+  return memcmp(seed, SHARED_ZERO_SEED, SHARED_SECRET_LENGTH) != 0;
 }
 
 /*
@@ -31,19 +40,19 @@ downcast(struct protocol_t *proto)
 
    Returns 0 on success, -1 on fail.
 */
-static struct protocol_params_t *
+static protocol_params_t *
 obfs2_init(int n_options, const char *const *options)
 {
-  struct protocol_params_t *params
-    = xzalloc(sizeof(struct protocol_params_t));
+  obfs2_params_t *params = xzalloc(sizeof(obfs2_params_t));
 
+  params->super.vtable = &obfs2_vtable;
   if (parse_and_set_options(n_options, options, params) < 0) {
-    proto_params_free(params);
+    proto_params_free(&params->super);
     usage();
     return NULL;
   }
 
-  return params;
+  return &params->super;
 }
 
 /**
@@ -51,7 +60,7 @@ obfs2_init(int n_options, const char *const *options)
 */
 int
 parse_and_set_options(int n_options, const char *const *options,
-                      struct protocol_params_t *params)
+                      obfs2_params_t *params)
 {
   int got_dest=0;
   int got_ss=0;
@@ -67,17 +76,23 @@ parse_and_set_options(int n_options, const char *const *options,
       if (!strncmp(*options,"--dest=",7)) {
         if (got_dest)
           return -1;
-        params->target_addr = resolve_address_port(*options+7, 1, 0, NULL);
-        if (!params->target_addr)
+        params->super.target_addr =
+          resolve_address_port(*options+7, 1, 0, NULL);
+        if (!params->super.target_addr)
           return -1;
         got_dest=1;
       } else if (!strncmp(*options,"--shared-secret=",16)) {
+        digest_t *c;
         if (got_ss)
           return -1;
-        /* this is freed in proto_params_free() */
-        params->shared_secret_len = strlen(*options+16);
-        params->shared_secret = xmemdup(*options+16,
-                                        params->shared_secret_len + 1);
+
+        /* ASN we must say in spec that we hash command line shared
+           secret. */
+        c = digest_new();
+        digest_update(c, (uchar*)*options+16, strlen(*options+16));
+        digest_getdigest(c, params->shared_secret, SHARED_SECRET_LENGTH);
+        digest_free(c);
+
         got_ss=1;
       } else {
         log_warn("obfs2: Unknown argument.");
@@ -88,37 +103,36 @@ parse_and_set_options(int n_options, const char *const *options,
 
     if (!strcmp(*options, "client")) {
       defport = "48988"; /* bf5c */
-      params->mode = LSN_SIMPLE_CLIENT;
+      params->super.mode = LSN_SIMPLE_CLIENT;
     } else if (!strcmp(*options, "socks")) {
       defport = "23548"; /* 5bf5 */
-      params->mode = LSN_SOCKS_CLIENT;
+      params->super.mode = LSN_SOCKS_CLIENT;
     } else if (!strcmp(*options, "server")) {
       defport = "11253"; /* 2bf5 */
-      params->mode = LSN_SIMPLE_SERVER;
+      params->super.mode = LSN_SIMPLE_SERVER;
     } else {
       log_warn("obfs2: only client/socks/server modes supported.");
       return -1;
     }
     options++;
 
-    params->listen_addr = resolve_address_port(*options, 1, 1, defport);
-    if (!params->listen_addr)
+    params->super.listen_addr = resolve_address_port(*options, 1, 1, defport);
+    if (!params->super.listen_addr)
       return -1;
 
     /* Validate option selection. */
-    if (got_dest && (params->mode == LSN_SOCKS_CLIENT)) {
+    if (got_dest && (params->super.mode == LSN_SOCKS_CLIENT)) {
       log_warn("obfs2: You can't be on socks mode and have --dest.");
       return -1;
     }
 
-    if (!got_dest && (params->mode != LSN_SOCKS_CLIENT)) {
+    if (!got_dest && (params->super.mode != LSN_SOCKS_CLIENT)) {
       log_warn("obfs2: client/server mode needs --dest.");
       return -1;
     }
 
     log_debug("obfs2: Parsed options nicely!");
 
-    params->vtable = &obfs2_vtable;
     return 0;
 }
 
@@ -142,13 +156,6 @@ usage(void)
          "\tobfs2 server 127.0.0.1:1026");
 }
 
-/** Return true iff the OBFUSCATE_SEED_LENGTH-byte seed in 'seed' is nonzero */
-static int
-seed_nonzero(const uchar *seed)
-{
-  return memcmp(seed, OBFUSCATE_ZERO_SEED, OBFUSCATE_SEED_LENGTH) != 0;
-}
-
 /**
    Derive and return key of type 'keytype' from the seeds currently set in
    'state'.
@@ -166,12 +173,12 @@ derive_key(void *s, const char *keytype)
     digest_update(c, state->initiator_seed, OBFUSCATE_SEED_LENGTH);
   if (seed_nonzero(state->responder_seed))
     digest_update(c, state->responder_seed, OBFUSCATE_SEED_LENGTH);
-  if (seed_nonzero(state->secret_seed))
+  if (shared_seed_nonzero(state->secret_seed))
     digest_update(c, state->secret_seed, SHARED_SECRET_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
 
-  if (seed_nonzero(state->secret_seed)) {
+  if (shared_seed_nonzero(state->secret_seed)) {
     digest_t *d;
     int i;
     for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
@@ -206,13 +213,13 @@ derive_padding_key(void *s, const uchar *seed,
   digest_update(c, (uchar*)keytype, strlen(keytype));
   if (seed_nonzero(seed))
     digest_update(c, seed, OBFUSCATE_SEED_LENGTH);
-  if (seed_nonzero(state->secret_seed))
+  if (shared_seed_nonzero(state->secret_seed))
     digest_update(c, state->secret_seed, OBFUSCATE_SEED_LENGTH);
   digest_update(c, (uchar*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
   digest_free(c);
 
-  if (seed_nonzero(state->secret_seed)) {
+  if (shared_seed_nonzero(state->secret_seed)) {
     digest_t *d;
     int i;
     for (i=0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
@@ -230,22 +237,32 @@ derive_padding_key(void *s, const uchar *seed,
 }
 
 /**
+   Frees obfs2 parameters 'p'
+ */
+static void
+obfs2_fini(protocol_params_t *p)
+{
+  obfs2_params_t *params = DOWNCAST(obfs2_params_t, super, p);
+  /* wipe out keys */
+  memset(params, 0x99, sizeof(obfs2_params_t));
+  free(params);
+}
+
+
+/**
    This is called everytime we get a connection for the obfs2
    protocol.
-
-   It sets up the protocol vtable in 'proto_struct' and then attempts
-   to create and return a protocol state according to the protocol
-   parameters 'params'.
 */
-static struct protocol_t *
-obfs2_create(protocol_params_t *params)
+static protocol_t *
+obfs2_create(protocol_params_t *p)
 {
+  obfs2_params_t *params = DOWNCAST(obfs2_params_t, super, p);
   obfs2_protocol_t *proto = xzalloc(sizeof(obfs2_protocol_t));
   uchar *seed;
   const char *send_pad_type;
 
   proto->state = ST_WAIT_FOR_KEY;
-  proto->we_are_initiator = (params->mode != LSN_SIMPLE_SERVER);
+  proto->we_are_initiator = (params->super.mode != LSN_SIMPLE_SERVER);
   if (proto->we_are_initiator) {
     send_pad_type = INITIATOR_PAD_TYPE;
     seed = proto->initiator_seed;
@@ -255,17 +272,11 @@ obfs2_create(protocol_params_t *params)
   }
 
   /* Generate our seed */
+  memcpy(proto->secret_seed, params->shared_secret, SHARED_SECRET_LENGTH);
+
   if (random_bytes(seed, OBFUSCATE_SEED_LENGTH) < 0) {
     free(proto);
     return NULL;
-  }
-
-  if (params->shared_secret) {
-    /* ASN we must say in spec that we hash command line shared secret. */
-    digest_t *c = digest_new();
-    digest_update(c, (uchar*)params->shared_secret, params->shared_secret_len);
-    digest_getdigest(c, proto->secret_seed, SHARED_SECRET_LENGTH);
-    digest_free(c);
   }
 
   /* Derive the key for what we're sending */
@@ -278,9 +289,9 @@ obfs2_create(protocol_params_t *params)
     Frees obfs2 state 's'
 */
 static void
-obfs2_destroy(struct protocol_t *s)
+obfs2_destroy(protocol_t *s)
 {
-  obfs2_protocol_t *state = downcast(s);
+  obfs2_protocol_t *state = DOWNCAST(obfs2_protocol_t, super, s);
   if (state->send_crypto)
     crypt_free(state->send_crypto);
   if (state->send_padding_crypto)
@@ -301,9 +312,9 @@ obfs2_destroy(struct protocol_t *s)
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
  */
 static int
-obfs2_handshake(struct protocol_t *s, struct evbuffer *buf)
+obfs2_handshake(protocol_t *s, struct evbuffer *buf)
 {
-  obfs2_protocol_t *state = downcast(s);
+  obfs2_protocol_t *state = DOWNCAST(obfs2_protocol_t, super, s);
 
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE), plength, send_plength;
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
@@ -367,10 +378,10 @@ obfs2_crypt_and_transmit(crypt_t *crypto,
    using the state in 'state'.  Returns 0 on success, -1 on failure.
  */
 static int
-obfs2_send(struct protocol_t *s,
-          struct evbuffer *source, struct evbuffer *dest)
+obfs2_send(protocol_t *s,
+           struct evbuffer *source, struct evbuffer *dest)
 {
-  obfs2_protocol_t *state = downcast(s);
+  obfs2_protocol_t *state = DOWNCAST(obfs2_protocol_t, super, s);
 
   if (state->send_crypto) {
     /* First of all, send any data that we've been waiting to send. */
@@ -440,10 +451,10 @@ init_crypto(void *s)
  *  our callers that they must call obfs2_send() immediately.
  */
 static enum recv_ret
-obfs2_recv(struct protocol_t *s, struct evbuffer *source,
+obfs2_recv(protocol_t *s, struct evbuffer *source,
            struct evbuffer *dest)
 {
-  obfs2_protocol_t *state = downcast(s);
+  obfs2_protocol_t *state = DOWNCAST(obfs2_protocol_t, super, s);
   enum recv_ret r=0;
 
   if (state->state == ST_WAIT_FOR_KEY) {

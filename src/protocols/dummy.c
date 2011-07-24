@@ -29,6 +29,7 @@ dummy_init(int n_options, const char *const *options)
 {
   struct protocol_params_t *params
     = xzalloc(sizeof(struct protocol_params_t));
+  params->vtable = &dummy_vtable;
 
   if (parse_and_set_options(n_options, options, params) < 0) {
     proto_params_free(params);
@@ -85,6 +86,12 @@ usage(void)
            "\t\tlisten address ~ host:port\n"
            "Example:\n"
            "\tobfsproxy dummy socks 127.0.0.1:5000");
+}
+
+static void
+dummy_fini(struct protocol_params_t *params)
+{
+  free(params);
 }
 
 /*

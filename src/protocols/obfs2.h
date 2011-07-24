@@ -25,7 +25,6 @@ extern const struct protocol_vtable obfs2_vtable;
 #define OBFUSCATE_MAGIC_VALUE        0x2BF5CA7E
 #define OBFUSCATE_SEED_LENGTH        16
 #define OBFUSCATE_MAX_PADDING        8192
-#define OBFUSCATE_ZERO_SEED "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 #define OBFUSCATE_HASH_ITERATIONS     100000
 
 #define INITIATOR_PAD_TYPE "Initiator obfuscation padding"
@@ -34,6 +33,11 @@ extern const struct protocol_vtable obfs2_vtable;
 #define RESPONDER_SEND_TYPE "Responder obfuscated data"
 
 #define SHARED_SECRET_LENGTH SHA256_LENGTH
+
+typedef struct obfs2_params_t {
+  protocol_params_t super;
+  uchar shared_secret[SHARED_SECRET_LENGTH];
+} obfs2_params_t;
 
 typedef struct obfs2_protocol_t {
   struct protocol_t super;

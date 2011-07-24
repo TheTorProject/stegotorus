@@ -52,14 +52,19 @@ void
 proto_params_free(protocol_params_t *params)
 {
   obfs_assert(params);
+  obfs_assert(params->vtable);
+  obfs_assert(params->vtable->fini);
 
-  if (params->target_addr)
+  if (params->target_addr) {
     evutil_freeaddrinfo(params->target_addr);
-  if (params->listen_addr)
+    params->target_addr = NULL;
+  }
+  if (params->listen_addr) {
     evutil_freeaddrinfo(params->listen_addr);
-  if (params->shared_secret)
-    free(params->shared_secret);
-  free(params);
+    params->listen_addr = NULL;
+  }
+
+  params->vtable->fini(params);
 }
 
 /**
