@@ -31,7 +31,7 @@ const size_t n_supported_protocols =
    This function is called once for every listener through the runtime
    of obfsproxy.
 */
-struct protocol_params_t *
+protocol_params_t *
 proto_params_init(int n_options, const char *const *options)
 {
   size_t i;
@@ -73,7 +73,7 @@ proto_params_free(protocol_params_t *params)
 
    Return a 'protocol_t' if successful, NULL otherwise.
 */
-struct protocol_t *
+protocol_t *
 proto_create(protocol_params_t *params)
 {
   obfs_assert(params);
@@ -87,7 +87,7 @@ proto_create(protocol_params_t *params)
    Not all protocols have a handshake.
 */
 int
-proto_handshake(struct protocol_t *proto, void *buf) {
+proto_handshake(protocol_t *proto, void *buf) {
   obfs_assert(proto);
   obfs_assert(proto->vtable);
   obfs_assert(proto->vtable->handshake);
@@ -98,7 +98,7 @@ proto_handshake(struct protocol_t *proto, void *buf) {
    This function is responsible for sending protocol data.
 */
 int
-proto_send(struct protocol_t *proto, void *source, void *dest) {
+proto_send(protocol_t *proto, void *source, void *dest) {
   obfs_assert(proto);
   obfs_assert(proto->vtable);
   obfs_assert(proto->vtable->send);
@@ -109,7 +109,7 @@ proto_send(struct protocol_t *proto, void *source, void *dest) {
    This function is responsible for receiving protocol data.
 */
 enum recv_ret
-proto_recv(struct protocol_t *proto, void *source, void *dest) {
+proto_recv(protocol_t *proto, void *source, void *dest) {
   obfs_assert(proto);
   obfs_assert(proto->vtable);
   obfs_assert(proto->vtable->recv);
@@ -121,7 +121,7 @@ proto_recv(struct protocol_t *proto, void *source, void *dest) {
    It's called everytime we close a connection.
 */
 void
-proto_destroy(struct protocol_t *proto) {
+proto_destroy(protocol_t *proto) {
   obfs_assert(proto);
   obfs_assert(proto->vtable);
   obfs_assert(proto->vtable->destroy);

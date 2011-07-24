@@ -12,7 +12,7 @@ static void
 test_dummy_option_parsing(void *unused)
 {
   struct option_parsing_case {
-    struct protocol_params_t *result;
+    protocol_params_t *result;
     short should_succeed;
     short n_opts;
     const char *const opts[4];
@@ -64,10 +64,10 @@ test_dummy_option_parsing(void *unused)
 /* All the tests below use this test environment: */
 struct test_dummy_state
 {
-  struct protocol_params_t *proto_params_client;
-  struct protocol_params_t *proto_params_server;
-  struct protocol_t *client_proto;
-  struct protocol_t *server_proto;
+  protocol_params_t *proto_params_client;
+  protocol_params_t *proto_params_server;
+  protocol_t *client_proto;
+  protocol_t *server_proto;
   struct evbuffer *output_buffer;
   struct evbuffer *dummy_buffer;
 };

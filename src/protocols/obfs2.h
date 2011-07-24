@@ -40,7 +40,7 @@ typedef struct obfs2_params_t {
 } obfs2_params_t;
 
 typedef struct obfs2_protocol_t {
-  struct protocol_t super;
+  protocol_t super;
 
   /** Current protocol state.  We start out waiting for key information.  Then
       we have a key and wait for padding to arrive.  Finally, we are sending

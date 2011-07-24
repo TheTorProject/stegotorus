@@ -15,7 +15,7 @@
 static void usage(void);
 static int parse_and_set_options(int n_options,
                                  const char *const *options,
-                                 struct protocol_params_t *params);
+                                 protocol_params_t *params);
 
 /**
    This function populates 'params' according to 'options' and sets up
@@ -24,11 +24,10 @@ static int parse_and_set_options(int n_options,
    'options' is an array like this:
    {"dummy","socks","127.0.0.1:6666"}
 */
-static struct protocol_params_t *
+static protocol_params_t *
 dummy_init(int n_options, const char *const *options)
 {
-  struct protocol_params_t *params
-    = xzalloc(sizeof(struct protocol_params_t));
+  protocol_params_t *params = xzalloc(sizeof(protocol_params_t));
   params->vtable = &dummy_vtable;
 
   if (parse_and_set_options(n_options, options, params) < 0) {
@@ -45,7 +44,7 @@ dummy_init(int n_options, const char *const *options)
 */
 static int
 parse_and_set_options(int n_options, const char *const *options,
-                      struct protocol_params_t *params)
+                      protocol_params_t *params)
 {
   const char* defport;
 
@@ -100,7 +99,7 @@ usage(void)
 }
 
 static void
-dummy_fini(struct protocol_params_t *params)
+dummy_fini(protocol_params_t *params)
 {
   free(params);
 }
@@ -110,17 +109,17 @@ dummy_fini(struct protocol_params_t *params)
   protocol.
 */
 
-static struct protocol_t *
-dummy_create(struct protocol_params_t *params)
+static protocol_t *
+dummy_create(protocol_params_t *params)
 {
   /* Dummy needs no per-connection protocol-specific state. */
-  struct protocol_t *proto = xzalloc(sizeof(struct protocol_t));
+  protocol_t *proto = xzalloc(sizeof(protocol_t));
   proto->vtable = &dummy_vtable;
   return proto;
 }
 
 static void
-dummy_destroy(struct protocol_t *proto)
+dummy_destroy(protocol_t *proto)
 {
   free(proto);
 }
@@ -131,13 +130,13 @@ dummy_destroy(struct protocol_t *proto)
    The dummy protocol just puts the data of 'source' in 'dest'.
 */
 static int
-dummy_handshake(struct protocol_t *proto, struct evbuffer *buf)
+dummy_handshake(protocol_t *proto, struct evbuffer *buf)
 {
   return 0;
 }
 
 static int
-dummy_send(struct protocol_t *proto,
+dummy_send(protocol_t *proto,
            struct evbuffer *source, struct evbuffer *dest)
 {
   return evbuffer_add_buffer(dest,source);
@@ -149,7 +148,7 @@ dummy_send(struct protocol_t *proto,
   The dummy protocol just puts the data of 'source' into 'dest'.
 */
 static enum recv_ret
-dummy_recv(struct protocol_t *proto,
+dummy_recv(protocol_t *proto,
            struct evbuffer *source, struct evbuffer *dest)
 {
   if (evbuffer_add_buffer(dest,source)<0)

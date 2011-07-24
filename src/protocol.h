@@ -74,7 +74,7 @@ typedef struct protocol_vtable
               struct evbuffer *dest);
 
   /** Receive data from 'source' and pass it upstream to 'dest'. */
-  enum recv_ret (*recv)(struct protocol_t *state,
+  enum recv_ret (*recv)(protocol_t *state,
                         struct evbuffer *source,
                         struct evbuffer *dest);
 
@@ -93,16 +93,16 @@ typedef struct protocol_vtable
     name##_handshake, name##_send, name##_recv          \
   }
 
-struct protocol_params_t *proto_params_init(int n_options,
-                                            const char *const *options);
+protocol_params_t *proto_params_init(int n_options,
+                                     const char *const *options);
 void proto_params_free(protocol_params_t *params);
 
-struct protocol_t *proto_create(struct protocol_params_t *params);
-void proto_destroy(struct protocol_t *proto);
+protocol_t *proto_create(protocol_params_t *params);
+void proto_destroy(protocol_t *proto);
 
-int proto_handshake(struct protocol_t *proto, void *buf);
-int proto_send(struct protocol_t *proto, void *source, void *dest);
-enum recv_ret proto_recv(struct protocol_t *proto, void *source, void *dest);
+int proto_handshake(protocol_t *proto, void *buf);
+int proto_send(protocol_t *proto, void *source, void *dest);
+enum recv_ret proto_recv(protocol_t *proto, void *source, void *dest);
 
 extern const protocol_vtable *const supported_protocols[];
 extern const size_t n_supported_protocols;

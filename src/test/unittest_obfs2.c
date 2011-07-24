@@ -15,17 +15,16 @@
 #define ALEN(x) (sizeof x/sizeof x[0])
 
 static inline obfs2_protocol_t *
-downcast(struct protocol_t *proto)
+downcast(protocol_t *proto)
 {
-  return (obfs2_protocol_t *)
-    ((char *)proto - offsetof(obfs2_protocol_t, super));
+  return DOWNCAST(obfs2_protocol_t, super, proto);
 }
 
 static void
 test_obfs2_option_parsing(void *unused)
 {
   struct option_parsing_case {
-    struct protocol_params_t *result;
+    protocol_params_t *result;
     short should_succeed;
     short n_opts;
     const char *const opts[6];
@@ -78,10 +77,10 @@ test_obfs2_option_parsing(void *unused)
 /* All the tests below use this test environment: */
 struct test_obfs2_state
 {
-  struct protocol_params_t *proto_params_client;
-  struct protocol_params_t *proto_params_server;
-  struct protocol_t *client_proto;
-  struct protocol_t *server_proto;
+  protocol_params_t *proto_params_client;
+  protocol_params_t *proto_params_server;
+  protocol_t *client_proto;
+  protocol_t *server_proto;
   struct evbuffer *output_buffer;
   struct evbuffer *dummy_buffer;
 };
