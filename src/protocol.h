@@ -26,7 +26,6 @@ typedef struct protocol_params_t {
   size_t shared_secret_len;
   size_t target_address_len;
   size_t listen_address_len;
-  int is_initiator;
   int mode;
 } protocol_params_t;
 

@@ -102,8 +102,6 @@ parse_and_set_options(int n_options, const char *const *options,
     }
     options++;
 
-    params->is_initiator = (params->mode != LSN_SIMPLE_SERVER);
-
     if (resolve_address_port(*options, 1, 1,
                              &params->listen_address,
                              &params->listen_address_len, defport) < 0)
@@ -249,7 +247,7 @@ obfs2_create(protocol_params_t *params)
   const char *send_pad_type;
 
   proto->state = ST_WAIT_FOR_KEY;
-  proto->we_are_initiator = params->is_initiator;
+  proto->we_are_initiator = (params->mode != LSN_SIMPLE_SERVER);
   if (proto->we_are_initiator) {
     send_pad_type = INITIATOR_PAD_TYPE;
     seed = proto->initiator_seed;
