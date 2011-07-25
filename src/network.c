@@ -51,11 +51,11 @@ static void conn_free(conn_t *conn);
 static void close_all_connections(void);
 
 static void close_conn_on_flush(struct bufferevent *bev, void *arg);
-static void plaintext_read_cb(struct bufferevent *bev, void *arg);
+
+static void upstream_read_cb(struct bufferevent *bev, void *arg);
+static void downstream_read_cb(struct bufferevent *bev, void *arg);
 static void socks_read_cb(struct bufferevent *bev, void *arg);
-/* ASN Changed encrypted_read_cb() to obfuscated_read_cb(), it sounds
-   a bit more obfsproxy generic. I still don't like it though. */
-static void obfuscated_read_cb(struct bufferevent *bev, void *arg);
+
 static void input_event_cb(struct bufferevent *bev, short what, void *arg);
 static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 static void socks_event_cb(struct bufferevent *bev, short what, void *arg);
@@ -213,12 +213,12 @@ simple_client_listener_cb(struct evconnlistener *evcl,
   if (!conn->output)
     goto err;
 
-  bufferevent_setcb(conn->input, plaintext_read_cb, NULL, input_event_cb, conn);
+  bufferevent_setcb(conn->input, upstream_read_cb, NULL, input_event_cb, conn);
   /* don't enable the input side for reading at this point; wait till we
      have a connection to the target */
 
   bufferevent_setcb(conn->output,
-                    obfuscated_read_cb, NULL, output_event_cb, conn);
+                    downstream_read_cb, NULL, output_event_cb, conn);
 
   /* Queue handshake, if any, before connecting. */
   if (proto_handshake(conn->proto, bufferevent_get_output(conn->output)) < 0)
@@ -335,7 +335,7 @@ simple_server_listener_cb(struct evconnlistener *evcl,
     goto err;
   fd = -1; /* prevent double-close */
 
-  bufferevent_setcb(conn->input, obfuscated_read_cb, NULL, input_event_cb, conn);
+  bufferevent_setcb(conn->input, downstream_read_cb, NULL, input_event_cb, conn);
 
   /* don't enable the input side for reading at this point; wait till we
      have a connection to the target */
@@ -345,7 +345,7 @@ simple_server_listener_cb(struct evconnlistener *evcl,
   if (!conn->output)
     goto err;
 
-  bufferevent_setcb(conn->output, plaintext_read_cb, NULL,
+  bufferevent_setcb(conn->output, upstream_read_cb, NULL,
                     output_event_cb, conn);
 
   /* Queue handshake, if any, before connecting. */
@@ -456,7 +456,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
                                             -1,
                                             BEV_OPT_CLOSE_ON_FREE);
 
-      bufferevent_setcb(conn->output, obfuscated_read_cb, NULL,
+      bufferevent_setcb(conn->output, downstream_read_cb, NULL,
                         socks_event_cb, conn);
 
       /* Queue handshake, if any, before connecting. */
@@ -503,16 +503,18 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 }
 
 /**
-   This callback is responsible for handling plaintext traffic.
-*/
+   This callback is responsible for handling "upstream" traffic --
+   traffic coming in from the higher-level client or server that needs
+   to be obfuscated and transmitted.
+ */
 static void
-plaintext_read_cb(struct bufferevent *bev, void *arg)
+upstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   struct bufferevent *other;
   other = (bev == conn->input) ? conn->output : conn->input;
 
-  log_debug("Got data on plaintext side");
+  log_debug("Got data on upstream side");
   if (proto_send(conn->proto,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other)) < 0)
@@ -520,19 +522,19 @@ plaintext_read_cb(struct bufferevent *bev, void *arg)
 }
 
 /**
-   This callback is responsible for handling obfuscated
-   traffic -- traffic that has already been obfuscated
-   by our protocol.
-*/
+   This callback is responsible for handling "downstream" traffic --
+   traffic coming in from our remote peer that needs to be deobfuscated
+   and passed to the upstream client or server.
+ */
 static void
-obfuscated_read_cb(struct bufferevent *bev, void *arg)
+downstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   struct bufferevent *other;
   other = (bev == conn->input) ? conn->output : conn->input;
   enum recv_ret r;
 
-  log_debug("Got data on encrypted side");
+  log_debug("Got data on downstream side");
   r = proto_recv(conn->proto,
                  bufferevent_get_input(bev),
                  bufferevent_get_output(other));
@@ -548,7 +550,7 @@ obfuscated_read_cb(struct bufferevent *bev, void *arg)
 /**
    Something broke in our connection or we reached EOF.
    We prepare the connection to be closed ASAP.
-*/
+ */
 static void
 error_or_eof(conn_t *conn,
              struct bufferevent *bev_err, struct bufferevent *bev_flush)
@@ -675,11 +677,11 @@ socks_event_cb(struct bufferevent *bev, short what, void *arg)
     socks_state_free(conn->socks_state);
     conn->socks_state = NULL;
     bufferevent_setcb(conn->input,
-                      plaintext_read_cb, NULL, input_event_cb, conn);
+                      upstream_read_cb, NULL, input_event_cb, conn);
     bufferevent_setcb(conn->output,
-                      obfuscated_read_cb, NULL, output_event_cb, conn);
+                      downstream_read_cb, NULL, output_event_cb, conn);
     if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
-      obfuscated_read_cb(bev, conn->input);
+      downstream_read_cb(bev, conn->input);
   }
 
   /* also do everything that's done on a normal connection */
