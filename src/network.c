@@ -58,11 +58,6 @@
 /** All our listeners. */
 static smartlist_t *listeners;
 
-struct listener_t {
-  struct evconnlistener *listener;
-  protocol_params_t *proto_params;
-};
-
 /** All active connections.  */
 static smartlist_t *connections;
 
@@ -135,16 +130,13 @@ close_all_connections(void)
 
 /**
    This function spawns a listener configured according to the
-   provided 'protocol_params_t' object'.  Returns the listener on
-   success, NULL on fail.
+   provided 'protocol_params_t' object'.  Returns 1 on success, 0 on
+   failure.  (No, you can't have the listener object. It's private.)
 
-   If it succeeds, the new listener object takes ownership of the
-   protocol_params_t object provided; if it fails, the protocol_params_t
-   object is deallocated.
+   Regardless of success or failure, the protocol_params_t is consumed.
 */
-listener_t *
-listener_new(struct event_base *base,
-             protocol_params_t *params)
+int
+create_listener(struct event_base *base, protocol_params_t *params)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
@@ -168,7 +160,7 @@ listener_new(struct event_base *base,
     log_warn("Failed to create listener!");
     proto_params_free(params);
     free(lsn);
-    return NULL;
+    return 0;
   }
 
   /* If we don't have a listener list, create one now. */
@@ -176,7 +168,7 @@ listener_new(struct event_base *base,
     listeners = smartlist_create();
   smartlist_add(listeners, lsn);
 
-  return lsn;
+  return 1;
 }
 
 /**

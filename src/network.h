@@ -28,10 +28,8 @@ enum recv_ret {
   RECV_SEND_PENDING
 };
 
-typedef struct listener_t listener_t;
-
-listener_t *listener_new(struct event_base *base,
-                         struct protocol_params_t *params);
+/* returns 1 on success, 0 on failure */
+int create_listener(struct event_base *base, struct protocol_params_t *params);
 void free_all_listeners(void);
 
 void start_shutdown(int barbaric);
@@ -39,8 +37,15 @@ void start_shutdown(int barbaric);
 #ifdef NETWORK_PRIVATE
 
 struct bufferevent;
+struct evconnlistener;
 struct socks_state_t;
 struct protocol_t;
+struct protocol_params_t;
+
+typedef struct listener_t {
+  struct evconnlistener *listener;
+  struct protocol_params_t *proto_params;
+} listener_t;
 
 typedef struct conn_t {
   struct protocol_t *proto;

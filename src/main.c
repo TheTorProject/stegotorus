@@ -341,7 +341,6 @@ main(int argc, const char **argv)
 
   /*Let's open a new listener for each protocol. */
   int h;
-  listener_t *temp_listener;
   int n_listeners=0;
   protocol_params_t *proto_params=NULL;
   for (h=0;h<actual_protocols;h++) {
@@ -350,22 +349,13 @@ main(int argc, const char **argv)
     /** normally free'd in listener_free() */
     proto_params = proto_params_init(n_options_array[h],
                                      (const char *const *)protocol_options[h]);
-    if (!proto_params) {
-      free(protocol_options[h]);
-      continue;
+    if (proto_params && create_listener(the_event_base, proto_params)) {
+      log_info("Succesfully created listener %d.", h+1);
+      n_listeners++;
     }
-
-    temp_listener = listener_new(the_event_base, proto_params);
 
     /** Free the space allocated for this protocol's options. */
     free(protocol_options[h]);
-
-    if (!temp_listener)
-      continue;
-
-    log_info("Succesfully created listener %d.", h+1);
-
-    n_listeners++;
   }
 
   log_debug("From the original %d protocols only %d "
