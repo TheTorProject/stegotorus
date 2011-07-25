@@ -58,6 +58,7 @@ static void socks_read_cb(struct bufferevent *bev, void *arg);
 static void obfuscated_read_cb(struct bufferevent *bev, void *arg);
 static void input_event_cb(struct bufferevent *bev, short what, void *arg);
 static void output_event_cb(struct bufferevent *bev, short what, void *arg);
+static void socks_event_cb(struct bufferevent *bev, short what, void *arg);
 
 /**
    Puts obfsproxy's networking subsystem on "closing time" mode. This
@@ -213,12 +214,13 @@ simple_client_listener_cb(struct evconnlistener *evcl,
     goto err;
 
   bufferevent_setcb(conn->input, plaintext_read_cb, NULL, input_event_cb, conn);
-  bufferevent_enable(conn->input, EV_READ|EV_WRITE);
+  /* don't enable the input side for reading at this point; wait till we
+     have a connection to the target */
 
   bufferevent_setcb(conn->output,
                     obfuscated_read_cb, NULL, output_event_cb, conn);
 
-  /* Queue output right now. */
+  /* Queue handshake, if any, before connecting. */
   if (proto_handshake(conn->proto, bufferevent_get_output(conn->output)) < 0)
     goto err;
 
@@ -283,7 +285,7 @@ socks_client_listener_cb(struct evconnlistener *evcl,
   bufferevent_setcb(conn->input, socks_read_cb, NULL, input_event_cb, conn);
   bufferevent_enable(conn->input, EV_READ|EV_WRITE);
 
-  /* Do not create a target bufferevent at this time; the socks
+  /* Do not create an output bufferevent at this time; the socks
      handler will do it after we know where we're connecting */
 
   /* add conn to the connection list */
@@ -334,7 +336,9 @@ simple_server_listener_cb(struct evconnlistener *evcl,
   fd = -1; /* prevent double-close */
 
   bufferevent_setcb(conn->input, obfuscated_read_cb, NULL, input_event_cb, conn);
-  bufferevent_enable(conn->input, EV_READ|EV_WRITE);
+
+  /* don't enable the input side for reading at this point; wait till we
+     have a connection to the target */
 
   /* New bufferevent to connect to the target address */
   conn->output = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
@@ -436,8 +440,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   conn_t *conn = arg;
   //struct bufferevent *other;
   enum socks_ret socks_ret;
-  obfs_assert(bev == conn->input); /* socks must be on the initial bufferevent */
-
+  obfs_assert(bev == conn->input); /* socks only makes sense on the input side */
 
   do {
     enum socks_status_t status = socks_state_get_status(conn->socks_state);
@@ -453,7 +456,10 @@ socks_read_cb(struct bufferevent *bev, void *arg)
                                             -1,
                                             BEV_OPT_CLOSE_ON_FREE);
 
-      /* queue handshake, if any, before connecting */
+      bufferevent_setcb(conn->output, obfuscated_read_cb, NULL,
+                        socks_event_cb, conn);
+
+      /* Queue handshake, if any, before connecting. */
       if (proto_handshake(conn->proto,
                           bufferevent_get_output(conn->output))<0) {
         /* XXXX send socks reply */
@@ -484,7 +490,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   if (socks_ret == SOCKS_INCOMPLETE)
     return; /* need to read more data. */
   else if (socks_ret == SOCKS_BROKEN)
-    close_conn(conn); /* XXXX maybe send socks reply */
+    close_conn(conn); /* XXXX send socks reply */
   else if (socks_ret == SOCKS_CMD_NOT_CONNECT) {
     bufferevent_enable(bev, EV_WRITE);
     bufferevent_disable(bev, EV_READ);
@@ -567,101 +573,115 @@ error_or_eof(conn_t *conn,
 }
 
 /**
-   We land in here when an event happens on conn->input.
-*/
+   Called when an "event" happens on conn->input.
+   On the input side, all such events are error conditions.
+ */
 static void
 input_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
   obfs_assert(bev == conn->input);
 
-  if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
-    log_warn("Got error: %s",
+  /* It should be impossible to get BEV_EVENT_CONNECTED on this side. */
+  obfs_assert(what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT));
+  obfs_assert(!(what & BEV_EVENT_CONNECTED));
+
+  log_warn("Got error: %s",
            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-    error_or_eof(conn, bev, conn->output);
-  }
-  /* XXX we don't expect any other events */
+  error_or_eof(conn, bev, conn->output);
 }
 
 /**
-   We land in here when an event happens on conn->output.
-*/
+   Called when an "event" happens on conn->output.
+   In addition to the error cases dealt with above, this side can see
+   BEV_EVENT_CONNECTED which indicates that the output connection is
+   now open.
+ */
 static void
 output_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
   obfs_assert(bev == conn->output);
 
-  /**
-     If we got the BEV_EVENT_ERROR flag *AND* we are in socks mode
-     *AND* we are in the ST_HAVE_ADDR state, chances are that we
-     failed connecting to the host requested by the CONNECT call. This
-     means that we should send a negative SOCKS reply back to the
-     client and terminate the connection.
-  */
-  if (what & BEV_EVENT_ERROR) {
-    if ((conn->mode == LSN_SOCKS_CLIENT) &&
-        (conn->socks_state) &&
-        (socks_state_get_status(conn->socks_state) == ST_HAVE_ADDR)) {
-      log_debug("Connection failed") ;
-      /* Enable EV_WRITE so that we can send the response.
-         Disable EV_READ so that we don't get more stuff from the client. */
-      bufferevent_enable(conn->input, EV_WRITE);
-      bufferevent_disable(conn->input, EV_READ);
-      socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
-                       evutil_socket_geterror(bufferevent_getfd(bev)));
-      bufferevent_setcb(conn->input, NULL,
-                        close_conn_on_flush, output_event_cb, conn);
-      return;
-    }
-  }
-
-  /**
-     If the connection is terminating *OR* if we got a BEV_EVENT_ERROR
-     but we don't match the case above, we most probably have to close
-     this connection soon.
-  */
-  if (conn->flushing || (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR))) {
+  /* If the connection is terminating *OR* if we got one of the error
+     events, close this connection soon. */
+  if (conn->flushing ||
+      (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT))) {
     log_warn("Got error: %s",
-           evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     error_or_eof(conn, bev, conn->input);
     return;
   }
 
-  /**
-     If we got the BEV_EVENT_CONNECTED flag it means that a connection
-     request was succesfull and normally that should have been off a
-     CONNECT request by the SOCKS client. If that's the case we should
-     send a happy response to the client and switch to start serving
-     our pluggable transport protocol.
-  */
+  /* Upon successful connection, go ahead and enable traffic on the
+     input side. */
   if (what & BEV_EVENT_CONNECTED) {
-    /* woo, we're connected.  Now the input buffer can start reading. */
     conn->is_open = 1;
     log_debug("Connection done") ;
     bufferevent_enable(conn->input, EV_READ|EV_WRITE);
-    if (conn->mode == LSN_SOCKS_CLIENT) {
-      struct sockaddr_storage ss;
-      struct sockaddr *sa = (struct sockaddr*)&ss;
-      socklen_t slen = sizeof(&ss);
-      obfs_assert(conn->socks_state);
-      if (getpeername(bufferevent_getfd(bev), sa, &slen) == 0) {
-        /* Figure out where we actually connected to so that we can tell the
-         * socks client */
-        socks_state_set_address(conn->socks_state, sa);
-      }
-      socks_send_reply(conn->socks_state,
-                       bufferevent_get_output(conn->input), 0);
-      /* we sent a socks reply.  We can finally move over to being a regular
-         input bufferevent. */
-      socks_state_free(conn->socks_state);
-      conn->socks_state = NULL;
-      bufferevent_setcb(conn->input,
-                        plaintext_read_cb, NULL, input_event_cb, conn);
-      if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
-        obfuscated_read_cb(bev, conn->input);
-    }
     return;
   }
-  /* XXX we don't expect any other events */
+
+  /* unrecognized event */
+  obfs_abort();
+}
+
+/**
+   Called when an "event" happens on conn->output in socks mode.
+   Handles the same cases as output_event_cb but must also generate
+   appropriate socks messages back on the input side.
+ */
+static void
+socks_event_cb(struct bufferevent *bev, short what, void *arg)
+{
+  conn_t *conn = arg;
+  obfs_assert(bev == conn->output);
+
+  /* If we got an error while in the ST_HAVE_ADDR state, chances are
+     that we failed connecting to the host requested by the CONNECT
+     call. This means that we should send a negative SOCKS reply back
+     to the client and terminate the connection. */
+  if ((what & BEV_EVENT_ERROR) &&
+      socks_state_get_status(conn->socks_state) == ST_HAVE_ADDR) {
+    log_debug("Connection failed");
+    /* Enable EV_WRITE so that we can send the response.
+       Disable EV_READ so that we don't get more stuff from the client. */
+    bufferevent_enable(conn->input, EV_WRITE);
+    bufferevent_disable(conn->input, EV_READ);
+    socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
+                     evutil_socket_geterror(bufferevent_getfd(bev)));
+    bufferevent_setcb(conn->input, NULL,
+                      close_conn_on_flush, output_event_cb, conn);
+    return;
+  }
+
+  /* Additional work to do for BEV_EVENT_CONNECTED: send a happy
+     response to the client and switch to the actual obfuscated
+     protocol handlers. */
+  if (what & BEV_EVENT_CONNECTED) {
+    struct sockaddr_storage ss;
+    struct sockaddr *sa = (struct sockaddr*)&ss;
+    socklen_t slen = sizeof(&ss);
+    obfs_assert(conn->socks_state);
+    if (getpeername(bufferevent_getfd(bev), sa, &slen) == 0) {
+      /* Figure out where we actually connected to so that we can tell the
+       * socks client */
+      socks_state_set_address(conn->socks_state, sa);
+    }
+    socks_send_reply(conn->socks_state,
+                     bufferevent_get_output(conn->input), 0);
+    /* we sent a socks reply.  We can finally move over to being a regular
+       input bufferevent. */
+    socks_state_free(conn->socks_state);
+    conn->socks_state = NULL;
+    bufferevent_setcb(conn->input,
+                      plaintext_read_cb, NULL, input_event_cb, conn);
+    bufferevent_setcb(conn->output,
+                      obfuscated_read_cb, NULL, output_event_cb, conn);
+    if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
+      obfuscated_read_cb(bev, conn->input);
+  }
+
+  /* also do everything that's done on a normal connection */
+  output_event_cb(bev, what, arg);
 }
