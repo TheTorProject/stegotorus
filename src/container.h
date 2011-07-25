@@ -6,8 +6,6 @@
 #ifndef CONTAINER_H
 #define CONTAINER_H
 
-#include <stdlib.h>
-#include <string.h>
 #include <time.h>
 
 /** A resizeable list of pointers, with associated helpful functionality.

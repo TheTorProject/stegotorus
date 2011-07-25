@@ -8,10 +8,6 @@
 #include "protocols/obfs2.h"
 #include "protocols/dummy.h"
 
-#include <stdlib.h>
-#include <string.h>
-
-
 /**
     All supported protocols should be put in this array.
     It's used by main.c.

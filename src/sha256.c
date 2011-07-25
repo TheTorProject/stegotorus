@@ -7,7 +7,6 @@
 #include "util.h"
 
 #include "sha256.h"
-#include <string.h>
 #include <arpa/inet.h> /* for htonl/ntohl */
 
 #define STMT_BEGIN do {

@@ -4,8 +4,7 @@
 #ifndef PROTOCOL_DUMMY_H
 #define PROTOCOL_DUMMY_H
 
-struct protocol_vtable;
-extern const struct protocol_vtable dummy_vtable;
+extern const protocol_vtable dummy_vtable;
 
 #ifdef PROTOCOL_DUMMY_PRIVATE
 

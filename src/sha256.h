@@ -2,8 +2,6 @@
 #ifndef SHA256_H
 #define SHA256_H
 
-#include <stdint.h>
-
 typedef struct sha256_state {
     uint64_t length;
     uint32_t state[8], curlen;

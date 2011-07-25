@@ -6,14 +6,25 @@
 #define UTIL_H
 
 #include "config.h"
+
+#include <limits.h>
 #include <stdarg.h> /* va_list */
 #include <stddef.h> /* size_t, ptrdiff_t, offsetof, NULL */
 #include <stdint.h> /* intN_t, uintN_t */
-#include <event2/util.h> /* evutil_addrinfo */
+#include <stdlib.h>
+#include <string.h>
 
-struct sockaddr;
-struct event_base;
+#include <event2/util.h> /* evutil_addrinfo */
+#ifdef _WIN32
+#include <ws2tcpip.h> /* addrinfo (event2/util.h should do this,
+                         but it doesn't) */
+#endif
+
+struct bufferevent;
+struct evconnlistener;
+struct evbuffer;
 struct evdns_base;
+struct event_base;
 
 /***** Type annotations. *****/
 
@@ -49,7 +60,34 @@ char *xstrndup(const char *s, size_t maxsize) ATTR_MALLOC;
 
 unsigned int ui64_log2(uint64_t u64);
 
-/***** Network functions. *****/
+/***** Network types and functions. *****/
+
+typedef struct protocol_t protocol_t;
+typedef struct protocol_params_t protocol_params_t;
+typedef struct protocol_vtable protocol_vtable;
+typedef struct socks_state_t socks_state_t;
+
+enum recv_ret {
+  /* Everything went fine. */
+  RECV_GOOD=0,
+  /* Something went bad. */
+  RECV_BAD,
+  /* ...need...more...data... */
+  RECV_INCOMPLETE,
+
+  /* Originally needed by the obfs2 protocol but it might get other
+     users in the future.
+     It means:
+     "We have pending data that we have to send. You should do that by
+     calling proto_send() immediately." */
+  RECV_SEND_PENDING
+};
+
+enum listen_mode {
+  LSN_SIMPLE_CLIENT = 1,
+  LSN_SIMPLE_SERVER,
+  LSN_SOCKS_CLIENT
+};
 
 struct evutil_addrinfo *resolve_address_port(const char *address,
                                              int nodns, int passive,

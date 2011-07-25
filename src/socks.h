@@ -5,10 +5,6 @@
 #ifndef SOCKS_H
 #define SOCKS_H
 
-typedef struct socks_state_t socks_state_t;
-struct evbuffer;
-struct sockaddr;
-
 enum socks_status_t {
   /* Waiting for initial socks4 or socks5 message */
   ST_WAITING,

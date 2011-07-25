@@ -7,8 +7,6 @@
 #define PROTOCOL_OBFS2_PRIVATE
 #include "obfs2.h"
 
-#include <stdlib.h>
-#include <string.h>
 #include <event2/buffer.h>
 
 /* type-safe downcast wrappers */

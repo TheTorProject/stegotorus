@@ -5,8 +5,6 @@
 #ifndef CRYPT_H
 #define CRYPT_H
 
-#include <stddef.h> /* for size_t */
-
 #define SHA256_LENGTH 32
 
 /* Stream cipher state */

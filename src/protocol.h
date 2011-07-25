@@ -5,11 +5,6 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#include "network.h"  /* for recv_ret */
-#include <event2/util.h> /* for evutil_addrinfo */
-
-struct evbuffer;
-
 /**
   This struct defines the protocol-specific state for all connections
   opened from a particular listener.  Each protocol may extend this
@@ -17,12 +12,12 @@ struct evbuffer;
   member of a larger structure (standard fake-inheritance-in-C
   technique).
  */
-typedef struct protocol_params_t {
-  const struct protocol_vtable *vtable;
+struct protocol_params_t {
+  const protocol_vtable *vtable;
   struct evutil_addrinfo *target_addr;
   struct evutil_addrinfo *listen_addr;
   int mode;
-} protocol_params_t;
+};
 
 /**
    This struct defines the protocol-specific state for a particular
@@ -30,9 +25,9 @@ typedef struct protocol_params_t {
    additional private data by embedding it as the first member of a
    larger structure.
  */
-typedef struct protocol_t {
-  const struct protocol_vtable *vtable;
-} protocol_t;
+struct protocol_t {
+  const protocol_vtable *vtable;
+};
 
 /**
    This struct defines a protocol and its methods; note that not all
@@ -42,7 +37,7 @@ typedef struct protocol_t {
    principal interface between each individual protocol and generic
    code.  At present there is a static list of these objects in protocol.c.
  */
-typedef struct protocol_vtable
+struct protocol_vtable
 {
   /** The short name of this protocol. */
   const char *name;
@@ -78,19 +73,19 @@ typedef struct protocol_vtable
                         struct evbuffer *source,
                         struct evbuffer *dest);
 
-} protocol_vtable;
+};
 
 /**
    Use this macro to define protocol_vtable objects; it ensures all
    the methods are in the correct order and enforces a consistent
    naming convention on protocol implementations.
  */
-#define DEFINE_PROTOCOL_VTABLE(name)                    \
-  const struct protocol_vtable name##_vtable = {        \
-    #name,                                              \
-    name##_init, name##_fini,                           \
-    name##_create, name##_destroy,                      \
-    name##_handshake, name##_send, name##_recv          \
+#define DEFINE_PROTOCOL_VTABLE(name)            \
+  const protocol_vtable name##_vtable = {       \
+    #name,                                      \
+    name##_init, name##_fini,                   \
+    name##_create, name##_destroy,              \
+    name##_handshake, name##_send, name##_recv  \
   }
 
 protocol_params_t *proto_params_init(int n_options,

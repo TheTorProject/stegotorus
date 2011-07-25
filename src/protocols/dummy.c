@@ -7,8 +7,6 @@
 #define PROTOCOL_DUMMY_PRIVATE
 #include "dummy.h"
 
-#include <stdlib.h>
-#include <string.h>
 #include <event2/buffer.h>
 
 /* type-safe downcast wrappers */

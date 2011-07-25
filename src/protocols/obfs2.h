@@ -5,8 +5,7 @@
 #ifndef PROTOCOL_OBFS2_H
 #define PROTOCOL_OBFS2_H
 
-struct protocol_vtable;
-extern const struct protocol_vtable obfs2_vtable;
+extern const protocol_vtable obfs2_vtable;
 
 #ifdef PROTOCOL_OBFS2_PRIVATE
 

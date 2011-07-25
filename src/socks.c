@@ -8,14 +8,8 @@
 #include "socks.h"
 
 #include <errno.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include <event2/buffer.h>
-
-#ifdef _WIN32
-#include <ws2tcpip.h> /* sockaddr_in6 */
-#endif
 
 /**
    General SOCKS5 idea:

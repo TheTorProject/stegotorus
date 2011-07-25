@@ -13,18 +13,11 @@
 #include "protocol.h"
 
 #include <errno.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/bufferevent_struct.h>
 #include <event2/listener.h>
-#include <event2/util.h>
-
-#ifdef _WIN32
-#include <ws2tcpip.h>  /* socklen_t */
-#endif
 
 /* Terminology used in this file:
 

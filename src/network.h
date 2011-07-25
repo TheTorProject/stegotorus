@@ -5,51 +5,22 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-struct event_base;
-struct protocol_params_t;
-
-#define LSN_SIMPLE_CLIENT 1
-#define LSN_SIMPLE_SERVER 2
-#define LSN_SOCKS_CLIENT  3
-
-enum recv_ret {
-  /* Everything went fine. */
-  RECV_GOOD=0,
-  /* Something went bad. */
-  RECV_BAD,
-  /* ...need...more...data... */
-  RECV_INCOMPLETE,
-
-  /* Originally needed by the obfs2 protocol but it might get other
-     users in the future.
-     It means:
-     "We have pending data that we have to send. You should do that by
-     calling proto_send() immediately." */
-  RECV_SEND_PENDING
-};
-
 /* returns 1 on success, 0 on failure */
-int create_listener(struct event_base *base, struct protocol_params_t *params);
+int create_listener(struct event_base *base, protocol_params_t *params);
 void free_all_listeners(void);
 
 void start_shutdown(int barbaric);
 
 #ifdef NETWORK_PRIVATE
 
-struct bufferevent;
-struct evconnlistener;
-struct socks_state_t;
-struct protocol_t;
-struct protocol_params_t;
-
 typedef struct listener_t {
+  protocol_params_t *proto_params;
   struct evconnlistener *listener;
-  struct protocol_params_t *proto_params;
 } listener_t;
 
 typedef struct conn_t {
-  struct protocol_t *proto;
-  struct socks_state_t *socks_state;
+  protocol_t *proto;
+  socks_state_t *socks_state;
   struct bufferevent *upstream;
   struct bufferevent *downstream;
   unsigned int mode : 30;

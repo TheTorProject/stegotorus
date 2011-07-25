@@ -6,18 +6,10 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include <event2/dns.h>
-#include <event2/util.h>
-
-#ifdef _WIN32
-#include <ws2tcpip.h> /* addrinfo */
-#endif
 
 /** Any size_t larger than this amount is likely to be an underflow. */
 #define SIZE_T_CEILING  (SIZE_MAX/2 - 16)
