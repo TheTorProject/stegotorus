@@ -6,14 +6,24 @@
 
 #define PROTOCOL_OBFS2_PRIVATE
 #include "obfs2.h"
-#include "../protocol.h"
 
 #include <stdlib.h>
 #include <string.h>
-
 #include <event2/buffer.h>
 
-static void usage(void);
+/* type-safe downcast wrappers */
+static inline obfs2_params_t *
+downcast_params(protocol_params_t *p)
+{
+  return DOWNCAST(obfs2_params_t, super, p);
+}
+
+static inline obfs2_protocol_t *
+downcast_protocol(protocol_t *p)
+{
+  return DOWNCAST(obfs2_protocol_t, super, p);
+}
+
 static int parse_and_set_options(int n_options,
                                  const char *const *options,
                                  obfs2_params_t *params);
@@ -44,15 +54,25 @@ static protocol_params_t *
 obfs2_init(int n_options, const char *const *options)
 {
   obfs2_params_t *params = xzalloc(sizeof(obfs2_params_t));
-
   params->super.vtable = &obfs2_vtable;
-  if (parse_and_set_options(n_options, options, params) < 0) {
-    proto_params_free(&params->super);
-    usage();
-    return NULL;
-  }
 
-  return &params->super;
+  if (parse_and_set_options(n_options, options, params) == 0)
+    return &params->super;
+
+  proto_params_free(&params->super);
+  log_warn("You failed at creating a correct obfs2 line.\n"
+         "obfs2 syntax:\n"
+         "\tobfs2 [obfs2_args] obfs2_opts\n"
+         "\t'obfs2_opts':\n"
+         "\t\tmode ~ server|client|socks\n"
+         "\t\tlisten address ~ host:port\n"
+         "\t'obfs2_args':\n"
+         "\t\tDestination Address ~ --dest=host:port\n"
+         "\t\tShared Secret ~ --shared-secret=<secret>\n"
+         "\tExample:\n"
+         "\tobfsproxy --dest=127.0.0.1:666 --shared-secret=himitsu "
+         "\tobfs2 server 127.0.0.1:1026");
+  return NULL;
 }
 
 /**
@@ -134,26 +154,6 @@ parse_and_set_options(int n_options, const char *const *options,
     log_debug("obfs2: Parsed options nicely!");
 
     return 0;
-}
-
-/**
-   Prints usage instructions for the obfs2 protocol.
-*/
-static void
-usage(void)
-{
-  log_warn("You failed at creating a correct obfs2 line.\n"
-         "obfs2 syntax:\n"
-         "\tobfs2 [obfs2_args] obfs2_opts\n"
-         "\t'obfs2_opts':\n"
-         "\t\tmode ~ server|client|socks\n"
-         "\t\tlisten address ~ host:port\n"
-         "\t'obfs2_args':\n"
-         "\t\tDestination Address ~ --dest=host:port\n"
-         "\t\tShared Secret ~ --shared-secret=<secret>\n"
-         "\tExample:\n"
-         "\tobfsproxy --dest=127.0.0.1:666 --shared-secret=himitsu "
-         "\tobfs2 server 127.0.0.1:1026");
 }
 
 /**
@@ -242,7 +242,7 @@ derive_padding_key(void *s, const uchar *seed,
 static void
 obfs2_fini(protocol_params_t *p)
 {
-  obfs2_params_t *params = DOWNCAST(obfs2_params_t, super, p);
+  obfs2_params_t *params = downcast_params(p);
   /* wipe out keys */
   memset(params, 0x99, sizeof(obfs2_params_t));
   free(params);
@@ -256,7 +256,7 @@ obfs2_fini(protocol_params_t *p)
 static protocol_t *
 obfs2_create(protocol_params_t *p)
 {
-  obfs2_params_t *params = DOWNCAST(obfs2_params_t, super, p);
+  obfs2_params_t *params = downcast_params(p);
   obfs2_protocol_t *proto = xzalloc(sizeof(obfs2_protocol_t));
   uchar *seed;
   const char *send_pad_type;
@@ -291,7 +291,7 @@ obfs2_create(protocol_params_t *p)
 static void
 obfs2_destroy(protocol_t *s)
 {
-  obfs2_protocol_t *state = DOWNCAST(obfs2_protocol_t, super, s);
+  obfs2_protocol_t *state = downcast_protocol(s);
   if (state->send_crypto)
     crypt_free(state->send_crypto);
   if (state->send_padding_crypto)
@@ -314,7 +314,7 @@ obfs2_destroy(protocol_t *s)
 static int
 obfs2_handshake(protocol_t *s, struct evbuffer *buf)
 {
-  obfs2_protocol_t *state = DOWNCAST(obfs2_protocol_t, super, s);
+  obfs2_protocol_t *state = downcast_protocol(s);
 
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE), plength, send_plength;
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
@@ -381,7 +381,7 @@ static int
 obfs2_send(protocol_t *s,
            struct evbuffer *source, struct evbuffer *dest)
 {
-  obfs2_protocol_t *state = DOWNCAST(obfs2_protocol_t, super, s);
+  obfs2_protocol_t *state = downcast_protocol(s);
 
   if (state->send_crypto) {
     /* First of all, send any data that we've been waiting to send. */
@@ -454,7 +454,7 @@ static enum recv_ret
 obfs2_recv(protocol_t *s, struct evbuffer *source,
            struct evbuffer *dest)
 {
-  obfs2_protocol_t *state = DOWNCAST(obfs2_protocol_t, super, s);
+  obfs2_protocol_t *state = downcast_protocol(s);
   enum recv_ret r=0;
 
   if (state->state == ST_WAIT_FOR_KEY) {

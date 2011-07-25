@@ -4,18 +4,29 @@
 
 #include "../util.h"
 
+#define PROTOCOL_DUMMY_PRIVATE
 #include "dummy.h"
-#include "../protocol.h"
 
 #include <stdlib.h>
 #include <string.h>
-
 #include <event2/buffer.h>
 
-static void usage(void);
+/* type-safe downcast wrappers */
+static inline dummy_params_t *
+downcast_params(protocol_params_t *p)
+{
+  return DOWNCAST(dummy_params_t, super, p);
+}
+
+static inline dummy_protocol_t *
+downcast_protocol(protocol_t *p)
+{
+  return DOWNCAST(dummy_protocol_t, super, p);
+}
+
 static int parse_and_set_options(int n_options,
                                  const char *const *options,
-                                 protocol_params_t *params);
+                                 dummy_params_t *params);
 
 /**
    This function populates 'params' according to 'options' and sets up
@@ -27,65 +38,13 @@ static int parse_and_set_options(int n_options,
 static protocol_params_t *
 dummy_init(int n_options, const char *const *options)
 {
-  protocol_params_t *params = xzalloc(sizeof(protocol_params_t));
-  params->vtable = &dummy_vtable;
+  dummy_params_t *params = xzalloc(sizeof(dummy_params_t));
+  params->super.vtable = &dummy_vtable;
 
-  if (parse_and_set_options(n_options, options, params) < 0) {
-    proto_params_free(params);
-    usage();
-    return NULL;
-  }
+  if (parse_and_set_options(n_options, options, params) == 0)
+    return &params->super;
 
-  return params;
-}
-
-/**
-   Helper: Parses 'options' and fills 'params'.
-*/
-static int
-parse_and_set_options(int n_options, const char *const *options,
-                      protocol_params_t *params)
-{
-  const char* defport;
-
-  if (n_options < 1)
-    return -1;
-
-  if (!strcmp(options[0], "client")) {
-    defport = "48988"; /* bf5c */
-    params->mode = LSN_SIMPLE_CLIENT;
-  } else if (!strcmp(options[0], "socks")) {
-    defport = "23548"; /* 5bf5 */
-    params->mode = LSN_SOCKS_CLIENT;
-  } else if (!strcmp(options[0], "server")) {
-    defport = "11253"; /* 2bf5 */
-    params->mode = LSN_SIMPLE_SERVER;
-  } else
-    return -1;
-
-  if (n_options != (params->mode == LSN_SOCKS_CLIENT ? 2 : 3))
-      return -1;
-
-  params->listen_addr = resolve_address_port(options[1], 1, 1, defport);
-  if (!params->listen_addr)
-    return -1;
-
-  if (params->mode != LSN_SOCKS_CLIENT) {
-    params->target_addr = resolve_address_port(options[2], 1, 0, NULL);
-    if (!params->target_addr)
-      return -1;
-  }
-
-  params->vtable = &dummy_vtable;
-  return 0;
-}
-
-/**
-   Prints dummy protocol usage information.
-*/
-static void
-usage(void)
-{
+  proto_params_free(&params->super);
   log_warn("dummy syntax:\n"
            "\tdummy <mode> <listen_address> [<target_address>]\n"
            "\t\tmode ~ server|client|socks\n"
@@ -96,12 +55,53 @@ usage(void)
            "\tobfsproxy dummy socks 127.0.0.1:5000\n"
            "\tobfsproxy dummy client 127.0.0.1:5000 192.168.1.99:11253\n"
            "\tobfsproxy dummy server 192.168.1.99:11253 127.0.0.1:9005");
+  return NULL;
+}
+
+/**
+   Helper: Parses 'options' and fills 'params'.
+*/
+static int
+parse_and_set_options(int n_options, const char *const *options,
+                      dummy_params_t *params)
+{
+  const char* defport;
+
+  if (n_options < 1)
+    return -1;
+
+  if (!strcmp(options[0], "client")) {
+    defport = "48988"; /* bf5c */
+    params->super.mode = LSN_SIMPLE_CLIENT;
+  } else if (!strcmp(options[0], "socks")) {
+    defport = "23548"; /* 5bf5 */
+    params->super.mode = LSN_SOCKS_CLIENT;
+  } else if (!strcmp(options[0], "server")) {
+    defport = "11253"; /* 2bf5 */
+    params->super.mode = LSN_SIMPLE_SERVER;
+  } else
+    return -1;
+
+  if (n_options != (params->super.mode == LSN_SOCKS_CLIENT ? 2 : 3))
+      return -1;
+
+  params->super.listen_addr = resolve_address_port(options[1], 1, 1, defport);
+  if (!params->super.listen_addr)
+    return -1;
+
+  if (params->super.mode != LSN_SOCKS_CLIENT) {
+    params->super.target_addr = resolve_address_port(options[2], 1, 0, NULL);
+    if (!params->super.target_addr)
+      return -1;
+  }
+
+  return 0;
 }
 
 static void
 dummy_fini(protocol_params_t *params)
 {
-  free(params);
+  free(downcast_params(params));
 }
 
 /*
@@ -112,44 +112,33 @@ dummy_fini(protocol_params_t *params)
 static protocol_t *
 dummy_create(protocol_params_t *params)
 {
-  /* Dummy needs no per-connection protocol-specific state. */
-  protocol_t *proto = xzalloc(sizeof(protocol_t));
-  proto->vtable = &dummy_vtable;
-  return proto;
+  dummy_protocol_t *proto = xzalloc(sizeof(dummy_protocol_t));
+  proto->super.vtable = &dummy_vtable;
+  return &proto->super;
 }
 
 static void
 dummy_destroy(protocol_t *proto)
 {
-  free(proto);
+  free(downcast_protocol(proto));
 }
 
-/**
-   Responsible for sending data according to the dummy protocol.
-
-   The dummy protocol just puts the data of 'source' in 'dest'.
-*/
+/** Dummy has no handshake */
 static int
 dummy_handshake(protocol_t *proto, struct evbuffer *buf)
 {
   return 0;
 }
 
+/** send, receive - just copy */
 static int
-dummy_send(protocol_t *proto,
-           struct evbuffer *source, struct evbuffer *dest)
+dummy_send(protocol_t *proto, struct evbuffer *source, struct evbuffer *dest)
 {
   return evbuffer_add_buffer(dest,source);
 }
 
-/*
-  Responsible for receiving data according to the dummy protocol.
-
-  The dummy protocol just puts the data of 'source' into 'dest'.
-*/
 static enum recv_ret
-dummy_recv(protocol_t *proto,
-           struct evbuffer *source, struct evbuffer *dest)
+dummy_recv(protocol_t *proto, struct evbuffer *source, struct evbuffer *dest)
 {
   if (evbuffer_add_buffer(dest,source)<0)
     return RECV_BAD;
