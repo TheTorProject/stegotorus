@@ -26,6 +26,35 @@
 #include <ws2tcpip.h>  /* socklen_t */
 #endif
 
+/* Terminology used in this file:
+
+   A "side" is a bidirectional communications channel, usually backed
+   by a network socket and represented at this layer by a
+   'struct bufferevent'.
+
+   A "connection" is a _pair_ of sides, referred to as the "upstream"
+   side and the "downstream" side.  A connection is represented by a
+   'conn_t'.  The upstream side of a connection communicates in
+   cleartext with the higher-level program that wishes to make use of
+   our obfuscation service.  The downstream side commmunicates in an
+   obfuscated fashion with the remote peer that the higher-level
+   client wishes to contact.
+
+   A "listener" is a listening socket bound to a particular
+   obfuscation protocol, represented in this layer by a 'listener_t'.
+   Connecting to a listener creates one side of a connection, and
+   causes this program to initiate the other side of the connection.
+   A listener is said to be a "client" listener if connecting to it
+   creates the _upstream_ side of a connection, and a "server"
+   listener if connecting to it creates the _downstream_ side.
+
+   There are two kinds of client listeners: a "simple" client listener
+   always connects to the same remote peer every time it needs to
+   initiate a downstream connection; a "socks" client listener can be
+   told to connect to an arbitrary remote peer using the SOCKS protocol
+   (version 4 or 5).
+*/
+
 /** All our listeners. */
 static smartlist_t *listeners;
 
@@ -205,34 +234,37 @@ simple_client_listener_cb(struct evconnlistener *evcl,
 
   /* New bufferevent to wrap socket we received. */
   base = evconnlistener_get_base(lsn->listener);
-  conn->input = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->input)
+  conn->upstream = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+  if (!conn->upstream)
     goto err;
   fd = -1; /* prevent double-close */
 
+  bufferevent_setcb(conn->upstream,
+                    upstream_read_cb, NULL, error_cb, conn);
+
+  /* Don't enable the upstream side for reading at this point; wait
+     till the downstream side is established. */
+
   /* New bufferevent to connect to the target address */
-  conn->output = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->output)
+  conn->downstream = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!conn->downstream)
     goto err;
 
-  bufferevent_setcb(conn->input, upstream_read_cb, NULL, error_cb, conn);
-  /* don't enable the input side for reading at this point; wait till we
-     have a connection to the target */
-
-  bufferevent_setcb(conn->output,
+  bufferevent_setcb(conn->downstream,
                     downstream_read_cb, NULL, pending_conn_cb, conn);
 
   /* Queue handshake, if any, before connecting. */
-  if (proto_handshake(conn->proto, bufferevent_get_output(conn->output)) < 0)
+  if (proto_handshake(conn->proto,
+                      bufferevent_get_output(conn->downstream))<0)
     goto err;
 
   /* Launch the connect attempt. */
-  if (bufferevent_socket_connect(conn->output,
+  if (bufferevent_socket_connect(conn->downstream,
                                  lsn->proto_params->target_addr->ai_addr,
                                  lsn->proto_params->target_addr->ai_addrlen)<0)
     goto err;
 
-  bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+  bufferevent_enable(conn->downstream, EV_READ|EV_WRITE);
 
   /* add conn to the connection list */
   if (!connections)
@@ -279,16 +311,16 @@ socks_client_listener_cb(struct evconnlistener *evcl,
 
   /* New bufferevent to wrap socket we received. */
   base = evconnlistener_get_base(lsn->listener);
-  conn->input = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->input)
+  conn->upstream = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+  if (!conn->upstream)
     goto err;
   fd = -1; /* prevent double-close */
 
-  bufferevent_setcb(conn->input, socks_read_cb, NULL, error_cb, conn);
-  bufferevent_enable(conn->input, EV_READ|EV_WRITE);
+  bufferevent_setcb(conn->upstream, socks_read_cb, NULL, error_cb, conn);
+  bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);
 
-  /* Do not create an output bufferevent at this time; the socks
-     handler will do it after we know where we're connecting */
+  /* Do not create a downstream bufferevent at this time; the socks
+     handler will do it after it learns the downstream peer address. */
 
   /* add conn to the connection list */
   if (!connections)
@@ -332,43 +364,45 @@ simple_server_listener_cb(struct evconnlistener *evcl,
 
   /* New bufferevent to wrap socket we received. */
   base = evconnlistener_get_base(lsn->listener);
-  conn->input = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->input)
+  conn->downstream = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+  if (!conn->downstream)
     goto err;
   fd = -1; /* prevent double-close */
 
-  bufferevent_setcb(conn->input, downstream_read_cb, NULL, error_cb, conn);
+  bufferevent_setcb(conn->downstream,
+                    downstream_read_cb, NULL, error_cb, conn);
 
-  /* don't enable the input side for reading at this point; wait till we
-     have a connection to the target */
+  /* Don't enable the downstream side for reading at this point; wait
+     till the upstream side is established. */
 
-  /* New bufferevent to connect to the target address */
-  conn->output = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->output)
+  /* New bufferevent to connect to the target address. */
+  conn->upstream = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!conn->upstream)
     goto err;
 
-  bufferevent_setcb(conn->output, upstream_read_cb, NULL,
-                    pending_conn_cb, conn);
+  bufferevent_setcb(conn->upstream,
+                    upstream_read_cb, NULL, pending_conn_cb, conn);
 
   /* Queue handshake, if any, before connecting. */
   if (proto_handshake(conn->proto,
-                      bufferevent_get_output(conn->input))<0)
+                      bufferevent_get_output(conn->upstream))<0)
     goto err;
 
-  if (bufferevent_socket_connect(conn->output,
+  /* Launch the connect attempt. */
+  if (bufferevent_socket_connect(conn->upstream,
                                  lsn->proto_params->target_addr->ai_addr,
                                  lsn->proto_params->target_addr->ai_addrlen)<0)
     goto err;
 
-  bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+  bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);
 
   /* add conn to the connection list */
   if (!connections)
     connections = smartlist_create();
   smartlist_add(connections, conn);
 
-  log_debug("Connection setup completed. "
-            "We currently have %d connections!", smartlist_len(connections));
+  log_debug("%s: setup completed, %d connections",
+            __func__, smartlist_len(connections));
   return;
 
  err:
@@ -388,10 +422,10 @@ conn_free(conn_t *conn)
     proto_destroy(conn->proto);
   if (conn->socks_state)
     socks_state_free(conn->socks_state);
-  if (conn->input)
-    bufferevent_free(conn->input);
-  if (conn->output)
-    bufferevent_free(conn->output);
+  if (conn->upstream)
+    bufferevent_free(conn->upstream);
+  if (conn->upstream)
+    bufferevent_free(conn->upstream);
 
   memset(conn, 0x99, sizeof(conn_t));
   free(conn);
@@ -409,8 +443,8 @@ close_conn(conn_t *conn)
   log_debug("Connection destroyed. "
             "We currently have %d connections!", smartlist_len(connections));
 
-  /** If this was the last connection AND we are shutting down,
-      finish shutdown. */
+  /* If this was the last connection AND we are shutting down,
+     finish shutdown. */
   if (smartlist_len(connections) == 0) {
     smartlist_free(connections);
     connections = NULL;
@@ -440,9 +474,9 @@ static void
 socks_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
-  //struct bufferevent *other;
   enum socks_ret socks_ret;
-  obfs_assert(bev == conn->input); /* socks only makes sense on the input side */
+  /* socks only makes sense on the upstream side */
+  obfs_assert(bev == conn->upstream);
 
   do {
     enum socks_status_t status = socks_state_get_status(conn->socks_state);
@@ -454,25 +488,25 @@ socks_read_cb(struct bufferevent *bev, void *arg)
       const char *addr=NULL;
       r = socks_state_get_address(conn->socks_state, &af, &addr, &port);
       obfs_assert(r==0);
-      conn->output = bufferevent_socket_new(bufferevent_get_base(conn->input),
-                                            -1,
-                                            BEV_OPT_CLOSE_ON_FREE);
+      conn->downstream =
+        bufferevent_socket_new(bufferevent_get_base(conn->upstream),
+                               -1, BEV_OPT_CLOSE_ON_FREE);
 
-      bufferevent_setcb(conn->output, downstream_read_cb, NULL,
-                        pending_socks_cb, conn);
+      bufferevent_setcb(conn->downstream,
+                        downstream_read_cb, NULL, pending_socks_cb, conn);
 
       /* Queue handshake, if any, before connecting. */
       if (proto_handshake(conn->proto,
-                          bufferevent_get_output(conn->output))<0) {
+                          bufferevent_get_output(conn->downstream))<0) {
         /* XXXX send socks reply */
         close_conn(conn);
         return;
       }
 
-      r = bufferevent_socket_connect_hostname(conn->output,
+      r = bufferevent_socket_connect_hostname(conn->downstream,
                                               get_evdns_base(),
                                               af, addr, port);
-      bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+      bufferevent_enable(conn->downstream, EV_READ|EV_WRITE);
       log_debug("socket_connect_hostname said %d! (%s,%d)", r, addr, port);
 
       if (r < 0) {
@@ -480,13 +514,15 @@ socks_read_cb(struct bufferevent *bev, void *arg)
         close_conn(conn);
         return;
       }
-      bufferevent_disable(conn->input, EV_READ|EV_WRITE);
-      /* ignore data XXX */
+      /* further upstream data will be processed once the downstream
+         side is established */
+      bufferevent_disable(conn->upstream, EV_READ|EV_WRITE);
       return;
     }
 
     socks_ret = handle_socks(bufferevent_get_input(bev),
-                     bufferevent_get_output(bev), conn->socks_state);
+                             bufferevent_get_output(bev),
+                             conn->socks_state);
   } while (socks_ret == SOCKS_GOOD);
 
   if (socks_ret == SOCKS_INCOMPLETE)
@@ -513,13 +549,12 @@ static void
 upstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
-  struct bufferevent *other;
-  other = (bev == conn->input) ? conn->output : conn->input;
+  obfs_assert(bev == conn->upstream);
 
   log_debug("Got data on upstream side");
   if (proto_send(conn->proto,
-                 bufferevent_get_input(bev),
-                 bufferevent_get_output(other)) < 0)
+                 bufferevent_get_input(conn->upstream),
+                 bufferevent_get_output(conn->downstream)) < 0)
     close_conn(conn);
 }
 
@@ -532,25 +567,24 @@ static void
 downstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
-  struct bufferevent *other;
-  other = (bev == conn->input) ? conn->output : conn->input;
   enum recv_ret r;
+  obfs_assert(bev == conn->downstream);
 
   log_debug("Got data on downstream side");
   r = proto_recv(conn->proto,
-                 bufferevent_get_input(bev),
-                 bufferevent_get_output(other));
+                 bufferevent_get_input(conn->downstream),
+                 bufferevent_get_output(conn->upstream));
 
   if (r == RECV_BAD)
     close_conn(conn);
   else if (r == RECV_SEND_PENDING)
     proto_send(conn->proto,
-               bufferevent_get_input(conn->input),
-               bufferevent_get_output(conn->output));
+               bufferevent_get_input(conn->upstream),
+               bufferevent_get_output(conn->downstream));
 }
 
 /**
-   Something broke in our connection or we reached EOF.
+   Something broke one side of the connection, or we reached EOF.
    We prepare the connection to be closed ASAP.
  */
 static void
@@ -558,8 +592,8 @@ error_or_eof(conn_t *conn, struct bufferevent *bev_err)
 {
   struct bufferevent *bev_flush;
 
-  if (bev_err == conn->input) bev_flush = conn->output;
-  else if (bev_err == conn->output) bev_flush = conn->input;
+  if (bev_err == conn->upstream) bev_flush = conn->downstream;
+  else if (bev_err == conn->downstream) bev_flush = conn->upstream;
   else obfs_abort();
 
   log_debug("error_or_eof");
@@ -619,7 +653,7 @@ flush_error_cb(struct bufferevent *bev, short what, void *arg)
 }
 
 /**
-   Called when an "event" happens on a socket that's still waiting to
+   Called when an event happens on a socket that's still waiting to
    be connected.  We expect to get BEV_EVENT_CONNECTED, which
    indicates that the connection is now open, but we might also get
    errors as above.
@@ -629,8 +663,8 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
   struct bufferevent *other;
-  if (bev == conn->input) other = conn->output;
-  else if (bev == conn->output) other = conn->input;
+  if (bev == conn->upstream) other = conn->downstream;
+  else if (bev == conn->downstream) other = conn->upstream;
   else obfs_abort();
 
   /* Upon successful connection, enable traffic on the other side,
@@ -639,7 +673,7 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
     obfs_assert(!conn->flushing);
 
     conn->is_open = 1;
-    log_debug("Connection successful") ;
+    log_debug("Connection successful");
     bufferevent_enable(other, EV_READ|EV_WRITE);
 
     /* XXX Dirty access to bufferevent guts.  There appears to be no
@@ -654,15 +688,15 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
 }
 
 /**
-   Called when an "event" happens on a socket in socks mode.
+   Called when an event happens on a socket in socks mode.
    Both connections and errors are possible; must generate
-   appropriate socks messages on the input side.
+   appropriate socks messages on the upstream side.
  */
 static void
 pending_socks_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
-  obfs_assert(bev == conn->output);
+  obfs_assert(bev == conn->downstream);
   obfs_assert(conn->socks_state);
 
   /* If we got an error while in the ST_HAVE_ADDR state, chances are
@@ -674,7 +708,8 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
     log_warn("Connection error: %s",
              evutil_socket_error_to_string(err));
     if (socks_state_get_status(conn->socks_state) == ST_HAVE_ADDR) {
-      socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
+      socks_send_reply(conn->socks_state,
+                       bufferevent_get_output(conn->upstream),
                        err);
     }
     error_or_eof(conn, bev);
@@ -697,7 +732,7 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
       socks_state_set_address(conn->socks_state, sa);
     }
     socks_send_reply(conn->socks_state,
-                     bufferevent_get_output(conn->input), 0);
+                     bufferevent_get_output(conn->upstream), 0);
 
     /* Switch to regular upstream behavior. */
     socks_state_free(conn->socks_state);
@@ -705,11 +740,13 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
     conn->is_open = 1;
     log_debug("Connection successful");
 
-    bufferevent_setcb(conn->input, upstream_read_cb, NULL, error_cb, conn);
-    bufferevent_setcb(conn->output, downstream_read_cb, NULL, error_cb, conn);
-    bufferevent_enable(conn->input, EV_READ|EV_WRITE);
-    if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
-      downstream_read_cb(bev, conn->input);
+    bufferevent_setcb(conn->upstream,
+                      upstream_read_cb, NULL, error_cb, conn);
+    bufferevent_setcb(conn->downstream,
+                      downstream_read_cb, NULL, error_cb, conn);
+    bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);
+    if (evbuffer_get_length(bufferevent_get_input(conn->upstream)) != 0)
+      downstream_read_cb(bev, conn->upstream);
     return;
   }
 

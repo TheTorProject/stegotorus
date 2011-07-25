@@ -45,8 +45,8 @@ struct protocol_t;
 typedef struct conn_t {
   struct protocol_t *proto;
   struct socks_state_t *socks_state;
-  struct bufferevent *input;
-  struct bufferevent *output;
+  struct bufferevent *upstream;
+  struct bufferevent *downstream;
   unsigned int mode : 30;
   unsigned int flushing : 1;
   unsigned int is_open : 1;
