@@ -43,12 +43,11 @@ struct socks_state_t;
 struct protocol_t;
 
 typedef struct conn_t {
+  struct protocol_t *proto;
   struct socks_state_t *socks_state;
-  struct protocol_t *proto; /* ASN Do we like this here? We probably don't.
-                               But it's so convenient!! So convenient! */
-  int mode;
   struct bufferevent *input;
   struct bufferevent *output;
+  unsigned int mode : 30;
   unsigned int flushing : 1;
   unsigned int is_open : 1;
 } conn_t;

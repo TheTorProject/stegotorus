@@ -40,7 +40,11 @@ static smartlist_t *connections;
     connections and shutdowns when the last connection is closed. */
 static int shutting_down=0;
 
-static void simple_listener_cb(struct evconnlistener *evcl,
+static void simple_client_listener_cb(struct evconnlistener *evcl,
+   evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
+static void socks_client_listener_cb(struct evconnlistener *evcl,
+   evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
+static void simple_server_listener_cb(struct evconnlistener *evcl,
    evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
 
 static void conn_free(conn_t *conn);
@@ -108,23 +112,29 @@ close_all_connections(void)
 */
 listener_t *
 listener_new(struct event_base *base,
-             protocol_params_t *proto_params)
+             protocol_params_t *params)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
-
+  evconnlistener_cb callback;
   listener_t *lsn = xzalloc(sizeof(listener_t));
 
-  lsn->proto_params = proto_params;
+  switch (params->mode) {
+  case LSN_SIMPLE_CLIENT: callback = simple_client_listener_cb; break;
+  case LSN_SIMPLE_SERVER: callback = simple_server_listener_cb; break;
+  case LSN_SOCKS_CLIENT:  callback = socks_client_listener_cb;  break;
+  default: obfs_abort();
+  }
 
+  lsn->proto_params = params;
   lsn->listener =
-    evconnlistener_new_bind(base, simple_listener_cb, lsn, flags, -1,
-                            proto_params->listen_addr->ai_addr,
-                            proto_params->listen_addr->ai_addrlen);
+    evconnlistener_new_bind(base, callback, lsn, flags, -1,
+                            params->listen_addr->ai_addr,
+                            params->listen_addr->ai_addrlen);
 
   if (!lsn->listener) {
     log_warn("Failed to create listener!");
-    proto_params_free(lsn->proto_params);
+    proto_params_free(params);
     free(lsn);
     return NULL;
   }
@@ -167,23 +177,22 @@ free_all_listeners(void)
 }
 
 /**
-   This function is called when a new connection is received.
-
-   It initializes the protocol we are using, sets up the necessary
-   callbacks for input/output and does the protocol handshake.
+   This function is called when an upstream client connects to us in
+   simple client mode.
 */
 static void
-simple_listener_cb(struct evconnlistener *evcl,
-                   evutil_socket_t fd, struct sockaddr *sourceaddr,
-                   int socklen, void *arg)
+simple_client_listener_cb(struct evconnlistener *evcl,
+                          evutil_socket_t fd, struct sockaddr *sourceaddr,
+                          int socklen, void *arg)
 {
   listener_t *lsn = arg;
   struct event_base *base;
   conn_t *conn = xzalloc(sizeof(conn_t));
 
-  log_debug("Got a connection attempt.");
+  log_debug("%s: connection attempt.", __func__);
 
   conn->mode = lsn->proto_params->mode;
+  obfs_assert(conn->mode == LSN_SIMPLE_CLIENT);
 
   conn->proto = proto_create(lsn->proto_params);
   if (!conn->proto) {
@@ -191,67 +200,161 @@ simple_listener_cb(struct evconnlistener *evcl,
     goto err;
   }
 
-  if (conn->mode == LSN_SOCKS_CLIENT) {
-    /* Construct SOCKS state. */
-    conn->socks_state = socks_state_new();
-  }
-
   /* New bufferevent to wrap socket we received. */
   base = evconnlistener_get_base(lsn->listener);
-  conn->input = bufferevent_socket_new(base,
-                                       fd,
-                                       BEV_OPT_CLOSE_ON_FREE);
+  conn->input = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
   if (!conn->input)
     goto err;
   fd = -1; /* prevent double-close */
 
-  if (conn->mode == LSN_SIMPLE_SERVER) {
-    bufferevent_setcb(conn->input,
-                      obfuscated_read_cb, NULL, input_event_cb, conn);
-  } else if (conn->mode == LSN_SIMPLE_CLIENT) {
-    bufferevent_setcb(conn->input,
-                      plaintext_read_cb, NULL, input_event_cb, conn);
-  } else {
-    obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
-    bufferevent_setcb(conn->input,
-                      socks_read_cb, NULL, input_event_cb, conn);
-  }
-
-  bufferevent_enable(conn->input, EV_READ|EV_WRITE);
-
   /* New bufferevent to connect to the target address */
-  conn->output = bufferevent_socket_new(base,
-                                        -1,
-                                        BEV_OPT_CLOSE_ON_FREE);
+  conn->output = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!conn->output)
     goto err;
 
-  if (conn->mode == LSN_SIMPLE_SERVER)
-    bufferevent_setcb(conn->output,
-                      plaintext_read_cb, NULL, output_event_cb, conn);
-  else
-    bufferevent_setcb(conn->output,
-                      obfuscated_read_cb, NULL, output_event_cb, conn);
+  bufferevent_setcb(conn->input, plaintext_read_cb, NULL, input_event_cb, conn);
+  bufferevent_enable(conn->input, EV_READ|EV_WRITE);
+
+  bufferevent_setcb(conn->output,
+                    obfuscated_read_cb, NULL, output_event_cb, conn);
 
   /* Queue output right now. */
-  struct bufferevent *encrypted =
-    conn->mode == LSN_SIMPLE_SERVER ? conn->input : conn->output;
-
-  /* ASN Will all protocols need to handshake here? Don't think so. */
-  if (proto_handshake(conn->proto,
-                      bufferevent_get_output(encrypted))<0)
+  if (proto_handshake(conn->proto, bufferevent_get_output(conn->output)) < 0)
     goto err;
 
-  if (conn->mode == LSN_SIMPLE_SERVER || conn->mode == LSN_SIMPLE_CLIENT) {
-    /* Launch the connect attempt. */
-    if (bufferevent_socket_connect(conn->output,
-                                   lsn->proto_params->target_addr->ai_addr,
-                                   lsn->proto_params->target_addr->ai_addrlen)
-        < 0)
-      goto err;
+  /* Launch the connect attempt. */
+  if (bufferevent_socket_connect(conn->output,
+                                 lsn->proto_params->target_addr->ai_addr,
+                                 lsn->proto_params->target_addr->ai_addrlen)<0)
+    goto err;
 
-    bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+  bufferevent_enable(conn->output, EV_READ|EV_WRITE);
+
+  /* add conn to the connection list */
+  if (!connections)
+    connections = smartlist_create();
+  smartlist_add(connections, conn);
+
+  log_debug("%s: setup completed, %d connections",
+            __func__, smartlist_len(connections));
+  return;
+
+ err:
+  if (conn)
+    conn_free(conn);
+  if (fd >= 0)
+    evutil_closesocket(fd);
+}
+
+/**
+   This function is called when an upstream client connects to us in
+   socks mode.
+*/
+static void
+socks_client_listener_cb(struct evconnlistener *evcl,
+                         evutil_socket_t fd, struct sockaddr *sourceaddr,
+                         int socklen, void *arg)
+{
+  listener_t *lsn = arg;
+  struct event_base *base;
+  conn_t *conn = xzalloc(sizeof(conn_t));
+
+  log_debug("%s: connection attempt.", __func__);
+
+  conn->mode = lsn->proto_params->mode;
+  obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
+
+  conn->proto = proto_create(lsn->proto_params);
+  if (!conn->proto) {
+    log_warn("Creation of protocol object failed! Closing connection.");
+    goto err;
   }
+
+  /* Construct SOCKS state. */
+  conn->socks_state = socks_state_new();
+
+  /* New bufferevent to wrap socket we received. */
+  base = evconnlistener_get_base(lsn->listener);
+  conn->input = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+  if (!conn->input)
+    goto err;
+  fd = -1; /* prevent double-close */
+
+  bufferevent_setcb(conn->input, socks_read_cb, NULL, input_event_cb, conn);
+  bufferevent_enable(conn->input, EV_READ|EV_WRITE);
+
+  /* Do not create a target bufferevent at this time; the socks
+     handler will do it after we know where we're connecting */
+
+  /* add conn to the connection list */
+  if (!connections)
+    connections = smartlist_create();
+  smartlist_add(connections, conn);
+
+  log_debug("%s: setup completed, %d connections",
+            __func__, smartlist_len(connections));
+  return;
+
+ err:
+  if (conn)
+    conn_free(conn);
+  if (fd >= 0)
+    evutil_closesocket(fd);
+}
+
+/**
+   This function is called when a remote client connects to us in
+   server mode.
+*/
+static void
+simple_server_listener_cb(struct evconnlistener *evcl,
+                          evutil_socket_t fd, struct sockaddr *sourceaddr,
+                          int socklen, void *arg)
+{
+  listener_t *lsn = arg;
+  struct event_base *base;
+  conn_t *conn = xzalloc(sizeof(conn_t));
+
+  log_debug("%s: connection attempt.", __func__);
+
+  conn->mode = lsn->proto_params->mode;
+  obfs_assert(conn->mode == LSN_SIMPLE_SERVER);
+
+  conn->proto = proto_create(lsn->proto_params);
+  if (!conn->proto) {
+    log_warn("Creation of protocol object failed! Closing connection.");
+    goto err;
+  }
+
+  /* New bufferevent to wrap socket we received. */
+  base = evconnlistener_get_base(lsn->listener);
+  conn->input = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+  if (!conn->input)
+    goto err;
+  fd = -1; /* prevent double-close */
+
+  bufferevent_setcb(conn->input, obfuscated_read_cb, NULL, input_event_cb, conn);
+  bufferevent_enable(conn->input, EV_READ|EV_WRITE);
+
+  /* New bufferevent to connect to the target address */
+  conn->output = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!conn->output)
+    goto err;
+
+  bufferevent_setcb(conn->output, plaintext_read_cb, NULL,
+                    output_event_cb, conn);
+
+  /* Queue handshake, if any, before connecting. */
+  if (proto_handshake(conn->proto,
+                      bufferevent_get_output(conn->input))<0)
+    goto err;
+
+  if (bufferevent_socket_connect(conn->output,
+                                 lsn->proto_params->target_addr->ai_addr,
+                                 lsn->proto_params->target_addr->ai_addrlen)<0)
+    goto err;
+
+  bufferevent_enable(conn->output, EV_READ|EV_WRITE);
 
   /* add conn to the connection list */
   if (!connections)
@@ -346,6 +449,18 @@ socks_read_cb(struct bufferevent *bev, void *arg)
       const char *addr=NULL;
       r = socks_state_get_address(conn->socks_state, &af, &addr, &port);
       obfs_assert(r==0);
+      conn->output = bufferevent_socket_new(bufferevent_get_base(conn->input),
+                                            -1,
+                                            BEV_OPT_CLOSE_ON_FREE);
+
+      /* queue handshake, if any, before connecting */
+      if (proto_handshake(conn->proto,
+                          bufferevent_get_output(conn->output))<0) {
+        /* XXXX send socks reply */
+        close_conn(conn);
+        return;
+      }
+
       r = bufferevent_socket_connect_hostname(conn->output,
                                               get_evdns_base(),
                                               af, addr, port);
