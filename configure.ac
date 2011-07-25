@@ -1,5 +1,5 @@
 AC_PREREQ([2.61])dnl Possibly earlier will do, but this is what I have
-AC_INIT([obsproxy], [0.0])
+AC_INIT([obfsproxy], [0.0])
 AC_CONFIG_SRCDIR([src/main.c])
 AM_INIT_AUTOMAKE([foreign])
 

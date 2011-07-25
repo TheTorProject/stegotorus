@@ -186,7 +186,7 @@ resolve_address_port(const char *address, int nodns, int passive,
   free(a);
 
   if (ai_res) {
-    if (ai_res == EAI_SYSTEM)
+    if (ai_res == EVUTIL_EAI_SYSTEM)
       log_warn("Error resolving %s: %s [%s]",
                address, evutil_gai_strerror(ai_res), strerror(ai_errno));
     else
