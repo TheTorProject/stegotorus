@@ -298,7 +298,7 @@ ascii_strlower(char *s)
 #define LOG_SEV_DEBUG   1
 
 /* logging method */
-static int logging_method=LOG_METHOD_STDOUT;
+static int logging_method=LOG_METHOD_STDERR;
 /* minimum logging severity */
 static int logging_min_sev=LOG_SEV_INFO;
 /* logfile fd */
@@ -473,8 +473,8 @@ logv(int severity, const char *format, va_list ap)
   buf[n]='\n';
   buf[n+1]='\0';
 
-  if (logging_method == LOG_METHOD_STDOUT)
-    fprintf(stdout, "%s", buf);
+  if (logging_method == LOG_METHOD_STDERR)
+    fprintf(stderr, "%s", buf);
   else if (logging_method == LOG_METHOD_FILE) {
     if (!logging_logfile)
       abort();

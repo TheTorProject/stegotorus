@@ -120,8 +120,8 @@ int obfs_snprintf(char *str, size_t size,
 
 /** Log destinations */
 
-/** Spit log messages on stdout. */
-#define LOG_METHOD_STDOUT 1
+/** Spit log messages on stderr. */
+#define LOG_METHOD_STDERR 1
 /** Place log messages in a file. */
 #define LOG_METHOD_FILE 2
 /** We don't want no logs. */

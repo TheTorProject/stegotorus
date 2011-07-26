@@ -71,7 +71,7 @@ test_obfs2_option_parsing(void *unused)
       proto_params_free(c->result);
 
   /* Unsuspend logging */
-  log_set_method(LOG_METHOD_STDOUT, NULL);
+  log_set_method(LOG_METHOD_STDERR, NULL);
 }
 
 /* All the tests below use this test environment: */
