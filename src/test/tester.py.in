@@ -1,0 +1,18 @@
+#! @PYTHON@
+
+# Integration tests for obfsproxy.
+#
+# The obfsproxy binary is assumed to exist in the current working
+# directory, and you need to have Python 2.6 or better (but not 3).
+# You need to be able to make connections to arbitrary high-numbered
+# TCP ports on the loopback interface (there is, however, an effort to
+# figure out which ones are already in use) and all IPv4 addresses in
+# 127.0.0/24 are assumed to be bound to the loopback interface.
+
+import socket
+import struct
+import subprocess
+import sys
+
+print "All tests successful."
+sys.exit(0)

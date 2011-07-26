@@ -13,6 +13,14 @@ m4_pushdef([AC_INCLUDES_DEFAULT], [$1])
 
 AC_PROG_CC
 AC_PROG_RANLIB
+AC_PROG_SED
+
+AM_PATH_PYTHON([2.6],, [:])
+AM_CONDITIONAL([HAVE_PYTHON], [test "$PYTHON" != ":"])
+if test "$PYTHON" == ":"; then
+  AC_MSG_WARN([Python interpreter not found; integration tests disabled.])
+fi
+
 PKG_PROG_PKG_CONFIG
 
 ### Libraries ###

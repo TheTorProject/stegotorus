@@ -51,3 +51,13 @@ noinst_HEADERS = \
 EXTRA_DIST = doc/protocol-spec.txt
 
 TESTS = unittests
+
+if HAVE_PYTHON
+TESTS += tester.py
+noinst_PROGRAMS += tester.py
+tester_py_SOURCES = src/test/tester.py.in
+
+tester.py: src/test/tester.py.in Makefile
+	$(SED) -e 's,[@]PYTHON[@],$(PYTHON),' < $< > $@
+	chmod +x $@
+endif
