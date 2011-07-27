@@ -409,8 +409,8 @@ conn_free(conn_t *conn)
     socks_state_free(conn->socks_state);
   if (conn->upstream)
     bufferevent_free(conn->upstream);
-  if (conn->upstream)
-    bufferevent_free(conn->upstream);
+  if (conn->downstream)
+    bufferevent_free(conn->downstream);
 
   memset(conn, 0x99, sizeof(conn_t));
   free(conn);
@@ -611,6 +611,11 @@ error_cb(struct bufferevent *bev, short what, void *arg)
   obfs_assert(what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT));
   obfs_assert(!(what & BEV_EVENT_CONNECTED));
 
+  /* If we get EAGAIN or EINPROGRESS here, something has gone horribly
+     wrong. */
+  obfs_assert(EVUTIL_SOCKET_ERROR() != EAGAIN &&
+              EVUTIL_SOCKET_ERROR() != EINPROGRESS);
+
   log_warn("Got error: %s",
            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
   error_or_eof(arg, bev);
@@ -731,7 +736,7 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
                       downstream_read_cb, NULL, error_cb, conn);
     bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);
     if (evbuffer_get_length(bufferevent_get_input(conn->upstream)) != 0)
-      downstream_read_cb(bev, conn->upstream);
+      upstream_read_cb(conn->upstream, conn);
     return;
   }
 

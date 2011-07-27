@@ -147,9 +147,6 @@ class SocksTest(object):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
 
-        self.input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
-        self.input_chan.settimeout(1.0)
-
     def tearDown(self):
         if self.obfs_server.returncode is None:
             self.obfs_server.terminate()
@@ -193,14 +190,17 @@ class SocksTest(object):
     def socksTest(self, sequence):
         sending = True
         good = True
+        input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
+        input_chan.settimeout(1.0)
+
         for msg in sequence:
             if msg is False:
-                self.input_chan.shutdown(socket.SHUT_WR)
+                input_chan.shutdown(socket.SHUT_WR)
                 # Expect either a clean closedown or a connection reset
                 # at this point.
                 got = ""
                 try:
-                    got = self.input_chan.recv(4096)
+                    got = input_chan.recv(4096)
                 except socket.error, e:
                     if e.errno != errno.ECONNRESET: raise
                 self.assertEqual(got, "")
@@ -213,25 +213,28 @@ class SocksTest(object):
             else:
                 raise TypeError("incomprehensible msg: " + repr(msg))
             if sending:
-                self.input_chan.sendall(exp)
+                input_chan.sendall(exp)
             else:
                 got = ""
                 try:
-                    got = self.input_chan.recv(4096)
+                    got = input_chan.recv(4096)
                 except socket.error, e:
                     if e.errno != errno.ECONNRESET: raise
                 self.assertEqual(got, exp)
         if good:
-            self.input_chan.sendall(TEST_FILE)
-            self.input_chan.shutdown(socket.SHUT_WR)
+            input_chan.sendall(TEST_FILE)
+            input_chan.shutdown(socket.SHUT_WR)
             try:
                 output = self.output_reader.get()
             except Queue.Empty:
                 output = ""
+
+        input_chan.close()
+        self.checkSubprocesses()
+
+        if good:
             self.assertEqual(output, TEST_FILE)
 
-        self.input_chan.close()
-        self.checkSubprocesses()
 
     def test_illformed(self):
         # ill-formed socks message - server should drop connection
@@ -239,7 +242,7 @@ class SocksTest(object):
                          "Connection: close\r\n\r\n",
                          False ])
 
-    def test_socks4_unsupported_methods(self):
+    def test_socks4_unsupported_method_1(self):
         # SOCKS4 bind request - should fail, presently just drops connection
         self.socksTest([ ( (4, 2, SERVER_PORT, 127, 0, 0, 1, 0), "!BBH5B" ),
                          False ])
@@ -249,23 +252,35 @@ class SocksTest(object):
         self.socksTest([ ( (4, 1, SERVER_PORT, 127, 0, 0, 1, 0), "!BBH5B" ),
                          ( (0, 90, SERVER_PORT, 127, 0, 0, 1), "!BBH4B" ) ])
 
-    def test_socks5_bad_handshakes(self):
+    def test_socks5_bad_handshake_1(self):
         self.socksTest([ "\x05", False ])
+
+    def test_socks5_bad_handshake_2(self):
         self.socksTest([ "\x05\x00", False ])
+
+    def test_socks5_bad_handshake_3(self):
         self.socksTest([ "\x05\x01\x01", "\x05\xFF", False ])
+
+    def test_socks5_bad_handshake_4(self):
         self.socksTest([ "\x05\x01\x080", "\x05\xFF", False ])
+
+    def test_socks5_bad_handshake_5(self):
         self.socksTest([ "\x05\x02\x01\x02", "\x05\xFF", False ])
 
-    def test_socks5_bad_requests(self):
+    def test_socks5_bad_request_1(self):
         self.socksTest([ "\x05\x01\x00", "\x05\x00", "\x05\x00",
                          "\x05\x07\x00", False ])
+
+    def test_socks5_bad_request_2(self):
         self.socksTest([ "\x05\x02\x00\x01", "\x05\x00", "\x05\x00",
                          "\x05\x07\x00", False ])
 
-    def test_socks5_unsupported_methods(self):
+    def test_socks5_unsupported_method_1(self):
         self.socksTest([ "\x05\x01\x00", "\x05\x00",
                          ( (5, 2, 0, 1, 127, 0, 0, 1, SERVER_PORT), "!8BH" ),
                          "\x05\x07\x00", False ])
+
+    def test_socks5_unsupported_method_2(self):
         self.socksTest([ "\x05\x01\x00", "\x05\x00",
                          ( (5, 3, 0, 1, 127, 0, 0, 1, SERVER_PORT), "!8BH" ),
                          "\x05\x07\x00", False ])
