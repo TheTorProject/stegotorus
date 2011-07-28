@@ -10,6 +10,10 @@
 #include <unistd.h>
 
 #include <event2/dns.h>
+#include <arpa/inet.h>
+#ifdef AF_LOCAL
+#include <sys/un.h>
+#endif
 
 /** Any size_t larger than this amount is likely to be an underflow. */
 #define SIZE_T_CEILING  (SIZE_MAX/2 - 16)
@@ -193,6 +197,43 @@ resolve_address_port(const char *address, int nodns, int passive,
   }
 
   return ai;
+}
+
+char *
+printable_address(struct sockaddr *addr, socklen_t addrlen)
+{
+  char abuf[INET6_ADDRSTRLEN];
+  char apbuf[INET6_ADDRSTRLEN + 8]; /* []:65535 is 8 characters */
+
+  switch (addr->sa_family) {
+  case AF_INET: {
+    struct sockaddr_in *sin = (struct sockaddr_in*)addr;
+    if (!inet_ntop(AF_INET, &sin->sin_addr, abuf, INET6_ADDRSTRLEN))
+      break;
+    obfs_snprintf(apbuf, sizeof apbuf, "%s:%d", abuf, ntohs(sin->sin_port));
+    return xstrdup(apbuf);
+  }
+
+  case AF_INET6: {
+    struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)addr;
+    if (!inet_ntop(AF_INET, &sin6->sin6_addr, abuf, INET6_ADDRSTRLEN))
+      break;
+    obfs_snprintf(apbuf, sizeof apbuf, "[%s]:%d", abuf,
+                  ntohs(sin6->sin6_port));
+    return xstrdup(apbuf);
+  }
+
+#ifdef AF_LOCAL
+  case AF_LOCAL:
+    return xstrdup(((struct sockaddr_un*)addr)->sun_path);
+#endif
+  default:
+    break;
+  }
+
+  obfs_snprintf(apbuf, sizeof apbuf,
+                "<addr family %d>", addr->sa_family);
+  return xstrdup(apbuf);
 }
 
 static struct evdns_base *the_evdns_base = NULL;

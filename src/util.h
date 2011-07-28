@@ -93,6 +93,10 @@ struct evutil_addrinfo *resolve_address_port(const char *address,
                                              int nodns, int passive,
                                              const char *default_port);
 
+/** Produce a printable name for this sockaddr.  The result is in
+    malloced memory. */
+char *printable_address(struct sockaddr *addr, socklen_t addrlen);
+
 struct evdns_base *get_evdns_base(void);
 int init_evdns_base(struct event_base *base);
 

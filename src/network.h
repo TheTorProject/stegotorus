@@ -14,11 +14,13 @@ void start_shutdown(int barbaric);
 #ifdef NETWORK_PRIVATE
 
 typedef struct listener_t {
+  char *address;
   protocol_params_t *proto_params;
   struct evconnlistener *listener;
 } listener_t;
 
 typedef struct conn_t {
+  char *peername;
   protocol_t *proto;
   socks_state_t *socks_state;
   struct bufferevent *upstream;

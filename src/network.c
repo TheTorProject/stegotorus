@@ -92,6 +92,8 @@ static void pending_socks_cb(struct bufferevent *bev, short what, void *arg);
 void
 start_shutdown(int barbaric)
 {
+  log_debug("Beginning %s shutdown.", barbaric ? "barbaric" : "normal");
+
   if (!shutting_down)
     shutting_down=1;
 
@@ -115,6 +117,7 @@ close_all_connections(void)
 {
   if (!connections)
     return;
+  log_debug("Closing all connections.");
   SMARTLIST_FOREACH(connections, conn_t *, conn,
                     { conn_free(conn); });
   smartlist_free(connections);
@@ -143,6 +146,8 @@ create_listener(struct event_base *base, protocol_params_t *params)
   default: obfs_abort();
   }
 
+  lsn->address = printable_address(params->listen_addr->ai_addr,
+                                   params->listen_addr->ai_addrlen);
   lsn->proto_params = params;
   lsn->listener =
     evconnlistener_new_bind(base, callback, lsn, flags, -1,
@@ -155,6 +160,9 @@ create_listener(struct event_base *base, protocol_params_t *params)
     free(lsn);
     return 0;
   }
+
+  log_debug("Now listening on %s in mode %d, protocol %s.",
+            lsn->address, params->mode, params->vtable->name);
 
   /* If we don't have a listener list, create one now. */
   if (!listeners)
@@ -170,6 +178,8 @@ create_listener(struct event_base *base, protocol_params_t *params)
 static void
 listener_free(listener_t *lsn)
 {
+  if (lsn->address)
+    free(lsn->address);
   if (lsn->listener)
     evconnlistener_free(lsn->listener);
   if (lsn->proto_params)
@@ -206,7 +216,9 @@ simple_client_listener_cb(struct evconnlistener *evcl,
   struct event_base *base;
   conn_t *conn = xzalloc(sizeof(conn_t));
 
-  log_debug("%s: connection attempt.", __func__);
+  conn->peername = printable_address(sourceaddr, socklen);
+  log_debug("%s: connection to %s from %s", __func__,
+            lsn->address, conn->peername);
 
   conn->mode = lsn->proto_params->mode;
   obfs_assert(conn->mode == LSN_SIMPLE_CLIENT);
@@ -280,7 +292,9 @@ socks_client_listener_cb(struct evconnlistener *evcl,
   struct event_base *base;
   conn_t *conn = xzalloc(sizeof(conn_t));
 
-  log_debug("%s: connection attempt.", __func__);
+  conn->peername = printable_address(sourceaddr, socklen);
+  log_debug("%s: connection to %s from %s", __func__,
+            lsn->address, conn->peername);
 
   conn->mode = lsn->proto_params->mode;
   obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
@@ -336,7 +350,9 @@ simple_server_listener_cb(struct evconnlistener *evcl,
   struct event_base *base;
   conn_t *conn = xzalloc(sizeof(conn_t));
 
-  log_debug("%s: connection attempt.", __func__);
+  conn->peername = printable_address(sourceaddr, socklen);
+  log_debug("%s: connection to %s from %s", __func__,
+            lsn->address, conn->peername);
 
   conn->mode = lsn->proto_params->mode;
   obfs_assert(conn->mode == LSN_SIMPLE_SERVER);
@@ -403,6 +419,8 @@ simple_server_listener_cb(struct evconnlistener *evcl,
 static void
 conn_free(conn_t *conn)
 {
+  if (conn->peername)
+    free(conn->peername);
   if (conn->proto)
     proto_destroy(conn->proto);
   if (conn->socks_state)
@@ -423,10 +441,11 @@ static void
 close_conn(conn_t *conn)
 {
   obfs_assert(connections);
+  log_debug("Closing connection from %s; %d remaining",
+            conn->peername, smartlist_len(connections) - 1);
+
   smartlist_remove(connections, conn);
   conn_free(conn);
-  log_debug("Connection destroyed. "
-            "We currently have %d connections!", smartlist_len(connections));
 
   /* If this was the last connection AND we are shutting down,
      finish shutdown. */
@@ -447,6 +466,7 @@ static void
 close_conn_on_flush(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
+  log_debug("%s for %s", __func__, conn->peername);
 
   if (evbuffer_get_length(bufferevent_get_output(bev)) == 0)
     close_conn(conn);
@@ -460,6 +480,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   enum socks_ret socks_ret;
+  log_debug("%s for %s", __func__, conn->peername);
   /* socks only makes sense on the upstream side */
   obfs_assert(bev == conn->upstream);
 
@@ -534,9 +555,9 @@ static void
 upstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
+  log_debug("%s for %s", __func__, conn->peername);
   obfs_assert(bev == conn->upstream);
 
-  log_debug("Got data on upstream side");
   if (proto_send(conn->proto,
                  bufferevent_get_input(conn->upstream),
                  bufferevent_get_output(conn->downstream)) < 0)
@@ -553,9 +574,9 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   enum recv_ret r;
+  log_debug("%s for %s", __func__, conn->peername);
   obfs_assert(bev == conn->downstream);
 
-  log_debug("Got data on downstream side");
   r = proto_recv(conn->proto,
                  bufferevent_get_input(conn->downstream),
                  bufferevent_get_output(conn->upstream));
@@ -576,12 +597,12 @@ static void
 error_or_eof(conn_t *conn, struct bufferevent *bev_err)
 {
   struct bufferevent *bev_flush;
+  log_debug("%s for %s", __func__, conn->peername);
 
   if (bev_err == conn->upstream) bev_flush = conn->downstream;
   else if (bev_err == conn->downstream) bev_flush = conn->upstream;
   else obfs_abort();
 
-  log_debug("error_or_eof");
   if (conn->flushing || !conn->is_open ||
       evbuffer_get_length(bufferevent_get_output(bev_flush)) == 0) {
     close_conn(conn);
@@ -607,17 +628,35 @@ error_or_eof(conn_t *conn, struct bufferevent *bev_err)
 static void
 error_cb(struct bufferevent *bev, short what, void *arg)
 {
+  conn_t *conn = arg;
+  int errcode = EVUTIL_SOCKET_ERROR();
+  log_debug("%s for %s: what=%x err=%d", __func__, conn->peername,
+            what, errcode);
+
   /* It should be impossible to get here with BEV_EVENT_CONNECTED. */
   obfs_assert(what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT));
   obfs_assert(!(what & BEV_EVENT_CONNECTED));
 
-  /* If we get EAGAIN or EINPROGRESS here, something has gone horribly
-     wrong. */
-  obfs_assert(EVUTIL_SOCKET_ERROR() != EAGAIN &&
-              EVUTIL_SOCKET_ERROR() != EINPROGRESS);
+  if (what & BEV_EVENT_ERROR) {
+    /* If we get EAGAIN, EINTR, or EINPROGRESS here, something has
+       gone horribly wrong. */
+    obfs_assert(errcode != EAGAIN && errcode != EINTR &&
+                errcode != EINPROGRESS);
 
-  log_warn("Got error: %s",
-           evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    log_warn("Error on %s side of connection from %s: %s",
+             bev == conn->upstream ? "upstream" : "downstream",
+             conn->peername,
+             evutil_socket_error_to_string(errcode));
+  } else if (what & BEV_EVENT_EOF) {
+    log_info("EOF on %s side of connection from %s",
+             bev == conn->upstream ? "upstream" : "downstream",
+             conn->peername);
+  } else {
+    obfs_assert(what & BEV_EVENT_TIMEOUT);
+    log_info("Timeout on %s side of connection from %s",
+             bev == conn->upstream ? "upstream" : "downstream",
+             conn->peername);
+  }
   error_or_eof(arg, bev);
 }
 
@@ -629,6 +668,9 @@ static void
 flush_error_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
+  int errcode = EVUTIL_SOCKET_ERROR();
+  log_debug("%s for %s: what=%x err=%d", __func__, conn->peername,
+            what, errcode);
 
   /* It should be impossible to get here with BEV_EVENT_CONNECTED. */
   obfs_assert(what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT));
@@ -636,8 +678,10 @@ flush_error_cb(struct bufferevent *bev, short what, void *arg)
 
   obfs_assert(conn->flushing);
 
-  log_warn("Error during flush: %s",
-           evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+  log_warn("Error during flush of %s side of connection from %s: %s",
+           bev == conn->upstream ? "upstream" : "downstream",
+           conn->peername,
+           evutil_socket_error_to_string(errcode));
   close_conn(conn);
   return;
 }
@@ -653,6 +697,8 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
   struct bufferevent *other;
+  log_debug("%s for %s", __func__, conn->peername);
+
   if (bev == conn->upstream) other = conn->downstream;
   else if (bev == conn->downstream) other = conn->upstream;
   else obfs_abort();
@@ -663,13 +709,15 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
     obfs_assert(!conn->flushing);
 
     conn->is_open = 1;
-    log_debug("Connection successful");
-    bufferevent_enable(other, EV_READ|EV_WRITE);
+    log_debug("Successful %s connection for %s",
+              bev == conn->upstream ? "upstream" : "downstream",
+              conn->peername);
 
     /* XXX Dirty access to bufferevent guts.  There appears to be no
        official API to retrieve the callback functions and/or change
        just one callback while leaving the others intact. */
     bufferevent_setcb(bev, bev->readcb, bev->writecb, error_cb, conn);
+    bufferevent_enable(other, EV_READ|EV_WRITE);
     return;
   }
 
@@ -686,13 +734,16 @@ static void
 pending_socks_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
+  log_debug("%s for %s", __func__, conn->peername);
   obfs_assert(bev == conn->downstream);
   obfs_assert(conn->socks_state);
 
   /* If we got an error while in the ST_HAVE_ADDR state, chances are
      that we failed connecting to the host requested by the CONNECT
      call. This means that we should send a negative SOCKS reply back
-     to the client and terminate the connection. */
+     to the client and terminate the connection.
+     XXX properly distinguish BEV_EVENT_EOF from BEV_EVENT_ERROR;
+     errno isn't meaningful in that case...  */
   if ((what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT))) {
     int err = EVUTIL_SOCKET_ERROR();
     log_warn("Connection error: %s",

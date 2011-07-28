@@ -91,6 +91,7 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 void
 finish_shutdown(void)
 {
+  log_debug("Finishing shutdown.");
   event_base_loopexit(the_event_base, NULL);
 }
 

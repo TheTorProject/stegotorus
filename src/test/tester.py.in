@@ -7,15 +7,85 @@
 # You need to be able to make connections to arbitrary high-numbered
 # TCP ports on the loopback interface.
 
+import difflib
 import errno
 import multiprocessing
 import Queue
+import re
 import signal
 import socket
 import struct
 import subprocess
 import time
+import traceback
 import unittest
+
+# Helper: generate unified-format diffs between two named strings.
+# Pythonic escaped-string syntax is used for unprintable characters.
+
+def diff(label, expected, received):
+    if expected == received:
+        return ""
+    else:
+        return (label + "\n"
+                + "\n".join(s.encode("string_escape")
+                            for s in
+                            difflib.unified_diff(expected.split("\n"),
+                                                 received.split("\n"),
+                                                 "expected", "received",
+                                                 lineterm=""))
+                + "\n")
+
+# Helper: Run obfsproxy instances and confirm that they have
+# completed without any errors.
+
+class Obfsproxy(subprocess.Popen):
+    def __init__(self, *args, **kwargs):
+        argv = ["./obfsproxy", "--log-min-severity=debug"]
+        if len(args) == 1 and (isinstance(args[0], list) or
+                               isinstance(args[0], tuple)):
+            argv.extend(args[0])
+        else:
+            argv.extend(args)
+
+        subprocess.Popen.__init__(self, argv,
+                                  stdin=open("/dev/null", "r"),
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE,
+                                  **kwargs)
+
+    severe_error_re = re.compile(r"\[(?:warn|err(?:or)?)\]")
+
+    def check_completion(self, label):
+        if self.poll() is None:
+            self.send_signal(signal.SIGINT)
+
+        (out, err) = self.communicate()
+
+        report = ""
+        def indent(s):
+            return "| " + "\n| ".join(s.strip().split("\n"))
+
+        # exit status should be zero
+        if self.returncode > 0:
+            report += label + " exit code: %d\n" % self.returncode
+        elif self.returncode < 0:
+            report += label + " killed: signal %d\n" % -self.returncode
+
+        # there should be nothing on stdout
+        if out != "":
+            report += label + " stdout:\n%s\n" % indent(out)
+
+        # there will be debugging messages on stderr, but there should be
+        # no [warn], [err], or [error] messages.
+        if self.severe_error_re.search(err):
+            report += label + " stderr:\n%s\n" % indent(err)
+
+        return report
+
+    def stop(self):
+        if self.poll() is None:
+            self.terminate()
 
 # Helper: Repeatedly try to connect to the specified server socket
 # until either it succeeds or one full second has elapsed.  (Surely
@@ -89,32 +159,14 @@ EXIT_PORT   = 5001
 class DirectTest(object):
     def setUp(self):
         self.output_reader = ReadWorker(("127.0.0.1", EXIT_PORT))
-        self.obfs = subprocess.Popen(
-            self.obfs_args,
-            stdin=open("/dev/null", "r"),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-
+        self.obfs = Obfsproxy(self.obfs_args)
         self.input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
         self.input_chan.settimeout(1.0)
 
     def tearDown(self):
-        if self.obfs.returncode is None:
-            self.obfs.terminate()
+        self.obfs.stop()
         self.output_reader.stop()
-
-    def checkSubprocesses(self):
-        if self.obfs.poll() is None:
-            self.obfs.send_signal(signal.SIGINT)
-
-        (out, err) = self.obfs.communicate()
-
-        if (out != "" or err != "" or self.obfs.returncode != 0):
-            self.fail("obfsproxy process failure:\n"
-                      "\treturn code: %d\n"
-                      "\tstdout: %s\n"
-                      "\tstderr: %s\n"
-                      % (self.obfs.returncode, out, err))
+        self.input_chan.close()
 
     def test_direct_transfer(self):
         # Open a server and a simple client (in the same process) and
@@ -127,8 +179,11 @@ class DirectTest(object):
         except Queue.Empty:
             output = ""
 
-        self.checkSubprocesses()
-        self.assertEqual(output, TEST_FILE)
+        report = self.obfs.check_completion("obfsproxy")
+        report += diff("errors in transfer:", TEST_FILE, output)
+
+        if report != "":
+            self.fail("\n" + report)
 
 # Same as above, but we use a socks client instead of a simple client,
 # and the server's a separate process.
@@ -136,46 +191,13 @@ class DirectTest(object):
 class SocksTest(object):
     def setUp(self):
         self.output_reader = ReadWorker(("127.0.0.1", EXIT_PORT))
-        self.obfs_server = subprocess.Popen(
-            self.server_args,
-            stdin=open("/dev/null", "r"),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        self.obfs_client = subprocess.Popen(
-            self.client_args,
-            stdin=open("/dev/null", "r"),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
+        self.obfs_server = Obfsproxy(self.server_args)
+        self.obfs_client = Obfsproxy(self.client_args)
 
     def tearDown(self):
-        if self.obfs_server.returncode is None:
-            self.obfs_server.terminate()
-        if self.obfs_client.returncode is None:
-            self.obfs_client.terminate()
+        self.obfs_server.stop()
+        self.obfs_client.stop()
         self.output_reader.stop()
-
-    def checkSubprocesses(self):
-        if self.obfs_server.poll() is None:
-            self.obfs_server.send_signal(signal.SIGINT)
-        if self.obfs_client.poll() is None:
-            self.obfs_client.send_signal(signal.SIGINT)
-
-        (sout, serr) = self.obfs_server.communicate()
-        (cout, cerr) = self.obfs_client.communicate()
-
-        if (sout != "" or serr != "" or cout != "" or cerr != ""
-            or self.obfs_server.returncode != 0
-            or self.obfs_client.returncode != 0):
-            self.fail("obfsproxy process failures:\n"
-                      "\tclient return code: %d\n"
-                      "\tserver return code: %d\n"
-                      "\tclient stdout: %s\n"
-                      "\tclient stderr: %s\n"
-                      "\tserver stdout: %s\n"
-                      "\tserver stderr: %s\n"
-                      % (self.obfs_client.returncode,
-                         self.obfs_server.returncode,
-                         cout, cerr, sout, serr))
 
     # 'sequence' is a sequence of SOCKS[45] protocol messages
     # which we will send or receive.  Sends alternate with
@@ -187,7 +209,7 @@ class SocksTest(object):
     # the SOCKS sequence without the server having dropped the
     # connection, we transmit the test file and expect to get it
     # back from the far end.
-    def socksTest(self, sequence):
+    def socksTestInner(self, sequence):
         sending = True
         good = True
         input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
@@ -230,10 +252,25 @@ class SocksTest(object):
                 output = ""
 
         input_chan.close()
-        self.checkSubprocesses()
+        if good: return output
+        else: return None
 
-        if good:
-            self.assertEqual(output, TEST_FILE)
+    def socksTest(self, sequence):
+        try:
+            output = self.socksTestInner(sequence)
+            report = ""
+        except Exception:
+            output = None
+            report = traceback.format_exc()
+
+        report += self.obfs_server.check_completion("obfsproxy server")
+        report += self.obfs_client.check_completion("obfsproxy client")
+
+        if output is not None:
+            report += diff("errors in transfer:", TEST_FILE, output)
+
+        if report != "":
+            self.fail("\n" + report)
 
 
     def test_illformed(self):
@@ -295,8 +332,7 @@ class SocksTest(object):
 #
 
 class DirectObfs2(DirectTest, unittest.TestCase):
-    obfs_args = ("./obfsproxy", "--log-min-severity=warn",
-                 "obfs2",
+    obfs_args = ("obfs2",
                  "--dest=127.0.0.1:%d" % EXIT_PORT,
                  "server", "127.0.0.1:%d" % SERVER_PORT,
                  "+", "obfs2",
@@ -304,8 +340,7 @@ class DirectObfs2(DirectTest, unittest.TestCase):
                  "client", "127.0.0.1:%d" % ENTRY_PORT)
 
 class DirectDummy(DirectTest, unittest.TestCase):
-    obfs_args = ("./obfsproxy", "--log-min-severity=warn",
-                 "dummy", "server",
+    obfs_args = ("dummy", "server",
                  "127.0.0.1:%d" % SERVER_PORT,
                  "127.0.0.1:%d" % EXIT_PORT,
                  "+", "dummy", "client",
@@ -313,21 +348,17 @@ class DirectDummy(DirectTest, unittest.TestCase):
                  "127.0.0.1:%d" % SERVER_PORT)
 
 class SocksObfs2(SocksTest, unittest.TestCase):
-    server_args = ("./obfsproxy", "--log-min-severity=warn",
-                   "obfs2",
+    server_args = ("obfs2",
                    "--dest=127.0.0.1:%d" % EXIT_PORT,
                    "server", "127.0.0.1:%d" % SERVER_PORT)
-    client_args = ("./obfsproxy", "--log-min-severity=warn",
-                   "obfs2",
+    client_args = ("obfs2",
                    "socks", "127.0.0.1:%d" % ENTRY_PORT)
 
 class SocksDummy(SocksTest, unittest.TestCase):
-    server_args = ("./obfsproxy", "--log-min-severity=warn",
-                   "dummy", "server",
+    server_args = ("dummy", "server",
                    "127.0.0.1:%d" % SERVER_PORT,
                    "127.0.0.1:%d" % EXIT_PORT)
-    client_args = ("./obfsproxy", "--log-min-severity=warn",
-                   "dummy", "socks",
+    client_args = ("dummy", "socks",
                    "127.0.0.1:%d" % ENTRY_PORT)
 
 TEST_FILE = """\
