@@ -348,6 +348,11 @@ obfs2_handshake(protocol_t *s, struct evbuffer *buf)
 
   /* Put it on the buffer */
   evbuffer_add(buf, msg, OBFUSCATE_SEED_LENGTH+8+plength);
+
+  log_debug("obfs2_handshake: %s queued %ld bytes",
+            state->we_are_initiator ? "initiator" : "responder",
+            evbuffer_get_length(buf));
+
   return 0;
 }
 
@@ -366,7 +371,7 @@ obfs2_crypt_and_transmit(crypt_t *crypto,
       return 0;
     stream_crypt(crypto, data, n);
     evbuffer_add(dest, data, n);
-    log_debug("%s(): Processed %d bytes.", __func__, n);
+    log_debug("%s: Processed %d bytes.", __func__, n);
   }
 }
 
@@ -384,16 +389,25 @@ obfs2_send(protocol_t *s,
   if (state->send_crypto) {
     /* First of all, send any data that we've been waiting to send. */
     if (state->pending_data_to_send) {
-      obfs2_crypt_and_transmit(state->send_crypto, state->pending_data_to_send,
+      log_debug("%s: transmitting %ld bytes previously queued.", __func__,
+                evbuffer_get_length(state->pending_data_to_send));
+      obfs2_crypt_and_transmit(state->send_crypto,
+                               state->pending_data_to_send,
                                dest);
       evbuffer_free(state->pending_data_to_send);
       state->pending_data_to_send = NULL;
     }
     /* Our crypto is set up; just relay the bytes */
+    if (evbuffer_get_length(source)) {
+      log_debug("%s: transmitting %ld bytes.", __func__,
+                evbuffer_get_length(source));
+    }
     return obfs2_crypt_and_transmit(state->send_crypto, source, dest);
   } else {
     /* Our crypto isn't set up yet, we'll have to queue the data */
     if (evbuffer_get_length(source)) {
+      log_debug("%s: handshake incomplete, queueing %ld bytes.", __func__,
+                evbuffer_get_length(source));
       if (! state->pending_data_to_send) {
         if ((state->pending_data_to_send = evbuffer_new()) == NULL)
           return -1;
@@ -453,7 +467,6 @@ obfs2_recv(protocol_t *s, struct evbuffer *source,
            struct evbuffer *dest)
 {
   obfs2_protocol_t *state = downcast_protocol(s);
-  enum recv_ret r=0;
 
   if (state->state == ST_WAIT_FOR_KEY) {
     /* We're waiting for the first OBFUSCATE_SEED_LENGTH+8 bytes to show up
@@ -461,9 +474,12 @@ obfs2_recv(protocol_t *s, struct evbuffer *source,
     uchar buf[OBFUSCATE_SEED_LENGTH+8], *other_seed;
     uint32_t magic, plength;
     if (evbuffer_get_length(source) < OBFUSCATE_SEED_LENGTH+8) {
+      log_debug("%s: waiting for key, %ld/%d bytes so far",
+                __func__, evbuffer_get_length(source), OBFUSCATE_SEED_LENGTH+8);
       /* data not here yet */
       return RECV_INCOMPLETE;
     }
+
     evbuffer_remove(source, buf, OBFUSCATE_SEED_LENGTH+8);
 
     if (state->we_are_initiator)
@@ -494,15 +510,9 @@ obfs2_recv(protocol_t *s, struct evbuffer *source,
 
     /* Fall through here: if there is padding data waiting on the buffer, pull
        it off immediately. */
-    log_debug("%s(): Received key, expecting %d bytes of padding",
+    log_debug("%s: received key, expecting %d bytes of padding",
               __func__, plength);
   }
-
-  /* If we have pending data to send, we set the return code
-  appropriately so that we call proto_send() right after we get out of
-  here! */
-  if (state->pending_data_to_send)
-    r = RECV_SEND_PENDING;
 
   /* If we're still looking for padding, start pulling off bytes and
      discarding them. */
@@ -511,25 +521,26 @@ obfs2_recv(protocol_t *s, struct evbuffer *source,
     size_t sourcelen = evbuffer_get_length(source);
     if (!sourcelen)
       return RECV_INCOMPLETE;
-    if ((size_t) n > evbuffer_get_length(source))
-      n = evbuffer_get_length(source);
+    if ((size_t) n > sourcelen)
+      n = sourcelen;
     evbuffer_drain(source, n);
     state->padding_left_to_read -= n;
-    log_debug("%s(): Received %d bytes of padding; %d left to read",
+    log_debug("%s: consumed %d bytes padding, %d still to come",
               __func__, n, state->padding_left_to_read);
   }
 
   /* Okay; now we're definitely open.  Process whatever data we have. */
   state->state = ST_OPEN;
 
-  log_debug("%s(): Processing %d bytes data onto destination buffer",
-            __func__, (int) evbuffer_get_length(source));
+  log_debug("%s: Processing %ld bytes application data",
+            __func__, evbuffer_get_length(source));
   obfs2_crypt_and_transmit(state->recv_crypto, source, dest);
 
-  if (r != RECV_SEND_PENDING)
-    r = RECV_GOOD;
+  /* If we have pending data to send, transmit it now. */
+  if (state->pending_data_to_send)
+    return RECV_SEND_PENDING;
 
-  return r;
+  return RECV_GOOD;
 }
 
 DEFINE_PROTOCOL_VTABLE(obfs2);

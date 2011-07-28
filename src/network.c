@@ -250,11 +250,6 @@ simple_client_listener_cb(struct evconnlistener *evcl,
   bufferevent_setcb(conn->downstream,
                     downstream_read_cb, NULL, pending_conn_cb, conn);
 
-  /* Queue handshake, if any, before connecting. */
-  if (proto_handshake(conn->proto,
-                      bufferevent_get_output(conn->downstream))<0)
-    goto err;
-
   /* Launch the connect attempt. */
   if (bufferevent_socket_connect(conn->downstream,
                                  lsn->proto_params->target_addr->ai_addr,
@@ -384,11 +379,6 @@ simple_server_listener_cb(struct evconnlistener *evcl,
   bufferevent_setcb(conn->upstream,
                     upstream_read_cb, NULL, pending_conn_cb, conn);
 
-  /* Queue handshake, if any, before connecting. */
-  if (proto_handshake(conn->proto,
-                      bufferevent_get_output(conn->upstream))<0)
-    goto err;
-
   /* Launch the connect attempt. */
   if (bufferevent_socket_connect(conn->upstream,
                                  lsn->proto_params->target_addr->ai_addr,
@@ -501,14 +491,6 @@ socks_read_cb(struct bufferevent *bev, void *arg)
       bufferevent_setcb(conn->downstream,
                         downstream_read_cb, NULL, pending_socks_cb, conn);
 
-      /* Queue handshake, if any, before connecting. */
-      if (proto_handshake(conn->proto,
-                          bufferevent_get_output(conn->downstream))<0) {
-        /* XXXX send socks reply */
-        close_conn(conn);
-        return;
-      }
-
       r = bufferevent_socket_connect_hostname(conn->downstream,
                                               get_evdns_base(),
                                               af, addr, port);
@@ -555,13 +537,16 @@ static void
 upstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
-  log_debug("%s for %s", __func__, conn->peername);
+  log_debug("%s: %s, %lu bytes available", conn->peername, __func__,
+            evbuffer_get_length(bufferevent_get_input(bev)));
   obfs_assert(bev == conn->upstream);
 
   if (proto_send(conn->proto,
                  bufferevent_get_input(conn->upstream),
-                 bufferevent_get_output(conn->downstream)) < 0)
+                 bufferevent_get_output(conn->downstream)) < 0) {
+    log_debug("%s: Error during transmit.", conn->peername);
     close_conn(conn);
+  }
 }
 
 /**
@@ -574,19 +559,27 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   enum recv_ret r;
-  log_debug("%s for %s", __func__, conn->peername);
+  log_debug("%s: %s, %lu bytes available", conn->peername, __func__,
+            evbuffer_get_length(bufferevent_get_input(bev)));
   obfs_assert(bev == conn->downstream);
 
   r = proto_recv(conn->proto,
                  bufferevent_get_input(conn->downstream),
                  bufferevent_get_output(conn->upstream));
 
-  if (r == RECV_BAD)
+  if (r == RECV_BAD) {
+    log_debug("%s: Error during receive.", conn->peername);
     close_conn(conn);
-  else if (r == RECV_SEND_PENDING)
-    proto_send(conn->proto,
-               bufferevent_get_input(conn->upstream),
-               bufferevent_get_output(conn->downstream));
+  } else if (r == RECV_SEND_PENDING) {
+    log_debug("%s: Reply of %ld bytes", conn->peername,
+              evbuffer_get_length(bufferevent_get_input(conn->upstream)));
+    if (proto_send(conn->proto,
+                   bufferevent_get_input(conn->upstream),
+                   bufferevent_get_output(conn->downstream)) < 0) {
+      log_debug("%s: Error during reply.", conn->peername);
+      close_conn(conn);
+    }
+  }
 }
 
 /**
@@ -615,10 +608,11 @@ error_or_eof(conn_t *conn, struct bufferevent *bev_err)
   bufferevent_disable(bev_err, EV_READ|EV_WRITE);
   bufferevent_setcb(bev_err, NULL, NULL, flush_error_cb, conn);
 
-  bufferevent_disable(bev_flush, EV_READ);
-  bufferevent_setcb(bev_flush, NULL,
+  /* XXX Dirty access to bufferevent guts.  There appears to be no
+     official API to retrieve the callback functions and/or change
+     just one callback while leaving the others intact. */
+  bufferevent_setcb(bev_flush, bev_flush->readcb,
                     close_conn_on_flush, flush_error_cb, conn);
-  bufferevent_enable(bev_flush, EV_WRITE);
 }
 
 /**
@@ -697,7 +691,7 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
   struct bufferevent *other;
-  log_debug("%s for %s", __func__, conn->peername);
+  log_debug("%s: %s", conn->peername, __func__);
 
   if (bev == conn->upstream) other = conn->downstream;
   else if (bev == conn->downstream) other = conn->upstream;
@@ -709,9 +703,16 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
     obfs_assert(!conn->flushing);
 
     conn->is_open = 1;
-    log_debug("Successful %s connection for %s",
-              bev == conn->upstream ? "upstream" : "downstream",
-              conn->peername);
+    log_debug("%s: Successful %s connection", conn->peername,
+              bev == conn->upstream ? "upstream" : "downstream");
+
+    /* Queue handshake, if any. */
+    if (proto_handshake(conn->proto,
+                        bufferevent_get_output(conn->downstream))<0) {
+      log_debug("%s: Error during handshake", conn->peername);
+      close_conn(conn);
+      return;
+    }
 
     /* XXX Dirty access to bufferevent guts.  There appears to be no
        official API to retrieve the callback functions and/or change
@@ -734,7 +735,7 @@ static void
 pending_socks_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
-  log_debug("%s for %s", __func__, conn->peername);
+  log_debug("%s: %s", conn->peername, __func__);
   obfs_assert(bev == conn->downstream);
   obfs_assert(conn->socks_state);
 
@@ -779,13 +780,23 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
     socks_state_free(conn->socks_state);
     conn->socks_state = NULL;
     conn->is_open = 1;
-    log_debug("Connection successful");
+    log_debug("%s: Successful %s connection", conn->peername,
+              bev == conn->upstream ? "upstream" : "downstream");
 
     bufferevent_setcb(conn->upstream,
                       upstream_read_cb, NULL, error_cb, conn);
     bufferevent_setcb(conn->downstream,
                       downstream_read_cb, NULL, error_cb, conn);
     bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);
+
+    /* Queue handshake, if any. */
+    if (proto_handshake(conn->proto,
+                        bufferevent_get_output(conn->downstream))<0) {
+      log_debug("%s: Error during handshake", conn->peername);
+      close_conn(conn);
+      return;
+    }
+
     if (evbuffer_get_length(bufferevent_get_input(conn->upstream)) != 0)
       upstream_read_cb(conn->upstream, conn);
     return;
