@@ -56,7 +56,7 @@ class Obfsproxy(subprocess.Popen):
 
     severe_error_re = re.compile(r"\[(?:warn|err(?:or)?)\]")
 
-    def check_completion(self, label):
+    def check_completion(self, label, force_stderr):
         if self.poll() is None:
             self.send_signal(signal.SIGINT)
 
@@ -78,7 +78,7 @@ class Obfsproxy(subprocess.Popen):
 
         # there will be debugging messages on stderr, but there should be
         # no [warn], [err], or [error] messages.
-        if self.severe_error_re.search(err):
+        if force_stderr or self.severe_error_re.search(err):
             report += label + " stderr:\n%s\n" % indent(err)
 
         return report
@@ -115,6 +115,8 @@ class ReadWorker(object):
         listener.bind(address)
         listener.listen(1)
         (conn, remote) = listener.accept()
+        listener.close()
+        conn.settimeout(1.0)
         data = ""
         try:
             while True:
@@ -124,7 +126,6 @@ class ReadWorker(object):
         except Exception, e:
             data += "|RECV ERROR: " + e
         conn.close()
-        listener.close()
         oq.put(data)
 
     def __init__(self, address):
@@ -179,8 +180,9 @@ class DirectTest(object):
         except Queue.Empty:
             output = ""
 
-        report = self.obfs.check_completion("obfsproxy")
-        report += diff("errors in transfer:", TEST_FILE, output)
+        report = diff("errors in transfer:", TEST_FILE, output)
+
+        report += self.obfs.check_completion("obfsproxy", report!="")
 
         if report != "":
             self.fail("\n" + report)
@@ -209,12 +211,9 @@ class SocksTest(object):
     # the SOCKS sequence without the server having dropped the
     # connection, we transmit the test file and expect to get it
     # back from the far end.
-    def socksTestInner(self, sequence):
+    def socksTestInner(self, sequence, input_chan):
         sending = True
         good = True
-        input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
-        input_chan.settimeout(1.0)
-
         for msg in sequence:
             if msg is False:
                 input_chan.shutdown(socket.SHUT_WR)
@@ -243,6 +242,7 @@ class SocksTest(object):
                 except socket.error, e:
                     if e.errno != errno.ECONNRESET: raise
                 self.assertEqual(got, exp)
+            sending = not sending
         if good:
             input_chan.sendall(TEST_FILE)
             input_chan.shutdown(socket.SHUT_WR)
@@ -251,27 +251,57 @@ class SocksTest(object):
             except Queue.Empty:
                 output = ""
 
-        input_chan.close()
         if good: return output
         else: return None
 
     def socksTest(self, sequence):
+        input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
+        input_chan.settimeout(1.0)
+
         try:
-            output = self.socksTestInner(sequence)
+            output = self.socksTestInner(sequence, input_chan)
             report = ""
         except Exception:
             output = None
             report = traceback.format_exc()
 
-        report += self.obfs_server.check_completion("obfsproxy server")
-        report += self.obfs_client.check_completion("obfsproxy client")
+        input_chan.close()
 
         if output is not None:
             report += diff("errors in transfer:", TEST_FILE, output)
 
+        fs = report != ""
+
+        report += self.obfs_server.check_completion("obfsproxy server", fs)
+        report += self.obfs_client.check_completion("obfsproxy client", fs)
+
         if report != "":
             self.fail("\n" + report)
 
+class GoodSocksTest(SocksTest):
+    # Test methods for good SOCKS dialogues; these should be repeated for each
+    # protocol.
+
+    def test_socks4_connect(self):
+        # SOCKS4 connection request - should succeed
+        self.socksTest([ ( (4, 1, SERVER_PORT, 127, 0, 0, 1, 0), "!BBH5B" ),
+                         ( (0, 90, SERVER_PORT, 127, 0, 0, 1), "!BBH4B" ) ])
+
+    def test_socks5_connect(self):
+        self.socksTest([ "\x05\x01\x00", "\x05\x00",
+                         ( (5, 1, 0, 1, 127, 0, 0, 1, SERVER_PORT), "!8BH" ),
+                         ( (5, 0, 0, 1, 127, 0, 0, 1, SERVER_PORT), "!8BH" ) ])
+
+#
+# Concrete test classes that are not protocol-specific.
+#
+
+class SocksBad(SocksTest, unittest.TestCase):
+    server_args = ("dummy", "server",
+                   "127.0.0.1:%d" % SERVER_PORT,
+                   "127.0.0.1:%d" % EXIT_PORT)
+    client_args = ("dummy", "socks",
+                   "127.0.0.1:%d" % ENTRY_PORT)
 
     def test_illformed(self):
         # ill-formed socks message - server should drop connection
@@ -284,11 +314,6 @@ class SocksTest(object):
         self.socksTest([ ( (4, 2, SERVER_PORT, 127, 0, 0, 1, 0), "!BBH5B" ),
                          False ])
 
-    def test_socks4_connect(self):
-        # SOCKS4 connection request - should succeed
-        self.socksTest([ ( (4, 1, SERVER_PORT, 127, 0, 0, 1, 0), "!BBH5B" ),
-                         ( (0, 90, SERVER_PORT, 127, 0, 0, 1), "!BBH4B" ) ])
-
     def test_socks5_bad_handshake_1(self):
         self.socksTest([ "\x05", False ])
 
@@ -296,36 +321,31 @@ class SocksTest(object):
         self.socksTest([ "\x05\x00", False ])
 
     def test_socks5_bad_handshake_3(self):
-        self.socksTest([ "\x05\x01\x01", "\x05\xFF", False ])
+        self.socksTest([ "\x05\x01\x01", False ]) # should get "\x05\xFF"
 
     def test_socks5_bad_handshake_4(self):
-        self.socksTest([ "\x05\x01\x080", "\x05\xFF", False ])
+        self.socksTest([ "\x05\x01\x080", False ]) # should get "\x05\xFF"
 
     def test_socks5_bad_handshake_5(self):
-        self.socksTest([ "\x05\x02\x01\x02", "\x05\xFF", False ])
+        self.socksTest([ "\x05\x02\x01\x02", False ]) # should get "\x05\xFF"
 
-    def test_socks5_bad_request_1(self):
-        self.socksTest([ "\x05\x01\x00", "\x05\x00", "\x05\x00",
-                         "\x05\x07\x00", False ])
+    def test_socks5_good_handshake_1(self):
+        self.socksTest([ "\x05\x01\x00", "\x05\x00", False ])
 
-    def test_socks5_bad_request_2(self):
-        self.socksTest([ "\x05\x02\x00\x01", "\x05\x00", "\x05\x00",
-                         "\x05\x07\x00", False ])
+    def test_socks5_good_handshake_2(self):
+        self.socksTest([ "\x05\x02\x00\x01", "\x05\x00", False ])
 
     def test_socks5_unsupported_method_1(self):
         self.socksTest([ "\x05\x01\x00", "\x05\x00",
                          ( (5, 2, 0, 1, 127, 0, 0, 1, SERVER_PORT), "!8BH" ),
-                         "\x05\x07\x00", False ])
+                         "\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00", False ])
 
     def test_socks5_unsupported_method_2(self):
         self.socksTest([ "\x05\x01\x00", "\x05\x00",
                          ( (5, 3, 0, 1, 127, 0, 0, 1, SERVER_PORT), "!8BH" ),
-                         "\x05\x07\x00", False ])
+                         "\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00", False ])
 
-    def test_socks5_connect(self):
-        self.socksTest([ "\x05\x01\x00", "\x05\x00",
-                         ( (5, 1, 0, 1, 127, 0, 0, 1, SERVER_PORT), "!8BH" ),
-                         ( (5, 0, 0, 1, 127, 0, 0, 1, SERVER_PORT), "!8BH" ) ])
+
 
 #
 # Concrete test classes specialize the above base classes for each protocol.
@@ -347,14 +367,14 @@ class DirectDummy(DirectTest, unittest.TestCase):
                  "127.0.0.1:%d" % ENTRY_PORT,
                  "127.0.0.1:%d" % SERVER_PORT)
 
-class SocksObfs2(SocksTest, unittest.TestCase):
+class SocksObfs2(GoodSocksTest, unittest.TestCase):
     server_args = ("obfs2",
                    "--dest=127.0.0.1:%d" % EXIT_PORT,
                    "server", "127.0.0.1:%d" % SERVER_PORT)
     client_args = ("obfs2",
                    "socks", "127.0.0.1:%d" % ENTRY_PORT)
 
-class SocksDummy(SocksTest, unittest.TestCase):
+class SocksDummy(GoodSocksTest, unittest.TestCase):
     server_args = ("dummy", "server",
                    "127.0.0.1:%d" % SERVER_PORT,
                    "127.0.0.1:%d" % EXIT_PORT)
