@@ -10,7 +10,9 @@
 #include <unistd.h>
 
 #include <event2/dns.h>
+#ifndef _WIN32
 #include <arpa/inet.h>
+#endif
 #ifdef AF_LOCAL
 #include <sys/un.h>
 #endif
@@ -202,11 +204,12 @@ resolve_address_port(const char *address, int nodns, int passive,
 char *
 printable_address(struct sockaddr *addr, socklen_t addrlen)
 {
-  char abuf[INET6_ADDRSTRLEN];
   char apbuf[INET6_ADDRSTRLEN + 8]; /* []:65535 is 8 characters */
 
   switch (addr->sa_family) {
+#ifndef _WIN32 /* Windows XP doesn't have inet_ntop. Fix later. */
   case AF_INET: {
+    char abuf[INET6_ADDRSTRLEN];
     struct sockaddr_in *sin = (struct sockaddr_in*)addr;
     if (!inet_ntop(AF_INET, &sin->sin_addr, abuf, INET6_ADDRSTRLEN))
       break;
@@ -215,6 +218,7 @@ printable_address(struct sockaddr *addr, socklen_t addrlen)
   }
 
   case AF_INET6: {
+    char abuf[INET6_ADDRSTRLEN];
     struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)addr;
     if (!inet_ntop(AF_INET, &sin6->sin6_addr, abuf, INET6_ADDRSTRLEN))
       break;
@@ -222,6 +226,7 @@ printable_address(struct sockaddr *addr, socklen_t addrlen)
                   ntohs(sin6->sin6_port));
     return xstrdup(apbuf);
   }
+#endif
 
 #ifdef AF_LOCAL
   case AF_LOCAL:

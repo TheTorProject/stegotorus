@@ -538,7 +538,7 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   log_debug("%s: %s, %lu bytes available", conn->peername, __func__,
-            evbuffer_get_length(bufferevent_get_input(bev)));
+            (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
   obfs_assert(bev == conn->upstream);
 
   if (proto_send(conn->proto,
@@ -560,7 +560,7 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   conn_t *conn = arg;
   enum recv_ret r;
   log_debug("%s: %s, %lu bytes available", conn->peername, __func__,
-            evbuffer_get_length(bufferevent_get_input(bev)));
+            (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
   obfs_assert(bev == conn->downstream);
 
   r = proto_recv(conn->proto,
@@ -571,7 +571,8 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
     log_debug("%s: Error during receive.", conn->peername);
     close_conn(conn);
   } else if (r == RECV_SEND_PENDING) {
-    log_debug("%s: Reply of %ld bytes", conn->peername,
+    log_debug("%s: Reply of %lu bytes", conn->peername,
+              (unsigned long)
               evbuffer_get_length(bufferevent_get_input(conn->upstream)));
     if (proto_send(conn->proto,
                    bufferevent_get_input(conn->upstream),
@@ -632,11 +633,6 @@ error_cb(struct bufferevent *bev, short what, void *arg)
   obfs_assert(!(what & BEV_EVENT_CONNECTED));
 
   if (what & BEV_EVENT_ERROR) {
-    /* If we get EAGAIN, EINTR, or EINPROGRESS here, something has
-       gone horribly wrong. */
-    obfs_assert(errcode != EAGAIN && errcode != EINTR &&
-                errcode != EINPROGRESS);
-
     log_warn("Error on %s side of connection from %s: %s",
              bev == conn->upstream ? "upstream" : "downstream",
              conn->peername,
