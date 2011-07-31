@@ -15,8 +15,7 @@ libobfsproxy_a_SOURCES = \
 	src/protocol.c \
 	src/socks.c \
 	src/util.c \
-	src/protocols/dummy.c \
-	src/protocols/obfs2.c
+	src/protocols/dummy.c
 if NEED_SHA256
 libobfsproxy_a_SOURCES += src/sha256.c
 endif
@@ -30,8 +29,7 @@ unittests_SOURCES = \
 	src/test/unittest_container.c \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c \
-	src/test/unittest_dummy.c \
-	src/test/unittest_obfs2.c
+	src/test/unittest_dummy.c
 
 noinst_HEADERS = \
 	src/container.h \
@@ -48,7 +46,10 @@ noinst_HEADERS = \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h
 
-EXTRA_DIST = doc/protocol-spec.txt
+EXTRA_DIST = doc/protocol-spec.txt \
+	src/protocols/obfs2.c \
+	src/test/unittest_obfs2.c
+
 
 TESTS = unittests
 

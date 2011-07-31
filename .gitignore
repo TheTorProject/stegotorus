@@ -24,4 +24,5 @@ Makefile.in
 /libobfsproxy.a
 /obfsproxy
 /unittests
+/tester.py
 
