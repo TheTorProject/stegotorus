@@ -126,18 +126,19 @@ close_all_connections(void)
 
 /**
    This function spawns a listener configured according to the
-   provided 'protocol_params_t' object'.  Returns 1 on success, 0 on
-   failure.  (No, you can't have the listener object. It's private.)
-
-   Regardless of success or failure, the protocol_params_t is consumed.
+   provided argument subvector.  Returns 1 on success, 0 on failure.
+   (No, you can't have the listener object. It's private.)
 */
 int
-create_listener(struct event_base *base, protocol_params_t *params)
+create_listener(struct event_base *base, int argc, const char *const *argv)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
   evconnlistener_cb callback;
-  listener_t *lsn = xzalloc(sizeof(listener_t));
+  listener_t *lsn;
+  protocol_params_t *params = proto_params_init(argc, argv);
+  if (!params)
+    return 0;
 
   switch (params->mode) {
   case LSN_SIMPLE_CLIENT: callback = simple_client_listener_cb; break;
@@ -145,7 +146,7 @@ create_listener(struct event_base *base, protocol_params_t *params)
   case LSN_SOCKS_CLIENT:  callback = socks_client_listener_cb;  break;
   default: obfs_abort();
   }
-
+  lsn = xzalloc(sizeof(listener_t));
   lsn->address = printable_address(params->listen_addr->ai_addr,
                                    params->listen_addr->ai_addrlen);
   lsn->proto_params = params;

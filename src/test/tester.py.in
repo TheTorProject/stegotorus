@@ -356,7 +356,7 @@ class SocksBad(SocksTest, unittest.TestCase):
 #    obfs_args = ("obfs2",
 #                 "--dest=127.0.0.1:%d" % EXIT_PORT,
 #                 "server", "127.0.0.1:%d" % SERVER_PORT,
-#                 "+", "obfs2",
+#                 "obfs2",
 #                 "--dest=127.0.0.1:%d" % SERVER_PORT,
 #                 "client", "127.0.0.1:%d" % ENTRY_PORT)
 
@@ -364,7 +364,7 @@ class DirectDummy(DirectTest, unittest.TestCase):
     obfs_args = ("dummy", "server",
                  "127.0.0.1:%d" % SERVER_PORT,
                  "127.0.0.1:%d" % EXIT_PORT,
-                 "+", "dummy", "client",
+                 "dummy", "client",
                  "127.0.0.1:%d" % ENTRY_PORT,
                  "127.0.0.1:%d" % SERVER_PORT)
 

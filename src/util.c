@@ -472,6 +472,15 @@ log_set_min_severity(const char* sev_string)
   return 0;
 }
 
+/** True if the minimum log severity is "debug".  Used in a few places
+    to avoid some expensive formatting work if we are going to ignore the
+    result. */
+int
+log_do_debug(void)
+{
+  return logging_min_sev == LOG_SEV_DEBUG;
+}
+
 /**
     Logging worker function.
     Accepts a logging 'severity' and a 'format' string and logs the

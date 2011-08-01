@@ -6,7 +6,7 @@
 #define NETWORK_H
 
 /* returns 1 on success, 0 on failure */
-int create_listener(struct event_base *base, protocol_params_t *params);
+int create_listener(struct event_base *base, int argc, const char *const *argv);
 void free_all_listeners(void);
 
 void start_shutdown(int barbaric);

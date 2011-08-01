@@ -138,6 +138,9 @@ int log_set_method(int method, const char *filename);
     'sev_string' may be "warn", "info", or "debug" (case-insensitively). */
 int log_set_min_severity(const char* sev_string);
 
+/** True if debug messages are being logged. */
+int log_do_debug(void);
+
 /** Close the logfile if it's open.  Ignores errors. */
 void close_obfsproxy_logfile(void);
 
