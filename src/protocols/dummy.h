@@ -17,14 +17,17 @@ extern const protocol_vtable dummy_vtable;
 #include "../network.h"
 #include "../protocol.h"
 
-/* Dummy presently needs no extensions to the generic protocol
-   structures, but we have shims for future expansion, and also
-   because, if you're using dummy as a template, you probably will
-   want to extend the generic structures. */
+/* Dummy presently needs only the obligatory extensions to the generic
+   protocol structures, but we have shims for future expansion, and
+   also because, if you're using dummy as a template, you probably
+   will want to extend the generic structures. */
 
-typedef struct dummy_listener_t {
-  listener_t super;
-} dummy_listener_t;
+typedef struct dummy_config_t {
+  config_t super;
+  struct evutil_addrinfo *listen_addr;
+  struct evutil_addrinfo *target_addr;
+  enum listen_mode mode;
+} dummy_config_t;
 
 typedef struct dummy_conn_t {
   conn_t super;

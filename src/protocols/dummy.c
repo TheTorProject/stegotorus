@@ -10,10 +10,10 @@
 #include <event2/buffer.h>
 
 /* type-safe downcast wrappers */
-static inline dummy_listener_t *
-downcast_listener(listener_t *p)
+static inline dummy_config_t *
+downcast_config(config_t *p)
 {
-  return DOWNCAST(dummy_listener_t, super, p);
+  return DOWNCAST(dummy_config_t, super, p);
 }
 
 static inline dummy_conn_t *
@@ -22,32 +22,72 @@ downcast_conn(conn_t *p)
   return DOWNCAST(dummy_conn_t, super, p);
 }
 
-static int parse_and_set_options(int n_options,
-                                 const char *const *options,
-                                 dummy_listener_t *lsn);
+/**
+   Helper: Parses 'options' and fills 'cfg'.
+*/
+static int
+parse_and_set_options(int n_options, const char *const *options,
+                      dummy_config_t *cfg)
+{
+  const char* defport;
+
+  if (n_options < 1)
+    return -1;
+
+  if (!strcmp(options[0], "client")) {
+    defport = "48988"; /* bf5c */
+    cfg->mode = LSN_SIMPLE_CLIENT;
+  } else if (!strcmp(options[0], "socks")) {
+    defport = "23548"; /* 5bf5 */
+    cfg->mode = LSN_SOCKS_CLIENT;
+  } else if (!strcmp(options[0], "server")) {
+    defport = "11253"; /* 2bf5 */
+    cfg->mode = LSN_SIMPLE_SERVER;
+  } else
+    return -1;
+
+  if (n_options != (cfg->mode == LSN_SOCKS_CLIENT ? 2 : 3))
+      return -1;
+
+  cfg->listen_addr = resolve_address_port(options[1], 1, 1, defport);
+  if (!cfg->listen_addr)
+    return -1;
+
+  if (cfg->mode != LSN_SOCKS_CLIENT) {
+    cfg->target_addr = resolve_address_port(options[2], 1, 0, NULL);
+    if (!cfg->target_addr)
+      return -1;
+  }
+
+  return 0;
+}
+
+/* Deallocate 'cfg'. */
+static void
+dummy_config_free(config_t *c)
+{
+  dummy_config_t *cfg = downcast_config(c);
+  if (cfg->listen_addr)
+    evutil_freeaddrinfo(cfg->listen_addr);
+  if (cfg->target_addr)
+    evutil_freeaddrinfo(cfg->target_addr);
+  free(cfg);
+}
 
 /**
-   This function populates 'lsn' according to 'options' and sets up
-   the protocol vtable.
-
-   'options' is an array like this:
-   {"dummy","socks","127.0.0.1:6666"}
+   Populate 'cfg' according to 'options', which is an array like this:
+   {"socks","127.0.0.1:6666"}
 */
-static listener_t *
-dummy_listener_create(int n_options, const char *const *options)
+static config_t *
+dummy_config_create(int n_options, const char *const *options)
 {
-  dummy_listener_t *lsn = xzalloc(sizeof(dummy_listener_t));
-  lsn->super.vtable = &dummy_vtable;
+  dummy_config_t *cfg = xzalloc(sizeof(dummy_config_t));
+  cfg->super.vtable = &dummy_vtable;
 
-  if (parse_and_set_options(n_options, options, lsn) == 0)
-    return &lsn->super;
+  if (parse_and_set_options(n_options, options, cfg) == 0)
+    return &cfg->super;
 
-  if (lsn->super.listen_addr)
-    evutil_freeaddrinfo(lsn->super.listen_addr);
-  if (lsn->super.target_addr)
-    evutil_freeaddrinfo(lsn->super.target_addr);
-  free(lsn);
-
+  dummy_config_free(&cfg->super);
   log_warn("dummy syntax:\n"
            "\tdummy <mode> <listen_address> [<target_address>]\n"
            "\t\tmode ~ server|client|socks\n"
@@ -61,50 +101,20 @@ dummy_listener_create(int n_options, const char *const *options)
   return NULL;
 }
 
-/**
-   Helper: Parses 'options' and fills 'lsn'.
-*/
-static int
-parse_and_set_options(int n_options, const char *const *options,
-                      dummy_listener_t *lsn)
+/** Retrieve the 'n'th set of listen addresses for this configuration. */
+static struct evutil_addrinfo *
+dummy_config_get_listen_addrs(config_t *cfg, size_t n)
 {
-  const char* defport;
-
-  if (n_options < 1)
-    return -1;
-
-  if (!strcmp(options[0], "client")) {
-    defport = "48988"; /* bf5c */
-    lsn->super.mode = LSN_SIMPLE_CLIENT;
-  } else if (!strcmp(options[0], "socks")) {
-    defport = "23548"; /* 5bf5 */
-    lsn->super.mode = LSN_SOCKS_CLIENT;
-  } else if (!strcmp(options[0], "server")) {
-    defport = "11253"; /* 2bf5 */
-    lsn->super.mode = LSN_SIMPLE_SERVER;
-  } else
-    return -1;
-
-  if (n_options != (lsn->super.mode == LSN_SOCKS_CLIENT ? 2 : 3))
-      return -1;
-
-  lsn->super.listen_addr = resolve_address_port(options[1], 1, 1, defport);
-  if (!lsn->super.listen_addr)
-    return -1;
-
-  if (lsn->super.mode != LSN_SOCKS_CLIENT) {
-    lsn->super.target_addr = resolve_address_port(options[2], 1, 0, NULL);
-    if (!lsn->super.target_addr)
-      return -1;
-  }
-
-  return 0;
+  if (n > 0)
+    return 0;
+  return downcast_config(cfg)->listen_addr;
 }
 
-static void
-dummy_listener_free(listener_t *lsn)
+/* Retrieve the target address for this configuration. */
+static struct evutil_addrinfo *
+dummy_config_get_target_addr(config_t *cfg)
 {
-  free(downcast_listener(lsn));
+  return downcast_config(cfg)->target_addr;
 }
 
 /*
@@ -113,10 +123,11 @@ dummy_listener_free(listener_t *lsn)
 */
 
 static conn_t *
-dummy_conn_create(listener_t *lsn)
+dummy_conn_create(config_t *cfg)
 {
   dummy_conn_t *proto = xzalloc(sizeof(dummy_conn_t));
-  proto->super.vtable = &dummy_vtable;
+  proto->super.cfg = cfg;
+  proto->super.mode = downcast_config(cfg)->mode;
   return &proto->super;
 }
 

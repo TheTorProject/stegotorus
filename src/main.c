@@ -58,7 +58,7 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 
   switch (signum) {
   case SIGINT:
-    free_all_listeners();
+    close_all_listeners();
     if (!got_sigint) {
       log_info("Got SIGINT. Preparing shutdown.");
       start_shutdown(0);
@@ -104,7 +104,7 @@ is_supported_protocol(const char *name)
    If it fails, it exits obfsproxy.
 */
 static int
-handle_obfsproxy_args(const char **argv)
+handle_obfsproxy_args(const char *const *argv)
 {
   int logmethod_set=0;
   int logsev_set=0;
@@ -154,83 +154,53 @@ handle_obfsproxy_args(const char **argv)
 }
 
 int
-main(int argc, const char **argv)
+main(int argc, const char *const *argv)
 {
   struct event *sig_int;
   struct event *sig_term;
-
-  /* Array of argument counts, one per listener. */
-  int *listener_argcs = NULL;
-
-  /* Array of pointers into argv. Each points to the beginning of a
-     sequence of options for a particular listener. */
-  const char *const **listener_argvs = NULL;
-
-  /* Total number of listeners requested on the command line. */
-  unsigned int n_listeners;
-
-  /* Total number of listeners successfully created. */
-  unsigned int n_good_listeners;
-
-  /* Index of the first argv string after the optional obfsproxy
-      arguments. Normally this should be where the listeners start. */
-  int start_of_listeners;
-
-  int cl, i;
+  smartlist_t *configs = smartlist_create();
+  const char *const *begin;
+  const char *const *end;
 
   /* Handle optional obfsproxy arguments. */
-  start_of_listeners = handle_obfsproxy_args(argv);
+  begin = argv + handle_obfsproxy_args(argv);
 
-  if (!is_supported_protocol(argv[start_of_listeners]))
+  /* Find the subsets of argv that define each configuration.
+     Each configuration's subset consists of the entries in argv from
+     its recognized protocol name, up to but not including the next
+     recognized protocol name. */
+  if (!*begin || !is_supported_protocol(*begin))
     usage();
 
-  /* Count number of listeners and allocate space for the listener-
-     argument arrays. We already know there's at least one. */
-  n_listeners = 1;
-  for (i = start_of_listeners+1; i < argc; i++)
-    if (is_supported_protocol(argv[i]))
-      n_listeners++;
-
-  log_debug("%d listener%s on command line.",
-            n_listeners, n_listeners == 1 ? "" : "s");
-  listener_argcs = xzalloc(n_listeners * sizeof(int));
-  listener_argvs = xzalloc(n_listeners * sizeof(char **));
-
-  /* Each listener's argument vector consists of the entries in argv
-     from its recognized protocol name, up to but not including
-     the next recognized protocol name. */
-  cl = 1;
-  listener_argvs[0] = &argv[start_of_listeners];
-  for (i = start_of_listeners + 1; i < argc; i++)
-    if (is_supported_protocol(argv[i])) {
-      listener_argcs[cl-1] = i - (listener_argvs[cl-1] - argv);
-      if (listener_argcs[cl-1] == 1)
-        log_warn("No arguments to listener %d", cl);
-
-      listener_argvs[cl] = &argv[i];
-      cl++;
-    }
-
-  listener_argcs[cl-1] = argc - (listener_argvs[cl-1] - argv);
-  if (listener_argcs[cl-1] == 1)
-    log_warn("No arguments to listener %d", cl);
-
-  obfs_assert(cl == n_listeners);
-
-  if (log_do_debug()) {
-    smartlist_t *s = smartlist_create();
-    char *joined;
-    for (cl = 0; cl < n_listeners; cl++) {
-      smartlist_clear(s);
-      for (i = 0; i < listener_argcs[cl]; i++)
-        smartlist_add(s, (void *)listener_argvs[cl][i]);
+  do {
+    end = begin+1;
+    while (*end && !is_supported_protocol(*end))
+      end++;
+    if (log_do_debug()) {
+      smartlist_t *s = smartlist_create();
+      char *joined;
+      const char *const *p;
+      for (p = begin; p < end; p++)
+        smartlist_add(s, (void *)*p);
       joined = smartlist_join_strings(s, " ", 0, NULL);
-      log_debug("Listener %d: %s", cl+1, joined);
+      log_debug("Configuration %d: %s", smartlist_len(configs)+1, joined);
+      free(joined);
+      smartlist_free(s);
     }
-    smartlist_free(s);
-  }
+    if (end == begin+1) {
+      log_warn("No arguments for configuration %d", smartlist_len(configs)+1);
+      usage();
+    } else {
+      config_t *cfg = config_create(end - begin, begin);
+      if (!cfg)
+        return 2; /* diagnostic already issued */
+      smartlist_add(configs, cfg);
+    }
+    begin = end;
+  } while (*begin);
+  obfs_assert(smartlist_len(configs) > 0);
 
-  /* argv has been chunked; proceed with initialization. */
+  /* Configurations have been established; proceed with initialization. */
 
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
@@ -268,37 +238,31 @@ main(int argc, const char **argv)
     return 1;
   }
 
-  /* Open a new listener for each protocol. */
-  n_good_listeners = 0;
-  for (cl = 0; cl < n_listeners; cl++)
-    if (create_listener(the_event_base,
-                        listener_argcs[cl], listener_argvs[cl]))
-      n_good_listeners++;
-
-  /* If the number of usable listeners is not equal to the complete
-     set specified on the command line, we have a usage error.
-     Diagnostics have already been issued.  */
-  log_debug("%d recognized listener%s on command line, %d with valid config",
-            n_listeners, n_listeners == 1 ? "" : "s", n_good_listeners);
-  if (n_listeners != n_good_listeners)
-    return 2;
+  /* Open listeners for each configuration. */
+  SMARTLIST_FOREACH(configs, config_t *, cfg, {
+    if (!open_listeners(the_event_base, cfg)) {
+      log_error("Failed to open listeners for configuration %d", cfg_sl_idx+1);
+      return 1;
+    }
+  });
 
   /* We are go for launch. */
   event_base_dispatch(the_event_base);
 
+  /* We have landed. */
   log_info("Exiting.");
 
-  free_all_listeners();
+  close_all_listeners();
+  SMARTLIST_FOREACH(configs, config_t *, cfg, config_free(cfg));
+  smartlist_free(configs);
+
   evdns_base_free(get_evdns_base(), 0);
   event_free(sig_int);
   event_free(sig_term);
   event_base_free(the_event_base);
 
   cleanup_crypto();
-
   close_obfsproxy_logfile();
-  free(listener_argvs);
-  free(listener_argcs);
 
   return 0;
 }

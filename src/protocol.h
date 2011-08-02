@@ -6,6 +6,18 @@
 #define PROTOCOL_H
 
 /**
+   This struct defines a "configuration" of the proxy.
+   A configuration is a set of addresses to listen on, and what to do
+   when connections are received.  Almost all of a configuration is
+   protocol-private data, stored in the larger structure in which this
+   struct is embedded.
+ */
+struct config_t
+{
+  const struct protocol_vtable *vtable;
+};
+
+/**
    This struct defines a protocol and its methods; note that not all
    of them are methods on the same object in the C++ sense.
 
@@ -18,20 +30,29 @@ struct protocol_vtable
   /** The short name of this protocol. */
   const char *name;
 
-  /** Allocate a 'listener_t' object and fill it in from the provided
+  /** Allocate a 'config_t' object and fill it in from the provided
       'options' array. */
-  listener_t *(*listener_create)(int n_options, const char *const *options);
+  config_t *(*config_create)(int n_options, const char *const *options);
 
-  /** Destroy the provided 'listener_t' object.  This function is
-      responsible for deallocating any data that the protocol's
-      extended structure points to, and deallocating the object
-      itself.  But it is *not* responsible for deallocating the data
-      pointed to by the generic 'listener_t'; that's already been done
-      by generic code.  */
-  void (*listener_free)(listener_t *params);
+  /** Destroy the provided 'config_t' object.  */
+  void (*config_free)(config_t *cfg);
 
-  /** Allocate per-connection, protocol-specific state. */
-  conn_t *(*conn_create)(listener_t *params);
+  /** Return a set of addresses to listen on, in the form of an
+      'evutil_addrinfo' linked list.  There may be more than one list;
+      users of this function should call it repeatedly with successive
+      values of N, starting from zero, until it returns NULL, and
+      create listeners for every address returned. */
+  struct evutil_addrinfo *(*config_get_listen_addrs)(config_t *cfg, size_t n);
+
+  /** Return a set of addresses to attempt an outbound connection to,
+      in the form of an 'evutil_addrinfo' linked list.  There is only
+      one such list. */
+  struct evutil_addrinfo *(*config_get_target_addr)(config_t *cfg);
+
+  /** A connection has just been made to one of 'cfg's listener
+      addresses.  Return an extended 'conn_t' object, filling in the
+      'cfg' and 'mode' fields of the generic structure.  */
+  conn_t *(*conn_create)(config_t *cfg);
 
   /** Destroy per-connection, protocol-specific state.  */
   void (*conn_free)(conn_t *state);
@@ -59,17 +80,22 @@ struct protocol_vtable
 #define DEFINE_PROTOCOL_VTABLE(name)            \
   const protocol_vtable name##_vtable = {       \
     #name,                                      \
-    name##_listener_create,                     \
-    name##_listener_free,                       \
+    name##_config_create,                       \
+    name##_config_free,                         \
+    name##_config_get_listen_addrs,             \
+    name##_config_get_target_addr,              \
     name##_conn_create,                         \
     name##_conn_free,                           \
     name##_handshake, name##_send, name##_recv  \
   }
 
-listener_t *proto_listener_create(int n_options, const char *const *options);
-void proto_listener_free(listener_t *lsn);
+config_t *config_create(int n_options, const char *const *options);
+void config_free(config_t *cfg);
 
-conn_t *proto_conn_create(listener_t *lsn);
+struct evutil_addrinfo *config_get_listen_addrs(config_t *cfg, size_t n);
+struct evutil_addrinfo *config_get_target_addr(config_t *cfg);
+
+conn_t *proto_conn_create(config_t *cfg);
 void proto_conn_free(conn_t *conn);
 
 int proto_handshake(conn_t *conn, void *buf);

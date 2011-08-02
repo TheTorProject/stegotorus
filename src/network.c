@@ -47,6 +47,15 @@
    (version 4 or 5).
 */
 
+/**
+  This struct defines the state of a listener on a particular address.
+ */
+typedef struct listener_t {
+  config_t *cfg;
+  struct evconnlistener *listener;
+  char *address;
+} listener_t;
+
 /** All our listeners. */
 static smartlist_t *listeners;
 
@@ -59,17 +68,23 @@ static int shutting_down=0;
 
 static void listener_free(listener_t *lsn);
 
-static void simple_client_listener_cb(struct evconnlistener *evcl,
-   evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
-static void socks_client_listener_cb(struct evconnlistener *evcl,
-   evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
-static void simple_server_listener_cb(struct evconnlistener *evcl,
-   evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
+static void listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
+                        struct sockaddr *sourceaddr, int socklen,
+                        void *closure);
+
+static void simple_client_listener_cb(conn_t *conn, struct bufferevent *buf);
+static void socks_client_listener_cb(conn_t *conn, struct bufferevent *buf);
+static void simple_server_listener_cb(conn_t *conn, struct bufferevent *buf);
 
 static void conn_free(conn_t *conn);
+static void close_conn(conn_t *conn);
 static void close_all_connections(void);
 
 static void close_conn_on_flush(struct bufferevent *bev, void *arg);
+
+static struct bufferevent *open_outbound_socket(conn_t *conn,
+                                                struct event_base *base,
+                                                bufferevent_data_cb readcb);
 
 static void upstream_read_cb(struct bufferevent *bev, void *arg);
 static void downstream_read_cb(struct bufferevent *bev, void *arg);
@@ -126,49 +141,48 @@ close_all_connections(void)
 }
 
 /**
-   This function spawns a listener configured according to the
-   provided argument subvector.  Returns 1 on success, 0 on failure.
-   (No, you can't have the listener object. It's private.)
-*/
+   This function opens listening sockets configured according to the
+   provided 'config_t'.  Returns 1 on success, 0 on failure.
+ */
 int
-create_listener(struct event_base *base, int argc, const char *const *argv)
+open_listeners(struct event_base *base, config_t *cfg)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
-  evconnlistener_cb callback;
-  listener_t *lsn = proto_listener_create(argc, argv);
-  if (!lsn)
-    return 0;
-
-  switch (lsn->mode) {
-  case LSN_SIMPLE_CLIENT: callback = simple_client_listener_cb; break;
-  case LSN_SIMPLE_SERVER: callback = simple_server_listener_cb; break;
-  case LSN_SOCKS_CLIENT:  callback = socks_client_listener_cb;  break;
-  default: obfs_abort();
-  }
-
-  lsn->listen_addr_str = printable_address(lsn->listen_addr->ai_addr,
-                                           lsn->listen_addr->ai_addrlen);
-  lsn->listener =
-    evconnlistener_new_bind(base, callback, lsn, flags, -1,
-                            lsn->listen_addr->ai_addr,
-                            lsn->listen_addr->ai_addrlen);
-
-  if (!lsn->listener) {
-    log_warn("Could not begin listening on %s: %s",
-             lsn->listen_addr_str,
-             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-    listener_free(lsn);
-    return 0;
-  }
-
-  log_debug("Now listening on %s in mode %d, protocol %s.",
-            lsn->listen_addr_str, lsn->mode, lsn->vtable->name);
+  size_t i;
+  listener_t *lsn;
+  struct evutil_addrinfo *addrs;
 
   /* If we don't have a listener list, create one now. */
   if (!listeners)
     listeners = smartlist_create();
-  smartlist_add(listeners, lsn);
+
+  for (i = 0; ; i++) {
+    addrs = config_get_listen_addrs(cfg, i);
+    if (!addrs) break;
+    do {
+      lsn = xzalloc(sizeof(listener_t));
+      lsn->cfg = cfg;
+      lsn->address = printable_address(addrs->ai_addr, addrs->ai_addrlen);
+      lsn->listener =
+        evconnlistener_new_bind(base, listener_cb, lsn, flags, -1,
+                                addrs->ai_addr, addrs->ai_addrlen);
+
+      if (!lsn->listener) {
+        log_warn("Failed to open listening socket on %s: %s",
+                 lsn->address,
+                 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+        listener_free(lsn);
+        return 0;
+      }
+
+      smartlist_add(listeners, lsn);
+      log_debug("Now listening on %s for protocol %s.",
+                lsn->address, cfg->vtable->name);
+
+      addrs = addrs->ai_next;
+    } while (addrs);
+  }
 
   return 1;
 }
@@ -181,21 +195,16 @@ listener_free(listener_t *lsn)
 {
   if (lsn->listener)
     evconnlistener_free(lsn->listener);
-  if (lsn->listen_addr)
-    evutil_freeaddrinfo(lsn->listen_addr);
-  if (lsn->listen_addr_str)
-    free(lsn->listen_addr_str);
-  if (lsn->target_addr)
-    evutil_freeaddrinfo(lsn->target_addr);
-
-  proto_listener_free(lsn);
+  if (lsn->address)
+    free(lsn->address);
+  free(lsn);
 }
 
 /**
    Frees all active listeners.
 */
 void
-free_all_listeners(void)
+close_all_listeners(void)
 {
   if (!listeners)
     return;
@@ -208,73 +217,75 @@ free_all_listeners(void)
 }
 
 /**
+   This function is called when any listener receives a connection.
+ */
+static void
+listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
+            struct sockaddr *peeraddr, int peerlen,
+            void *closure)
+{
+  struct event_base *base = evconnlistener_get_base(evcl);
+  listener_t *lsn = closure;
+  char *peername = printable_address(peeraddr, peerlen);
+  conn_t *conn = proto_conn_create(lsn->cfg);
+  struct bufferevent *buf = bufferevent_socket_new(base, fd,
+                                                   BEV_OPT_CLOSE_ON_FREE);
+
+  if (!conn || !buf) {
+    log_warn("%s: failed to set up new connection from %s.",
+             lsn->address, peername);
+    if (buf)
+      bufferevent_free(buf);
+    else
+      evutil_closesocket(fd);
+    if (conn)
+      proto_conn_free(conn);
+    free(peername);
+    return;
+  }
+
+  if (!connections)
+    connections = smartlist_create();
+  smartlist_add(connections, conn);
+  log_debug("%s: new connection from %s (%d total)", lsn->address, peername,
+            smartlist_len(connections));
+
+  conn->peername = peername;
+  switch (conn->mode) {
+  case LSN_SIMPLE_CLIENT: simple_client_listener_cb(conn, buf); break;
+  case LSN_SOCKS_CLIENT:  socks_client_listener_cb(conn, buf);  break;
+  case LSN_SIMPLE_SERVER: simple_server_listener_cb(conn, buf); break;
+  default:
+    obfs_abort();
+  }
+}
+
+/**
    This function is called when an upstream client connects to us in
    simple client mode.
 */
 static void
-simple_client_listener_cb(struct evconnlistener *evcl,
-                          evutil_socket_t fd, struct sockaddr *sourceaddr,
-                          int socklen, void *arg)
+simple_client_listener_cb(conn_t *conn, struct bufferevent *buf)
 {
-  struct event_base *base;
-  listener_t *lsn = arg;
-  conn_t *conn = proto_conn_create(lsn);
-  if (!conn) {
-    log_warn("Failed to create state object for new connection to %s",
-             lsn->listen_addr_str);
-    goto err;
-  }
-
-  conn->peername = printable_address(sourceaddr, socklen);
-  log_debug("%s: connection to %s from %s", __func__,
-            lsn->listen_addr_str, conn->peername);
-
-  conn->mode = lsn->mode;
+  struct event_base *base = bufferevent_get_base(buf);
+  obfs_assert(buf);
+  obfs_assert(conn);
   obfs_assert(conn->mode == LSN_SIMPLE_CLIENT);
+  log_debug("%s: simple client connection", conn->peername);
 
-  /* New bufferevent to wrap socket we received. */
-  base = evconnlistener_get_base(lsn->listener);
-  conn->upstream = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->upstream)
-    goto err;
-  fd = -1; /* prevent double-close */
-
-  bufferevent_setcb(conn->upstream,
-                    upstream_read_cb, NULL, error_cb, conn);
+  conn->upstream = buf;
+  bufferevent_setcb(conn->upstream, upstream_read_cb, NULL, error_cb, conn);
 
   /* Don't enable the upstream side for reading at this point; wait
      till the downstream side is established. */
 
-  /* New bufferevent to connect to the target address */
-  conn->downstream = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->downstream)
-    goto err;
+  conn->downstream = open_outbound_socket(conn, base, downstream_read_cb);
+  if (!conn->downstream) {
+    close_conn(conn);
+    return;
+  }
 
-  bufferevent_setcb(conn->downstream,
-                    downstream_read_cb, NULL, pending_conn_cb, conn);
-
-  /* Launch the connect attempt. */
-  if (bufferevent_socket_connect(conn->downstream,
-                                 lsn->target_addr->ai_addr,
-                                 lsn->target_addr->ai_addrlen)<0)
-    goto err;
-
-  bufferevent_enable(conn->downstream, EV_READ|EV_WRITE);
-
-  /* add conn to the connection list */
-  if (!connections)
-    connections = smartlist_create();
-  smartlist_add(connections, conn);
-
-  log_debug("%s: setup completed, %d connections",
-            __func__, smartlist_len(connections));
-  return;
-
- err:
-  if (conn)
-    conn_free(conn);
-  if (fd >= 0)
-    evutil_closesocket(fd);
+  log_debug("%s: setup complete", conn->peername);
 }
 
 /**
@@ -282,56 +293,24 @@ simple_client_listener_cb(struct evconnlistener *evcl,
    socks mode.
 */
 static void
-socks_client_listener_cb(struct evconnlistener *evcl,
-                         evutil_socket_t fd, struct sockaddr *sourceaddr,
-                         int socklen, void *arg)
+socks_client_listener_cb(conn_t *conn, struct bufferevent *buf)
 {
-  struct event_base *base;
-  listener_t *lsn = arg;
-  conn_t *conn = proto_conn_create(lsn);
-  if (!conn) {
-    log_warn("Failed to create state object for new connection to %s",
-             lsn->listen_addr_str);
-    goto err;
-  }
-
-  conn->peername = printable_address(sourceaddr, socklen);
-  log_debug("%s: connection to %s from %s", __func__,
-            lsn->listen_addr_str, conn->peername);
-
-  conn->mode = lsn->mode;
+  obfs_assert(buf);
+  obfs_assert(conn);
   obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
+  log_debug("%s: socks client connection", conn->peername);
+
+  conn->upstream = buf;
+  bufferevent_setcb(conn->upstream, socks_read_cb, NULL, error_cb, conn);
+  bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);
 
   /* Construct SOCKS state. */
   conn->socks_state = socks_state_new();
 
-  /* New bufferevent to wrap socket we received. */
-  base = evconnlistener_get_base(lsn->listener);
-  conn->upstream = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->upstream)
-    goto err;
-  fd = -1; /* prevent double-close */
-
-  bufferevent_setcb(conn->upstream, socks_read_cb, NULL, error_cb, conn);
-  bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);
-
   /* Do not create a downstream bufferevent at this time; the socks
      handler will do it after it learns the downstream peer address. */
 
-  /* add conn to the connection list */
-  if (!connections)
-    connections = smartlist_create();
-  smartlist_add(connections, conn);
-
-  log_debug("%s: setup completed, %d connections",
-            __func__, smartlist_len(connections));
-  return;
-
- err:
-  if (conn)
-    conn_free(conn);
-  if (fd >= 0)
-    evutil_closesocket(fd);
+  log_debug("%s: setup complete", conn->peername);
 }
 
 /**
@@ -339,33 +318,15 @@ socks_client_listener_cb(struct evconnlistener *evcl,
    server mode.
 */
 static void
-simple_server_listener_cb(struct evconnlistener *evcl,
-                          evutil_socket_t fd, struct sockaddr *sourceaddr,
-                          int socklen, void *arg)
+simple_server_listener_cb(conn_t *conn, struct bufferevent *buf)
 {
-  struct event_base *base;
-  listener_t *lsn = arg;
-  conn_t *conn = proto_conn_create(lsn);
-  if (!conn) {
-    log_warn("Failed to create state object for new connection to %s",
-             lsn->listen_addr_str);
-    goto err;
-  }
-
-  conn->peername = printable_address(sourceaddr, socklen);
-  log_debug("%s: connection to %s from %s", __func__,
-            lsn->listen_addr_str, conn->peername);
-
-  conn->mode = lsn->mode;
+  struct event_base *base = bufferevent_get_base(buf);
+  obfs_assert(buf);
+  obfs_assert(conn);
   obfs_assert(conn->mode == LSN_SIMPLE_SERVER);
+  log_debug("%s: server connection", conn->peername);
 
-  /* New bufferevent to wrap socket we received. */
-  base = evconnlistener_get_base(lsn->listener);
-  conn->downstream = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->downstream)
-    goto err;
-  fd = -1; /* prevent double-close */
-
+  conn->downstream = buf;
   bufferevent_setcb(conn->downstream,
                     downstream_read_cb, NULL, error_cb, conn);
 
@@ -373,35 +334,13 @@ simple_server_listener_cb(struct evconnlistener *evcl,
      till the upstream side is established. */
 
   /* New bufferevent to connect to the target address. */
-  conn->upstream = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->upstream)
-    goto err;
+  conn->upstream = open_outbound_socket(conn, base, upstream_read_cb);
+  if (!conn->upstream) {
+    close_conn(conn);
+    return;
+  }
 
-  bufferevent_setcb(conn->upstream,
-                    upstream_read_cb, NULL, pending_conn_cb, conn);
-
-  /* Launch the connect attempt. */
-  if (bufferevent_socket_connect(conn->upstream,
-                                 lsn->target_addr->ai_addr,
-                                 lsn->target_addr->ai_addrlen) < 0)
-    goto err;
-
-  bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);
-
-  /* add conn to the connection list */
-  if (!connections)
-    connections = smartlist_create();
-  smartlist_add(connections, conn);
-
-  log_debug("%s: setup completed, %d connections",
-            __func__, smartlist_len(connections));
-  return;
-
- err:
-  if (conn)
-    conn_free(conn);
-  if (fd >= 0)
-    evutil_closesocket(fd);
+  log_debug("%s: setup complete", conn->peername);
 }
 
 /**
@@ -437,13 +376,10 @@ close_conn(conn_t *conn)
 
   /* If this was the last connection AND we are shutting down,
      finish shutdown. */
-  if (smartlist_len(connections) == 0) {
+  if (smartlist_len(connections) == 0 && shutting_down) {
     smartlist_free(connections);
-    connections = NULL;
-  }
-
-  if (!connections && shutting_down)
     finish_shutdown();
+  }
 }
 
 /**
@@ -458,6 +394,54 @@ close_conn_on_flush(struct bufferevent *bev, void *arg)
 
   if (evbuffer_get_length(bufferevent_get_output(bev)) == 0)
     close_conn(conn);
+}
+
+/**
+   Make the outbound socket for a connection.
+*/
+static struct bufferevent *
+open_outbound_socket(conn_t *conn, struct event_base *base,
+                     bufferevent_data_cb readcb)
+{
+  struct evutil_addrinfo *addr = config_get_target_addr(conn->cfg);
+  struct bufferevent *buf;
+  char *peername;
+
+  if (!addr) {
+    log_warn("%s: no target addresses available", conn->peername);
+    return NULL;
+  }
+
+  buf = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!buf) {
+    log_warn("%s: unable to create outbound socket buffer", conn->peername);
+    return NULL;
+  }
+
+  bufferevent_setcb(buf, readcb, NULL, pending_conn_cb, conn);
+
+  do {
+    peername = printable_address(addr->ai_addr, addr->ai_addrlen);
+    log_info("%s (%s): trying to connect to %s",
+             conn->peername, conn->cfg->vtable->name, peername);
+    if (bufferevent_socket_connect(buf, addr->ai_addr, addr->ai_addrlen) >= 0) {
+      /* success */
+      bufferevent_enable(buf, EV_READ|EV_WRITE);
+      free(peername);
+      return buf;
+    }
+    log_info("%s: connection to %s failed: %s",
+             conn->peername, peername,
+             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    free(peername);
+    addr = addr->ai_next;
+  } while (addr);
+
+  log_warn("%s: all outbound connection attempts failed",
+           conn->peername);
+
+  bufferevent_free(buf);
+  return NULL;
 }
 
 /**

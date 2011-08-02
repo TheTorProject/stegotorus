@@ -12,7 +12,7 @@ static void
 test_dummy_option_parsing(void *unused)
 {
   struct option_parsing_case {
-    listener_t *result;
+    config_t *result;
     short should_succeed;
     short n_opts;
     const char *const opts[4];
@@ -45,7 +45,7 @@ test_dummy_option_parsing(void *unused)
 
   struct option_parsing_case *c;
   for (c = cases; c->n_opts; c++) {
-    c->result = proto_listener_create(c->n_opts, c->opts);
+    c->result = config_create(c->n_opts, c->opts);
     if (c->should_succeed)
       tt_ptr_op(c->result, !=, NULL);
     else
@@ -55,7 +55,7 @@ test_dummy_option_parsing(void *unused)
  end:
   for (c = cases; c->n_opts; c++)
     if (c->result)
-      proto_listener_free(c->result);
+      config_free(c->result);
 
   /* Unsuspend logging */
   log_set_method(LOG_METHOD_STDERR, NULL);
@@ -64,8 +64,8 @@ test_dummy_option_parsing(void *unused)
 /* All the tests below use this test environment: */
 struct test_dummy_state
 {
-  listener_t *lsn_client;
-  listener_t *lsn_server;
+  config_t *cfg_client;
+  config_t *cfg_server;
   conn_t *conn_client;
   conn_t *conn_server;
   struct evbuffer *output_buffer;
@@ -82,10 +82,10 @@ cleanup_dummy_state(const struct testcase_t *unused, void *state)
   if (s->conn_server)
       proto_conn_free(s->conn_server);
 
-  if (s->lsn_client)
-    proto_listener_free(s->lsn_client);
-  if (s->lsn_server)
-    proto_listener_free(s->lsn_server);
+  if (s->cfg_client)
+    config_free(s->cfg_client);
+  if (s->cfg_server)
+    config_free(s->cfg_server);
 
   if (s->output_buffer)
     evbuffer_free(s->output_buffer);
@@ -109,18 +109,18 @@ setup_dummy_state(const struct testcase_t *unused)
 {
   struct test_dummy_state *s = xzalloc(sizeof(struct test_dummy_state));
 
-  s->lsn_client =
-    proto_listener_create(ALEN(options_client), options_client);
-  tt_assert(s->lsn_client);
+  s->cfg_client =
+    config_create(ALEN(options_client), options_client);
+  tt_assert(s->cfg_client);
 
-  s->lsn_server =
-    proto_listener_create(ALEN(options_server), options_server);
-  tt_assert(s->lsn_server);
+  s->cfg_server =
+    config_create(ALEN(options_server), options_server);
+  tt_assert(s->cfg_server);
 
-  s->conn_client = proto_conn_create(s->lsn_client);
+  s->conn_client = proto_conn_create(s->cfg_client);
   tt_assert(s->conn_client);
 
-  s->conn_server = proto_conn_create(s->lsn_server);
+  s->conn_server = proto_conn_create(s->cfg_server);
   tt_assert(s->conn_server);
 
   s->output_buffer = evbuffer_new();
