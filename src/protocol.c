@@ -3,10 +3,11 @@
 */
 
 #include "util.h"
-
+#include "network.h"
 #include "protocol.h"
-/*#include "protocols/obfs2.h"*/
+
 #include "protocols/dummy.h"
+/*#include "protocols/obfs2.h"*/
 
 /**
     All supported protocols should be put in this array.
@@ -21,46 +22,32 @@ const size_t n_supported_protocols =
   sizeof(supported_protocols)/sizeof(supported_protocols[0]);
 
 /**
-   This function figures out which protocol we want to set up, and
-   gives 'n_options', 'options' and 'params' to the appropriate
-   protocol-specific initalization function.
-   This function is called once for every listener through the runtime
-   of obfsproxy.
-*/
-protocol_params_t *
-proto_params_init(int n_options, const char *const *options)
+   This function dispatches (by name) creation of a |listener_t|
+   to the appropriate protocol-specific initalization function.
+ */
+listener_t *
+proto_listener_create(int n_options, const char *const *options)
 {
   size_t i;
   for (i = 0; i < n_supported_protocols; i++)
     if (!strcmp(*options, supported_protocols[i]->name))
       /* Remove the first element of 'options' (which is always the
          protocol name) from the list passed to the init method. */
-      return supported_protocols[i]->init(n_options - 1, options + 1);
+      return supported_protocols[i]->listener_create(n_options - 1, options + 1);
 
   return NULL;
 }
 
 /**
-   This function destroys 'params'.
-   It's called everytime we free a listener.
+   This function destroys the protocol-specific part of a listener object.
 */
 void
-proto_params_free(protocol_params_t *params)
+proto_listener_free(listener_t *lsn)
 {
-  obfs_assert(params);
-  obfs_assert(params->vtable);
-  obfs_assert(params->vtable->fini);
-
-  if (params->target_addr) {
-    evutil_freeaddrinfo(params->target_addr);
-    params->target_addr = NULL;
-  }
-  if (params->listen_addr) {
-    evutil_freeaddrinfo(params->listen_addr);
-    params->listen_addr = NULL;
-  }
-
-  params->vtable->fini(params);
+  obfs_assert(lsn);
+  obfs_assert(lsn->vtable);
+  obfs_assert(lsn->vtable->listener_free);
+  lsn->vtable->listener_free(lsn);
 }
 
 /**
@@ -70,12 +57,12 @@ proto_params_free(protocol_params_t *params)
    Return a 'protocol_t' if successful, NULL otherwise.
 */
 protocol_t *
-proto_create(protocol_params_t *params)
+proto_create(listener_t *lsn)
 {
-  obfs_assert(params);
-  obfs_assert(params->vtable);
-  obfs_assert(params->vtable->create);
-  return params->vtable->create(params);
+  obfs_assert(lsn);
+  obfs_assert(lsn->vtable);
+  obfs_assert(lsn->vtable->create);
+  return lsn->vtable->create(lsn);
 }
 
 /**

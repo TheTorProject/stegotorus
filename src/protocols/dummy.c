@@ -10,10 +10,10 @@
 #include <event2/buffer.h>
 
 /* type-safe downcast wrappers */
-static inline dummy_params_t *
-downcast_params(protocol_params_t *p)
+static inline dummy_listener_t *
+downcast_listener(listener_t *p)
 {
-  return DOWNCAST(dummy_params_t, super, p);
+  return DOWNCAST(dummy_listener_t, super, p);
 }
 
 static inline dummy_protocol_t *
@@ -24,25 +24,30 @@ downcast_protocol(protocol_t *p)
 
 static int parse_and_set_options(int n_options,
                                  const char *const *options,
-                                 dummy_params_t *params);
+                                 dummy_listener_t *lsn);
 
 /**
-   This function populates 'params' according to 'options' and sets up
+   This function populates 'lsn' according to 'options' and sets up
    the protocol vtable.
 
    'options' is an array like this:
    {"dummy","socks","127.0.0.1:6666"}
 */
-static protocol_params_t *
-dummy_init(int n_options, const char *const *options)
+static listener_t *
+dummy_listener_create(int n_options, const char *const *options)
 {
-  dummy_params_t *params = xzalloc(sizeof(dummy_params_t));
-  params->super.vtable = &dummy_vtable;
+  dummy_listener_t *lsn = xzalloc(sizeof(dummy_listener_t));
+  lsn->super.vtable = &dummy_vtable;
 
-  if (parse_and_set_options(n_options, options, params) == 0)
-    return &params->super;
+  if (parse_and_set_options(n_options, options, lsn) == 0)
+    return &lsn->super;
 
-  proto_params_free(&params->super);
+  if (lsn->super.listen_addr)
+    evutil_freeaddrinfo(lsn->super.listen_addr);
+  if (lsn->super.target_addr)
+    evutil_freeaddrinfo(lsn->super.target_addr);
+  free(lsn);
+
   log_warn("dummy syntax:\n"
            "\tdummy <mode> <listen_address> [<target_address>]\n"
            "\t\tmode ~ server|client|socks\n"
@@ -57,11 +62,11 @@ dummy_init(int n_options, const char *const *options)
 }
 
 /**
-   Helper: Parses 'options' and fills 'params'.
+   Helper: Parses 'options' and fills 'lsn'.
 */
 static int
 parse_and_set_options(int n_options, const char *const *options,
-                      dummy_params_t *params)
+                      dummy_listener_t *lsn)
 {
   const char* defport;
 
@@ -70,26 +75,26 @@ parse_and_set_options(int n_options, const char *const *options,
 
   if (!strcmp(options[0], "client")) {
     defport = "48988"; /* bf5c */
-    params->super.mode = LSN_SIMPLE_CLIENT;
+    lsn->super.mode = LSN_SIMPLE_CLIENT;
   } else if (!strcmp(options[0], "socks")) {
     defport = "23548"; /* 5bf5 */
-    params->super.mode = LSN_SOCKS_CLIENT;
+    lsn->super.mode = LSN_SOCKS_CLIENT;
   } else if (!strcmp(options[0], "server")) {
     defport = "11253"; /* 2bf5 */
-    params->super.mode = LSN_SIMPLE_SERVER;
+    lsn->super.mode = LSN_SIMPLE_SERVER;
   } else
     return -1;
 
-  if (n_options != (params->super.mode == LSN_SOCKS_CLIENT ? 2 : 3))
+  if (n_options != (lsn->super.mode == LSN_SOCKS_CLIENT ? 2 : 3))
       return -1;
 
-  params->super.listen_addr = resolve_address_port(options[1], 1, 1, defport);
-  if (!params->super.listen_addr)
+  lsn->super.listen_addr = resolve_address_port(options[1], 1, 1, defport);
+  if (!lsn->super.listen_addr)
     return -1;
 
-  if (params->super.mode != LSN_SOCKS_CLIENT) {
-    params->super.target_addr = resolve_address_port(options[2], 1, 0, NULL);
-    if (!params->super.target_addr)
+  if (lsn->super.mode != LSN_SOCKS_CLIENT) {
+    lsn->super.target_addr = resolve_address_port(options[2], 1, 0, NULL);
+    if (!lsn->super.target_addr)
       return -1;
   }
 
@@ -97,9 +102,9 @@ parse_and_set_options(int n_options, const char *const *options,
 }
 
 static void
-dummy_fini(protocol_params_t *params)
+dummy_listener_free(listener_t *lsn)
 {
-  free(downcast_params(params));
+  free(downcast_listener(lsn));
 }
 
 /*
@@ -108,7 +113,7 @@ dummy_fini(protocol_params_t *params)
 */
 
 static protocol_t *
-dummy_create(protocol_params_t *params)
+dummy_create(listener_t *lsn)
 {
   dummy_protocol_t *proto = xzalloc(sizeof(dummy_protocol_t));
   proto->super.vtable = &dummy_vtable;

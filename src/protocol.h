@@ -6,20 +6,6 @@
 #define PROTOCOL_H
 
 /**
-  This struct defines the protocol-specific state for all connections
-  opened from a particular listener.  Each protocol may extend this
-  structure with additional private data by embedding it as the first
-  member of a larger structure (standard fake-inheritance-in-C
-  technique).
- */
-struct protocol_params_t {
-  const protocol_vtable *vtable;
-  struct evutil_addrinfo *target_addr;
-  struct evutil_addrinfo *listen_addr;
-  int mode;
-};
-
-/**
    This struct defines the protocol-specific state for a particular
    connection.  Again, each protocol may extend this structure with
    additional private data by embedding it as the first member of a
@@ -42,20 +28,20 @@ struct protocol_vtable
   /** The short name of this protocol. */
   const char *name;
 
-  /** Initialization: Allocate a 'protocol_params_t' object and fill
-      it in from the provided 'options' array. */
-  protocol_params_t *(*init)(int n_options, const char *const *options);
+  /** Allocate a 'listener_t' object and fill it in from the provided
+      'options' array. */
+  listener_t *(*listener_create)(int n_options, const char *const *options);
 
-  /** Finalization: Destroy the provided 'protocol_params_t' object.
-      This function is responsible for deallocating any data that the
-      protocol's extended structure points to, and deallocating the
-      object itself.  But it is *not* responsible for deallocating the
-      data pointed to by the generic 'protocol_params_t'; that's
-      already been done.  */
-  void (*fini)(protocol_params_t *params);
+  /** Destroy the provided 'listener_t' object.  This function is
+      responsible for deallocating any data that the protocol's
+      extended structure points to, and deallocating the object
+      itself.  But it is *not* responsible for deallocating the data
+      pointed to by the generic 'listener_t'; that's already been done
+      by generic code.  */
+  void (*listener_free)(listener_t *params);
 
   /** Constructor: Allocates per-connection, protocol-specific state. */
-  protocol_t *(*create)(protocol_params_t *params);
+  protocol_t *(*create)(listener_t *params);
 
   /** Destructor: Destroys per-connection, protocol-specific state.  */
   void (*destroy)(protocol_t *state);
@@ -83,16 +69,16 @@ struct protocol_vtable
 #define DEFINE_PROTOCOL_VTABLE(name)            \
   const protocol_vtable name##_vtable = {       \
     #name,                                      \
-    name##_init, name##_fini,                   \
+    name##_listener_create,                     \
+    name##_listener_free,                       \
     name##_create, name##_destroy,              \
     name##_handshake, name##_send, name##_recv  \
   }
 
-protocol_params_t *proto_params_init(int n_options,
-                                     const char *const *options);
-void proto_params_free(protocol_params_t *params);
+listener_t *proto_listener_create(int n_options, const char *const *options);
+void proto_listener_free(listener_t *params);
 
-protocol_t *proto_create(protocol_params_t *params);
+protocol_t *proto_create(listener_t *params);
 void proto_destroy(protocol_t *proto);
 
 int proto_handshake(protocol_t *proto, void *buf);

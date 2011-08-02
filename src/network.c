@@ -58,6 +58,8 @@ static smartlist_t *connections;
     connections and shutdowns when the last connection is closed. */
 static int shutting_down=0;
 
+static void listener_free(listener_t *lsn);
+
 static void simple_client_listener_cb(struct evconnlistener *evcl,
    evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
 static void socks_client_listener_cb(struct evconnlistener *evcl,
@@ -135,35 +137,34 @@ create_listener(struct event_base *base, int argc, const char *const *argv)
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
   evconnlistener_cb callback;
-  listener_t *lsn;
-  protocol_params_t *params = proto_params_init(argc, argv);
-  if (!params)
+  listener_t *lsn = proto_listener_create(argc, argv);
+  if (!lsn)
     return 0;
 
-  switch (params->mode) {
+  switch (lsn->mode) {
   case LSN_SIMPLE_CLIENT: callback = simple_client_listener_cb; break;
   case LSN_SIMPLE_SERVER: callback = simple_server_listener_cb; break;
   case LSN_SOCKS_CLIENT:  callback = socks_client_listener_cb;  break;
   default: obfs_abort();
   }
-  lsn = xzalloc(sizeof(listener_t));
-  lsn->address = printable_address(params->listen_addr->ai_addr,
-                                   params->listen_addr->ai_addrlen);
-  lsn->proto_params = params;
+
+  lsn->listen_addr_str = printable_address(lsn->listen_addr->ai_addr,
+                                           lsn->listen_addr->ai_addrlen);
   lsn->listener =
     evconnlistener_new_bind(base, callback, lsn, flags, -1,
-                            params->listen_addr->ai_addr,
-                            params->listen_addr->ai_addrlen);
+                            lsn->listen_addr->ai_addr,
+                            lsn->listen_addr->ai_addrlen);
 
   if (!lsn->listener) {
-    log_warn("Failed to create listener!");
-    proto_params_free(params);
-    free(lsn);
+    log_warn("Could not begin listening on %s: %s",
+             lsn->listen_addr_str,
+             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    listener_free(lsn);
     return 0;
   }
 
   log_debug("Now listening on %s in mode %d, protocol %s.",
-            lsn->address, params->mode, params->vtable->name);
+            lsn->listen_addr_str, lsn->mode, lsn->vtable->name);
 
   /* If we don't have a listener list, create one now. */
   if (!listeners)
@@ -179,13 +180,16 @@ create_listener(struct event_base *base, int argc, const char *const *argv)
 static void
 listener_free(listener_t *lsn)
 {
-  if (lsn->address)
-    free(lsn->address);
   if (lsn->listener)
     evconnlistener_free(lsn->listener);
-  if (lsn->proto_params)
-    proto_params_free(lsn->proto_params);
-  free(lsn);
+  if (lsn->listen_addr)
+    evutil_freeaddrinfo(lsn->listen_addr);
+  if (lsn->listen_addr_str)
+    free(lsn->listen_addr_str);
+  if (lsn->target_addr)
+    evutil_freeaddrinfo(lsn->target_addr);
+
+  proto_listener_free(lsn);
 }
 
 /**
@@ -219,12 +223,12 @@ simple_client_listener_cb(struct evconnlistener *evcl,
 
   conn->peername = printable_address(sourceaddr, socklen);
   log_debug("%s: connection to %s from %s", __func__,
-            lsn->address, conn->peername);
+            lsn->listen_addr_str, conn->peername);
 
-  conn->mode = lsn->proto_params->mode;
+  conn->mode = lsn->mode;
   obfs_assert(conn->mode == LSN_SIMPLE_CLIENT);
 
-  conn->proto = proto_create(lsn->proto_params);
+  conn->proto = proto_create(lsn);
   if (!conn->proto) {
     log_warn("Creation of protocol object failed! Closing connection.");
     goto err;
@@ -253,8 +257,8 @@ simple_client_listener_cb(struct evconnlistener *evcl,
 
   /* Launch the connect attempt. */
   if (bufferevent_socket_connect(conn->downstream,
-                                 lsn->proto_params->target_addr->ai_addr,
-                                 lsn->proto_params->target_addr->ai_addrlen)<0)
+                                 lsn->target_addr->ai_addr,
+                                 lsn->target_addr->ai_addrlen)<0)
     goto err;
 
   bufferevent_enable(conn->downstream, EV_READ|EV_WRITE);
@@ -290,12 +294,12 @@ socks_client_listener_cb(struct evconnlistener *evcl,
 
   conn->peername = printable_address(sourceaddr, socklen);
   log_debug("%s: connection to %s from %s", __func__,
-            lsn->address, conn->peername);
+            lsn->listen_addr_str, conn->peername);
 
-  conn->mode = lsn->proto_params->mode;
+  conn->mode = lsn->mode;
   obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
 
-  conn->proto = proto_create(lsn->proto_params);
+  conn->proto = proto_create(lsn);
   if (!conn->proto) {
     log_warn("Creation of protocol object failed! Closing connection.");
     goto err;
@@ -348,12 +352,12 @@ simple_server_listener_cb(struct evconnlistener *evcl,
 
   conn->peername = printable_address(sourceaddr, socklen);
   log_debug("%s: connection to %s from %s", __func__,
-            lsn->address, conn->peername);
+            lsn->listen_addr_str, conn->peername);
 
-  conn->mode = lsn->proto_params->mode;
+  conn->mode = lsn->mode;
   obfs_assert(conn->mode == LSN_SIMPLE_SERVER);
 
-  conn->proto = proto_create(lsn->proto_params);
+  conn->proto = proto_create(lsn);
   if (!conn->proto) {
     log_warn("Creation of protocol object failed! Closing connection.");
     goto err;
@@ -382,8 +386,8 @@ simple_server_listener_cb(struct evconnlistener *evcl,
 
   /* Launch the connect attempt. */
   if (bufferevent_socket_connect(conn->upstream,
-                                 lsn->proto_params->target_addr->ai_addr,
-                                 lsn->proto_params->target_addr->ai_addrlen)<0)
+                                 lsn->target_addr->ai_addr,
+                                 lsn->target_addr->ai_addrlen) < 0)
     goto err;
 
   bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);

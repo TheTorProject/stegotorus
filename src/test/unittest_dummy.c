@@ -12,7 +12,7 @@ static void
 test_dummy_option_parsing(void *unused)
 {
   struct option_parsing_case {
-    protocol_params_t *result;
+    listener_t *result;
     short should_succeed;
     short n_opts;
     const char *const opts[4];
@@ -45,7 +45,7 @@ test_dummy_option_parsing(void *unused)
 
   struct option_parsing_case *c;
   for (c = cases; c->n_opts; c++) {
-    c->result = proto_params_init(c->n_opts, c->opts);
+    c->result = proto_listener_create(c->n_opts, c->opts);
     if (c->should_succeed)
       tt_ptr_op(c->result, !=, NULL);
     else
@@ -55,7 +55,7 @@ test_dummy_option_parsing(void *unused)
  end:
   for (c = cases; c->n_opts; c++)
     if (c->result)
-      proto_params_free(c->result);
+      proto_listener_free(c->result);
 
   /* Unsuspend logging */
   log_set_method(LOG_METHOD_STDERR, NULL);
@@ -64,8 +64,8 @@ test_dummy_option_parsing(void *unused)
 /* All the tests below use this test environment: */
 struct test_dummy_state
 {
-  protocol_params_t *proto_params_client;
-  protocol_params_t *proto_params_server;
+  listener_t *proto_lsn_client;
+  listener_t *proto_lsn_server;
   protocol_t *client_proto;
   protocol_t *server_proto;
   struct evbuffer *output_buffer;
@@ -82,10 +82,10 @@ cleanup_dummy_state(const struct testcase_t *unused, void *state)
   if (s->server_proto)
       proto_destroy(s->server_proto);
 
-  if (s->proto_params_client)
-    proto_params_free(s->proto_params_client);
-  if (s->proto_params_server)
-    proto_params_free(s->proto_params_server);
+  if (s->proto_lsn_client)
+    proto_listener_free(s->proto_lsn_client);
+  if (s->proto_lsn_server)
+    proto_listener_free(s->proto_lsn_server);
 
   if (s->output_buffer)
     evbuffer_free(s->output_buffer);
@@ -109,18 +109,18 @@ setup_dummy_state(const struct testcase_t *unused)
 {
   struct test_dummy_state *s = xzalloc(sizeof(struct test_dummy_state));
 
-  s->proto_params_client =
-    proto_params_init(ALEN(options_client), options_client);
-  tt_assert(s->proto_params_client);
+  s->proto_lsn_client =
+    proto_listener_create(ALEN(options_client), options_client);
+  tt_assert(s->proto_lsn_client);
 
-  s->proto_params_server =
-    proto_params_init(ALEN(options_server), options_server);
-  tt_assert(s->proto_params_server);
+  s->proto_lsn_server =
+    proto_listener_create(ALEN(options_server), options_server);
+  tt_assert(s->proto_lsn_server);
 
-  s->client_proto = proto_create(s->proto_params_client);
+  s->client_proto = proto_create(s->proto_lsn_client);
   tt_assert(s->client_proto);
 
-  s->server_proto = proto_create(s->proto_params_server);
+  s->server_proto = proto_create(s->proto_lsn_server);
   tt_assert(s->server_proto);
 
   s->output_buffer = evbuffer_new();

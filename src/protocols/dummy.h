@@ -14,6 +14,7 @@ extern const protocol_vtable dummy_vtable;
    ==========
 */
 
+#include "../network.h"
 #include "../protocol.h"
 
 /* Dummy presently needs no extensions to the generic protocol
@@ -21,9 +22,9 @@ extern const protocol_vtable dummy_vtable;
    because, if you're using dummy as a template, you probably will
    want to extend the generic structures. */
 
-typedef struct dummy_params_t {
-  protocol_params_t super;
-} dummy_params_t;
+typedef struct dummy_listener_t {
+  listener_t super;
+} dummy_listener_t;
 
 typedef struct dummy_protocol_t {
   protocol_t super;

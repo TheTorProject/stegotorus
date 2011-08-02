@@ -11,13 +11,25 @@ void free_all_listeners(void);
 
 void start_shutdown(int barbaric);
 
-#ifdef NETWORK_PRIVATE
+/**
+  This struct defines the state of a listener on a particular address.
+  Each protocol may extend this structure with additional private data
+  by embedding it as the first member of a larger structure (standard
+  fake-inheritance-in-C technique).  The protocol's listener_create()
+  method is responsible for filling in the |vtable|, |listen_addr|,
+  |target_addr|, and |mode| fields of this structure, but should leave
+  the |listener| and |listen_addr_str| fields alone.
+ */
+struct listener_t {
+  const protocol_vtable  *vtable;
+  struct evconnlistener  *listener;
+  struct evutil_addrinfo *listen_addr;
+  char                   *listen_addr_str;
+  struct evutil_addrinfo *target_addr;
+  enum listen_mode        mode;
+};
 
-typedef struct listener_t {
-  char *address;
-  protocol_params_t *proto_params;
-  struct evconnlistener *listener;
-} listener_t;
+#ifdef NETWORK_PRIVATE
 
 typedef struct conn_t {
   char *peername;
