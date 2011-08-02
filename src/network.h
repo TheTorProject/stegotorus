@@ -29,19 +29,24 @@ struct listener_t {
   enum listen_mode        mode;
 };
 
-#ifdef NETWORK_PRIVATE
-
-typedef struct conn_t {
-  char *peername;
-  protocol_t *proto;
-  socks_state_t *socks_state;
-  struct bufferevent *upstream;
-  struct bufferevent *downstream;
-  unsigned int mode : 30;
-  unsigned int flushing : 1;
-  unsigned int is_open : 1;
-} conn_t;
-
-#endif
+/**
+   This struct defines the state of a connection between "upstream"
+   and "downstream" peers (it's really two connections at the socket
+   level).  Again, each protocol may extend this structure with
+   additional private data by embedding it as the first member of a
+   larger structure.  The protocol's conn_create() method is responsible
+   only for filling in the |vtable| field of this structure, plus any
+   private data of course.
+ */
+struct conn_t {
+  const protocol_vtable *vtable;
+  char                  *peername;
+  socks_state_t         *socks_state;
+  struct bufferevent    *upstream;
+  struct bufferevent    *downstream;
+  enum listen_mode       mode     : 30;
+  unsigned int           flushing : 1;
+  unsigned int           is_open  : 1;
+};
 
 #endif

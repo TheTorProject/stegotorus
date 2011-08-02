@@ -26,9 +26,9 @@ typedef struct dummy_listener_t {
   listener_t super;
 } dummy_listener_t;
 
-typedef struct dummy_protocol_t {
-  protocol_t super;
-} dummy_protocol_t;
+typedef struct dummy_conn_t {
+  conn_t super;
+} dummy_conn_t;
 
 #endif
 

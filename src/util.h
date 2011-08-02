@@ -62,8 +62,8 @@ unsigned int ui64_log2(uint64_t u64);
 
 /***** Network types and functions. *****/
 
+typedef struct conn_t conn_t;
 typedef struct listener_t listener_t;
-typedef struct protocol_t protocol_t;
 typedef struct protocol_vtable protocol_vtable;
 typedef struct socks_state_t socks_state_t;
 

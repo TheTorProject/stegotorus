@@ -4,7 +4,6 @@
 
 #include "util.h"
 
-#define NETWORK_PRIVATE
 #include "network.h"
 
 #include "container.h"
@@ -217,9 +216,14 @@ simple_client_listener_cb(struct evconnlistener *evcl,
                           evutil_socket_t fd, struct sockaddr *sourceaddr,
                           int socklen, void *arg)
 {
-  listener_t *lsn = arg;
   struct event_base *base;
-  conn_t *conn = xzalloc(sizeof(conn_t));
+  listener_t *lsn = arg;
+  conn_t *conn = proto_conn_create(lsn);
+  if (!conn) {
+    log_warn("Failed to create state object for new connection to %s",
+             lsn->listen_addr_str);
+    goto err;
+  }
 
   conn->peername = printable_address(sourceaddr, socklen);
   log_debug("%s: connection to %s from %s", __func__,
@@ -227,12 +231,6 @@ simple_client_listener_cb(struct evconnlistener *evcl,
 
   conn->mode = lsn->mode;
   obfs_assert(conn->mode == LSN_SIMPLE_CLIENT);
-
-  conn->proto = proto_create(lsn);
-  if (!conn->proto) {
-    log_warn("Creation of protocol object failed! Closing connection.");
-    goto err;
-  }
 
   /* New bufferevent to wrap socket we received. */
   base = evconnlistener_get_base(lsn->listener);
@@ -288,9 +286,14 @@ socks_client_listener_cb(struct evconnlistener *evcl,
                          evutil_socket_t fd, struct sockaddr *sourceaddr,
                          int socklen, void *arg)
 {
-  listener_t *lsn = arg;
   struct event_base *base;
-  conn_t *conn = xzalloc(sizeof(conn_t));
+  listener_t *lsn = arg;
+  conn_t *conn = proto_conn_create(lsn);
+  if (!conn) {
+    log_warn("Failed to create state object for new connection to %s",
+             lsn->listen_addr_str);
+    goto err;
+  }
 
   conn->peername = printable_address(sourceaddr, socklen);
   log_debug("%s: connection to %s from %s", __func__,
@@ -298,12 +301,6 @@ socks_client_listener_cb(struct evconnlistener *evcl,
 
   conn->mode = lsn->mode;
   obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
-
-  conn->proto = proto_create(lsn);
-  if (!conn->proto) {
-    log_warn("Creation of protocol object failed! Closing connection.");
-    goto err;
-  }
 
   /* Construct SOCKS state. */
   conn->socks_state = socks_state_new();
@@ -346,9 +343,14 @@ simple_server_listener_cb(struct evconnlistener *evcl,
                           evutil_socket_t fd, struct sockaddr *sourceaddr,
                           int socklen, void *arg)
 {
-  listener_t *lsn = arg;
   struct event_base *base;
-  conn_t *conn = xzalloc(sizeof(conn_t));
+  listener_t *lsn = arg;
+  conn_t *conn = proto_conn_create(lsn);
+  if (!conn) {
+    log_warn("Failed to create state object for new connection to %s",
+             lsn->listen_addr_str);
+    goto err;
+  }
 
   conn->peername = printable_address(sourceaddr, socklen);
   log_debug("%s: connection to %s from %s", __func__,
@@ -356,12 +358,6 @@ simple_server_listener_cb(struct evconnlistener *evcl,
 
   conn->mode = lsn->mode;
   obfs_assert(conn->mode == LSN_SIMPLE_SERVER);
-
-  conn->proto = proto_create(lsn);
-  if (!conn->proto) {
-    log_warn("Creation of protocol object failed! Closing connection.");
-    goto err;
-  }
 
   /* New bufferevent to wrap socket we received. */
   base = evconnlistener_get_base(lsn->listener);
@@ -416,8 +412,6 @@ conn_free(conn_t *conn)
 {
   if (conn->peername)
     free(conn->peername);
-  if (conn->proto)
-    proto_destroy(conn->proto);
   if (conn->socks_state)
     socks_state_free(conn->socks_state);
   if (conn->upstream)
@@ -425,8 +419,7 @@ conn_free(conn_t *conn)
   if (conn->downstream)
     bufferevent_free(conn->downstream);
 
-  memset(conn, 0x99, sizeof(conn_t));
-  free(conn);
+  proto_conn_free(conn);
 }
 
 /**
@@ -546,7 +539,7 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
   obfs_assert(bev == conn->upstream);
 
-  if (proto_send(conn->proto,
+  if (proto_send(conn,
                  bufferevent_get_input(conn->upstream),
                  bufferevent_get_output(conn->downstream)) < 0) {
     log_debug("%s: Error during transmit.", conn->peername);
@@ -568,7 +561,7 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
   obfs_assert(bev == conn->downstream);
 
-  r = proto_recv(conn->proto,
+  r = proto_recv(conn,
                  bufferevent_get_input(conn->downstream),
                  bufferevent_get_output(conn->upstream));
 
@@ -579,7 +572,7 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
     log_debug("%s: Reply of %lu bytes", conn->peername,
               (unsigned long)
               evbuffer_get_length(bufferevent_get_input(conn->upstream)));
-    if (proto_send(conn->proto,
+    if (proto_send(conn,
                    bufferevent_get_input(conn->upstream),
                    bufferevent_get_output(conn->downstream)) < 0) {
       log_debug("%s: Error during reply.", conn->peername);
@@ -708,7 +701,7 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
               bev == conn->upstream ? "upstream" : "downstream");
 
     /* Queue handshake, if any. */
-    if (proto_handshake(conn->proto,
+    if (proto_handshake(conn,
                         bufferevent_get_output(conn->downstream))<0) {
       log_debug("%s: Error during handshake", conn->peername);
       close_conn(conn);
@@ -791,7 +784,7 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
     bufferevent_enable(conn->upstream, EV_READ|EV_WRITE);
 
     /* Queue handshake, if any. */
-    if (proto_handshake(conn->proto,
+    if (proto_handshake(conn,
                         bufferevent_get_output(conn->downstream))<0) {
       log_debug("%s: Error during handshake", conn->peername);
       close_conn(conn);

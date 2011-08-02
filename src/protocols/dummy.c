@@ -16,10 +16,10 @@ downcast_listener(listener_t *p)
   return DOWNCAST(dummy_listener_t, super, p);
 }
 
-static inline dummy_protocol_t *
-downcast_protocol(protocol_t *p)
+static inline dummy_conn_t *
+downcast_conn(conn_t *p)
 {
-  return DOWNCAST(dummy_protocol_t, super, p);
+  return DOWNCAST(dummy_conn_t, super, p);
 }
 
 static int parse_and_set_options(int n_options,
@@ -112,36 +112,36 @@ dummy_listener_free(listener_t *lsn)
   protocol.
 */
 
-static protocol_t *
-dummy_create(listener_t *lsn)
+static conn_t *
+dummy_conn_create(listener_t *lsn)
 {
-  dummy_protocol_t *proto = xzalloc(sizeof(dummy_protocol_t));
+  dummy_conn_t *proto = xzalloc(sizeof(dummy_conn_t));
   proto->super.vtable = &dummy_vtable;
   return &proto->super;
 }
 
 static void
-dummy_destroy(protocol_t *proto)
+dummy_conn_free(conn_t *proto)
 {
-  free(downcast_protocol(proto));
+  free(downcast_conn(proto));
 }
 
 /** Dummy has no handshake */
 static int
-dummy_handshake(protocol_t *proto, struct evbuffer *buf)
+dummy_handshake(conn_t *proto, struct evbuffer *buf)
 {
   return 0;
 }
 
 /** send, receive - just copy */
 static int
-dummy_send(protocol_t *proto, struct evbuffer *source, struct evbuffer *dest)
+dummy_send(conn_t *proto, struct evbuffer *source, struct evbuffer *dest)
 {
   return evbuffer_add_buffer(dest,source);
 }
 
 static enum recv_ret
-dummy_recv(protocol_t *proto, struct evbuffer *source, struct evbuffer *dest)
+dummy_recv(conn_t *proto, struct evbuffer *source, struct evbuffer *dest)
 {
   if (evbuffer_add_buffer(dest,source)<0)
     return RECV_BAD;

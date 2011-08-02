@@ -64,10 +64,10 @@ test_dummy_option_parsing(void *unused)
 /* All the tests below use this test environment: */
 struct test_dummy_state
 {
-  listener_t *proto_lsn_client;
-  listener_t *proto_lsn_server;
-  protocol_t *client_proto;
-  protocol_t *server_proto;
+  listener_t *lsn_client;
+  listener_t *lsn_server;
+  conn_t *conn_client;
+  conn_t *conn_server;
   struct evbuffer *output_buffer;
   struct evbuffer *dummy_buffer;
 };
@@ -77,15 +77,15 @@ cleanup_dummy_state(const struct testcase_t *unused, void *state)
 {
   struct test_dummy_state *s = (struct test_dummy_state *)state;
 
-  if (s->client_proto)
-      proto_destroy(s->client_proto);
-  if (s->server_proto)
-      proto_destroy(s->server_proto);
+  if (s->conn_client)
+      proto_conn_free(s->conn_client);
+  if (s->conn_server)
+      proto_conn_free(s->conn_server);
 
-  if (s->proto_lsn_client)
-    proto_listener_free(s->proto_lsn_client);
-  if (s->proto_lsn_server)
-    proto_listener_free(s->proto_lsn_server);
+  if (s->lsn_client)
+    proto_listener_free(s->lsn_client);
+  if (s->lsn_server)
+    proto_listener_free(s->lsn_server);
 
   if (s->output_buffer)
     evbuffer_free(s->output_buffer);
@@ -109,19 +109,19 @@ setup_dummy_state(const struct testcase_t *unused)
 {
   struct test_dummy_state *s = xzalloc(sizeof(struct test_dummy_state));
 
-  s->proto_lsn_client =
+  s->lsn_client =
     proto_listener_create(ALEN(options_client), options_client);
-  tt_assert(s->proto_lsn_client);
+  tt_assert(s->lsn_client);
 
-  s->proto_lsn_server =
+  s->lsn_server =
     proto_listener_create(ALEN(options_server), options_server);
-  tt_assert(s->proto_lsn_server);
+  tt_assert(s->lsn_server);
 
-  s->client_proto = proto_create(s->proto_lsn_client);
-  tt_assert(s->client_proto);
+  s->conn_client = proto_conn_create(s->lsn_client);
+  tt_assert(s->conn_client);
 
-  s->server_proto = proto_create(s->proto_lsn_server);
-  tt_assert(s->server_proto);
+  s->conn_server = proto_conn_create(s->lsn_server);
+  tt_assert(s->conn_server);
 
   s->output_buffer = evbuffer_new();
   tt_assert(s->output_buffer);
@@ -148,13 +148,13 @@ test_dummy_transfer(void *state)
 
   /* Call the handshake method to satisfy the high-level contract,
      even though dummy doesn't use a handshake */
-  tt_int_op(proto_handshake(s->client_proto, s->output_buffer), >=, 0);
+  tt_int_op(proto_handshake(s->conn_client, s->output_buffer), >=, 0);
 
   /* That should have put nothing into the output buffer */
   tt_int_op(evbuffer_get_length(s->output_buffer), ==, 0);
 
   /* Ditto on the server side */
-  tt_int_op(proto_handshake(s->server_proto, s->output_buffer), >=, 0);
+  tt_int_op(proto_handshake(s->conn_server, s->output_buffer), >=, 0);
   tt_int_op(evbuffer_get_length(s->output_buffer), ==, 0);
 
   const char *msg1 = "this is a 54-byte message passed from client to server";
@@ -162,9 +162,9 @@ test_dummy_transfer(void *state)
 
   /* client -> server */
   evbuffer_add(s->dummy_buffer, msg1, 54);
-  proto_send(s->client_proto, s->dummy_buffer, s->output_buffer);
+  proto_send(s->conn_client, s->dummy_buffer, s->output_buffer);
 
-  tt_assert(RECV_GOOD == proto_recv(s->server_proto, s->output_buffer,
+  tt_assert(RECV_GOOD == proto_recv(s->conn_server, s->output_buffer,
                                     s->dummy_buffer));
 
   n = evbuffer_peek(s->dummy_buffer, -1, NULL, &v[0], 2);
@@ -177,10 +177,10 @@ test_dummy_transfer(void *state)
 
   /* client <- server */
   evbuffer_add(s->dummy_buffer, msg2, 55);
-  tt_int_op(0, <=, proto_send(s->server_proto, s->dummy_buffer,
+  tt_int_op(0, <=, proto_send(s->conn_server, s->dummy_buffer,
                               s->output_buffer));
 
-  tt_assert(RECV_GOOD == proto_recv(s->client_proto, s->output_buffer,
+  tt_assert(RECV_GOOD == proto_recv(s->conn_client, s->output_buffer,
                                     s->dummy_buffer));
 
   n = evbuffer_peek(s->dummy_buffer, -1, NULL, &v[1], 2);

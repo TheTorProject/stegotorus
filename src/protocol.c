@@ -56,13 +56,13 @@ proto_listener_free(listener_t *lsn)
 
    Return a 'protocol_t' if successful, NULL otherwise.
 */
-protocol_t *
-proto_create(listener_t *lsn)
+conn_t *
+proto_conn_create(listener_t *lsn)
 {
   obfs_assert(lsn);
   obfs_assert(lsn->vtable);
-  obfs_assert(lsn->vtable->create);
-  return lsn->vtable->create(lsn);
+  obfs_assert(lsn->vtable->conn_create);
+  return lsn->vtable->conn_create(lsn);
 }
 
 /**
@@ -70,43 +70,43 @@ proto_create(listener_t *lsn)
    Not all protocols have a handshake.
 */
 int
-proto_handshake(protocol_t *proto, void *buf) {
-  obfs_assert(proto);
-  obfs_assert(proto->vtable);
-  obfs_assert(proto->vtable->handshake);
-  return proto->vtable->handshake(proto, buf);
+proto_handshake(conn_t *conn, void *buf) {
+  obfs_assert(conn);
+  obfs_assert(conn->vtable);
+  obfs_assert(conn->vtable->handshake);
+  return conn->vtable->handshake(conn, buf);
 }
 
 /**
    This function is responsible for sending protocol data.
 */
 int
-proto_send(protocol_t *proto, void *source, void *dest) {
-  obfs_assert(proto);
-  obfs_assert(proto->vtable);
-  obfs_assert(proto->vtable->send);
-  return proto->vtable->send(proto, source, dest);
+proto_send(conn_t *conn, void *source, void *dest) {
+  obfs_assert(conn);
+  obfs_assert(conn->vtable);
+  obfs_assert(conn->vtable->send);
+  return conn->vtable->send(conn, source, dest);
 }
 
 /**
    This function is responsible for receiving protocol data.
 */
 enum recv_ret
-proto_recv(protocol_t *proto, void *source, void *dest) {
-  obfs_assert(proto);
-  obfs_assert(proto->vtable);
-  obfs_assert(proto->vtable->recv);
-  return proto->vtable->recv(proto, source, dest);
+proto_recv(conn_t *conn, void *source, void *dest) {
+  obfs_assert(conn);
+  obfs_assert(conn->vtable);
+  obfs_assert(conn->vtable->recv);
+  return conn->vtable->recv(conn, source, dest);
 }
 
 /**
-   This function destroys 'proto'.
+   This function destroys 'conn'.
    It's called everytime we close a connection.
 */
 void
-proto_destroy(protocol_t *proto) {
-  obfs_assert(proto);
-  obfs_assert(proto->vtable);
-  obfs_assert(proto->vtable->destroy);
-  proto->vtable->destroy(proto);
+proto_conn_free(conn_t *conn) {
+  obfs_assert(conn);
+  obfs_assert(conn->vtable);
+  obfs_assert(conn->vtable->conn_free);
+  conn->vtable->conn_free(conn);
 }

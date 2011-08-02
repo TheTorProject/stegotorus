@@ -6,16 +6,6 @@
 #define PROTOCOL_H
 
 /**
-   This struct defines the protocol-specific state for a particular
-   connection.  Again, each protocol may extend this structure with
-   additional private data by embedding it as the first member of a
-   larger structure.
- */
-struct protocol_t {
-  const protocol_vtable *vtable;
-};
-
-/**
    This struct defines a protocol and its methods; note that not all
    of them are methods on the same object in the C++ sense.
 
@@ -40,22 +30,22 @@ struct protocol_vtable
       by generic code.  */
   void (*listener_free)(listener_t *params);
 
-  /** Constructor: Allocates per-connection, protocol-specific state. */
-  protocol_t *(*create)(listener_t *params);
+  /** Allocate per-connection, protocol-specific state. */
+  conn_t *(*conn_create)(listener_t *params);
 
-  /** Destructor: Destroys per-connection, protocol-specific state.  */
-  void (*destroy)(protocol_t *state);
+  /** Destroy per-connection, protocol-specific state.  */
+  void (*conn_free)(conn_t *state);
 
   /** Perform a connection handshake. Not all protocols have a handshake. */
-  int (*handshake)(protocol_t *state, struct evbuffer *buf);
+  int (*handshake)(conn_t *state, struct evbuffer *buf);
 
   /** Send data coming downstream from 'source' along to 'dest'. */
-  int (*send)(protocol_t *state,
+  int (*send)(conn_t *state,
               struct evbuffer *source,
               struct evbuffer *dest);
 
   /** Receive data from 'source' and pass it upstream to 'dest'. */
-  enum recv_ret (*recv)(protocol_t *state,
+  enum recv_ret (*recv)(conn_t *state,
                         struct evbuffer *source,
                         struct evbuffer *dest);
 
@@ -71,19 +61,20 @@ struct protocol_vtable
     #name,                                      \
     name##_listener_create,                     \
     name##_listener_free,                       \
-    name##_create, name##_destroy,              \
+    name##_conn_create,                         \
+    name##_conn_free,                           \
     name##_handshake, name##_send, name##_recv  \
   }
 
 listener_t *proto_listener_create(int n_options, const char *const *options);
-void proto_listener_free(listener_t *params);
+void proto_listener_free(listener_t *lsn);
 
-protocol_t *proto_create(listener_t *params);
-void proto_destroy(protocol_t *proto);
+conn_t *proto_conn_create(listener_t *lsn);
+void proto_conn_free(conn_t *conn);
 
-int proto_handshake(protocol_t *proto, void *buf);
-int proto_send(protocol_t *proto, void *source, void *dest);
-enum recv_ret proto_recv(protocol_t *proto, void *source, void *dest);
+int proto_handshake(conn_t *conn, void *buf);
+int proto_send(conn_t *conn, void *source, void *dest);
+enum recv_ret proto_recv(conn_t *conn, void *source, void *dest);
 
 extern const protocol_vtable *const supported_protocols[];
 extern const size_t n_supported_protocols;
