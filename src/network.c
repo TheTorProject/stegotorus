@@ -82,7 +82,9 @@ static void conn_free(conn_t *conn);
 static void conn_free_all(void);
 static void conn_free_on_flush(struct bufferevent *bev, void *arg);
 
-static int circuit_create(conn_t *upstream, conn_t *downstream);
+static int circuit_create(conn_t *up, conn_t *down);
+static void circuit_create_socks(conn_t *up);
+static int circuit_add_down(circuit_t *circuit, conn_t *down);
 static void circuit_free(circuit_t *circuit);
 static conn_t *open_outbound(conn_t *conn, bufferevent_data_cb readcb);
 
@@ -293,7 +295,7 @@ socks_client_listener_cb(conn_t *conn)
   obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
   log_debug("%s: socks client connection", conn->peername);
 
-  conn->socks_state = socks_state_new();
+  circuit_create_socks(conn);
 
   bufferevent_setcb(conn->buffer, socks_read_cb, NULL, error_cb, conn);
   bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
@@ -341,8 +343,6 @@ conn_free(conn_t *conn)
     }
     if (conn->peername)
       free(conn->peername);
-    if (conn->socks_state)
-      socks_state_free(conn->socks_state);
     if (conn->buffer)
       bufferevent_free(conn->buffer);
     proto_conn_free(conn);
@@ -386,13 +386,38 @@ circuit_create(conn_t *up, conn_t *down)
 }
 
 static void
+circuit_create_socks(conn_t *up)
+{
+  obfs_assert(up);
+
+  circuit_t *r = xzalloc(sizeof(circuit_t));
+  r->upstream = up;
+  r->socks_state = socks_state_new();
+  up->circuit = r;
+}
+
+static int
+circuit_add_down(circuit_t *circuit, conn_t *down)
+{
+  if (!down)
+    return -1;
+  circuit->downstream = down;
+  down->circuit = circuit;
+  return 0;
+}
+
+static void
 circuit_free(circuit_t *circuit)
 {
   /* break the circular references before deallocating each side */
   circuit->upstream->circuit = NULL;
-  circuit->downstream->circuit = NULL;
   conn_free(circuit->upstream);
-  conn_free(circuit->downstream);
+  if (circuit->downstream) {
+    circuit->downstream->circuit = NULL;
+    conn_free(circuit->downstream);
+  }
+  if (circuit->socks_state)
+    socks_state_free(circuit->socks_state);
   free(circuit);
 }
 
@@ -504,22 +529,28 @@ static void
 socks_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
+  socks_state_t *socks;
   enum socks_ret socks_ret;
+
   log_debug("%s: %s", conn->peername, __func__);
+  obfs_assert(conn->circuit);
+  obfs_assert(conn->circuit->socks_state);
+  socks = conn->circuit->socks_state;
 
   do {
-    enum socks_status_t status = socks_state_get_status(conn->socks_state);
+    enum socks_status_t status = socks_state_get_status(socks);
     if (status == ST_SENT_REPLY) {
       /* We shouldn't be here. */
       obfs_abort();
     } else if (status == ST_HAVE_ADDR) {
       int af, r, port;
       const char *addr=NULL;
-      r = socks_state_get_address(conn->socks_state, &af, &addr, &port);
+      r = socks_state_get_address(socks, &af, &addr, &port);
       obfs_assert(r==0);
       log_info("%s: socks: trying to connect to %s:%u",
                conn->peername, addr, port);
-      if (circuit_create(conn, open_outbound_hostname(conn, af, addr, port))) {
+      if (circuit_add_down(conn->circuit,
+                           open_outbound_hostname(conn, af, addr, port))) {
         /* XXXX send socks reply */
         conn_free(conn);
         return;
@@ -532,7 +563,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 
     socks_ret = handle_socks(bufferevent_get_input(bev),
                              bufferevent_get_output(bev),
-                             conn->socks_state);
+                             socks);
   } while (socks_ret == SOCKS_GOOD);
 
   if (socks_ret == SOCKS_INCOMPLETE)
@@ -542,7 +573,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   else if (socks_ret == SOCKS_CMD_NOT_CONNECT) {
     bufferevent_enable(bev, EV_WRITE);
     bufferevent_disable(bev, EV_READ);
-    socks5_send_reply(bufferevent_get_output(bev), conn->socks_state,
+    socks5_send_reply(bufferevent_get_output(bev), socks,
                       SOCKS5_FAILED_UNSUPPORTED);
     bufferevent_setcb(bev, NULL,
                       conn_free_on_flush, flush_error_cb, conn);
@@ -564,10 +595,10 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
   obfs_assert(up->buffer == bev);
-  obfs_assert(!up->flushing);
-  obfs_assert(up->is_open);
   obfs_assert(up->circuit);
   obfs_assert(up->circuit->downstream);
+  obfs_assert(up->circuit->is_open);
+  obfs_assert(!up->circuit->is_flushing);
 
   down = up->circuit->downstream;
   if (proto_send(up,
@@ -597,10 +628,10 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
   obfs_assert(down->buffer == bev);
-  obfs_assert(!down->flushing);
-  obfs_assert(down->is_open);
   obfs_assert(down->circuit);
   obfs_assert(down->circuit->upstream);
+  obfs_assert(down->circuit->is_open);
+  obfs_assert(!down->circuit->is_flushing);
   up = down->circuit->upstream;
 
 
@@ -644,7 +675,8 @@ error_or_eof(conn_t *conn)
   struct bufferevent *bev_flush;
 
   log_debug("%s for %s", __func__, conn->peername);
-  if (!circ || conn->flushing || !conn->is_open) {
+  if (!circ || !circ->upstream || !circ->downstream || !circ->is_open
+      || circ->is_flushing) {
     conn_free(conn);
     return;
   }
@@ -656,9 +688,7 @@ error_or_eof(conn_t *conn)
     return;
   }
 
-  /* XXX move ->flushing and ->is_open to circuit_t */
-  circ->upstream->flushing = 1;
-  circ->downstream->flushing = 1;
+  circ->is_flushing = 1;
 
   /* Stop reading and writing; wait for the other side to flush if it has
    * data. */
@@ -717,7 +747,8 @@ flush_error_cb(struct bufferevent *bev, short what, void *arg)
   obfs_assert(what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT));
   obfs_assert(!(what & BEV_EVENT_CONNECTED));
 
-  obfs_assert(conn->flushing);
+  obfs_assert(conn->circuit);
+  obfs_assert(conn->circuit->is_flushing);
 
   log_warn("Error during flush of connection with %s: %s",
            conn->peername,
@@ -743,11 +774,9 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
   if (what & BEV_EVENT_CONNECTED) {
     circuit_t *circ = conn->circuit;
     obfs_assert(circ);
-    obfs_assert(!circ->upstream->flushing);
-    obfs_assert(!circ->downstream->flushing);
+    obfs_assert(!circ->is_flushing);
 
-    circ->upstream->is_open = 1;
-    circ->downstream->is_open = 1;
+    circ->is_open = 1;
 
     log_debug("%s: Successful connection", conn->peername);
 
@@ -790,11 +819,11 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
 
   obfs_assert(circ);
   obfs_assert(circ->upstream);
-  obfs_assert(circ->upstream->socks_state);
+  obfs_assert(circ->socks_state);
   obfs_assert(circ->downstream == down);
 
   up = circ->upstream;
-  socks = circ->upstream->socks_state;
+  socks = circ->socks_state;
 
   /* If we got an error while in the ST_HAVE_ADDR state, chances are
      that we failed connecting to the host requested by the CONNECT
@@ -820,8 +849,7 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
     struct sockaddr *sa = (struct sockaddr*)&ss;
     socklen_t slen = sizeof(&ss);
 
-    obfs_assert(!up->flushing);
-    obfs_assert(!down->flushing);
+    obfs_assert(!circ->is_flushing);
 
     /* Figure out where we actually connected to, and tell the socks client */
     if (getpeername(bufferevent_getfd(bev), sa, &slen) == 0) {
@@ -833,9 +861,8 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
 
     /* Switch to regular upstream behavior. */
     socks_state_free(socks);
-    up->socks_state = NULL;
-    up->is_open = 1;
-    down->is_open = 1;
+    circ->socks_state = NULL;
+    circ->is_open = 1;
     log_debug("%s: Successful outbound connection to %s",
               up->peername, down->peername);
 

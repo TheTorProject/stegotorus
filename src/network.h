@@ -26,23 +26,36 @@ void start_shutdown(int barbaric);
 struct conn_t {
   config_t           *cfg;
   char               *peername;
-  socks_state_t      *socks_state;
   circuit_t          *circuit;
   struct bufferevent *buffer;
-  enum listen_mode    mode     : 30;
-  unsigned int        flushing : 1;
-  unsigned int        is_open  : 1;
+  enum listen_mode    mode;
 };
 
 /**
-   This struct defines a pair of established connections.  The "upstream"
-   connection is to the higher-level client or server that we are proxying
-   traffic for.  The "downstream" connection is to the remote peer.
+   This struct defines a pair of established connections.
+
+   The "upstream" connection is to the higher-level client or server
+   that we are proxying traffic for.  The "downstream" connection is
+   to the remote peer.  Circuits always have an upstream connection,
+   and normally also have a downstream connection; however, a circuit
+   that's waiting for SOCKS directives from its upstream will have a
+   non-null socks_state field instead.
+
+   A circuit is "open" if both its upstream and downstream connections
+   have been established (not just if both conn_t objects exist).
+   It is "flushing" if one of the two connections has hit either EOF
+   or an error, and we are clearing out the other side's pending
+   transmissions before closing it.  Both of these flags are used
+   near-exclusively for assertion checks; the actual behavior is
+   controlled by changing bufferevent callbacks on the connections.
  */
 
 struct circuit_t {
   conn_t             *upstream;
   conn_t             *downstream;
+  socks_state_t      *socks_state;
+  unsigned int        is_open : 1;
+  unsigned int        is_flushing : 1;
 };
 
 #endif
