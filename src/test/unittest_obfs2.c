@@ -2,13 +2,13 @@
    See LICENSE for other credits and copying information
 */
 
-#include "../util.h"
+#include "util.h"
 #include "tinytest_macros.h"
 
 #define PROTOCOL_OBFS2_PRIVATE
 #define CRYPT_PRIVATE
-#include "../protocols/obfs2.h"
-#include "../crypt.h"
+#include "protocols/obfs2.h"
+#include "crypt.h"
 
 #include <event2/buffer.h>
 

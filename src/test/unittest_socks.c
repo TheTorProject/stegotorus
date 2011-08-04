@@ -2,12 +2,12 @@
    See LICENSE for other credits and copying information
 */
 
-#include "../util.h"
+#include "util.h"
 #include "tinytest_macros.h"
 
 #define SOCKS_PRIVATE
-#include "../socks.h"
-#include "../crypt.h"
+#include "socks.h"
+#include "crypt.h"
 
 #include <event2/buffer.h>
 

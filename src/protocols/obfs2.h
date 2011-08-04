@@ -9,8 +9,8 @@ extern const protocol_vtable obfs2_vtable;
 
 #ifdef PROTOCOL_OBFS2_PRIVATE
 
-#include "../crypt.h"
-#include "../protocol.h"
+#include "crypt.h"
+#include "protocol.h"
 
 /* ==========
    These definitions are not part of the obfs2_protocol interface.

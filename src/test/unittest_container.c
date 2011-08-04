@@ -3,11 +3,11 @@
  * Copyright (c) 2007-2011, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
-#include "../util.h"
+#include "util.h"
 #include "tinytest_macros.h"
 
-#include "../container.h"
-#include "../crypt.h"
+#include "container.h"
+#include "crypt.h"
 
 /** Helper: return a tristate based on comparing the strings in *<b>a</b> and
  * *<b>b</b>. */
