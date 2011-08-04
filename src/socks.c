@@ -317,12 +317,6 @@ socks5_handle_negotiation(struct evbuffer *source,
 
   evbuffer_drain(source, 1);
 
-  /* this should be impossible, but we check it anyway for great defensiveness */
-  if (nmethods > 0xFF) {
-    log_warn("too many methods!");
-    return SOCKS_BROKEN;
-  }
-
   if (evbuffer_remove(source, methods, nmethods) < 0)
     obfs_abort();
 

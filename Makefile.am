@@ -1,6 +1,7 @@
 
 ACLOCAL_AMFLAGS = -I m4
 WARNINGS = -Wall -Wwrite-strings -Werror
+AM_CPPFLAGS = -I. -I$(srcdir)/src
 AM_CFLAGS = $(WARNINGS) @libevent_CFLAGS@ @libcrypto_CFLAGS@
 LDADD = libobfsproxy.a @libevent_LIBS@ @libcrypto_LIBS@ @ws32_LIBS@
 
@@ -42,6 +43,7 @@ noinst_HEADERS = \
 	src/protocol.h \
 	src/sha256.h \
 	src/socks.h \
+	src/steg.h \
 	src/util.h \
 	src/protocols/dummy.h \
 	src/protocols/obfs2.h \
@@ -50,8 +52,8 @@ noinst_HEADERS = \
 
 EXTRA_DIST = doc/protocol-spec.txt \
 	src/protocols/obfs2.c \
+	src/steg/x_http.c \
 	src/test/unittest_obfs2.c
-
 
 TESTS = unittests
 

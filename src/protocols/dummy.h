@@ -14,8 +14,8 @@ extern const protocol_vtable dummy_vtable;
    ==========
 */
 
-#include "../connections.h"
-#include "../protocol.h"
+#include "connections.h"
+#include "protocol.h"
 
 /* Dummy presently needs only the obligatory extensions to the generic
    structures, but we have shims for future expansion, and also
