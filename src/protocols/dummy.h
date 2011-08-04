@@ -14,8 +14,8 @@ extern const protocol_vtable dummy_vtable;
    ==========
 */
 
-#include "../network.h"
-#include "../protocol.h"
+#include "network.h"
+#include "protocol.h"
 
 /* Dummy presently needs only the obligatory extensions to the generic
    protocol structures, but we have shims for future expansion, and

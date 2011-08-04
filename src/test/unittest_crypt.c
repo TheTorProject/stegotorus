@@ -2,11 +2,11 @@
    See LICENSE for other credits and copying information
 */
 
-#include "../util.h"
+#include "util.h"
 #include "tinytest_macros.h"
 
 #define CRYPT_PRIVATE
-#include "../crypt.h"
+#include "crypt.h"
 
 /* Test vectors for sha256 */
 static void

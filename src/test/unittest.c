@@ -3,7 +3,7 @@
 */
 
 #include "tinytest.h"
-#include "../crypt.h"
+#include "crypt.h"
 
 extern struct testcase_t container_tests[];
 extern struct testcase_t crypt_tests[];

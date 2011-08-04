@@ -2,7 +2,7 @@
    See LICENSE for other credits and copying information
 */
 
-#include "../util.h"
+#include "util.h"
 
 #define PROTOCOL_DUMMY_PRIVATE
 #include "dummy.h"
