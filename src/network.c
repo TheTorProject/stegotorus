@@ -3,9 +3,9 @@
 */
 
 #include "util.h"
-
 #include "network.h"
 
+#include "connections.h"
 #include "container.h"
 #include "main.h"
 #include "socks.h"
@@ -61,13 +61,6 @@ typedef struct listener_t {
 /** All our listeners. */
 static smartlist_t *listeners;
 
-/** All active connections.  */
-static smartlist_t *connections;
-
-/** Flag toggled when obfsproxy is shutting down. It blocks new
-    connections and shutdowns when the last connection is closed. */
-static int shutting_down=0;
-
 static void listener_free(listener_t *lsn);
 
 static void listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
@@ -78,14 +71,8 @@ static void simple_client_listener_cb(conn_t *conn);
 static void socks_client_listener_cb(conn_t *conn);
 static void simple_server_listener_cb(conn_t *conn);
 
-static void conn_free(conn_t *conn);
-static void conn_free_all(void);
 static void conn_free_on_flush(struct bufferevent *bev, void *arg);
 
-static int circuit_create(conn_t *up, conn_t *down);
-static void circuit_create_socks(conn_t *up);
-static int circuit_add_down(circuit_t *circuit, conn_t *down);
-static void circuit_free(circuit_t *circuit);
 static conn_t *open_outbound(conn_t *conn, bufferevent_data_cb readcb);
 
 static void upstream_read_cb(struct bufferevent *bev, void *arg);
@@ -97,57 +84,13 @@ static void flush_error_cb(struct bufferevent *bev, short what, void *arg);
 static void pending_conn_cb(struct bufferevent *bev, short what, void *arg);
 static void pending_socks_cb(struct bufferevent *bev, short what, void *arg);
 
-/**
-   Puts obfsproxy's networking subsystem on "closing time" mode. This
-   means that we stop accepting new connections and we shutdown when
-   the last connection is closed.
-
-   If 'barbaric' is set, we forcefully close all open connections and
-   finish shutdown.
-
-   (Only called by signal handlers)
-*/
-void
-start_shutdown(int barbaric)
-{
-  log_debug("Beginning %s shutdown.", barbaric ? "barbaric" : "normal");
-
-  if (!shutting_down)
-    shutting_down=1;
-
-  if (barbaric)
-    conn_free_all();
-
-  if (connections && smartlist_len(connections) == 0) {
-    smartlist_free(connections);
-    connections = NULL;
-  }
-
-  if (!connections)
-    finish_shutdown();
-}
-
-/**
-   Closes all open connections.
-*/
-static void
-conn_free_all(void)
-{
-  if (!connections)
-    return;
-  log_debug("Closing all connections.");
-  SMARTLIST_FOREACH(connections, conn_t *, conn,
-                    { conn_free(conn); });
-  smartlist_free(connections);
-  connections = NULL;
-}
 
 /**
    This function opens listening sockets configured according to the
    provided 'config_t'.  Returns 1 on success, 0 on failure.
  */
 int
-open_listeners(struct event_base *base, config_t *cfg)
+listener_open(struct event_base *base, config_t *cfg)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
@@ -206,7 +149,7 @@ listener_free(listener_t *lsn)
    Frees all active listeners.
 */
 void
-close_all_listeners(void)
+listener_close_all(void)
 {
   if (!listeners)
     return;
@@ -229,7 +172,7 @@ listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   struct event_base *base = evconnlistener_get_base(evcl);
   listener_t *lsn = closure;
   char *peername = printable_address(peeraddr, peerlen);
-  conn_t *conn = proto_conn_create(lsn->cfg);
+  conn_t *conn = conn_create(lsn->cfg);
   struct bufferevent *buf = bufferevent_socket_new(base, fd,
                                                    BEV_OPT_CLOSE_ON_FREE);
 
@@ -241,16 +184,13 @@ listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
     else
       evutil_closesocket(fd);
     if (conn)
-      proto_conn_free(conn);
+      conn_free(conn);
     free(peername);
     return;
   }
 
-  if (!connections)
-    connections = smartlist_create();
-  smartlist_add(connections, conn);
-  log_debug("%s: new connection from %s (%d total)", lsn->address, peername,
-            smartlist_len(connections));
+  log_debug("%s: new connection from %s (%ld total)",
+            lsn->address, peername, conn_count());
 
   conn->peername = peername;
   conn->buffer = buf;
@@ -328,36 +268,6 @@ simple_server_listener_cb(conn_t *conn)
 }
 
 /**
-   Deallocates conn_t 'conn'.
-*/
-static void
-conn_free(conn_t *conn)
-{
-  if (conn->circuit)
-    circuit_free(conn->circuit); /* will recurse and take care of us */
-  else {
-    if (connections) {
-      smartlist_remove(connections, conn);
-      log_debug("Closing connection with %s; %d remaining",
-                conn->peername, smartlist_len(connections));
-    }
-    if (conn->peername)
-      free(conn->peername);
-    if (conn->buffer)
-      bufferevent_free(conn->buffer);
-    proto_conn_free(conn);
-
-    /* If this was the last connection AND we are shutting down,
-       finish shutdown. */
-    if (shutting_down && (!connections || smartlist_len(connections) == 0)) {
-      if (connections)
-        smartlist_free(connections);
-      finish_shutdown();
-    }
-  }
-}
-
-/**
    Closes associated connection if the output evbuffer of 'bev' is
    empty.
 */
@@ -369,56 +279,6 @@ conn_free_on_flush(struct bufferevent *bev, void *arg)
 
   if (evbuffer_get_length(bufferevent_get_output(bev)) == 0)
     conn_free(conn);
-}
-
-static int
-circuit_create(conn_t *up, conn_t *down)
-{
-  if (!up || !down)
-    return -1;
-
-  circuit_t *r = xzalloc(sizeof(circuit_t));
-  r->upstream = up;
-  r->downstream = down;
-  up->circuit = r;
-  down->circuit = r;
-  return 0;
-}
-
-static void
-circuit_create_socks(conn_t *up)
-{
-  obfs_assert(up);
-
-  circuit_t *r = xzalloc(sizeof(circuit_t));
-  r->upstream = up;
-  r->socks_state = socks_state_new();
-  up->circuit = r;
-}
-
-static int
-circuit_add_down(circuit_t *circuit, conn_t *down)
-{
-  if (!down)
-    return -1;
-  circuit->downstream = down;
-  down->circuit = circuit;
-  return 0;
-}
-
-static void
-circuit_free(circuit_t *circuit)
-{
-  /* break the circular references before deallocating each side */
-  circuit->upstream->circuit = NULL;
-  conn_free(circuit->upstream);
-  if (circuit->downstream) {
-    circuit->downstream->circuit = NULL;
-    conn_free(circuit->downstream);
-  }
-  if (circuit->socks_state)
-    socks_state_free(circuit->socks_state);
-  free(circuit);
 }
 
 /**
@@ -444,7 +304,7 @@ open_outbound(conn_t *conn, bufferevent_data_cb readcb)
     return NULL;
   }
 
-  newconn = proto_conn_create(conn->cfg);
+  newconn = conn_create(conn->cfg);
   if (!conn) {
     log_warn("%s: failed to allocate state for outbound connection",
              conn->peername);
@@ -477,8 +337,6 @@ open_outbound(conn_t *conn, bufferevent_data_cb readcb)
  success:
   bufferevent_enable(buf, EV_READ|EV_WRITE);
   newconn->peername = peername;
-  obfs_assert(connections);
-  smartlist_add(connections, newconn);
   return newconn;
 }
 
@@ -498,7 +356,7 @@ open_outbound_hostname(conn_t *conn, int af, const char *addr, int port)
     log_warn("%s: unable to create outbound socket buffer", conn->peername);
     return NULL;
   }
-  newconn = proto_conn_create(conn->cfg);
+  newconn = conn_create(conn->cfg);
   if (!conn) {
     log_warn("%s: failed to allocate state for outbound connection",
              conn->peername);
@@ -517,8 +375,6 @@ open_outbound_hostname(conn_t *conn, int af, const char *addr, int port)
   }
 
   bufferevent_enable(buf, EV_READ|EV_WRITE);
-  obfs_assert(connections);
-  smartlist_add(connections, newconn);
   return newconn;
 }
 

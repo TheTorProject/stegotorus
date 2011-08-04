@@ -4,6 +4,7 @@
 
 #include "util.h"
 
+#include "connections.h"
 #include "container.h"
 #include "crypt.h"
 #include "network.h"
@@ -16,7 +17,71 @@
 #include <event2/event.h>
 #include <event2/dns.h>
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
 static struct event_base *the_event_base;
+
+/**
+   Puts obfsproxy's networking subsystem on "closing time" mode. This
+   means that we stop accepting new connections and we shutdown when
+   the last connection is closed.
+
+   If 'barbaric' is set, we forcefully close all open connections and
+   finish shutdown.
+
+   (Only called by signal handlers)
+*/
+static void
+start_shutdown(int barbaric)
+{
+  log_debug("Beginning %s shutdown.", barbaric ? "barbaric" : "normal");
+
+  listener_close_all();          /* prevent further connections */
+  conn_start_shutdown(barbaric); /* possibly break existing connections */
+}
+
+/** Stop obfsproxy's event loop. Final cleanup happens in main().
+    Called by conn_start_shutdown and/or conn_free (see connections.c). */
+void
+finish_shutdown(void)
+{
+  log_debug("Finishing shutdown.");
+  event_base_loopexit(the_event_base, NULL);
+}
+
+/**
+   This is called when we receive a signal.
+   It figures out the signal type and acts accordingly.
+
+   Current behavior:
+   SIGINT: On a single SIGINT we stop accepting new connections,
+           keep the already existing connections open,
+           and terminate when they all close.
+           On a second SIGINT we shut down immediately but cleanly.
+   SIGTERM: Shut down obfsproxy immediately but cleanly.
+*/
+static void
+handle_signal_cb(evutil_socket_t fd, short what, void *arg)
+{
+  static int got_sigint = 0;
+  int signum = (int) fd;
+
+  obfs_assert(signum == SIGINT || signum == SIGTERM);
+
+  if (signum == SIGINT && !got_sigint) {
+    got_sigint++;
+    log_info("Normal shutdown on SIGINT (%ld connection%s remain)",
+             conn_count(), conn_count() == 1 ? "" : "s");
+    start_shutdown(0);
+  } else {
+    log_info("Barbaric shutdown on %s (%ld connection%s will be broken)",
+             signum == SIGINT ? "SIGINT" : "SIGTERM",
+             conn_count(), conn_count() == 1 ? "" : "s");
+    start_shutdown(1);
+  }
+}
 
 /**
    Prints the obfsproxy usage instructions then exits.
@@ -37,50 +102,6 @@ usage(void)
           "--no-log ~ disable logging\n");
 
   exit(1);
-}
-
-/**
-   This is called when we receive a signal.
-   It figures out the signal type and acts accordingly.
-
-   Current behavior:
-   SIGINT: On a single SIGINT we stop accepting new connections,
-           keep the already existing connections open,
-           and terminate when they all close.
-           On a second SIGINT we shut down immediately but cleanly.
-   SIGTERM: Shut down obfsproxy immediately but cleanly.
-*/
-static void
-handle_signal_cb(evutil_socket_t fd, short what, void *arg)
-{
-  int signum = (int) fd;
-  static int got_sigint=0;
-
-  switch (signum) {
-  case SIGINT:
-    close_all_listeners();
-    if (!got_sigint) {
-      log_info("Got SIGINT. Preparing shutdown.");
-      start_shutdown(0);
-      got_sigint++;
-    } else {
-      log_info("Got SIGINT for the second time. Terminating.");
-      start_shutdown(1);
-    }
-    break;
-  case SIGTERM:
-    log_info("Got SIGTERM. Terminating.");
-    start_shutdown(1);
-    break;
-  }
-}
-
-/** Stop obfsproxy's event loop. Final cleanup happens in main(). */
-void
-finish_shutdown(void)
-{
-  log_debug("Finishing shutdown.");
-  event_base_loopexit(the_event_base, NULL);
 }
 
 /** Return 1 if 'name' is the name of a supported protocol, otherwise 0. */
@@ -240,19 +261,24 @@ main(int argc, const char *const *argv)
 
   /* Open listeners for each configuration. */
   SMARTLIST_FOREACH(configs, config_t *, cfg, {
-    if (!open_listeners(the_event_base, cfg)) {
+    if (!listener_open(the_event_base, cfg)) {
       log_error("Failed to open listeners for configuration %d", cfg_sl_idx+1);
       return 1;
     }
   });
 
   /* We are go for launch. */
+  log_info("Obfsproxy process %lu now initialized",
+           (unsigned long)getpid());
+
   event_base_dispatch(the_event_base);
 
   /* We have landed. */
   log_info("Exiting.");
 
-  close_all_listeners();
+  /* By the time we get to this point, all listeners and connections
+     have already been freed. */
+
   SMARTLIST_FOREACH(configs, config_t *, cfg, config_free(cfg));
   smartlist_free(configs);
 

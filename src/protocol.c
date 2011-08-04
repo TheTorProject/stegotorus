@@ -3,7 +3,7 @@
 */
 
 #include "util.h"
-#include "network.h"
+#include "connections.h"
 #include "protocol.h"
 
 #include "protocols/dummy.h"

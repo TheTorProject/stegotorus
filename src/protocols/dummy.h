@@ -14,13 +14,13 @@ extern const protocol_vtable dummy_vtable;
    ==========
 */
 
-#include "../network.h"
+#include "../connections.h"
 #include "../protocol.h"
 
 /* Dummy presently needs only the obligatory extensions to the generic
-   protocol structures, but we have shims for future expansion, and
-   also because, if you're using dummy as a template, you probably
-   will want to extend the generic structures. */
+   structures, but we have shims for future expansion, and also
+   because, if you're using dummy as a template, you probably will
+   want to extend the generic structures. */
 
 typedef struct dummy_config_t {
   config_t super;

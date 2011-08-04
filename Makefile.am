@@ -9,6 +9,7 @@ noinst_LIBRARIES = libobfsproxy.a
 noinst_PROGRAMS = unittests
 
 libobfsproxy_a_SOURCES = \
+	src/connections.c \
 	src/container.c \
 	src/crypt.c \
 	src/network.c \
@@ -32,6 +33,7 @@ unittests_SOURCES = \
 	src/test/unittest_dummy.c
 
 noinst_HEADERS = \
+	src/connections.h \
 	src/container.h \
 	src/crypt.h \
 	src/ht.h \
