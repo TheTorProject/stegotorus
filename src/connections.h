@@ -5,6 +5,8 @@
 #ifndef CONNECTIONS_H
 #define CONNECTIONS_H
 
+#include <event2/bufferevent.h>
+
 /**
    This struct defines the state of one socket-level connection.  Each
    protocol may extend this structure with additional private data by
@@ -25,10 +27,48 @@ struct conn_t {
   enum listen_mode    mode;
 };
 
+/** Create a new connection from a configuration. */
 conn_t *conn_create(config_t *cfg);
+
+/** Close and deallocate a connection.  If the connection is part of a
+    circuit, close the other side of that circuit as well. */
 void conn_free(conn_t *conn);
-void conn_start_shutdown(int barbaric);
+
+/** Report the number of currently-open connections. */
 unsigned long conn_count(void);
+
+/** When all currently-open connections are closed, stop the event
+    loop and exit the program.  If 'barbaric' is true, forcibly close
+    all connections now, then stop the event loop.  It is a bug to call
+    conn_create after conn_start_shutdown has been called. */
+void conn_start_shutdown(int barbaric);
+
+/** Retrieve the inbound evbuffer for a connection. */
+static inline struct evbuffer *conn_get_inbound(conn_t *conn)
+{ return conn->buffer ? bufferevent_get_input(conn->buffer) : NULL; }
+
+/** Retrieve the outbound evbuffer for a connection. */
+static inline struct evbuffer *conn_get_outbound(conn_t *conn)
+{ return conn->buffer ? bufferevent_get_output(conn->buffer) : NULL; }
+
+/* The next several conn_t methods are used by steganography modules to
+   provide hints about appropriate higher-level behavior.  */
+
+/** The peer is expected to close CONN without any further
+    transmissions. */
+void conn_expect_close(conn_t *conn);
+
+/** The peer is expected to close CONN after its next transmission,
+    and we should not transmit any more data after the current
+    outbound queue has drained. */
+void conn_expect_close_after_response(conn_t *conn);
+
+/** Close CONN after all pending data is transmitted. */
+void conn_close_after_transmit(conn_t *conn);
+
+/** We must transmit something on this connection within TIMEOUT
+    milliseconds. */
+void conn_transmit_soon(conn_t *conn, unsigned long timeout);
 
 /**
    This struct defines a pair of established connections.

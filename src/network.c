@@ -457,15 +457,12 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
   obfs_assert(!up->circuit->is_flushing);
 
   down = up->circuit->downstream;
-  if (proto_send(up,
-                 bufferevent_get_input(up->buffer),
-                 bufferevent_get_output(down->buffer))) {
+  if (proto_send(up, conn_get_inbound(up), conn_get_outbound(down))) {
     log_debug("%s: error during transmit.", up->peername);
     conn_free(up);
   }
   log_debug("%s: transmitted %lu bytes", down->peername,
-            (unsigned long)
-            evbuffer_get_length(bufferevent_get_output(down->buffer)));
+            (unsigned long) evbuffer_get_length(conn_get_outbound(down)));
 }
 
 /**
@@ -490,31 +487,24 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   obfs_assert(!down->circuit->is_flushing);
   up = down->circuit->upstream;
 
-
-  r = proto_recv(down,
-                 bufferevent_get_input(down->buffer),
-                 bufferevent_get_output(up->buffer));
+  r = proto_recv(down, conn_get_inbound(down), conn_get_outbound(up));
 
   if (r == RECV_BAD) {
     log_debug("%s: error during receive.", down->peername);
     conn_free(down);
   } else {
     log_debug("%s: forwarded %lu bytes", down->peername,
-              (unsigned long)
-              evbuffer_get_length(bufferevent_get_output(up->buffer)));
+              (unsigned long) evbuffer_get_length(conn_get_outbound(up)));
     if (r == RECV_SEND_PENDING) {
       log_debug("%s: reply of %lu bytes", down->peername,
-                (unsigned long)
-                evbuffer_get_length(bufferevent_get_input(up->buffer)));
-      if (proto_send(up,
-                     bufferevent_get_input(up->buffer),
-                     bufferevent_get_output(down->buffer)) < 0) {
+                (unsigned long) evbuffer_get_length(conn_get_inbound(up)));
+
+      if (proto_send(up, conn_get_inbound(up), conn_get_outbound(down)) < 0) {
         log_debug("%s: error during reply.", down->peername);
         conn_free(down);
       }
       log_debug("%s: transmitted %lu bytes", down->peername,
-                (unsigned long)
-                evbuffer_get_length(bufferevent_get_output(down->buffer)));
+                (unsigned long)evbuffer_get_length(conn_get_outbound(down)));
     }
   }
 }
@@ -638,7 +628,7 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
 
     /* Queue handshake, if any. */
     if (proto_handshake(circ->downstream,
-                        bufferevent_get_output(circ->downstream->buffer))<0) {
+                        conn_get_outbound(circ->downstream))<0) {
       log_debug("%s: Error during handshake", conn->peername);
       conn_free(conn);
       return;
@@ -691,7 +681,7 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
     int err = EVUTIL_SOCKET_ERROR();
     log_warn("Connection error: %s", evutil_socket_error_to_string(err));
     if (socks_state_get_status(socks) == ST_HAVE_ADDR) {
-      socks_send_reply(socks, bufferevent_get_output(up->buffer), err);
+      socks_send_reply(socks, conn_get_outbound(up), err);
     }
     error_or_eof(down);
     return;
@@ -713,7 +703,7 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
       if (!down->peername)
         down->peername = printable_address(sa, slen);
     }
-    socks_send_reply(socks, bufferevent_get_output(up->buffer), 0);
+    socks_send_reply(socks, conn_get_outbound(up), 0);
 
     /* Switch to regular upstream behavior. */
     socks_state_free(socks);
@@ -728,13 +718,13 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
     bufferevent_enable(down->buffer, EV_READ|EV_WRITE);
 
     /* Queue handshake, if any. */
-    if (proto_handshake(down, bufferevent_get_output(down->buffer))) {
+    if (proto_handshake(down, conn_get_outbound(down))) {
       log_debug("%s: Error during handshake", down->peername);
       conn_free(down);
       return;
     }
 
-    if (evbuffer_get_length(bufferevent_get_input(up->buffer)) > 0)
+    if (evbuffer_get_length(conn_get_inbound(up)) > 0)
       upstream_read_cb(up->buffer, up);
     return;
   }

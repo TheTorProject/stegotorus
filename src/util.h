@@ -65,8 +65,12 @@ unsigned int ui64_log2(uint64_t u64);
 typedef struct circuit_t circuit_t;
 typedef struct config_t config_t;
 typedef struct conn_t conn_t;
-typedef struct protocol_vtable protocol_vtable;
+typedef struct rng_t rng_t;
 typedef struct socks_state_t socks_state_t;
+typedef struct steg_t steg_t;
+
+typedef struct protocol_vtable protocol_vtable;
+typedef struct steg_vtable steg_vtable;
 
 enum recv_ret {
   /* Everything went fine. */

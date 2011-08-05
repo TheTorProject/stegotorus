@@ -16,6 +16,7 @@ libobfsproxy_a_SOURCES = \
 	src/network.c \
 	src/protocol.c \
 	src/socks.c \
+	src/steg.c \
 	src/util.c \
 	src/protocols/dummy.c
 if NEED_SHA256
@@ -41,6 +42,7 @@ noinst_HEADERS = \
 	src/main.h \
 	src/network.h \
 	src/protocol.h \
+	src/rng.h \
 	src/sha256.h \
 	src/socks.h \
 	src/steg.h \
