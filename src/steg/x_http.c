@@ -30,7 +30,9 @@ static const char http_query_1[] =
   "GET /";
 static const char http_query_2[] =
   " HTTP/1.1\r\n"
-  "Host: %s\r\n"
+  "Host: ";
+static const char http_query_3[] =
+  "\r\n"
   "Connection: close\r\n\r\n";
 
 static const char http_response_1[] =
@@ -127,8 +129,12 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     dlen = dlen + 3 - (dlen-1)%4;
     if (dlen == 0) dlen = 4;
 
-    if (evbuffer_expand(scratch, dlen)) return -1;
+    if (evbuffer_expand(scratch, dlen)) {
+      evbuffer_free(scratch);
+      return -1;
+    }
 
+    /* XXX Failures past this point consume data in 'source'. */
     while (evbuffer_get_length(source) > 0) {
       size_t chunk = evbuffer_get_contiguous_space(source);
       unsigned char *data = evbuffer_pullup(source, chunk);
@@ -146,9 +152,14 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
            evbuffer_get_length(scratch) % 4 != 0)
       evbuffer_add(scratch, "=", 1);
 
-    if (evbuffer_add(dest, http_query_1, sizeof http_query_1-1)) return -1;
-    if (evbuffer_add_buffer(dest, scratch)) return -1;
-    if (evbuffer_add_printf(dest, http_query_2, conn->peername)) return -1;
+    if (evbuffer_add(dest, http_query_1, sizeof http_query_1-1) ||
+        evbuffer_add_buffer(dest, scratch) ||
+        evbuffer_add(dest, http_query_2, sizeof http_query_2-1) ||
+        evbuffer_add(dest, conn->peername, strlen(conn->peername)) ||
+        evbuffer_add(dest, http_query_3, sizeof http_query_3-1)) {
+      evbuffer_free(scratch);
+      return -1;
+    }
 
     evbuffer_free(scratch);
     conn_expect_close_after_response(conn);
@@ -226,7 +237,65 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
     conn_expect_close(conn);
     return RECV_GOOD;
   } else {
-    /* not yet implemented */
-    return RECV_BAD;
+    /* Search for the second and third invariant bits of the query headers
+       we expect.  We completely ignore the contents of the Host header. */
+    struct evbuffer_ptr s2 = evbuffer_search(source, http_query_2,
+                                             sizeof http_query_2 - 1,
+                                             NULL);
+    if (s2.pos == -1)
+      return RECV_INCOMPLETE;
+    struct evbuffer_ptr s3 = evbuffer_search(source, http_query_3,
+                                             sizeof http_query_3 - 1,
+                                             &s2);
+    if (s3.pos == -1)
+      return RECV_INCOMPLETE;
+    if (s3.pos + sizeof http_query_3 - 1 != evbuffer_get_length(source))
+      return RECV_BAD;
+
+    unsigned char *data = evbuffer_pullup(source, s2.pos);
+    if (!memcmp(data, "GET /", sizeof "GET /"-1))
+      return RECV_BAD;
+
+    unsigned char *p = data + sizeof "GET /"-1;
+    unsigned char *limit = data + s2.pos;
+
+    /* We need a scratch buffer here because the contract is that if
+       we hit a decode error we *don't* write anything to 'dest'. */
+    struct evbuffer *scratch = evbuffer_new();
+    if (evbuffer_expand(scratch, (limit - p)/2)) {
+      evbuffer_free(scratch);
+      return RECV_BAD;
+    }
+
+    unsigned char c, h, secondhalf = 0;
+    while (p < limit) {
+      if (!secondhalf) c = 0;
+      if ('0' <= *p && *p <= '9') h = *p - '0';
+      else if ('a' <= *p && *p <= 'f') h = *p - 'a' + 10;
+      else if ('A' <= *p && *p <= 'F') h = *p - 'A' + 10;
+      else if (*p == '=' && !secondhalf) {
+        p++;
+        continue;
+      } else {
+        evbuffer_free(scratch);
+        return RECV_BAD;
+      }
+
+      c = (c << 4) + h;
+      if (secondhalf)
+        evbuffer_add(scratch, &c, 1);
+      secondhalf = !secondhalf;
+      p++;
+    }
+
+    if (evbuffer_add_buffer(dest, scratch)) {
+      evbuffer_free(scratch);
+      return RECV_BAD;
+    } else {
+      evbuffer_drain(source, evbuffer_get_length(source));
+      evbuffer_free(scratch);
+      conn_transmit_soon(conn, 100);
+      return RECV_GOOD;
+    }
   }
 }
