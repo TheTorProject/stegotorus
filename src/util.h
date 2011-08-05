@@ -116,6 +116,14 @@ static inline int ascii_isspace(unsigned char c)
           c == '\v' ||
           c == '\f');
 }
+
+static inline int ascii_isxdigit(unsigned char c)
+{
+  return (('0' <= c && c <= '9') ||
+          ('A' <= c && c <= 'F') ||
+          ('a' <= c && c <= 'f'));
+}
+
 void ascii_strstrip(char *s, const char *kill);
 void ascii_strlower(char *s);
 

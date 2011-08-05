@@ -8,8 +8,11 @@
 /**
    All supported steganography modules go in this array.
 */
+extern const steg_vtable s_x_http_vtable;
+
 const steg_vtable *const supported_steg[] =
 {
+  &s_x_http_vtable,
 };
 const size_t n_supported_steg =
   sizeof(supported_steg)/sizeof(supported_steg[0]);
@@ -21,7 +24,7 @@ steg_new(const char *name)
   size_t i;
   for (i = 0; i < n_supported_steg; i++)
     if (!strcmp(name, supported_steg[i]->name))
-      return supported_steg[i]->state_new(NULL, /*is_clientside=*/1);
+      return supported_steg[i]->new(NULL, /*is_clientside=*/1);
   return NULL;
 }
 
@@ -32,7 +35,7 @@ steg_detect(conn_t *conn)
   size_t i;
   for (i = 0; i < n_supported_steg; i++)
     if (supported_steg[i]->detect(conn))
-      return supported_steg[i]->state_new(NULL, /*is_clientside=*/0);
+      return supported_steg[i]->new(NULL, /*is_clientside=*/0);
   return NULL;
 }
 
@@ -42,7 +45,7 @@ void
 steg_del(steg_t *state)
 {
   if (!state) return;
-  state->vtable->state_del(state);
+  state->vtable->del(state);
 }
 
 size_t

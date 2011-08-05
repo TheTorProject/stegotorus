@@ -9,7 +9,7 @@
     structures.  Most of the state is private to the module. */
 struct steg_t
 {
-  steg_vtable *vtable;
+  const steg_vtable *vtable;
   rng_t *rng;
   unsigned int is_clientside : 1;
   /* module may extend as necessary using embedding-as-inheritance */
@@ -53,10 +53,10 @@ struct steg_vtable
 
   /** Prepare to handle new connections.
       More arguments may be added to this method later. */
-  steg_t *(*state_new)(rng_t *rng, unsigned int is_clientside);
+  steg_t *(*new)(rng_t *rng, unsigned int is_clientside);
 
   /** Destroy a steg_t object created by this module. */
-  void (*state_del)(steg_t *state);
+  void (*del)(steg_t *state);
 
   /** Report the maximum number of bytes that could be transmitted on
       connection CONN at this time.  You must be prepared to handle a
@@ -84,5 +84,42 @@ void steg_del(steg_t *state);
 size_t steg_transmit_room(steg_t *state, conn_t *conn);
 int steg_transmit(steg_t *state, struct evbuffer *source, conn_t *conn);
 enum recv_ret steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
+
+/* Macros for use in defining steg modules. */
+
+#define STEG_DEFINE_MODULE(name, csm, scm, mcci, mci)                   \
+  typedef struct name##_steg_t name##_steg_t;                           \
+                                                                        \
+  /* helpers */                                                         \
+  static inline steg_t *upcast_steg(name##_steg_t *s)                   \
+  { return &s->super; }                                                 \
+  static inline name##_steg_t *downcast_steg(steg_t *s)                 \
+  { return DOWNCAST(name##_steg_t, super, s); }                         \
+                                                                        \
+  /* method forward decls */                                            \
+  static unsigned int name##_detect(conn_t *);                          \
+  static steg_t *name##_new(rng_t *, unsigned int);                     \
+  static void name##_del(steg_t *);                                     \
+  static size_t name##_transmit_room(steg_t *, conn_t *);               \
+  static int name##_transmit(steg_t *, struct evbuffer *, conn_t *);    \
+  static enum recv_ret name##_receive(steg_t *, conn_t *, struct evbuffer *); \
+                                                                        \
+  /* vtable */                                                          \
+  const struct steg_vtable s_##name##_vtable = {                        \
+    #name, csm, scm, mcci, mci,                                         \
+    name##_detect, name##_new, name##_del,                              \
+    name##_transmit_room, name##_transmit,                              \
+    name##_receive                                                      \
+  } /* deliberate absence of semicolon */
+
+#define STEG_NEW(name, var_, rng_, is_clientside_)      \
+  name##_steg_t *var_ = xzalloc(sizeof(name##_steg_t)); \
+  var_->super.vtable = &s_##name##_vtable;              \
+  var_->super.rng = rng_;                               \
+  var_->super.is_clientside = is_clientside_;           \
+  do { } while (0)
+
+#define STEG_DEL(var_)                                  \
+  do { } while (0)
 
 #endif
