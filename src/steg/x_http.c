@@ -242,19 +242,27 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
     struct evbuffer_ptr s2 = evbuffer_search(source, http_query_2,
                                              sizeof http_query_2 - 1,
                                              NULL);
-    if (s2.pos == -1)
+    if (s2.pos == -1) {
+      log_debug("Did not find second piece of HTTP query");
       return RECV_INCOMPLETE;
+    }
     struct evbuffer_ptr s3 = evbuffer_search(source, http_query_3,
                                              sizeof http_query_3 - 1,
                                              &s2);
-    if (s3.pos == -1)
+    if (s3.pos == -1) {
+      log_debug("Did not find third piece of HTTP query");
       return RECV_INCOMPLETE;
-    if (s3.pos + sizeof http_query_3 - 1 != evbuffer_get_length(source))
+    }
+    if (s3.pos + sizeof http_query_3 - 1 != evbuffer_get_length(source)) {
+      log_debug("Unexpected HTTP query body");
       return RECV_BAD;
+    }
 
     unsigned char *data = evbuffer_pullup(source, s2.pos);
-    if (!memcmp(data, "GET /", sizeof "GET /"-1))
+    if (memcmp(data, "GET /", sizeof "GET /"-1)) {
+      log_debug("Unexpected HTTP verb: %.*s", 5, data);
       return RECV_BAD;
+    }
 
     unsigned char *p = data + sizeof "GET /"-1;
     unsigned char *limit = data + s2.pos;
@@ -278,6 +286,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
         continue;
       } else {
         evbuffer_free(scratch);
+        log_debug("Decode error: unexpected URI character %c", *p);
         return RECV_BAD;
       }
 
@@ -290,6 +299,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
 
     if (evbuffer_add_buffer(dest, scratch)) {
       evbuffer_free(scratch);
+      log_debug("Failed to transfer buffer");
       return RECV_BAD;
     } else {
       evbuffer_drain(source, evbuffer_get_length(source));

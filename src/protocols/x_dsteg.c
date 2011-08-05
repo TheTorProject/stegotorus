@@ -46,7 +46,7 @@ parse_and_set_options(int n_options, const char *const *options,
   } else if (!strcmp(options[0], "server")) {
     defport = "11253"; /* 2bf5 */
     cfg->mode = LSN_SIMPLE_SERVER;
-    req_options = 2;
+    req_options = 3;
   } else
     return -1;
 
@@ -184,8 +184,12 @@ x_dsteg_recv(conn_t *s, struct evbuffer *dest)
   if (!source->steg) {
     obfs_assert(source->super.mode == LSN_SIMPLE_SERVER);
     source->steg = steg_detect(s);
-    if (!source->steg)
+    if (!source->steg) {
+      log_debug("No recognized steg pattern detected");
       return RECV_BAD;
+    } else {
+      log_debug("Detected steg pattern %s", source->steg->vtable->name);
+    }
   }
   return steg_receive(source->steg, s, dest);
 }
