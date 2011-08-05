@@ -162,7 +162,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     }
 
     evbuffer_free(scratch);
-    conn_expect_close_after_response(conn);
+    conn_cease_transmission(conn);
     return 0;
 
   } else {

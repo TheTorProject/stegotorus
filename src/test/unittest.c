@@ -2,8 +2,10 @@
    See LICENSE for other credits and copying information
 */
 
-#include "tinytest.h"
+#include "util.h"
+#include "connections.h"
 #include "crypt.h"
+#include "tinytest.h"
 
 extern struct testcase_t container_tests[];
 extern struct testcase_t crypt_tests[];
@@ -20,12 +22,18 @@ struct testgroup_t groups[] = {
   END_OF_GROUPS
 };
 
+void
+finish_shutdown(void)
+{
+}
+
 int
 main(int argc, const char **argv)
 {
   int rv;
   initialize_crypto();
   rv = tinytest_main(argc, argv, groups);
+  conn_start_shutdown(1);
   cleanup_crypto();
   return rv;
 }

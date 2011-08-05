@@ -139,25 +139,25 @@ dummy_conn_free(conn_t *proto)
 
 /** Dummy has no handshake */
 static int
-dummy_handshake(conn_t *proto, struct evbuffer *buf)
+dummy_handshake(conn_t *proto)
 {
   return 0;
 }
 
 /** send, receive - just copy */
 static int
-dummy_send(conn_t *proto, struct evbuffer *source, struct evbuffer *dest)
+dummy_send(conn_t *dest, struct evbuffer *source)
 {
-  return evbuffer_add_buffer(dest,source);
+  return evbuffer_add_buffer(conn_get_outbound(dest), source);
 }
 
 static enum recv_ret
-dummy_recv(conn_t *proto, struct evbuffer *source, struct evbuffer *dest)
+dummy_recv(conn_t *source, struct evbuffer *dest)
 {
-  if (evbuffer_add_buffer(dest,source)<0)
+  if (evbuffer_add_buffer(dest, conn_get_inbound(source)))
     return RECV_BAD;
   else
     return RECV_GOOD;
 }
 
-DEFINE_PROTOCOL_VTABLE(dummy);
+DEFINE_PROTOCOL_VTABLE_NOSTEG(dummy);

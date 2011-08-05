@@ -172,8 +172,17 @@
 	tt_assert_test_type(a,b,#a" "#op" "#b,const char *,		\
 			    (strcmp(_val1,_val2) op 0),"<%s>")
 
-#define tt_mem_op(expr1, op, expr2, len)                                \
-  tt_assert_test_fmt_type(expr1,expr2,#expr1" "#op" "#expr2,            \
+#define tt_stn_op(a,op,b,len)                                           \
+  tt_assert_test_fmt_type(a,b,#a" "#op" "#b,                            \
+                          const char *,                                 \
+                          (strncmp(_val1, _val2, len) op 0),            \
+                          char *, "%s",                                 \
+                          { _print = xstrndup(_value, len); },          \
+                          { free(_print); }                             \
+                          );
+
+#define tt_mem_op(a,op,b,len)                                           \
+  tt_assert_test_fmt_type(a,b,#a" "#op" "#b,                            \
                           const char *,                                 \
                           (memcmp(_val1, _val2, len) op 0),             \
                           char *, "%s",                                 \

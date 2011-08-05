@@ -44,27 +44,18 @@ config_create(int n_options, const char *const *options)
 void
 config_free(config_t *cfg)
 {
-  obfs_assert(cfg);
-  obfs_assert(cfg->vtable);
-  obfs_assert(cfg->vtable->config_free);
   cfg->vtable->config_free(cfg);
 }
 
 struct evutil_addrinfo *
 config_get_listen_addrs(config_t *cfg, size_t n)
 {
-  obfs_assert(cfg);
-  obfs_assert(cfg->vtable);
-  obfs_assert(cfg->vtable->config_get_listen_addrs);
   return cfg->vtable->config_get_listen_addrs(cfg, n);
 }
 
 struct evutil_addrinfo *
 config_get_target_addr(config_t *cfg)
 {
-  obfs_assert(cfg);
-  obfs_assert(cfg->vtable);
-  obfs_assert(cfg->vtable->config_get_target_addr);
   return cfg->vtable->config_get_target_addr(cfg);
 }
 
@@ -77,9 +68,6 @@ config_get_target_addr(config_t *cfg)
 conn_t *
 proto_conn_create(config_t *cfg)
 {
-  obfs_assert(cfg);
-  obfs_assert(cfg->vtable);
-  obfs_assert(cfg->vtable->conn_create);
   return cfg->vtable->conn_create(cfg);
 }
 
@@ -88,36 +76,27 @@ proto_conn_create(config_t *cfg)
    Not all protocols have a handshake.
 */
 int
-proto_handshake(conn_t *conn, void *buf) {
-  obfs_assert(conn);
-  obfs_assert(conn->cfg);
-  obfs_assert(conn->cfg->vtable);
-  obfs_assert(conn->cfg->vtable->handshake);
-  return conn->cfg->vtable->handshake(conn, buf);
+proto_handshake(conn_t *conn)
+{
+  return conn->cfg->vtable->handshake(conn);
 }
 
 /**
    This function is responsible for sending protocol data.
 */
 int
-proto_send(conn_t *conn, void *source, void *dest) {
-  obfs_assert(conn);
-  obfs_assert(conn->cfg);
-  obfs_assert(conn->cfg->vtable);
-  obfs_assert(conn->cfg->vtable->send);
-  return conn->cfg->vtable->send(conn, source, dest);
+proto_send(conn_t *dest, struct evbuffer *source)
+{
+  return dest->cfg->vtable->send(dest, source);
 }
 
 /**
    This function is responsible for receiving protocol data.
 */
 enum recv_ret
-proto_recv(conn_t *conn, void *source, void *dest) {
-  obfs_assert(conn);
-  obfs_assert(conn->cfg);
-  obfs_assert(conn->cfg->vtable);
-  obfs_assert(conn->cfg->vtable->recv);
-  return conn->cfg->vtable->recv(conn, source, dest);
+proto_recv(conn_t *source, struct evbuffer *dest)
+{
+  return source->cfg->vtable->recv(source, dest);
 }
 
 /**
@@ -125,10 +104,7 @@ proto_recv(conn_t *conn, void *source, void *dest) {
    It's called everytime we close a connection.
 */
 void
-proto_conn_free(conn_t *conn) {
-  obfs_assert(conn);
-  obfs_assert(conn->cfg);
-  obfs_assert(conn->cfg->vtable);
-  obfs_assert(conn->cfg->vtable->conn_free);
+proto_conn_free(conn_t *conn)
+{
   conn->cfg->vtable->conn_free(conn);
 }

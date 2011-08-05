@@ -58,10 +58,9 @@ static inline struct evbuffer *conn_get_outbound(conn_t *conn)
     transmissions. */
 void conn_expect_close(conn_t *conn);
 
-/** The peer is expected to close CONN after its next transmission,
-    and we should not transmit any more data after the current
-    outbound queue has drained. */
-void conn_expect_close_after_response(conn_t *conn);
+/** Do not transmit any more data on this connection after the outbound
+    queue has drained.  However, the peer may still send data back. */
+void conn_cease_transmission(conn_t *conn);
 
 /** Close CONN after all pending data is transmitted. */
 void conn_close_after_transmit(conn_t *conn);

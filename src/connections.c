@@ -90,6 +90,36 @@ conn_count(void)
   return smartlist_len(connections);
 }
 
+/* Protocol methods of connections. */
+
+void
+conn_expect_close(conn_t *conn)
+{
+  obfs_assert(conn->cfg->vtable->expect_close);
+  conn->cfg->vtable->expect_close(conn);
+}
+
+void
+conn_cease_transmission(conn_t *conn)
+{
+  obfs_assert(conn->cfg->vtable->cease_transmission);
+  conn->cfg->vtable->cease_transmission(conn);
+}
+
+void
+conn_close_after_transmit(conn_t *conn)
+{
+  obfs_assert(conn->cfg->vtable->close_after_transmit);
+  conn->cfg->vtable->close_after_transmit(conn);
+}
+
+void
+conn_transmit_soon(conn_t *conn, unsigned long timeout)
+{
+  obfs_assert(conn->cfg->vtable->transmit_soon);
+  conn->cfg->vtable->transmit_soon(conn, timeout);
+}
+
 /* Circuits.  Circuits are not tracked, they are owned by their connections. */
 
 int
