@@ -172,7 +172,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     if (evbuffer_add(dest, http_response_1, sizeof http_response_1-1))
         return -1;
     if (evbuffer_add_printf(dest, http_response_2,
-                            (unsigned long)evbuffer_get_length(source)))
+                            (unsigned long)evbuffer_get_length(source)) == -1)
       return -1;
     if (evbuffer_add_buffer(dest, source))
       return -1;

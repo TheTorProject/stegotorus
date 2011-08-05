@@ -34,7 +34,8 @@ unittests_SOURCES = \
 	src/test/unittest_container.c \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c \
-	src/test/unittest_dummy.c
+	src/test/unittest_dummy.c \
+	src/test/unittest_steg_x_http.c
 
 noinst_HEADERS = \
 	src/connections.h \

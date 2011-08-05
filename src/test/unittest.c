@@ -12,6 +12,7 @@ extern struct testcase_t crypt_tests[];
 extern struct testcase_t socks_tests[];
 extern struct testcase_t dummy_tests[];
 /*extern struct testcase_t obfs2_tests[];*/
+extern struct testcase_t s_x_http_tests[];
 
 struct testgroup_t groups[] = {
   { "container/", container_tests },
@@ -19,6 +20,7 @@ struct testgroup_t groups[] = {
   { "socks/", socks_tests },
   { "dummy/", dummy_tests },
   /*{ "obfs2/", obfs2_tests },*/
+  { "steg/x_http/", s_x_http_tests },
   END_OF_GROUPS
 };
 
