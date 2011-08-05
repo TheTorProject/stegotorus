@@ -7,6 +7,7 @@
 #include "protocol.h"
 
 #include "protocols/dummy.h"
+#include "protocols/x_dsteg.h"
 /*#include "protocols/obfs2.h"*/
 
 /**
@@ -16,6 +17,7 @@
 const protocol_vtable *const supported_protocols[] =
 {
   &dummy_vtable,
+  &x_dsteg_vtable,
   /*&obfs2_vtable,*/
 };
 const size_t n_supported_protocols =

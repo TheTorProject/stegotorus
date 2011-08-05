@@ -19,6 +19,7 @@ libobfsproxy_a_SOURCES = \
 	src/steg.c \
 	src/util.c \
 	src/protocols/dummy.c \
+	src/protocols/x_dsteg.c \
 	src/steg/x_http.c
 if NEED_SHA256
 libobfsproxy_a_SOURCES += src/sha256.c
@@ -50,6 +51,7 @@ noinst_HEADERS = \
 	src/util.h \
 	src/protocols/dummy.h \
 	src/protocols/obfs2.h \
+	src/protocols/x_dsteg.h \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h
 

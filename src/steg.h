@@ -78,6 +78,8 @@ struct steg_vtable
   enum recv_ret (*receive)(steg_t *state, conn_t *conn, struct evbuffer *dest);
 };
 
+int is_supported_steg(const char *name);
+
 steg_t *steg_new(const char *name);
 steg_t *steg_detect(conn_t *conn);
 void steg_del(steg_t *state);

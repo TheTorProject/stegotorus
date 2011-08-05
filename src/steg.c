@@ -17,6 +17,18 @@ const steg_vtable *const supported_steg[] =
 const size_t n_supported_steg =
   sizeof(supported_steg)/sizeof(supported_steg[0]);
 
+/* Report whether a named steg-module is supported. */
+
+int
+is_supported_steg(const char *name)
+{
+  size_t i;
+  for (i = 0; i < n_supported_steg; i++)
+    if (!strcmp(name, supported_steg[i]->name))
+      return 1;
+  return 0;
+}
+
 /* Instantiate a steg module by name. */
 steg_t *
 steg_new(const char *name)
