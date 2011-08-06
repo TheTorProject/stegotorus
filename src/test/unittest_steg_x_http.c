@@ -105,8 +105,6 @@ static void
 test_s_x_http_transfer(void *state)
 {
   struct test_s_x_http_state *s = (struct test_s_x_http_state *)state;
-  int n;
-  struct evbuffer_iovec v[2];
 
   /* Call the handshake method to satisfy the high-level contract,
      even though s_x_http doesn't use a handshake */
@@ -119,21 +117,38 @@ test_s_x_http_transfer(void *state)
   tt_int_op(0, ==, proto_handshake(s->conn_server));
   tt_int_op(0, ==, evbuffer_get_length(conn_get_outbound(s->conn_server)));
 
-  const char *msg1 = "this is a 54-byte message passed from client to server";
-  const char *msg2 = "this is a 55-byte message passed from server to client!";
+  static const char msg1[] =
+    "this is a 54-byte message passed from client to server";
+  static const char msg2[] =
+    "this is a 55-byte message passed from server to client!";
+  static const char enc1[] =
+    "GET /7468697320697320612035342d62797465206d6573736167652070617373"
+    "65642066726f6d20636c69656e7420746f20736572766572 HTTP/1.1\r\n"
+    "Host: 127.0.0.1:1800\r\n"
+    "Connection: close\r\n\r\n";
+  static const char enc2[] =
+    "HTTP/1.1 200 OK\r\n"
+    "Expires: Thu, 01 Jan 1970 00:00:00 GMT\r\n"
+    "Cache-Control: no-store\r\n"
+    "Connection: close\r\n"
+    "Content-Type: application/octet-stream\r\n"
+    "Content-Length: 55\r\n\r\n"
+    "this is a 55-byte message passed from server to client!";
 
   /* client -> server */
   evbuffer_add(s->scratch, msg1, 54);
   tt_int_op(0, ==, proto_send(s->conn_client, s->scratch));
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
-  tt_int_op(167, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
+  tt_int_op(sizeof enc1-1, ==,
+            evbuffer_get_length(conn_get_inbound(s->conn_server)));
+  tt_stn_op(enc1, ==, evbuffer_pullup(conn_get_inbound(s->conn_server),
+                                      sizeof enc1-1),
+            sizeof enc1-1);
 
   tt_int_op(RECV_GOOD, ==, proto_recv(s->conn_server, s->scratch));
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
-
-  n = evbuffer_peek(s->scratch, -1, NULL, &v[0], 2);
-  tt_int_op(1, ==, n); /* expect contiguous data */
-  tt_stn_op(msg1, ==, v[0].iov_base, 54);
+  tt_int_op(54, ==, evbuffer_get_length(s->scratch));
+  tt_stn_op(msg1, ==, evbuffer_pullup(s->scratch, 54), 54);
 
   /* empty scratch buffer before next test  */
   size_t buffer_len = evbuffer_get_length(s->scratch);
@@ -143,14 +158,16 @@ test_s_x_http_transfer(void *state)
   evbuffer_add(s->scratch, msg2, 55);
   tt_int_op(0, ==, proto_send(s->conn_server, s->scratch));
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
-  tt_int_op(218, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
+  tt_int_op(sizeof enc2-1, ==,
+            evbuffer_get_length(conn_get_inbound(s->conn_client)));
+  tt_stn_op(enc2, ==, evbuffer_pullup(conn_get_inbound(s->conn_client),
+                                      sizeof enc2-1),
+            sizeof enc2-1);
 
   tt_int_op(RECV_GOOD, ==, proto_recv(s->conn_client, s->scratch));
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
-
-  n = evbuffer_peek(s->scratch, -1, NULL, &v[1], 2);
-  tt_int_op(n, ==, 1); /* expect contiguous data */
-  tt_stn_op(msg2, ==, v[1].iov_base, 55);
+  tt_int_op(55, ==, evbuffer_get_length(s->scratch));
+  tt_stn_op(msg2, ==, evbuffer_pullup(s->scratch, 55), 55);
 
  end:;
 }
