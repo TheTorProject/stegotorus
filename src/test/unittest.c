@@ -33,6 +33,14 @@ int
 main(int argc, const char **argv)
 {
   int rv;
+
+  /* Ugly method to fix a Windows problem:
+     http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
+#ifdef _WIN32
+  WSADATA wsaData;
+  WSAStartup(0x101, &wsaData);
+#endif
+
   initialize_crypto();
   rv = tinytest_main(argc, argv, groups);
   conn_start_shutdown(1);

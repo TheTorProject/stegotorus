@@ -17,7 +17,9 @@
 #include <event2/event.h>
 #include <event2/dns.h>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <process.h>
+#else
 #include <unistd.h>
 #endif
 

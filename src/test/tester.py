@@ -11,6 +11,7 @@ import difflib
 import errno
 import multiprocessing
 import Queue
+import os
 import re
 import signal
 import socket
@@ -48,8 +49,12 @@ class Obfsproxy(subprocess.Popen):
         else:
             argv.extend(args)
 
+        # Windows needs an extra argument passed to parent __init__,
+        # but the constant isn't defined on Unix.
+        try: kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+        except AttributeError: pass
         subprocess.Popen.__init__(self, argv,
-                                  stdin=open("/dev/null", "r"),
+                                  stdin=open(os.path.devnull, "r"),
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
                                   **kwargs)
@@ -58,7 +63,9 @@ class Obfsproxy(subprocess.Popen):
 
     def check_completion(self, label, force_stderr):
         if self.poll() is None:
-            self.send_signal(signal.SIGINT)
+            try: signo = signal.CTRL_C_EVENT # Windows
+            except AttributeError: signo = signal.SIGINT # Unix
+            self.send_signal(signo)
 
         (out, err) = self.communicate()
 
@@ -107,30 +114,29 @@ def connect_with_retry(addr):
 # read all available data, stick it in a string, and post the string
 # to the output queue.  Then close both sockets and exit.
 
-class ReadWorker(object):
-    @staticmethod
-    def work(address, oq):
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind(address)
-        listener.listen(1)
-        (conn, remote) = listener.accept()
-        listener.close()
-        conn.settimeout(1.0)
-        data = ""
-        try:
-            while True:
-                chunk = conn.recv(4096)
-                if chunk == "": break
-                data += chunk
-        except Exception, e:
-            data += "|RECV ERROR: " + e
-        conn.close()
-        oq.put(data)
+def ReadWorkerFn(address, oq):
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(address)
+    listener.listen(1)
+    (conn, remote) = listener.accept()
+    listener.close()
+    conn.settimeout(1.0)
+    data = ""
+    try:
+        while True:
+            chunk = conn.recv(4096)
+            if chunk == "": break
+            data += chunk
+    except Exception, e:
+        data += "|RECV ERROR: " + str(e)
+    conn.close()
+    oq.put(data)
 
+class ReadWorker(object):
     def __init__(self, address):
         self.oq = multiprocessing.Queue()
-        self.worker = multiprocessing.Process(target=self.work,
+        self.worker = multiprocessing.Process(target=ReadWorkerFn,
                                               args=(address, self.oq))
         self.worker.start()
 
@@ -440,4 +446,8 @@ THIS IS A TEST FILE. IT'S USED BY THE INTEGRATION TESTS.
 """
 
 if __name__ == '__main__':
-    unittest.main()
+    # Doesn't yet work correctly on Windows
+    if os.name == 'posix':
+        unittest.main()
+    else:
+        print "*** Integration tests skipped on Windows"

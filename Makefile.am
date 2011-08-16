@@ -58,16 +58,13 @@ noinst_HEADERS = \
 
 EXTRA_DIST = doc/protocol-spec.txt \
 	src/protocols/obfs2.c \
-	src/test/unittest_obfs2.c
+	src/test/unittest_obfs2.c \
+	src/test/tester.py
 
-TESTS = unittests
-
+check-local:
+	@echo --- Unit tests ---
+	./unittests
 if HAVE_PYTHON
-TESTS += tester.py
-noinst_PROGRAMS += tester.py
-tester_py_SOURCES = src/test/tester.py.in
-
-tester.py: src/test/tester.py.in Makefile
-	$(SED) -e 's,[@]PYTHON[@],$(PYTHON),' < $< > $@
-	chmod +x $@
+	@echo --- Integration tests ---
+	$(PYTHON) $(srcdir)/src/test/tester.py --verbose
 endif
