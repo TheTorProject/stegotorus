@@ -9,7 +9,6 @@
 
 import difflib
 import errno
-import multiprocessing
 import Queue
 import os
 import re
@@ -17,6 +16,7 @@ import signal
 import socket
 import struct
 import subprocess
+import threading
 import time
 import traceback
 import unittest
@@ -65,6 +65,13 @@ class Obfsproxy(subprocess.Popen):
         if self.poll() is None:
             try: signo = signal.CTRL_C_EVENT # Windows
             except AttributeError: signo = signal.SIGINT # Unix
+
+            # subprocess.communicate has no timeout; arrange to blow
+            # the process away if it doesn't respond to the original
+            # signal in a timely fashion.
+            timeout = threading.Thread(target=self.stop, args=(1.0,))
+            timeout.daemon = True
+            timeout.start()
             self.send_signal(signo)
 
         (out, err) = self.communicate()
@@ -85,13 +92,18 @@ class Obfsproxy(subprocess.Popen):
 
         # there will be debugging messages on stderr, but there should be
         # no [warn], [err], or [error] messages.
-        if force_stderr or self.severe_error_re.search(err):
+        if (force_stderr or
+            self.severe_error_re.search(err) or
+            self.returncode != 0):
             report += label + " stderr:\n%s\n" % indent(err)
 
         return report
 
-    def stop(self):
+    def stop(self, delay=None):
         if self.poll() is None:
+            if delay is not None:
+                time.sleep(delay)
+                if self.poll() is not None: return
             self.terminate()
 
 # Helper: Repeatedly try to connect to the specified server socket
@@ -109,44 +121,52 @@ def connect_with_retry(addr):
             retry += 1
             time.sleep(0.05)
 
-# Helper: In a separate process (to avoid deadlock), listen on a
+# Helper: In a separate thread (to avoid deadlock), listen on a
 # specified socket.  The first time something connects to that socket,
 # read all available data, stick it in a string, and post the string
 # to the output queue.  Then close both sockets and exit.
 
-def ReadWorkerFn(address, oq):
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    listener.bind(address)
-    listener.listen(1)
-    (conn, remote) = listener.accept()
-    listener.close()
-    conn.settimeout(1.0)
-    data = ""
-    try:
-        while True:
-            chunk = conn.recv(4096)
-            if chunk == "": break
-            data += chunk
-    except Exception, e:
-        data += "|RECV ERROR: " + str(e)
-    conn.close()
-    oq.put(data)
+class ReadWorker(threading.Thread):
+    def run(self):
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.settimeout(0.1)
+        listener.bind(self.address)
+        listener.listen(1)
+        try:
+            (conn, remote) = listener.accept()
+        except Exception, e:
+            data = "|ACCEPT ERROR: " + str(e)
+            return
+        if not self.running: return
+        listener.close()
+        conn.settimeout(0.1)
+        data = ""
+        try:
+            while True:
+                chunk = conn.recv(4096)
+                if not self.running: raise socket.timeout
+                if chunk == "": break
+                data += chunk
+        except Exception, e:
+            data += "|RECV ERROR: " + str(e)
+        conn.close()
+        self.data = data
 
-class ReadWorker(object):
     def __init__(self, address):
-        self.oq = multiprocessing.Queue()
-        self.worker = multiprocessing.Process(target=ReadWorkerFn,
-                                              args=(address, self.oq))
-        self.worker.start()
+        self.address = address
+        self.data = ""
+        self.running = True
+        threading.Thread.__init__(self)
+        self.start()
 
     def get(self):
-        rv = self.oq.get(timeout=1)
-        self.worker.join()
-        return rv
+        self.join(0.5)
+        return self.data
 
     def stop(self):
-        if self.worker.is_alive(): self.worker.terminate()
+        self.running = False
+        self.join(0.5)
 
 # Right now this is a direct translation of the former int_test.sh
 # (except that I have fleshed out the SOCKS test a bit).
@@ -197,16 +217,6 @@ class DirectTest(object):
 # and the server's a separate process.
 
 class SocksTest(object):
-    def setUp(self):
-        self.output_reader = ReadWorker(("127.0.0.1", EXIT_PORT))
-        self.obfs_server = Obfsproxy(self.server_args)
-        self.obfs_client = Obfsproxy(self.client_args)
-
-    def tearDown(self):
-        self.obfs_server.stop()
-        self.obfs_client.stop()
-        self.output_reader.stop()
-
     # 'sequence' is a sequence of SOCKS[45] protocol messages
     # which we will send or receive.  Sends alternate with
     # receives.  Each entry may be a string, which is sent or
@@ -249,16 +259,11 @@ class SocksTest(object):
                     if e.errno != errno.ECONNRESET: raise
                 self.assertEqual(got, exp)
             sending = not sending
-        if good:
-            input_chan.sendall(TEST_FILE)
-            input_chan.shutdown(socket.SHUT_WR)
-            try:
-                output = self.output_reader.get()
-            except Queue.Empty:
-                output = ""
+        if not good: return None
 
-        if good: return output
-        else: return None
+        input_chan.sendall(TEST_FILE)
+        input_chan.shutdown(socket.SHUT_WR)
+        return self.output_reader.get()
 
     def socksTest(self, sequence):
         input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
@@ -278,8 +283,9 @@ class SocksTest(object):
 
         fs = report != ""
 
-        report += self.obfs_server.check_completion("obfsproxy server", fs)
         report += self.obfs_client.check_completion("obfsproxy client", fs)
+        if self.obfs_server is not None:
+            report += self.obfs_server.check_completion("obfsproxy server", fs)
 
         if report != "":
             self.fail("\n" + report)
@@ -287,6 +293,16 @@ class SocksTest(object):
 class GoodSocksTest(SocksTest):
     # Test methods for good SOCKS dialogues; these should be repeated for each
     # protocol.
+    def setUp(self):
+        self.output_reader = ReadWorker(("127.0.0.1", EXIT_PORT))
+        self.obfs_server = Obfsproxy(self.server_args)
+        self.obfs_client = Obfsproxy(self.client_args)
+
+    def tearDown(self):
+        self.obfs_server.stop()
+        self.obfs_client.stop()
+        self.output_reader.stop()
+
 
     def test_socks4_transfer(self):
         # SOCKS4 connection request - should succeed
@@ -303,9 +319,15 @@ class GoodSocksTest(SocksTest):
 #
 
 class SocksBad(SocksTest, unittest.TestCase):
-    server_args = ("dummy", "server",
-                   "127.0.0.1:%d" % SERVER_PORT,
-                   "127.0.0.1:%d" % EXIT_PORT)
+    # We never actually make a connection, so there's no point having a
+    # server or an output reader.
+    def setUp(self):
+        self.obfs_client = Obfsproxy(self.client_args)
+        self.obfs_server = None
+
+    def tearDown(self):
+        self.obfs_client.stop()
+
     client_args = ("dummy", "socks",
                    "127.0.0.1:%d" % ENTRY_PORT)
 
