@@ -331,7 +331,7 @@ class SocksBad(SocksTest, unittest.TestCase):
     client_args = ("dummy", "socks",
                    "127.0.0.1:%d" % ENTRY_PORT)
 
-    def test_illformed(self):
+    def test_socks_illformed(self):
         # ill-formed socks message - server should drop connection
         self.socksTest([ "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n"
                          "Connection: close\r\n\r\n",
