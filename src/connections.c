@@ -33,7 +33,7 @@ conn_create(config_t *cfg)
 
   if (!connections)
     connections = smartlist_create();
-  conn = proto_conn_create(cfg);
+  conn = cfg->vtable->conn_create(cfg);
   smartlist_add(connections, conn);
   return conn;
 }
@@ -63,7 +63,8 @@ conn_free(conn_t *conn)
     free(conn->peername);
   if (conn->buffer)
     bufferevent_free(conn->buffer);
-  proto_conn_free(conn);
+
+  conn->cfg->vtable->conn_free(conn);
 }
 
 void
@@ -91,6 +92,25 @@ conn_count(void)
 }
 
 /* Protocol methods of connections. */
+
+int
+conn_handshake(conn_t *conn)
+{
+  return conn->cfg->vtable->handshake(conn);
+}
+
+int
+conn_send(conn_t *dest, struct evbuffer *source)
+{
+  return dest->cfg->vtable->send(dest, source);
+}
+
+enum recv_ret
+conn_recv(conn_t *source, struct evbuffer *dest)
+{
+  return source->cfg->vtable->recv(source, dest);
+}
+
 
 void
 conn_expect_close(conn_t *conn)

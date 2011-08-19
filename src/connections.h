@@ -51,6 +51,17 @@ static inline struct evbuffer *conn_get_inbound(conn_t *conn)
 static inline struct evbuffer *conn_get_outbound(conn_t *conn)
 { return conn->buffer ? bufferevent_get_output(conn->buffer) : NULL; }
 
+/** Transmit the protocol-specific handshake message (if any) for a
+    connection. */
+int conn_handshake(conn_t *conn);
+
+/** Encode the data in SOURCE according to the appropriate wire protocol,
+    and transmit it on DEST. */
+int conn_send(conn_t *dest, struct evbuffer *source);
+
+/** Receive data from SOURCE, decode it, and write it to DEST. */
+enum recv_ret conn_recv(conn_t *source, struct evbuffer *dest);
+
 /* The next several conn_t methods are used by steganography modules to
    provide hints about appropriate higher-level behavior.  */
 

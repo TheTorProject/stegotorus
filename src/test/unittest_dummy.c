@@ -161,13 +161,13 @@ test_dummy_transfer(void *state)
 
   /* Call the handshake method to satisfy the high-level contract,
      even though dummy doesn't use a handshake */
-  tt_int_op(0, ==, proto_handshake(s->conn_client));
+  tt_int_op(0, ==, conn_handshake(s->conn_client));
 
   /* That should have put nothing into the output buffer */
   tt_int_op(0, ==, evbuffer_get_length(conn_get_outbound(s->conn_client)));
 
   /* Ditto on the server side */
-  tt_int_op(0, ==, proto_handshake(s->conn_server));
+  tt_int_op(0, ==, conn_handshake(s->conn_server));
   tt_int_op(0, ==, evbuffer_get_length(conn_get_outbound(s->conn_server)));
 
   const char *msg1 = "this is a 54-byte message passed from client to server";
@@ -175,11 +175,11 @@ test_dummy_transfer(void *state)
 
   /* client -> server */
   evbuffer_add(s->scratch, msg1, 54);
-  tt_int_op(0, ==, proto_send(s->conn_client, s->scratch));
+  tt_int_op(0, ==, conn_send(s->conn_client, s->scratch));
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
   tt_int_op(54, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
 
-  tt_int_op(RECV_GOOD, ==, proto_recv(s->conn_server, s->scratch));
+  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_server, s->scratch));
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
 
   n = evbuffer_peek(s->scratch, -1, NULL, &v[0], 2);
@@ -192,11 +192,11 @@ test_dummy_transfer(void *state)
 
   /* client <- server */
   evbuffer_add(s->scratch, msg2, 55);
-  tt_int_op(0, ==, proto_send(s->conn_server, s->scratch));
+  tt_int_op(0, ==, conn_send(s->conn_server, s->scratch));
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
   tt_int_op(55, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
 
-  tt_int_op(RECV_GOOD, ==, proto_recv(s->conn_client, s->scratch));
+  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_client, s->scratch));
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
 
   n = evbuffer_peek(s->scratch, -1, NULL, &v[1], 2);

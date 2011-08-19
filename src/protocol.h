@@ -125,13 +125,6 @@ void config_free(config_t *cfg);
 struct evutil_addrinfo *config_get_listen_addrs(config_t *cfg, size_t n);
 struct evutil_addrinfo *config_get_target_addr(config_t *cfg);
 
-conn_t *proto_conn_create(config_t *cfg);
-void proto_conn_free(conn_t *conn);
-
-int proto_handshake(conn_t *conn);
-int proto_send(conn_t *dest, struct evbuffer *source);
-enum recv_ret proto_recv(conn_t *source, struct evbuffer *dest);
-
 extern const protocol_vtable *const supported_protocols[];
 extern const size_t n_supported_protocols;
 

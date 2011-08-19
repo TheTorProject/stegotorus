@@ -457,7 +457,7 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
   obfs_assert(!up->circuit->is_flushing);
 
   down = up->circuit->downstream;
-  if (proto_send(down, conn_get_inbound(up))) {
+  if (conn_send(down, conn_get_inbound(up))) {
     log_debug("%s: error during transmit.", up->peername);
     conn_free(up);
   }
@@ -487,7 +487,7 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   obfs_assert(!down->circuit->is_flushing);
   up = down->circuit->upstream;
 
-  r = proto_recv(down, conn_get_outbound(up));
+  r = conn_recv(down, conn_get_outbound(up));
 
   if (r == RECV_BAD) {
     log_debug("%s: error during receive.", down->peername);
@@ -499,7 +499,7 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
       log_debug("%s: reply of %lu bytes", down->peername,
                 (unsigned long) evbuffer_get_length(conn_get_inbound(up)));
 
-      if (proto_send(down, conn_get_inbound(up)) < 0) {
+      if (conn_send(down, conn_get_inbound(up)) < 0) {
         log_debug("%s: error during reply.", down->peername);
         conn_free(down);
       }
@@ -627,7 +627,7 @@ pending_conn_cb(struct bufferevent *bev, short what, void *arg)
     log_debug("%s: Successful connection", conn->peername);
 
     /* Queue handshake, if any. */
-    if (proto_handshake(circ->downstream) < 0) {
+    if (conn_handshake(circ->downstream) < 0) {
       log_debug("%s: Error during handshake", conn->peername);
       conn_free(conn);
       return;
@@ -717,7 +717,7 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
     bufferevent_enable(down->buffer, EV_READ|EV_WRITE);
 
     /* Queue handshake, if any. */
-    if (proto_handshake(down)) {
+    if (conn_handshake(down)) {
       log_debug("%s: Error during handshake", down->peername);
       conn_free(down);
       return;
