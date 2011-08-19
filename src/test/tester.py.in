@@ -102,6 +102,8 @@ def connect_with_retry(addr):
             retry += 1
             time.sleep(0.05)
 
+SOCKET_TIMEOUT = 1.0
+
 # Helper: In a separate process (to avoid deadlock), listen on a
 # specified socket.  The first time something connects to that socket,
 # read all available data, stick it in a string, and post the string
@@ -116,13 +118,15 @@ class ReadWorker(object):
         listener.listen(1)
         (conn, remote) = listener.accept()
         listener.close()
-        conn.settimeout(1.0)
+        conn.settimeout(SOCKET_TIMEOUT)
         data = ""
         try:
             while True:
                 chunk = conn.recv(4096)
                 if chunk == "": break
                 data += chunk
+        except socket.timeout:
+            pass
         except Exception, e:
             data += "|RECV ERROR: " + e
         conn.close()
@@ -135,7 +139,7 @@ class ReadWorker(object):
         self.worker.start()
 
     def get(self):
-        rv = self.oq.get(timeout=1)
+        rv = self.oq.get(timeout=SOCKET_TIMEOUT+0.1)
         self.worker.join()
         return rv
 
@@ -162,7 +166,7 @@ class DirectTest(object):
         self.output_reader = ReadWorker(("127.0.0.1", EXIT_PORT))
         self.obfs = Obfsproxy(self.obfs_args)
         self.input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
-        self.input_chan.settimeout(1.0)
+        self.input_chan.settimeout(SOCKET_TIMEOUT)
 
     def tearDown(self):
         self.obfs.stop()
@@ -174,11 +178,12 @@ class DirectTest(object):
         # transfer a file.  Then check whether the output is the same
         # as the input.
         self.input_chan.sendall(TEST_FILE)
-        self.input_chan.shutdown(socket.SHUT_WR)
         try:
             output = self.output_reader.get()
         except Queue.Empty:
             output = ""
+
+        self.input_chan.close()
 
         report = diff("errors in transfer:", TEST_FILE, output)
 
@@ -243,20 +248,22 @@ class SocksTest(object):
                     if e.errno != errno.ECONNRESET: raise
                 self.assertEqual(got, exp)
             sending = not sending
+
         if good:
             input_chan.sendall(TEST_FILE)
-            input_chan.shutdown(socket.SHUT_WR)
             try:
                 output = self.output_reader.get()
             except Queue.Empty:
                 output = ""
+
+            input_chan.close()
 
         if good: return output
         else: return None
 
     def socksTest(self, sequence):
         input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
-        input_chan.settimeout(1.0)
+        input_chan.settimeout(SOCKET_TIMEOUT)
 
         try:
             output = self.socksTestInner(sequence, input_chan)
@@ -352,13 +359,13 @@ class SocksBad(SocksTest, unittest.TestCase):
 #
 
 # fails, disabled
-#class DirectObfs2(DirectTest, unittest.TestCase):
-#    obfs_args = ("obfs2",
-#                 "--dest=127.0.0.1:%d" % EXIT_PORT,
-#                 "server", "127.0.0.1:%d" % SERVER_PORT,
-#                 "obfs2",
-#                 "--dest=127.0.0.1:%d" % SERVER_PORT,
-#                 "client", "127.0.0.1:%d" % ENTRY_PORT)
+class DirectObfs2(DirectTest, unittest.TestCase):
+   obfs_args = ("obfs2",
+                "--dest=127.0.0.1:%d" % EXIT_PORT,
+                "server", "127.0.0.1:%d" % SERVER_PORT,
+                "obfs2",
+                "--dest=127.0.0.1:%d" % SERVER_PORT,
+                "client", "127.0.0.1:%d" % ENTRY_PORT)
 
 class DirectDummy(DirectTest, unittest.TestCase):
     obfs_args = ("dummy", "server",
@@ -369,12 +376,12 @@ class DirectDummy(DirectTest, unittest.TestCase):
                  "127.0.0.1:%d" % SERVER_PORT)
 
 # fails, disabled
-#class SocksObfs2(GoodSocksTest, unittest.TestCase):
-#    server_args = ("obfs2",
-#                   "--dest=127.0.0.1:%d" % EXIT_PORT,
-#                   "server", "127.0.0.1:%d" % SERVER_PORT)
-#    client_args = ("obfs2",
-#                   "socks", "127.0.0.1:%d" % ENTRY_PORT)
+class SocksObfs2(GoodSocksTest, unittest.TestCase):
+   server_args = ("obfs2",
+                  "--dest=127.0.0.1:%d" % EXIT_PORT,
+                  "server", "127.0.0.1:%d" % SERVER_PORT)
+   client_args = ("obfs2",
+                  "socks", "127.0.0.1:%d" % ENTRY_PORT)
 
 class SocksDummy(GoodSocksTest, unittest.TestCase):
     server_args = ("dummy", "server",
