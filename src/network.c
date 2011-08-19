@@ -79,7 +79,6 @@ static void socks_client_listener_cb(conn_t *conn);
 static void simple_server_listener_cb(conn_t *conn);
 
 static void conn_free(conn_t *conn);
-static void conn_free_all(void);
 static void conn_free_on_flush(struct bufferevent *bev, void *arg);
 
 static int circuit_create(conn_t *up, conn_t *down);
@@ -115,31 +114,16 @@ start_shutdown(int barbaric)
   if (!shutting_down)
     shutting_down=1;
 
-  if (barbaric)
-    conn_free_all();
-
-  if (connections && smartlist_len(connections) == 0) {
+  if (!connections) {
+    finish_shutdown();
+  } else if (smartlist_len(connections) == 0) {
     smartlist_free(connections);
     connections = NULL;
-  }
-
-  if (!connections)
     finish_shutdown();
-}
-
-/**
-   Closes all open connections.
-*/
-static void
-conn_free_all(void)
-{
-  if (!connections)
-    return;
-  log_debug("Closing all connections.");
-  SMARTLIST_FOREACH(connections, conn_t *, conn,
-                    { conn_free(conn); });
-  smartlist_free(connections);
-  connections = NULL;
+  } else if (barbaric) {
+    while (connections) /* last conn_free() will free connections smartlist */
+      conn_free(smartlist_get(connections,0));
+  }
 }
 
 /**
@@ -349,9 +333,9 @@ conn_free(conn_t *conn)
 
     /* If this was the last connection AND we are shutting down,
        finish shutdown. */
-    if (shutting_down && (!connections || smartlist_len(connections) == 0)) {
-      if (connections)
-        smartlist_free(connections);
+    if (shutting_down && connections && smartlist_len(connections) == 0) {
+      smartlist_free(connections);
+      connections = NULL;
       finish_shutdown();
     }
   }
