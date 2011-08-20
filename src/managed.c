@@ -70,71 +70,9 @@ enum launch_status {
 #define PROTO_CMETHODS_DONE "CMETHODS DONE\n"
 #define PROTO_SMETHODS_DONE "SMETHODS DONE\n"
 
-static int handle_environment(managed_proxy_t *proxy);
-static int conf_proto_version_negotiation(const managed_proxy_t *proxy);
-static int launch_listeners(const managed_proxy_t *proxy);
-static void print_method_line(const char *transport,
-                              const managed_proxy_t *proxy,
-                              config_t *cfg);
-static void print_method_error_line(const char *protocol,
-                                    const managed_proxy_t *proxy,
-                                    enum launch_status status);
-static const char *get_launch_error_message(enum launch_status status);
-
-static void print_method_done_line(const managed_proxy_t *proxy);
-
-static const char *get_env_parsing_error_message(enum env_parsing_status status);
-
-static void proxy_free(managed_proxy_t *proxy);
-static int is_supported_conf_protocol(const char *name);
-static void print_protocol_line(const char *format, ...);
-
-static int validate_environment(managed_proxy_t *proxy);
-
 const char *supported_conf_protocols[] = { "1" };
 const size_t n_supported_conf_protocols =
   sizeof(supported_conf_protocols)/sizeof(supported_conf_protocols[0]);
-
-/**
-   This function fires up the managed proxy.
-   It first reads the environment that tor should have prepared, and then
-   launches the appropriate listeners.
-
-   Returns 0 if we managed to launch at least one proxy,
-   returns -1 if something went wrong or we didn't launch any proxies.
-*/
-int
-launch_managed_proxy(void)
-{
-  int r=-1;
-  managed_proxy_t *proxy = xzalloc(sizeof(managed_proxy_t));
-  proxy->configs = smartlist_create();
-
-  obfsproxy_init();
-
-  if (handle_environment(proxy) < 0)
-    goto done;
-
-  if (validate_environment(proxy) < 0)
-    goto done;
-
-  if (conf_proto_version_negotiation(proxy) < 0)
-    goto done;
-
-  if (launch_listeners(proxy) < 0)
-    goto done;
-
-  /* Kickstart libevent */
-  event_base_dispatch(get_event_base());
-
-  r=0;
-
- done:
-  obfsproxy_cleanup();
-  proxy_free(proxy);
-
-  return r;
-}
 
 /**
    Make sure that we got *all* the necessary environment variables off tor.
@@ -156,6 +94,130 @@ assert_proxy_env(managed_proxy_t *proxy)
     obfs_assert(!proxy->vars.or_port);
     obfs_assert(!proxy->vars.bindaddrs);
   }
+}
+
+/**
+   This function is used for obfsproxy to communicate with tor.
+   Practically a wrapper of printf, it prints 'format' and the
+   fflushes stdout so that the output is always immediately available
+   to tor.
+*/
+static void
+print_protocol_line(const char *format, ...)
+{
+  va_list ap;
+  va_start(ap,format);
+  vprintf(format, ap);
+  fflush(stdout);
+  va_end(ap);
+}
+
+/**
+   Return a string containing the error we encountered while parsing
+   the environment variables, according to 'status'.
+*/
+static inline const char *
+get_env_parsing_error_message(enum env_parsing_status status)
+{
+  switch(status) {
+  case ST_ENV_SMOOTH: return "no error";
+  case ST_ENV_FAIL_STATE_LOC: return "failed on TOR_PT_STATE_LOCATION";
+  case ST_ENV_FAIL_CONF_PROTO_VER: return "failed on TOR_PT_MANAGED_TRANSPORT_VER";
+  case ST_ENV_FAIL_CLIENT_TRANSPORTS: return "failed on TOR_PT_CLIENT_TRANSPORTS";
+  case ST_ENV_FAIL_EXTENDED_PORT: return "failed on TOR_PT_EXTENDED_SERVER_PORT";
+  case ST_ENV_FAIL_ORPORT: return "failed on TOR_PT_ORPORT";
+  case ST_ENV_FAIL_BINDADDR: return "failed on TOR_PT_SERVER_BINDADDR";
+  case ST_ENV_FAIL_SERVER_TRANSPORTS: return "failed on TOR_PT_SERVER_TRANSPORTS";
+  default:
+    obfs_assert(0); return "UNKNOWN";
+  }
+}
+
+/**
+   Given:
+   * comma-separated list of "<transport>-<bindaddr>" strings in 'all_bindaddrs'.
+   * comma-separated list of "<transport>" strings in 'all_transports'.
+
+   Return:
+   * 0, if
+   - all <transport> strings in 'all_bindaddrs' match with <transport>
+     strings in 'all_transports' (order matters).
+   AND
+   - if all <bindaddr> strings in 'all_bindaddrs' are valid addrports.
+   * -1, otherwise.
+*/
+int
+validate_bindaddrs(const char *all_bindaddrs, const char *all_transports)
+{
+  int ret,i,n_bindaddrs,n_transports;
+  struct evutil_addrinfo *bindaddr_test;
+  char *bindaddr = NULL;
+  char *transport = NULL;
+
+  /* a list of "<proto>-<bindaddr>" strings */
+  smartlist_t *bindaddrs = smartlist_create();
+  /* a list holding (<proto>, <bindaddr>) for each 'bindaddrs' entry */
+  smartlist_t *split_bindaddr = NULL;
+  /* a list of "<proto>" strings */
+  smartlist_t *transports = smartlist_create();
+
+  smartlist_split_string(bindaddrs, all_bindaddrs, ",",
+                         SPLIT_SKIP_SPACE|SPLIT_IGNORE_BLANK, -1);
+  smartlist_split_string(transports, all_transports, ",",
+                         SPLIT_SKIP_SPACE|SPLIT_IGNORE_BLANK, -1);
+
+  n_bindaddrs = smartlist_len(bindaddrs);
+  n_transports = smartlist_len(transports);
+
+  if (n_bindaddrs != n_transports)
+    goto err;
+
+  for (i=0;i<n_bindaddrs;i++) {
+    bindaddr = smartlist_get(bindaddrs, i);
+    transport = smartlist_get(transports, i);
+
+    split_bindaddr = smartlist_create();
+    smartlist_split_string(split_bindaddr, bindaddr, "-",
+                           SPLIT_SKIP_SPACE|SPLIT_IGNORE_BLANK, -1);
+
+    /* (<proto>, <bindaddr>) */
+    if (smartlist_len(split_bindaddr) != 2)
+      goto err;
+
+    /* "all <transport> strings in 'all_bindaddrs' match with <transport>
+       strings in 'all_transports' (order matters)." */
+    if (strcmp(smartlist_get(split_bindaddr,0), transport))
+      goto err;
+
+    /* "if all <bindaddr> strings in 'all_bindaddrs' are valid addrports." */
+    bindaddr_test = resolve_address_port(smartlist_get(split_bindaddr, 1),
+                                         1, 1, NULL);
+    if (!bindaddr_test)
+      goto err;
+
+    evutil_freeaddrinfo(bindaddr_test);
+    SMARTLIST_FOREACH(split_bindaddr, char *, cp, free(cp));
+    smartlist_free(split_bindaddr);
+    split_bindaddr = NULL;
+  }
+
+  ret = 0;
+  goto done;
+
+ err:
+  ret = -1;
+
+ done:
+  SMARTLIST_FOREACH(bindaddrs, char *, cp, free(cp));
+  smartlist_free(bindaddrs);
+  SMARTLIST_FOREACH(transports, char *, cp, free(cp));
+  smartlist_free(transports);
+  if (split_bindaddr) {
+    SMARTLIST_FOREACH(split_bindaddr, char *, cp, free(cp));
+    smartlist_free(split_bindaddr);
+  }
+
+  return ret;
 }
 
 /**
@@ -188,7 +250,7 @@ validate_environment(managed_proxy_t *proxy)
    Free memory allocated by 'proxy'.
 */
 static void
-proxy_free(managed_proxy_t *proxy)
+managed_proxy_free(managed_proxy_t *proxy)
 {
   free(proxy->vars.state_loc);
   free(proxy->vars.conf_proto_version);
@@ -201,6 +263,217 @@ proxy_free(managed_proxy_t *proxy)
   smartlist_free(proxy->configs);
 
   free(proxy);
+}
+
+/**
+   Print a CMETHOD/SMETHOD line saying that we launched 'transport'
+   with 'cfg' under 'proxy'.
+*/
+static void
+print_method_line(const char *transport, const managed_proxy_t *proxy,
+                  config_t *cfg)
+{
+  struct evconnlistener *listener = get_evconnlistener_by_config(cfg);
+  obfs_assert(listener);
+
+  struct sockaddr_in saddr;
+  memset(&saddr,0,sizeof(struct sockaddr_in));
+  socklen_t slen = sizeof(saddr);
+
+  obfs_assert(!(getsockname(evconnlistener_get_fd(listener),
+                            (struct sockaddr *)&saddr, &slen) < 0));
+
+  if (proxy->is_server) {
+    print_protocol_line("%s %s %s:%hu\n",
+                        PROTO_SMETHOD,
+                        transport,
+                        inet_ntoa(saddr.sin_addr),
+                        ntohs(saddr.sin_port));
+  } else {
+    print_protocol_line("%s %s %s %s:%hu\n",
+                        PROTO_CMETHOD,
+                        transport,
+                        "socks5",
+                        inet_ntoa(saddr.sin_addr),
+                        ntohs(saddr.sin_port));
+
+  }
+}
+
+/**
+   Print the '{S,C}METHOD DONE' message.
+*/
+static inline void
+print_method_done_line(const managed_proxy_t *proxy)
+{
+  print_protocol_line("%s", proxy->is_server ?
+                      PROTO_SMETHODS_DONE : PROTO_CMETHODS_DONE);
+}
+
+/**
+   Return true if 'name' matches the name of a supported managed proxy
+   configuration protocol.
+*/
+static inline int
+is_supported_conf_protocol(const char *name) {
+  int f;
+  for (f=0;f<n_supported_conf_protocols;f++) {
+    if (!strcmp(name,supported_conf_protocols[f]))
+      return 1;
+  }
+  return 0;
+}
+
+/**
+   Finish the configuration protocol version negotiation by printing
+   whether we support any of the suggested configuration protocols in
+   stdout, according to the 180 spec.
+
+   Return:
+   * 0: if we actually found and selected a protocol.
+   * -1: if we couldn't find a common supported protocol or if we
+     couldn't even parse tor's supported protocol list.
+
+   XXX: in the future we should return the protocol version we
+   selected. let's keep it simple for now since we have just one
+   protocol version.
+*/
+static int
+conf_proto_version_negotiation(const managed_proxy_t *proxy)
+{
+  int r=-1;
+
+  smartlist_t *versions = smartlist_create();
+  smartlist_split_string(versions, proxy->vars.conf_proto_version, ",",
+                         SPLIT_SKIP_SPACE|SPLIT_IGNORE_BLANK, -1);
+
+  SMARTLIST_FOREACH_BEGIN(versions, char *, version) {
+    if (is_supported_conf_protocol(version)) {
+      print_protocol_line("%s %s\n", PROTO_NEG_SUCCESS, version);
+      r=0;
+      goto done;
+    }
+  } SMARTLIST_FOREACH_END(version);
+
+  /* we get here if we couldn't find a supported protocol */
+  print_protocol_line("%s", PROTO_NEG_FAIL);
+
+ done:
+  SMARTLIST_FOREACH(versions, char *, cp, free(cp));
+  smartlist_free(versions);
+
+  return r;
+}
+
+
+/**
+   Read the environment variables defined in the
+   180-pluggable-transport.txt spec and fill 'proxy' accordingly.
+
+   Return 0 if all necessary environment variables were set properly.
+   Return -1 otherwise.
+*/
+static int
+handle_environment(managed_proxy_t *proxy)
+{
+  char *tmp;
+  enum env_parsing_status status=ST_ENV_SMOOTH;
+
+  tmp = getenv("TOR_PT_STATE_LOCATION");
+  if (!tmp) {
+    status = ST_ENV_FAIL_STATE_LOC;
+    goto err;
+  }
+  proxy->vars.state_loc = xstrdup(tmp);
+
+  tmp = getenv("TOR_PT_MANAGED_TRANSPORT_VER");
+  if (!tmp) {
+    status = ST_ENV_FAIL_CONF_PROTO_VER;
+    goto err;
+  }
+  proxy->vars.conf_proto_version = xstrdup(tmp);
+
+  tmp = getenv("TOR_PT_CLIENT_TRANSPORTS");
+  if (tmp) {
+    proxy->vars.transports = xstrdup(tmp);
+    proxy->is_server = 0;
+  } else {
+    proxy->is_server = 1;
+  }
+
+  if (proxy->is_server) {
+    tmp = getenv("TOR_PT_EXTENDED_SERVER_PORT");
+    if (!tmp) {
+      status = ST_ENV_FAIL_EXTENDED_PORT;
+      goto err;
+    }
+    proxy->vars.extended_port = xstrdup(tmp);
+
+    tmp = getenv("TOR_PT_ORPORT");
+    if (!tmp) {
+      status = ST_ENV_FAIL_ORPORT;
+      goto err;
+    }
+    proxy->vars.or_port = xstrdup(tmp);
+
+    tmp = getenv("TOR_PT_SERVER_BINDADDR");
+    if (tmp) {
+      proxy->vars.bindaddrs = xstrdup(tmp);
+    } else {
+      status = ST_ENV_FAIL_BINDADDR;
+      goto err;
+    }
+
+    tmp = getenv("TOR_PT_SERVER_TRANSPORTS");
+    if (!tmp) {
+      status = ST_ENV_FAIL_SERVER_TRANSPORTS;
+      goto err;
+    }
+    proxy->vars.transports = xstrdup(tmp);
+  }
+
+  return 0;
+
+ err:
+  print_protocol_line("%s %s\n", PROTO_ENV_ERROR,
+                      get_env_parsing_error_message(status));
+
+  return -1;
+}
+
+/**
+    Return a string containing the error we encountered while
+    launching a listener, according to 'status'.
+*/
+static inline const char *
+get_launch_error_message(enum launch_status status)
+{
+  switch (status) {
+  case ST_LAUNCH_SMOOTH:    return "no error";
+  case ST_LAUNCH_FAIL_SETUP:   return "could not setup protocol";
+  case ST_LAUNCH_FAIL_LSN:   return "could not launch listener";
+  default:
+    obfs_assert(0); return "UNKNOWN";
+  }
+}
+
+/**
+   Given the name of a protocol we tried to launch in 'protocol'
+   the managed proxy parameters in 'proxy' and a listener launch
+   status in 'status', print a line of the form:
+       CMETHOD-ERROR <methodname> "<errormessage>"
+   to signify a listener launching failure.
+*/
+static inline void
+print_method_error_line(const char *protocol,
+                        const managed_proxy_t *proxy,
+                        enum launch_status status)
+{
+  print_protocol_line("%s %s %s\n",
+                      proxy->is_server ?
+                      PROTO_SMETHOD_ERROR : PROTO_CMETHOD_ERROR,
+                      protocol,
+                      get_launch_error_message(status));
 }
 
 /**
@@ -336,335 +609,42 @@ launch_listeners(const managed_proxy_t *proxy)
 }
 
 /**
-   Given:
-   * comma-separated list of "<transport>-<bindaddr>" strings in 'all_bindaddrs'.
-   * comma-separated list of "<transport>" strings in 'all_transports'.
+   This function fires up the managed proxy.
+   It first reads the environment that tor should have prepared, and then
+   launches the appropriate listeners.
 
-   Return:
-   * 0, if
-   - all <transport> strings in 'all_bindaddrs' match with <transport>
-     strings in 'all_transports' (order matters).
-   AND
-   - if all <bindaddr> strings in 'all_bindaddrs' are valid addrports.
-   * -1, otherwise.
+   Returns 0 if we managed to launch at least one proxy,
+   returns -1 if something went wrong or we didn't launch any proxies.
 */
 int
-validate_bindaddrs(const char *all_bindaddrs, const char *all_transports)
-{
-  int ret,i,n_bindaddrs,n_transports;
-  struct evutil_addrinfo *bindaddr_test;
-  char *bindaddr = NULL;
-  char *transport = NULL;
-
-  /* a list of "<proto>-<bindaddr>" strings */
-  smartlist_t *bindaddrs = smartlist_create();
-  /* a list holding (<proto>, <bindaddr>) for each 'bindaddrs' entry */
-  smartlist_t *split_bindaddr = NULL;
-  /* a list of "<proto>" strings */
-  smartlist_t *transports = smartlist_create();
-
-  smartlist_split_string(bindaddrs, all_bindaddrs, ",",
-                         SPLIT_SKIP_SPACE|SPLIT_IGNORE_BLANK, -1);
-  smartlist_split_string(transports, all_transports, ",",
-                         SPLIT_SKIP_SPACE|SPLIT_IGNORE_BLANK, -1);
-
-  n_bindaddrs = smartlist_len(bindaddrs);
-  n_transports = smartlist_len(transports);
-
-  if (n_bindaddrs != n_transports)
-    goto err;
-
-  for (i=0;i<n_bindaddrs;i++) {
-    bindaddr = smartlist_get(bindaddrs, i);
-    transport = smartlist_get(transports, i);
-
-    split_bindaddr = smartlist_create();
-    smartlist_split_string(split_bindaddr, bindaddr, "-",
-                           SPLIT_SKIP_SPACE|SPLIT_IGNORE_BLANK, -1);
-
-    /* (<proto>, <bindaddr>) */
-    if (smartlist_len(split_bindaddr) != 2)
-      goto err;
-
-    /* "all <transport> strings in 'all_bindaddrs' match with <transport>
-       strings in 'all_transports' (order matters)." */
-    if (strcmp(smartlist_get(split_bindaddr,0), transport))
-      goto err;
-
-    /* "if all <bindaddr> strings in 'all_bindaddrs' are valid addrports." */
-    bindaddr_test = resolve_address_port(smartlist_get(split_bindaddr, 1),
-                                         1, 1, NULL);
-    if (!bindaddr_test)
-      goto err;
-
-    evutil_freeaddrinfo(bindaddr_test);
-    SMARTLIST_FOREACH(split_bindaddr, char *, cp, free(cp));
-    smartlist_free(split_bindaddr);
-    split_bindaddr = NULL;
-  }
-
-  ret = 0;
-  goto done;
-
- err:
-  ret = -1;
-
- done:
-  SMARTLIST_FOREACH(bindaddrs, char *, cp, free(cp));
-  smartlist_free(bindaddrs);
-  SMARTLIST_FOREACH(transports, char *, cp, free(cp));
-  smartlist_free(transports);
-  if (split_bindaddr) {
-    SMARTLIST_FOREACH(split_bindaddr, char *, cp, free(cp));
-    smartlist_free(split_bindaddr);
-  }
-
-  return ret;
-}
-
-/**
-   Read the environment variables defined in the
-   180-pluggable-transport.txt spec and fill 'proxy' accordingly.
-
-   Return 0 if all necessary environment variables were set properly.
-   Return -1 otherwise.
-*/
-static int
-handle_environment(managed_proxy_t *proxy)
-{
-  char *tmp;
-  enum env_parsing_status status=ST_ENV_SMOOTH;
-
-  tmp = getenv("TOR_PT_STATE_LOCATION");
-  if (!tmp) {
-    status = ST_ENV_FAIL_STATE_LOC;
-    goto err;
-  }
-  proxy->vars.state_loc = xstrdup(tmp);
-
-  tmp = getenv("TOR_PT_MANAGED_TRANSPORT_VER");
-  if (!tmp) {
-    status = ST_ENV_FAIL_CONF_PROTO_VER;
-    goto err;
-  }
-  proxy->vars.conf_proto_version = xstrdup(tmp);
-
-  tmp = getenv("TOR_PT_CLIENT_TRANSPORTS");
-  if (tmp) {
-    proxy->vars.transports = xstrdup(tmp);
-    proxy->is_server = 0;
-  } else {
-    proxy->is_server = 1;
-  }
-
-  if (proxy->is_server) {
-    tmp = getenv("TOR_PT_EXTENDED_SERVER_PORT");
-    if (!tmp) {
-      status = ST_ENV_FAIL_EXTENDED_PORT;
-      goto err;
-    }
-    proxy->vars.extended_port = xstrdup(tmp);
-
-    tmp = getenv("TOR_PT_ORPORT");
-    if (!tmp) {
-      status = ST_ENV_FAIL_ORPORT;
-      goto err;
-    }
-    proxy->vars.or_port = xstrdup(tmp);
-
-    tmp = getenv("TOR_PT_SERVER_BINDADDR");
-    if (tmp) {
-      proxy->vars.bindaddrs = xstrdup(tmp);
-    } else {
-      status = ST_ENV_FAIL_BINDADDR;
-      goto err;
-    }
-
-    tmp = getenv("TOR_PT_SERVER_TRANSPORTS");
-    if (!tmp) {
-      status = ST_ENV_FAIL_SERVER_TRANSPORTS;
-      goto err;
-    }
-    proxy->vars.transports = xstrdup(tmp);
-  }
-
-  return 0;
-
- err:
-  print_protocol_line("%s %s\n", PROTO_ENV_ERROR,
-                      get_env_parsing_error_message(status));
-
-  return -1;
-}
-
-/**
-   Given the name of a protocol we tried to launch in 'protocol'
-   the managed proxy parameters in 'proxy' and a listener launch
-   status in 'status', print a line of the form:
-       CMETHOD-ERROR <methodname> "<errormessage>"
-   to signify a listener launching failure.
-*/
-static inline void
-print_method_error_line(const char *protocol,
-                        const managed_proxy_t *proxy,
-                        enum launch_status status)
-{
-  print_protocol_line("%s %s %s\n",
-                      proxy->is_server ?
-                      PROTO_SMETHOD_ERROR : PROTO_CMETHOD_ERROR,
-                      protocol,
-                      get_launch_error_message(status));
-}
-
-/**
-   Print a CMETHOD/SMETHOD line saying that we launched 'transport'
-   with 'cfg' under 'proxy'.
-*/
-static void
-print_method_line(const char *transport, const managed_proxy_t *proxy,
-                  config_t *cfg)
-{
-  struct evconnlistener *listener = get_evconnlistener_by_config(cfg);
-  obfs_assert(listener);
-
-  struct sockaddr_in saddr;
-  memset(&saddr,0,sizeof(struct sockaddr_in));
-  socklen_t slen = sizeof(saddr);
-
-  obfs_assert(!(getsockname(evconnlistener_get_fd(listener),
-                            (struct sockaddr *)&saddr, &slen) < 0));
-
-  if (proxy->is_server) {
-    print_protocol_line("%s %s %s:%hu\n",
-                        PROTO_SMETHOD,
-                        transport,
-                        inet_ntoa(saddr.sin_addr),
-                        ntohs(saddr.sin_port));
-  } else {
-    print_protocol_line("%s %s %s %s:%hu\n",
-                        PROTO_CMETHOD,
-                        transport,
-                        "socks5",
-                        inet_ntoa(saddr.sin_addr),
-                        ntohs(saddr.sin_port));
-
-  }
-}
-
-/**
-   Print the '{S,C}METHOD DONE' message.
-*/
-static inline void
-print_method_done_line(const managed_proxy_t *proxy)
-{
-  print_protocol_line("%s", proxy->is_server ?
-                      PROTO_SMETHODS_DONE : PROTO_CMETHODS_DONE);
-}
-
-/**
-   Return true if 'name' matches the name of a supported managed proxy
-   configuration protocol.
-*/
-static inline int
-is_supported_conf_protocol(const char *name) {
-  int f;
-  for (f=0;f<n_supported_conf_protocols;f++) {
-    if (!strcmp(name,supported_conf_protocols[f]))
-      return 1;
-  }
-  return 0;
-}
-
-/**
-   Finish the configuration protocol version negotiation by printing
-   whether we support any of the suggested configuration protocols in
-   stdout, according to the 180 spec.
-
-   Return:
-   * 0: if we actually found and selected a protocol.
-   * -1: if we couldn't find a common supported protocol or if we
-     couldn't even parse tor's supported protocol list.
-
-   XXX: in the future we should return the protocol version we
-   selected. let's keep it simple for now since we have just one
-   protocol version.
-*/
-static int
-conf_proto_version_negotiation(const managed_proxy_t *proxy)
+launch_managed_proxy(void)
 {
   int r=-1;
+  managed_proxy_t *proxy = xzalloc(sizeof(managed_proxy_t));
+  proxy->configs = smartlist_create();
 
-  smartlist_t *versions = smartlist_create();
-  smartlist_split_string(versions, proxy->vars.conf_proto_version, ",",
-                         SPLIT_SKIP_SPACE|SPLIT_IGNORE_BLANK, -1);
+  obfsproxy_init();
 
-  SMARTLIST_FOREACH_BEGIN(versions, char *, version) {
-    if (is_supported_conf_protocol(version)) {
-      print_protocol_line("%s %s\n", PROTO_NEG_SUCCESS, version);
-      r=0;
-      goto done;
-    }
-  } SMARTLIST_FOREACH_END(version);
+  if (handle_environment(proxy) < 0)
+    goto done;
 
-  /* we get here if we couldn't find a supported protocol */
-  print_protocol_line("%s", PROTO_NEG_FAIL);
+  if (validate_environment(proxy) < 0)
+    goto done;
+
+  if (conf_proto_version_negotiation(proxy) < 0)
+    goto done;
+
+  if (launch_listeners(proxy) < 0)
+    goto done;
+
+  /* Kickstart libevent */
+  event_base_dispatch(get_event_base());
+
+  r=0;
 
  done:
-  SMARTLIST_FOREACH(versions, char *, cp, free(cp));
-  smartlist_free(versions);
+  obfsproxy_cleanup();
+  managed_proxy_free(proxy);
 
   return r;
-}
-
-/**
-   Return a string containing the error we encountered while parsing
-   the environment variables, according to 'status'.
-*/
-static inline const char *
-get_env_parsing_error_message(enum env_parsing_status status)
-{
-  switch(status) {
-  case ST_ENV_SMOOTH: return "no error";
-  case ST_ENV_FAIL_STATE_LOC: return "failed on TOR_PT_STATE_LOCATION";
-  case ST_ENV_FAIL_CONF_PROTO_VER: return "failed on TOR_PT_MANAGED_TRANSPORT_VER";
-  case ST_ENV_FAIL_CLIENT_TRANSPORTS: return "failed on TOR_PT_CLIENT_TRANSPORTS";
-  case ST_ENV_FAIL_EXTENDED_PORT: return "failed on TOR_PT_EXTENDED_SERVER_PORT";
-  case ST_ENV_FAIL_ORPORT: return "failed on TOR_PT_ORPORT";
-  case ST_ENV_FAIL_BINDADDR: return "failed on TOR_PT_SERVER_BINDADDR";
-  case ST_ENV_FAIL_SERVER_TRANSPORTS: return "failed on TOR_PT_SERVER_TRANSPORTS";
-  default:
-    obfs_assert(0); return "UNKNOWN";
-  }
-}
-
-/**
-    Return a string containing the error we encountered while
-    launching a listener, according to 'status'.
-*/
-static inline const char *
-get_launch_error_message(enum launch_status status)
-{
-  switch (status) {
-  case ST_LAUNCH_SMOOTH:    return "no error";
-  case ST_LAUNCH_FAIL_SETUP:   return "could not setup protocol";
-  case ST_LAUNCH_FAIL_LSN:   return "could not launch listener";
-  default:
-    obfs_assert(0); return "UNKNOWN";
-  }
-}
-
-/**
-   This function is used for obfsproxy to communicate with tor.
-   Practically a wrapper of printf, it prints 'format' and the
-   fflushes stdout so that the output is always immediately available
-   to tor.
-*/
-static void
-print_protocol_line(const char *format, ...)
-{
-  va_list ap;
-  va_start(ap,format);
-  vprintf(format, ap);
-  fflush(stdout);
-  va_end(ap);
 }
