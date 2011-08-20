@@ -12,6 +12,9 @@ noinst_PROGRAMS = unittests
 libobfsproxy_a_SOURCES = \
 	src/container.c \
 	src/crypt.c \
+	src/external.c \
+	src/main.c \
+	src/managed.c \
 	src/network.c \
 	src/protocol.c \
 	src/socks.c \
@@ -22,8 +25,7 @@ if NEED_SHA256
 libobfsproxy_a_SOURCES += src/sha256.c
 endif
 
-obfsproxy_SOURCES = \
-	src/main.c
+obfsproxy_SOURCES = src/obfs_main.c
 
 unittests_SOURCES = \
 	src/test/tinytest.c \
@@ -32,13 +34,16 @@ unittests_SOURCES = \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c \
 	src/test/unittest_dummy.c \
+	src/test/unittest_managed.c \
 	src/test/unittest_obfs2.c
 
 noinst_HEADERS = \
 	src/container.h \
 	src/crypt.h \
+	src/external.h \
 	src/ht.h \
 	src/main.h \
+	src/managed.h \
 	src/network.h \
 	src/protocol.h \
 	src/sha256.h \
