@@ -7,7 +7,7 @@
 #include "protocol.h"
 
 #include "protocols/dummy.h"
-/*#include "protocols/obfs2.h"*/
+#include "protocols/obfs2.h"
 
 /**
     All supported protocols should be put in this array.
@@ -16,7 +16,7 @@
 const protocol_vtable *const supported_protocols[] =
 {
   &dummy_vtable,
-  /*&obfs2_vtable,*/
+  &obfs2_vtable
 };
 const size_t n_supported_protocols =
   sizeof(supported_protocols)/sizeof(supported_protocols[0]);

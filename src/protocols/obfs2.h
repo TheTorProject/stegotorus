@@ -11,6 +11,7 @@ extern const protocol_vtable obfs2_vtable;
 
 #include "crypt.h"
 #include "protocol.h"
+#include "network.h"
 
 /* ==========
    These definitions are not part of the obfs2_protocol interface.
@@ -33,14 +34,7 @@ extern const protocol_vtable obfs2_vtable;
 
 #define SHARED_SECRET_LENGTH SHA256_LENGTH
 
-typedef struct obfs2_params_t {
-  protocol_params_t super;
-  uchar shared_secret[SHARED_SECRET_LENGTH];
-} obfs2_params_t;
-
-typedef struct obfs2_protocol_t {
-  protocol_t super;
-
+typedef struct obfs2_state_t {
   /** Current protocol state.  We start out waiting for key information.  Then
       we have a key and wait for padding to arrive.  Finally, we are sending
       and receiving bytes on the connection.
@@ -73,7 +67,20 @@ typedef struct obfs2_protocol_t {
 
   /** Number of padding bytes to read before we get to real data */
   int padding_left_to_read;
-} obfs2_protocol_t;
+} obfs2_state_t;
+
+typedef struct obfs2_config_t {
+  config_t super;
+  struct evutil_addrinfo *listen_addr;
+  struct evutil_addrinfo *target_addr;
+  enum listen_mode mode;
+  uchar shared_secret[SHARED_SECRET_LENGTH];
+} obfs2_config_t;
+
+typedef struct obfs2_conn_t {
+  conn_t super;
+  obfs2_state_t *state;
+} obfs2_conn_t;
 
 #endif
 
