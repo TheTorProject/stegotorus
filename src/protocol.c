@@ -39,6 +39,39 @@ config_create(int n_options, const char *const *options)
 }
 
 /**
+   Return the transport name for 'cfg'.
+*/
+const char *
+get_transport_name_from_config(config_t *cfg)
+{
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->name);
+
+  return cfg->vtable->name;
+}
+
+/**
+   Create a config_t for a managed proxy listener.
+*/
+config_t *
+config_create_managed(int is_server, const char *protocol,
+                      const char *bindaddr, const char *orport)
+{
+  size_t i;
+  for (i = 0; i < n_supported_protocols; i++)
+    if (!strcmp(protocol, supported_protocols[i]->name)) {
+      /* Remove the first element of 'options' (which is always the
+         protocol name) from the list passed to the init method. */
+      return supported_protocols[i]->config_create_managed(is_server,
+                                                           protocol,
+                                                           bindaddr, orport);
+    }
+
+  return NULL;
+}
+
+/**
    This function destroys the protocol-specific part of a listener object.
 */
 void

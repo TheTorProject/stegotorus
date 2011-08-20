@@ -4,6 +4,7 @@
 
 #include "util.h"
 
+#define NETWORK_PRIVATE
 #include "network.h"
 
 #include "container.h"
@@ -81,7 +82,6 @@ static void simple_server_listener_cb(conn_t *conn);
 static void conn_free(conn_t *conn);
 static void conn_free_on_flush(struct bufferevent *bev, void *arg);
 
-static int circuit_create(conn_t *up, conn_t *down);
 static void circuit_create_socks(conn_t *up);
 static int circuit_add_down(circuit_t *circuit, conn_t *down);
 static void circuit_free(circuit_t *circuit);
@@ -95,6 +95,22 @@ static void error_cb(struct bufferevent *bev, short what, void *arg);
 static void flush_error_cb(struct bufferevent *bev, short what, void *arg);
 static void pending_conn_cb(struct bufferevent *bev, short what, void *arg);
 static void pending_socks_cb(struct bufferevent *bev, short what, void *arg);
+
+/**
+   Return the evconnlistener that uses 'cfg'.
+*/
+struct evconnlistener *
+get_evconnlistener_by_config(config_t *cfg)
+{
+  obfs_assert(listeners); /* ? */
+
+  SMARTLIST_FOREACH_BEGIN(listeners, listener_t *, l) {
+    if (l->cfg == cfg)
+      return l->listener;
+  } SMARTLIST_FOREACH_END(l);
+
+  return NULL;
+}
 
 /**
    Puts obfsproxy's networking subsystem on "closing time" mode. This
@@ -128,7 +144,8 @@ start_shutdown(int barbaric)
 
 /**
    This function opens listening sockets configured according to the
-   provided 'config_t'.  Returns 1 on success, 0 on failure.
+   provided 'config_t'.
+   Returns 1 on success, 0 on failure.
  */
 int
 open_listeners(struct event_base *base, config_t *cfg)
@@ -355,7 +372,7 @@ conn_free_on_flush(struct bufferevent *bev, void *arg)
     conn_free(conn);
 }
 
-static int
+int
 circuit_create(conn_t *up, conn_t *down)
 {
   if (!up || !down)

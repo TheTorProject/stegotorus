@@ -17,6 +17,8 @@ struct config_t
   const struct protocol_vtable *vtable;
 };
 
+const char *get_transport_name_from_config(config_t *cfg);
+
 /**
    This struct defines a protocol and its methods; note that not all
    of them are methods on the same object in the C++ sense.
@@ -33,6 +35,9 @@ struct protocol_vtable
   /** Allocate a 'config_t' object and fill it in from the provided
       'options' array. */
   config_t *(*config_create)(int n_options, const char *const *options);
+
+  config_t *(*config_create_managed)(int is_server, const char *protocol,
+                                     const char *bindaddr, const char *orport);
 
   /** Destroy the provided 'config_t' object.  */
   void (*config_free)(config_t *cfg);
@@ -81,6 +86,7 @@ struct protocol_vtable
   const protocol_vtable name##_vtable = {       \
     #name,                                      \
     name##_config_create,                       \
+    name##_config_create_managed,               \
     name##_config_free,                         \
     name##_config_get_listen_addrs,             \
     name##_config_get_target_addr,              \
@@ -90,6 +96,9 @@ struct protocol_vtable
   }
 
 config_t *config_create(int n_options, const char *const *options);
+config_t *config_create_managed(int is_server, const char *protocol,
+                                const char *bindaddr, const char *orport);
+
 void config_free(config_t *cfg);
 
 struct evutil_addrinfo *config_get_listen_addrs(config_t *cfg, size_t n);

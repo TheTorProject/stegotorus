@@ -9,6 +9,8 @@
 int open_listeners(struct event_base *base, config_t *cfg);
 void close_all_listeners(void);
 
+struct evconnlistener *get_evconnlistener_by_config(config_t *cfg);
+
 void start_shutdown(int barbaric);
 
 /**
@@ -57,5 +59,12 @@ struct circuit_t {
   unsigned int        is_open : 1;
   unsigned int        is_flushing : 1;
 };
+
+#ifdef NETWORK_PRIVATE
+
+int circuit_create(conn_t *up, conn_t *down);
+
+#endif
+
 
 #endif
