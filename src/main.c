@@ -8,6 +8,7 @@
 #include "crypt.h"
 #include "network.h"
 #include "protocol.h"
+#include "managed.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -17,6 +18,11 @@
 #include <event2/dns.h>
 
 static struct event_base *the_event_base;
+static struct event *sig_int;
+static struct event *sig_term;
+
+/* Pluggable transport proxy mode. ('External' or 'Managed') */
+static int is_external_proxy=1;
 
 /**
    Prints the obfsproxy usage instructions then exits.
@@ -73,6 +79,15 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
     start_shutdown(1);
     break;
   }
+}
+
+/**
+   Returns the libevent event base used by obfsproxy.
+*/
+struct event_base *
+get_event_base(void)
+{
+  return the_event_base;
 }
 
 /** Stop obfsproxy's event loop. Final cleanup happens in main(). */
@@ -143,6 +158,17 @@ handle_obfsproxy_args(const char *const *argv)
           exit(1);
         }
         logsev_set=1;
+    } else if (!strncmp(argv[i], "--managed", 10)) {
+      if (logsev_set) {
+        printf("You can't combine --managed with other log options.\n");
+        exit(1);
+      }
+      if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
+        printf("Error at setting logging severity.\n");
+        exit(1);
+      }
+      logsev_set=1;
+      is_external_proxy=0;
     } else {
       log_warn("Unrecognizable obfsproxy argument '%s'", argv[i]);
       exit(1);
@@ -153,17 +179,76 @@ handle_obfsproxy_args(const char *const *argv)
   return i;
 }
 
-int
-main(int argc, const char *const *argv)
+/**
+   Initialize basic components of obfsproxy.
+*/
+void
+obfsproxy_init()
 {
-  struct event *sig_int;
-  struct event *sig_term;
+  /* Ugly method to fix a Windows problem:
+     http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
+#ifdef _WIN32
+  WSADATA wsaData;
+  WSAStartup(0x101, &wsaData);
+#endif
+
+  /* Initialize crypto */
+  if (initialize_crypto() < 0) {
+    log_error("Failed to initialize cryptography.");
+  }
+
+  /* Initialize libevent */
+  the_event_base = event_base_new();
+  if (!the_event_base) {
+    log_error("Failed to initialize networking.");
+  }
+
+  /* ASN should this happen only when SOCKS is enabled? */
+  if (init_evdns_base(the_event_base)) {
+    log_error("Failed to initialize DNS resolver.");
+  }
+
+  /* Handle signals. */
+#ifdef SIGPIPE
+   signal(SIGPIPE, SIG_IGN);
+#endif
+  sig_int = evsignal_new(the_event_base, SIGINT,
+                         handle_signal_cb, NULL);
+  sig_term = evsignal_new(the_event_base, SIGTERM,
+                          handle_signal_cb, NULL);
+  if (event_add(sig_int,NULL) || event_add(sig_term,NULL)) {
+    log_error("Failed to initialize signal handling.");
+  }
+}
+
+/**
+   Clean the mess that obfsproxy made all over this computer's memory.
+*/
+void
+obfsproxy_cleanup()
+{
+  /* We have landed. */
+  log_info("Exiting.");
+
+  close_all_listeners();
+  evdns_base_free(get_evdns_base(), 0);
+  event_free(sig_int);
+  event_free(sig_term);
+  event_base_free(get_event_base());
+
+  cleanup_crypto();
+  close_obfsproxy_logfile();
+}
+
+/**
+   Launch external proxy.
+*/
+static int
+launch_external(const char *const *begin)
+{
   smartlist_t *configs = smartlist_create();
-  const char *const *begin;
   const char *const *end;
 
-  /* Handle optional obfsproxy arguments. */
-  begin = argv + handle_obfsproxy_args(argv);
 
   /* Find the subsets of argv that define each configuration.
      Each configuration's subset consists of the entries in argv from
@@ -201,42 +286,7 @@ main(int argc, const char *const *argv)
   obfs_assert(smartlist_len(configs) > 0);
 
   /* Configurations have been established; proceed with initialization. */
-
-  /* Ugly method to fix a Windows problem:
-     http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
-#ifdef _WIN32
-  WSADATA wsaData;
-  WSAStartup(0x101, &wsaData);
-#endif
-
-  /* Initialize crypto */
-  if (initialize_crypto() < 0) {
-    log_error("Failed to initialize cryptography.");
-  }
-
-  /* Initialize libevent */
-  the_event_base = event_base_new();
-  if (!the_event_base) {
-    log_error("Failed to initialize networking.");
-  }
-
-  /* ASN should this happen only when SOCKS is enabled? */
-  if (init_evdns_base(the_event_base)) {
-    log_error("Failed to initialize DNS resolver.");
-  }
-
-  /* Handle signals. */
-#ifdef SIGPIPE
-   signal(SIGPIPE, SIG_IGN);
-#endif
-  sig_int = evsignal_new(the_event_base, SIGINT,
-                         handle_signal_cb, NULL);
-  sig_term = evsignal_new(the_event_base, SIGTERM,
-                          handle_signal_cb, NULL);
-  if (event_add(sig_int,NULL) || event_add(sig_term,NULL)) {
-    log_error("Failed to initialize signal handling.");
-    return 1;
-  }
+  obfsproxy_init();
 
   /* Open listeners for each configuration. */
   SMARTLIST_FOREACH(configs, config_t *, cfg, {
@@ -249,20 +299,32 @@ main(int argc, const char *const *argv)
   /* We are go for launch. */
   event_base_dispatch(the_event_base);
 
-  /* We have landed. */
-  log_info("Exiting.");
+  /* Cleanup and exit! */
+  obfsproxy_cleanup();
 
-  close_all_listeners();
   SMARTLIST_FOREACH(configs, config_t *, cfg, config_free(cfg));
   smartlist_free(configs);
 
-  evdns_base_free(get_evdns_base(), 0);
-  event_free(sig_int);
-  event_free(sig_term);
-  event_base_free(the_event_base);
+  return 0;
+}
 
-  cleanup_crypto();
-  close_obfsproxy_logfile();
+/** Entry point */
+int
+obfs_main(int argc, const char *const *argv)
+{
+  const char *const *begin;
+
+  /* Handle optional obfsproxy arguments. */
+  begin = argv + handle_obfsproxy_args(argv);
+
+  if (is_external_proxy) {
+    if (launch_external(begin))
+      return 0;
+  } else {
+    if (launch_managed_proxy() < 0)
+      return 0;
+  }
 
   return 0;
 }
+

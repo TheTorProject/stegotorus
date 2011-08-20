@@ -5,6 +5,13 @@
 #ifndef MAIN_H
 #define MAIN_H
 
+int tor_main(int argc, char *argv[]);
+
 void finish_shutdown(void);
+
+void obfsproxy_init();
+void obfsproxy_cleanup();
+
+struct event_base *get_event_base(void);
 
 #endif
