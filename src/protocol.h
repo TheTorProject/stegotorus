@@ -14,20 +14,27 @@
  */
 struct config_t
 {
-  const struct protocol_vtable *vtable;
+  const struct proto_vtable *vtable;
 };
+
+config_t *config_create(int n_options, const char *const *options);
+void config_free(config_t *cfg);
+
+struct evutil_addrinfo *config_get_listen_addrs(config_t *cfg, size_t n);
+struct evutil_addrinfo *config_get_target_addr(config_t *cfg);
+
 
 /**
    This struct defines a protocol and its methods; note that not all
    of them are methods on the same object in the C++ sense.
 
-   A filled-in, statically allocated protocol_vtable object is the
+   A filled-in, statically allocated proto_vtable object is the
    principal interface between each individual protocol and generic
    code.  At present there is a static list of these objects in protocol.c.
  */
-struct protocol_vtable
+struct proto_vtable
 {
-  /** The short name of this protocol. */
+  /** The short name of this protocol. Must be a valid C identifier. */
   const char *name;
 
   /** Allocate a 'config_t' object and fill it in from the provided
@@ -88,13 +95,15 @@ struct protocol_vtable
   void (*transmit_soon)(conn_t *conn, unsigned long timeout);
 };
 
-/**
-   Use this macro to define protocol_vtable objects; it ensures all
-   the methods are in the correct order and enforces a consistent
-   naming convention on protocol implementations.
- */
+extern const proto_vtable *const supported_protocols[];
+extern const size_t n_supported_protocols;
 
-#define PROTOCOL_VTABLE_COMMON_METHODS(name)    \
+/** Use these macros to define protocol modules; they ensure all the
+    methods are in the correct order in the vtable, enforce a
+    consistent naming convention on protocol implementations, and
+    provide type-safe up and down casts. */
+
+#define PROTO_VTABLE_COMMON(name)               \
     #name,                                      \
     name##_config_create,                       \
     name##_config_free,                         \
@@ -102,30 +111,58 @@ struct protocol_vtable
     name##_config_get_target_addr,              \
     name##_conn_create,                         \
     name##_conn_free,                           \
-    name##_handshake, name##_send, name##_recv  \
+    name##_handshake,                           \
+    name##_send,                                \
+    name##_recv,
 
-#define DEFINE_PROTOCOL_VTABLE_NOSTEG(name)     \
-  const protocol_vtable name##_vtable = {       \
-    PROTOCOL_VTABLE_COMMON_METHODS(name),       \
-    NULL, NULL, NULL, NULL,                     \
-  }
+#define PROTO_VTABLE_NOSTEG(name)               \
+    NULL, NULL, NULL, NULL,
 
-#define DEFINE_PROTOCOL_VTABLE_STEG(name)       \
-  const protocol_vtable name##_vtable = {       \
-    PROTOCOL_VTABLE_COMMON_METHODS(name),       \
+#define PROTO_VTABLE_STEG(name)                 \
     name##_expect_close,                        \
     name##_cease_transmission,                  \
     name##_close_after_transmit,                \
-    name##_transmit_soon,                       \
-  }
+    name##_transmit_soon,
 
-config_t *config_create(int n_options, const char *const *options);
-void config_free(config_t *cfg);
+#define PROTO_FWD_COMMON(name)                                          \
+  static config_t *name##_config_create(int, const char *const *);      \
+  static void name##_config_free(config_t *);                           \
+  static struct evutil_addrinfo *                                       \
+    name##_config_get_listen_addrs(config_t *, size_t);                 \
+  static struct evutil_addrinfo *                                       \
+    name##_config_get_target_addr(config_t *);                          \
+  static conn_t *name##_conn_create(config_t *);                        \
+  static void name##_conn_free(conn_t *);                               \
+  static int name##_handshake(conn_t *);                                \
+  static int name##_send(conn_t *, struct evbuffer *);                  \
+  static enum recv_ret name##_recv(conn_t *, struct evbuffer *);
 
-struct evutil_addrinfo *config_get_listen_addrs(config_t *cfg, size_t n);
-struct evutil_addrinfo *config_get_target_addr(config_t *cfg);
+#define PROTO_FWD_NOSTEG(name) /* nothing required */
 
-extern const protocol_vtable *const supported_protocols[];
-extern const size_t n_supported_protocols;
+#define PROTO_FWD_STEG(name)                                    \
+  static void name##_expect_close(conn_t *);                    \
+  static void name##_cease_transmission(conn_t *);              \
+  static void name##_close_after_transmit(conn_t *);            \
+  static void name##_transmit_soon(conn_t *, unsigned long);
+
+#define PROTO_CAST_HELPERS(name)                                \
+  static inline config_t *upcast_config(name##_config_t *c)     \
+  { return &c->super; }                                         \
+  static inline name##_config_t *downcast_config(config_t *c)   \
+  { return DOWNCAST(name##_config_t, super, c); }               \
+  static inline conn_t *upcast_conn(name##_conn_t *c)           \
+  { return &c->super; }                                         \
+  static inline name##_conn_t *downcast_conn(conn_t *c)         \
+  { return DOWNCAST(name##_conn_t, super, c); }
+
+#define PROTO_DEFINE_MODULE(name, stegp)        \
+  PROTO_CAST_HELPERS(name)                      \
+  PROTO_FWD_COMMON(name)                        \
+  PROTO_FWD_##stegp(name)                       \
+                                                \
+  const proto_vtable p_##name##_vtable = {      \
+    PROTO_VTABLE_COMMON(name)                   \
+    PROTO_VTABLE_##stegp(name)                  \
+  } /* deliberate absence of semicolon */
 
 #endif

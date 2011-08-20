@@ -9,18 +9,7 @@
 
 #include <event2/buffer.h>
 
-/* type-safe downcast wrappers */
-static inline dummy_config_t *
-downcast_config(config_t *p)
-{
-  return DOWNCAST(dummy_config_t, super, p);
-}
-
-static inline dummy_conn_t *
-downcast_conn(conn_t *p)
-{
-  return DOWNCAST(dummy_conn_t, super, p);
-}
+PROTO_DEFINE_MODULE(dummy, NOSTEG);
 
 /**
    Helper: Parses 'options' and fills 'cfg'.
@@ -82,12 +71,13 @@ static config_t *
 dummy_config_create(int n_options, const char *const *options)
 {
   dummy_config_t *cfg = xzalloc(sizeof(dummy_config_t));
-  cfg->super.vtable = &dummy_vtable;
+  config_t *c = upcast_config(cfg);
+  c->vtable = &p_dummy_vtable;
 
   if (parse_and_set_options(n_options, options, cfg) == 0)
-    return &cfg->super;
+    return c;
 
-  dummy_config_free(&cfg->super);
+  dummy_config_free(c);
   log_warn("dummy syntax:\n"
            "\tdummy <mode> <listen_address> [<target_address>]\n"
            "\t\tmode ~ server|client|socks\n"
@@ -125,21 +115,21 @@ dummy_config_get_target_addr(config_t *cfg)
 static conn_t *
 dummy_conn_create(config_t *cfg)
 {
-  dummy_conn_t *proto = xzalloc(sizeof(dummy_conn_t));
-  proto->super.cfg = cfg;
-  proto->super.mode = downcast_config(cfg)->mode;
-  return &proto->super;
+  dummy_conn_t *conn = xzalloc(sizeof(dummy_conn_t));
+  conn->super.cfg = cfg;
+  conn->super.mode = downcast_config(cfg)->mode;
+  return upcast_conn(conn);
 }
 
 static void
-dummy_conn_free(conn_t *proto)
+dummy_conn_free(conn_t *c)
 {
-  free(downcast_conn(proto));
+  free(downcast_conn(c));
 }
 
 /** Dummy has no handshake */
 static int
-dummy_handshake(conn_t *proto)
+dummy_handshake(conn_t *c)
 {
   return 0;
 }
@@ -159,5 +149,3 @@ dummy_recv(conn_t *source, struct evbuffer *dest)
   else
     return RECV_GOOD;
 }
-
-DEFINE_PROTOCOL_VTABLE_NOSTEG(dummy);

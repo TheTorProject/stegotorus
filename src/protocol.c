@@ -14,10 +14,10 @@
     All supported protocols should be put in this array.
     It's used by main.c.
 */
-const protocol_vtable *const supported_protocols[] =
+const proto_vtable *const supported_protocols[] =
 {
-  &dummy_vtable,
-  &x_dsteg_vtable,
+  &p_dummy_vtable,
+  &p_x_dsteg_vtable,
   /*&obfs2_vtable,*/
 };
 const size_t n_supported_protocols =

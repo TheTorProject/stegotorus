@@ -69,7 +69,7 @@ typedef struct rng_t rng_t;
 typedef struct socks_state_t socks_state_t;
 typedef struct steg_t steg_t;
 
-typedef struct protocol_vtable protocol_vtable;
+typedef struct proto_vtable proto_vtable;
 typedef struct steg_vtable steg_vtable;
 
 enum recv_ret {

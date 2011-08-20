@@ -9,18 +9,7 @@
 
 #include <event2/buffer.h>
 
-/* type-safe downcast wrappers */
-static inline x_dsteg_config_t *
-downcast_config(config_t *p)
-{
-  return DOWNCAST(x_dsteg_config_t, super, p);
-}
-
-static inline x_dsteg_conn_t *
-downcast_conn(conn_t *p)
-{
-  return DOWNCAST(x_dsteg_conn_t, super, p);
-}
+PROTO_DEFINE_MODULE(x_dsteg, STEG);
 
 /**
    Helper: Parses 'options' and fills 'cfg'.
@@ -92,12 +81,13 @@ static config_t *
 x_dsteg_config_create(int n_options, const char *const *options)
 {
   x_dsteg_config_t *cfg = xzalloc(sizeof(x_dsteg_config_t));
-  cfg->super.vtable = &x_dsteg_vtable;
+  config_t *c = upcast_config(cfg);
+  c->vtable = &p_x_dsteg_vtable;
 
   if (parse_and_set_options(n_options, options, cfg) == 0)
-    return &cfg->super;
+    return c;
 
-  x_dsteg_config_free(&cfg->super);
+  x_dsteg_config_free(c);
   log_warn("x_dsteg syntax:\n"
            "\tx_dsteg <mode> <listen_address> [<target_address>] [<steg>]\n"
            "\t\tmode ~ server|client|socks\n"
@@ -140,16 +130,18 @@ x_dsteg_conn_create(config_t *c)
 {
   x_dsteg_config_t *cfg = downcast_config(c);
   x_dsteg_conn_t *conn = xzalloc(sizeof(x_dsteg_conn_t));
-  conn->super.cfg = c;
-  conn->super.mode = cfg->mode;
-  if (conn->super.mode != LSN_SIMPLE_SERVER) {
+  conn_t *cn = upcast_conn(conn);
+
+  cn->cfg = c;
+  cn->mode = cfg->mode;
+  if (cfg->mode != LSN_SIMPLE_SERVER) {
     conn->steg = steg_new(cfg->stegname);
     if (!conn->steg) {
       free(conn);
       return 0;
     }
   }
-  return &conn->super;
+  return cn;
 }
 
 static void
@@ -199,5 +191,3 @@ static void x_dsteg_expect_close(conn_t *conn) {}
 static void x_dsteg_cease_transmission(conn_t *conn) {}
 static void x_dsteg_close_after_transmit(conn_t *conn) {}
 static void x_dsteg_transmit_soon(conn_t *conn, unsigned long timeout) {}
-
-DEFINE_PROTOCOL_VTABLE_STEG(x_dsteg);

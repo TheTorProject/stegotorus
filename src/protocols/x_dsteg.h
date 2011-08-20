@@ -4,7 +4,7 @@
 #ifndef PROTOCOL_X_DSTEG_H
 #define PROTOCOL_X_DSTEG_H
 
-extern const protocol_vtable x_dsteg_vtable;
+extern const proto_vtable p_x_dsteg_vtable;
 
 #ifdef PROTOCOL_X_DSTEG_PRIVATE
 

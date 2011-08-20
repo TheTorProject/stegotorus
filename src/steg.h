@@ -107,7 +107,7 @@ enum recv_ret steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
   static enum recv_ret name##_receive(steg_t *, conn_t *, struct evbuffer *); \
                                                                         \
   /* vtable */                                                          \
-  const struct steg_vtable s_##name##_vtable = {                        \
+  const steg_vtable s_##name##_vtable = {                               \
     #name, csm, scm, mcci, mci,                                         \
     name##_detect, name##_new, name##_del,                              \
     name##_transmit_room, name##_transmit,                              \
