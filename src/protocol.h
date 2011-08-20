@@ -62,6 +62,12 @@ struct protocol_vtable
   /** Destroy per-connection, protocol-specific state.  */
   void (*conn_free)(conn_t *state);
 
+  /** A 'circuit_t' needs to be created. */
+  circuit_t *(*circuit_create)(config_t *cfg);
+
+  /** Destroy a 'circuit_t'.  */
+  void (*circuit_free)(circuit_t *circuit);
+
   /** Perform a connection handshake. Not all protocols have a handshake. */
   int (*handshake)(conn_t *state, struct evbuffer *buf);
 
@@ -92,6 +98,8 @@ struct protocol_vtable
     name##_config_get_target_addr,              \
     name##_conn_create,                         \
     name##_conn_free,                           \
+    name##_circuit_create,                      \
+    name##_circuit_free,                        \
     name##_handshake, name##_send, name##_recv  \
   }
 
@@ -106,6 +114,10 @@ struct evutil_addrinfo *config_get_target_addr(config_t *cfg);
 
 conn_t *proto_conn_create(config_t *cfg);
 void proto_conn_free(conn_t *conn);
+
+circuit_t *proto_circuit_create(config_t *cfg);
+void proto_circuit_free(circuit_t *conn, config_t *cfg);
+
 
 int proto_handshake(conn_t *conn, void *buf);
 int proto_send(conn_t *conn, void *source, void *dest);

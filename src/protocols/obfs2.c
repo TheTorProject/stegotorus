@@ -22,6 +22,13 @@ downcast_conn(conn_t *p)
   return DOWNCAST(obfs2_conn_t, super, p);
 }
 
+static inline obfs2_circuit_t *
+downcast_circuit(circuit_t *p)
+{
+  return DOWNCAST(obfs2_circuit_t, super, p);
+}
+
+
 static int parse_and_set_options(int n_options,
                                  const char *const *options,
                                  obfs2_config_t *params);
@@ -44,20 +51,10 @@ shared_seed_nonzero(const uchar *seed)
   return memcmp(seed, SHARED_ZERO_SEED, SHARED_SECRET_LENGTH) != 0;
 }
 
-/**
-   Stupid temporary function returning the other conn of a circuit.
-   For example, if 'conn' is the downstream connection on a circuit,
-   this function returns the upstream connection.
-*/
-static inline conn_t *
-get_other_conn(conn_t *conn)
+static inline obfs2_state_t *
+get_state_from_conn(conn_t *conn)
 {
-  if (conn->circuit->upstream == conn) {
-    return conn->circuit->downstream;
-  } else {
-    obfs_assert(conn->circuit->downstream == conn);
-    return conn->circuit->upstream;
-  }
+  return downcast_circuit(conn->circuit)->state;
 }
 
 static void
@@ -246,7 +243,6 @@ obfs2_conn_create(config_t *cfg)
   obfs2_conn_t *conn = xzalloc(sizeof(obfs2_conn_t));
   conn->super.cfg = cfg;
   conn->super.mode = downcast_config(cfg)->mode;
-  conn->state = state_create(cfg);
 
   return &conn->super;
 }
@@ -254,10 +250,25 @@ obfs2_conn_create(config_t *cfg)
 static void
 obfs2_conn_free(conn_t *conn)
 {
-  obfs2_conn_t *obfs2_conn = downcast_conn(conn);
+  free(downcast_conn(conn));
+}
 
-  obfs2_destroy(obfs2_conn->state);
-  free(obfs2_conn);
+static circuit_t *
+obfs2_circuit_create(config_t *cfg)
+{
+  obfs2_circuit_t *circuit = xzalloc(sizeof(obfs2_circuit_t));
+  circuit->state = state_create(cfg);
+
+  return &circuit->super;
+}
+
+static void
+obfs2_circuit_free(circuit_t *circuit)
+{
+  obfs2_circuit_t *obfs2_circuit = downcast_circuit(circuit);
+
+  obfs2_destroy(obfs2_circuit->state);
+  free(obfs2_circuit);
 }
 
 /**
@@ -402,7 +413,7 @@ obfs2_destroy(obfs2_state_t *state)
 static int
 obfs2_handshake(conn_t *s, struct evbuffer *buf)
 {
-  obfs2_state_t *state = downcast_conn(s)->state;
+  obfs2_state_t *state = get_state_from_conn(s);
 
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE), plength, send_plength;
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
@@ -474,7 +485,7 @@ static int
 obfs2_send(conn_t *s,
            struct evbuffer *source, struct evbuffer *dest)
 {
-  obfs2_state_t *state = downcast_conn(get_other_conn(s))->state;
+  obfs2_state_t *state = get_state_from_conn(s);
 
   if (state->send_crypto) {
     /* First of all, send any data that we've been waiting to send. */
@@ -554,7 +565,7 @@ static enum recv_ret
 obfs2_recv(conn_t *s, struct evbuffer *source,
            struct evbuffer *dest)
 {
-  obfs2_state_t *state = downcast_conn(s)->state;
+  obfs2_state_t *state = get_state_from_conn(s);
 
   if (state->state == ST_WAIT_FOR_KEY) {
     /* We're waiting for the first OBFUSCATE_SEED_LENGTH+8 bytes to show up

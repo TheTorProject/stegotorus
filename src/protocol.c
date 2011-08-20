@@ -165,3 +165,27 @@ proto_conn_free(conn_t *conn) {
   obfs_assert(conn->cfg->vtable->conn_free);
   conn->cfg->vtable->conn_free(conn);
 }
+
+/**
+   This protocol is called everytime a circuit has to be created.
+   Return a circuit_t on success or a NULL on fail.
+*/
+circuit_t *
+proto_circuit_create(config_t *cfg)
+{
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->circuit_create);
+  return cfg->vtable->circuit_create(cfg);
+}
+
+/**
+   This function destroys 'circuit', using the vtable off 'cfg'.
+*/
+void
+proto_circuit_free(circuit_t *circuit, config_t *cfg) {
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->circuit_free);
+  cfg->vtable->circuit_free(circuit);
+}

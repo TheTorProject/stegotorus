@@ -378,7 +378,9 @@ circuit_create(conn_t *up, conn_t *down)
   if (!up || !down)
     return -1;
 
-  circuit_t *r = xzalloc(sizeof(circuit_t));
+  obfs_assert(up->cfg == down->cfg);
+
+  circuit_t *r = proto_circuit_create(up->cfg);
   r->upstream = up;
   r->downstream = down;
   up->circuit = r;
@@ -391,7 +393,7 @@ circuit_create_socks(conn_t *up)
 {
   obfs_assert(up);
 
-  circuit_t *r = xzalloc(sizeof(circuit_t));
+  circuit_t *r = proto_circuit_create(up->cfg);
   r->upstream = up;
   r->socks_state = socks_state_new();
   up->circuit = r;
@@ -410,6 +412,10 @@ circuit_add_down(circuit_t *circuit, conn_t *down)
 static void
 circuit_free(circuit_t *circuit)
 {
+  /* keep the cfg so that we can use its vtable for proto_circuit_free() */
+  config_t *cfg = circuit->upstream->cfg;
+  obfs_assert(cfg);
+
   /* break the circular references before deallocating each side */
   circuit->upstream->circuit = NULL;
   conn_free(circuit->upstream);
@@ -419,7 +425,8 @@ circuit_free(circuit_t *circuit)
   }
   if (circuit->socks_state)
     socks_state_free(circuit->socks_state);
-  free(circuit);
+
+  proto_circuit_free(circuit, cfg);
 }
 
 /**

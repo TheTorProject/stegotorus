@@ -79,8 +79,12 @@ typedef struct obfs2_config_t {
 
 typedef struct obfs2_conn_t {
   conn_t super;
-  obfs2_state_t *state;
 } obfs2_conn_t;
+
+typedef struct obfs2_circuit_t {
+  circuit_t super;
+  obfs2_state_t *state;
+} obfs2_circuit_t;
 
 #endif
 

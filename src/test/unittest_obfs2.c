@@ -21,6 +21,18 @@ downcast(conn_t *proto)
   return DOWNCAST(obfs2_conn_t, super, proto);
 }
 
+static inline obfs2_circuit_t *
+downcast_circuit(circuit_t *p)
+{
+  return DOWNCAST(obfs2_circuit_t, super, p);
+}
+
+static inline obfs2_state_t *
+get_state_from_conn(conn_t *conn)
+{
+  return downcast_circuit(conn->circuit)->state;
+}
+
 static void
 test_obfs2_option_parsing(void *unused)
 {
@@ -81,7 +93,9 @@ struct test_obfs2_state
   config_t *cfg_client;
   config_t *cfg_server;
   conn_t *conn_client;
+  conn_t *conn2_client; /* dummy conn to build a circuit */
   conn_t *conn_server;
+  conn_t *conn2_server; /* dummy conn to build a circuit */
   struct evbuffer *output_buffer;
   struct evbuffer *dummy_buffer;
 };
@@ -91,10 +105,17 @@ cleanup_obfs2_state(const struct testcase_t *unused, void *state)
 {
   struct test_obfs2_state *s = (struct test_obfs2_state *)state;
 
+  proto_circuit_free(s->conn_client->circuit, s->cfg_client);
   if (s->conn_client)
     proto_conn_free(s->conn_client);
+  if (s->conn2_client)
+    proto_conn_free(s->conn2_client);
+
+  proto_circuit_free(s->conn_server->circuit, s->cfg_server);
   if (s->conn_server)
     proto_conn_free(s->conn_server);
+  if (s->conn2_server)
+    proto_conn_free(s->conn2_server);
 
   if (s->cfg_client)
     config_free(s->cfg_client);
@@ -136,6 +157,15 @@ setup_obfs2_state(const struct testcase_t *unused)
   s->conn_server = proto_conn_create(s->cfg_server);
   tt_assert(s->conn_server);
 
+  s->conn2_client = proto_conn_create(s->cfg_client);
+  tt_assert(s->conn2_client);
+
+  s->conn2_server = proto_conn_create(s->cfg_server);
+  tt_assert(s->conn2_server);
+
+  tt_assert(!(circuit_create(s->conn_client, s->conn2_client)<0));
+  tt_assert(!(circuit_create(s->conn_server, s->conn2_server)<0));
+
   s->output_buffer = evbuffer_new();
   tt_assert(s->output_buffer);
 
@@ -156,8 +186,8 @@ static void
 test_obfs2_handshake(void *state)
 {
   struct test_obfs2_state *s = (struct test_obfs2_state *)state;
-  obfs2_state_t *client_state = downcast(s->conn_client)->state;
-  obfs2_state_t *server_state = downcast(s->conn_server)->state;
+  obfs2_state_t *client_state = get_state_from_conn(s->conn_client);
+  obfs2_state_t *server_state = get_state_from_conn(s->conn_server);
 
   /* We create a client handshake message and pass it to output_buffer */
   tt_int_op(0, <=, proto_handshake(s->conn_client, s->output_buffer));
@@ -166,6 +196,7 @@ test_obfs2_handshake(void *state)
      handshake message, by using proto_recv() on the output_buffer */
   tt_assert(RECV_GOOD == proto_recv(s->conn_server, s->output_buffer,
                                     s->dummy_buffer));
+
 
   /* Now, we create the server's handshake and pass it to output_buffer */
   tt_int_op(0, <=, proto_handshake(s->conn_server, s->output_buffer));
@@ -192,10 +223,6 @@ test_obfs2_transfer(void *state)
   struct test_obfs2_state *s = (struct test_obfs2_state *)state;
   int n;
   struct evbuffer_iovec v[2];
-
-  /* evil trick to bypass get_other_conn() */
-  circuit_create(s->conn_client, s->conn_client);
-  circuit_create(s->conn_server, s->conn_server);
 
   /* Handshake */
   tt_int_op(0, <=, proto_handshake(s->conn_client, s->output_buffer));
@@ -254,8 +281,8 @@ static void
 test_obfs2_split_handshake(void *state)
 {
   struct test_obfs2_state *s = (struct test_obfs2_state *)state;
-  obfs2_state_t *client_state = downcast(s->conn_client)->state;
-  obfs2_state_t *server_state = downcast(s->conn_server)->state;
+  obfs2_state_t *client_state = get_state_from_conn(s->conn_client);
+  obfs2_state_t *server_state = get_state_from_conn(s->conn_server);
 
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);
   uint32_t plength1, plength1_msg1, plength1_msg2, send_plength1;
@@ -372,8 +399,8 @@ static void
 test_obfs2_wrong_handshake_magic(void *state)
 {
   struct test_obfs2_state *s = (struct test_obfs2_state *)state;
-  obfs2_state_t *client_state = downcast(s->conn_client)->state;
-  obfs2_state_t *server_state = downcast(s->conn_server)->state;
+  obfs2_state_t *client_state = get_state_from_conn(s->conn_client);
+  obfs2_state_t *server_state = get_state_from_conn(s->conn_server);
 
   uint32_t wrong_magic = 0xD15EA5E;
 
@@ -411,8 +438,8 @@ static void
 test_obfs2_wrong_handshake_plength(void *state)
 {
   struct test_obfs2_state *s = (struct test_obfs2_state *)state;
-  obfs2_state_t *client_state = downcast(s->conn_client)->state;
-  obfs2_state_t *server_state = downcast(s->conn_server)->state;
+  obfs2_state_t *client_state = get_state_from_conn(s->conn_client);
+  obfs2_state_t *server_state = get_state_from_conn(s->conn_server);
 
   uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8 + 1];
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);

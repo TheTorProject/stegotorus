@@ -22,6 +22,12 @@ downcast_conn(conn_t *p)
   return DOWNCAST(dummy_conn_t, super, p);
 }
 
+static inline dummy_circuit_t *
+downcast_circuit(circuit_t *p)
+{
+  return DOWNCAST(dummy_circuit_t, super, p);
+}
+
 /**
    Helper: Parses 'options' and fills 'cfg'.
 */
@@ -172,6 +178,19 @@ static void
 dummy_conn_free(conn_t *proto)
 {
   free(downcast_conn(proto));
+}
+
+static circuit_t *
+dummy_circuit_create(config_t *cfg)
+{
+  dummy_circuit_t *circuit = xzalloc(sizeof(dummy_circuit_t));
+  return &circuit->super;
+}
+
+static void
+dummy_circuit_free(circuit_t *circ)
+{
+  free(downcast_circuit(circ));
 }
 
 /** Dummy has no handshake */
