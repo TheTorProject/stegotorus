@@ -12,6 +12,9 @@ void finish_shutdown(void);
 void obfsproxy_init();
 void obfsproxy_cleanup();
 
+int is_supported_protocol(const char *name);
+void ATTR_NORETURN usage(void);
+
 struct event_base *get_event_base(void);
 
 #endif

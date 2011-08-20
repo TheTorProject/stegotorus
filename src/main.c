@@ -8,7 +8,9 @@
 #include "crypt.h"
 #include "network.h"
 #include "protocol.h"
+
 #include "managed.h"
+#include "external.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -27,7 +29,7 @@ static int is_external_proxy=1;
 /**
    Prints the obfsproxy usage instructions then exits.
 */
-static void ATTR_NORETURN
+void ATTR_NORETURN
 usage(void)
 {
   int i;
@@ -99,7 +101,7 @@ finish_shutdown(void)
 }
 
 /** Return 1 if 'name' is the name of a supported protocol, otherwise 0. */
-static int
+int
 is_supported_protocol(const char *name)
 {
   int i;
@@ -240,73 +242,6 @@ obfsproxy_cleanup()
   close_obfsproxy_logfile();
 }
 
-/**
-   Launch external proxy.
-*/
-static int
-launch_external(const char *const *begin)
-{
-  smartlist_t *configs = smartlist_create();
-  const char *const *end;
-
-
-  /* Find the subsets of argv that define each configuration.
-     Each configuration's subset consists of the entries in argv from
-     its recognized protocol name, up to but not including the next
-     recognized protocol name. */
-  if (!*begin || !is_supported_protocol(*begin))
-    usage();
-
-  do {
-    end = begin+1;
-    while (*end && !is_supported_protocol(*end))
-      end++;
-    if (log_do_debug()) {
-      smartlist_t *s = smartlist_create();
-      char *joined;
-      const char *const *p;
-      for (p = begin; p < end; p++)
-        smartlist_add(s, (void *)*p);
-      joined = smartlist_join_strings(s, " ", 0, NULL);
-      log_debug("Configuration %d: %s", smartlist_len(configs)+1, joined);
-      free(joined);
-      smartlist_free(s);
-    }
-    if (end == begin+1) {
-      log_warn("No arguments for configuration %d", smartlist_len(configs)+1);
-      usage();
-    } else {
-      config_t *cfg = config_create(end - begin, begin);
-      if (!cfg)
-        return 2; /* diagnostic already issued */
-      smartlist_add(configs, cfg);
-    }
-    begin = end;
-  } while (*begin);
-  obfs_assert(smartlist_len(configs) > 0);
-
-  /* Configurations have been established; proceed with initialization. */
-  obfsproxy_init();
-
-  /* Open listeners for each configuration. */
-  SMARTLIST_FOREACH(configs, config_t *, cfg, {
-    if (!open_listeners(the_event_base, cfg)) {
-      log_error("Failed to open listeners for configuration %d", cfg_sl_idx+1);
-      return 1;
-    }
-  });
-
-  /* We are go for launch. */
-  event_base_dispatch(the_event_base);
-
-  /* Cleanup and exit! */
-  obfsproxy_cleanup();
-
-  SMARTLIST_FOREACH(configs, config_t *, cfg, config_free(cfg));
-  smartlist_free(configs);
-
-  return 0;
-}
 
 /** Entry point */
 int
@@ -318,7 +253,7 @@ obfs_main(int argc, const char *const *argv)
   begin = argv + handle_obfsproxy_args(argv);
 
   if (is_external_proxy) {
-    if (launch_external(begin))
+    if (launch_external_proxy(begin))
       return 0;
   } else {
     if (launch_managed_proxy() < 0)
