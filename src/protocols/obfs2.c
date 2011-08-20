@@ -44,7 +44,11 @@ shared_seed_nonzero(const uchar *seed)
   return memcmp(seed, SHARED_ZERO_SEED, SHARED_SECRET_LENGTH) != 0;
 }
 
-/** stupid function returning the other conn of the circuit */
+/**
+   Stupid temporary function returning the other conn of a circuit.
+   For example, if 'conn' is the downstream connection on a circuit,
+   this function returns the upstream connection.
+*/
 static inline conn_t *
 get_other_conn(conn_t *conn)
 {
@@ -95,6 +99,43 @@ obfs2_config_create(int n_options, const char *const *options)
          "\tExample:\n"
          "\tobfsproxy --dest=127.0.0.1:666 --shared-secret=himitsu "
          "\tobfs2 server 127.0.0.1:1026");
+  return NULL;
+}
+
+/**
+   Populate a config_t for a managed proxy listener.
+*/
+static config_t *
+obfs2_config_create_managed(int is_server, const char *protocol,
+                            const char *bindaddr, const char *orport)
+{
+  const char* defport;
+
+  obfs2_config_t *cfg = xzalloc(sizeof(obfs2_config_t));
+  cfg->super.vtable = &obfs2_vtable;
+
+  if (is_server) {
+    defport = "11253"; /* 2bf5 */
+    cfg->mode = LSN_SIMPLE_SERVER;
+  } else {
+    defport = "23548"; /* 5bf5 */
+    cfg->mode = LSN_SOCKS_CLIENT;
+  }
+
+  cfg->listen_addr = resolve_address_port(bindaddr, 1, 1, defport);
+  if (!cfg->listen_addr)
+    goto err;
+
+  if (is_server) {
+    cfg->target_addr = resolve_address_port(orport, 1, 0, NULL);
+    if (!cfg->target_addr)
+      goto err;
+  }
+
+  return &cfg->super;
+
+ err:
+  obfs2_config_free(&cfg->super);
   return NULL;
 }
 
@@ -195,7 +236,7 @@ obfs2_config_get_target_addr(config_t *cfg)
 }
 
 /*
-  This is called everytime we get a connection for the dummy
+  This is called everytime we get a connection for the obfs2
   protocol.
 */
 

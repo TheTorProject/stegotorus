@@ -7,6 +7,7 @@
 
 #define PROTOCOL_OBFS2_PRIVATE
 #define CRYPT_PRIVATE
+#define NETWORK_PRIVATE
 #include "protocols/obfs2.h"
 #include "crypt.h"
 
@@ -191,6 +192,10 @@ test_obfs2_transfer(void *state)
   struct test_obfs2_state *s = (struct test_obfs2_state *)state;
   int n;
   struct evbuffer_iovec v[2];
+
+  /* evil trick to bypass get_other_conn() */
+  circuit_create(s->conn_client, s->conn_client);
+  circuit_create(s->conn_server, s->conn_server);
 
   /* Handshake */
   tt_int_op(0, <=, proto_handshake(s->conn_client, s->output_buffer));

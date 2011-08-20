@@ -101,6 +101,43 @@ dummy_config_create(int n_options, const char *const *options)
   return NULL;
 }
 
+/**
+   Return a config_t for a managed proxy listener.
+*/
+static config_t *
+dummy_config_create_managed(int is_server, const char *protocol,
+                            const char *bindaddr, const char *orport)
+{
+  const char* defport;
+
+  dummy_config_t *cfg = xzalloc(sizeof(dummy_config_t));
+  cfg->super.vtable = &dummy_vtable;
+
+  if (is_server) {
+    defport = "11253"; /* 2bf5 */
+    cfg->mode = LSN_SIMPLE_SERVER;
+  } else {
+    defport = "23548"; /* 5bf5 */
+    cfg->mode = LSN_SOCKS_CLIENT;
+  }
+
+  cfg->listen_addr = resolve_address_port(bindaddr, 1, 1, defport);
+  if (!cfg->listen_addr)
+    goto err;
+
+  if (is_server) {
+    cfg->target_addr = resolve_address_port(orport, 1, 0, NULL);
+    if (!cfg->target_addr)
+      goto err;
+  }
+
+  return &cfg->super;
+
+ err:
+  dummy_config_free(&cfg->super);
+  return NULL;
+}
+
 /** Retrieve the 'n'th set of listen addresses for this configuration. */
 static struct evutil_addrinfo *
 dummy_config_get_listen_addrs(config_t *cfg, size_t n)
