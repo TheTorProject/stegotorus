@@ -253,11 +253,11 @@ obfs_main(int argc, const char *const *argv)
   begin = argv + handle_obfsproxy_args(argv);
 
   if (is_external_proxy) {
-    if (launch_external_proxy(begin))
-      return 0;
+    if (launch_external_proxy(begin) < 0)
+      return 1;
   } else {
     if (launch_managed_proxy() < 0)
-      return 0;
+      return 1;
   }
 
   return 0;

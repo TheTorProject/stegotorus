@@ -51,7 +51,7 @@ launch_external_proxy(const char *const *begin)
     } else {
       config_t *cfg = config_create(end - begin, begin);
       if (!cfg)
-        return 2; /* diagnostic already issued */
+        return -1; /* diagnostic already issued */
       smartlist_add(configs, cfg);
     }
     begin = end;
@@ -65,7 +65,6 @@ launch_external_proxy(const char *const *begin)
   SMARTLIST_FOREACH(configs, config_t *, cfg, {
     if (!open_listeners(get_event_base(), cfg)) {
       log_error("Failed to open listeners for configuration %d", cfg_sl_idx+1);
-      return 1;
     }
   });
 
