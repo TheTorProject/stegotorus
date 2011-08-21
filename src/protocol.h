@@ -15,6 +15,7 @@
 struct config_t
 {
   const struct proto_vtable *vtable;
+  enum listen_mode           mode;
 };
 
 config_t *config_create(int n_options, const char *const *options);

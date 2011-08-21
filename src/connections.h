@@ -24,7 +24,6 @@ struct conn_t {
   char               *peername;
   circuit_t          *circuit;
   struct bufferevent *buffer;
-  enum listen_mode    mode;
 };
 
 /** Create a new connection from a configuration. */

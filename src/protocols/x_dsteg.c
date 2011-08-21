@@ -16,25 +16,26 @@ PROTO_DEFINE_MODULE(x_dsteg, STEG);
 */
 static int
 parse_and_set_options(int n_options, const char *const *options,
-                      x_dsteg_config_t *cfg)
+                      config_t *c)
 {
   const char* defport;
   int req_options;
+  x_dsteg_config_t *cfg = downcast_config(c);
 
   if (n_options < 1)
     return -1;
 
   if (!strcmp(options[0], "client")) {
     defport = "48988"; /* bf5c */
-    cfg->mode = LSN_SIMPLE_CLIENT;
+    c->mode = LSN_SIMPLE_CLIENT;
     req_options = 4;
   } else if (!strcmp(options[0], "socks")) {
     defport = "23548"; /* 5bf5 */
-    cfg->mode = LSN_SOCKS_CLIENT;
+    c->mode = LSN_SOCKS_CLIENT;
     req_options = 3;
   } else if (!strcmp(options[0], "server")) {
     defport = "11253"; /* 2bf5 */
-    cfg->mode = LSN_SIMPLE_SERVER;
+    c->mode = LSN_SIMPLE_SERVER;
     req_options = 3;
   } else
     return -1;
@@ -46,14 +47,14 @@ parse_and_set_options(int n_options, const char *const *options,
   if (!cfg->listen_addr)
     return -1;
 
-  if (cfg->mode != LSN_SOCKS_CLIENT) {
+  if (c->mode != LSN_SOCKS_CLIENT) {
     cfg->target_addr = resolve_address_port(options[2], 1, 0, NULL);
     if (!cfg->target_addr)
       return -1;
   }
 
-  if (cfg->mode != LSN_SIMPLE_SERVER) {
-    cfg->stegname = options[cfg->mode == LSN_SOCKS_CLIENT ? 2 : 3];
+  if (c->mode != LSN_SIMPLE_SERVER) {
+    cfg->stegname = options[c->mode == LSN_SOCKS_CLIENT ? 2 : 3];
     if (!is_supported_steg(cfg->stegname))
       return -1;
   }
@@ -84,7 +85,7 @@ x_dsteg_config_create(int n_options, const char *const *options)
   config_t *c = upcast_config(cfg);
   c->vtable = &p_x_dsteg_vtable;
 
-  if (parse_and_set_options(n_options, options, cfg) == 0)
+  if (parse_and_set_options(n_options, options, c) == 0)
     return c;
 
   x_dsteg_config_free(c);
@@ -133,8 +134,7 @@ x_dsteg_conn_create(config_t *c)
   conn_t *cn = upcast_conn(conn);
 
   cn->cfg = c;
-  cn->mode = cfg->mode;
-  if (cfg->mode != LSN_SIMPLE_SERVER) {
+  if (c->mode != LSN_SIMPLE_SERVER) {
     conn->steg = steg_new(cfg->stegname);
     if (!conn->steg) {
       free(conn);
@@ -174,7 +174,7 @@ x_dsteg_recv(conn_t *s, struct evbuffer *dest)
 {
   x_dsteg_conn_t *source = downcast_conn(s);
   if (!source->steg) {
-    obfs_assert(source->super.mode == LSN_SIMPLE_SERVER);
+    obfs_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
     source->steg = steg_detect(s);
     if (!source->steg) {
       log_debug("No recognized steg pattern detected");

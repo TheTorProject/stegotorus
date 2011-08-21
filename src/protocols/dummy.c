@@ -16,33 +16,34 @@ PROTO_DEFINE_MODULE(dummy, NOSTEG);
 */
 static int
 parse_and_set_options(int n_options, const char *const *options,
-                      dummy_config_t *cfg)
+                      config_t *c)
 {
   const char* defport;
+  dummy_config_t *cfg = downcast_config(c);
 
   if (n_options < 1)
     return -1;
 
   if (!strcmp(options[0], "client")) {
     defport = "48988"; /* bf5c */
-    cfg->mode = LSN_SIMPLE_CLIENT;
+    c->mode = LSN_SIMPLE_CLIENT;
   } else if (!strcmp(options[0], "socks")) {
     defport = "23548"; /* 5bf5 */
-    cfg->mode = LSN_SOCKS_CLIENT;
+    c->mode = LSN_SOCKS_CLIENT;
   } else if (!strcmp(options[0], "server")) {
     defport = "11253"; /* 2bf5 */
-    cfg->mode = LSN_SIMPLE_SERVER;
+    c->mode = LSN_SIMPLE_SERVER;
   } else
     return -1;
 
-  if (n_options != (cfg->mode == LSN_SOCKS_CLIENT ? 2 : 3))
+  if (n_options != (c->mode == LSN_SOCKS_CLIENT ? 2 : 3))
       return -1;
 
   cfg->listen_addr = resolve_address_port(options[1], 1, 1, defport);
   if (!cfg->listen_addr)
     return -1;
 
-  if (cfg->mode != LSN_SOCKS_CLIENT) {
+  if (c->mode != LSN_SOCKS_CLIENT) {
     cfg->target_addr = resolve_address_port(options[2], 1, 0, NULL);
     if (!cfg->target_addr)
       return -1;
@@ -74,7 +75,7 @@ dummy_config_create(int n_options, const char *const *options)
   config_t *c = upcast_config(cfg);
   c->vtable = &p_dummy_vtable;
 
-  if (parse_and_set_options(n_options, options, cfg) == 0)
+  if (parse_and_set_options(n_options, options, c) == 0)
     return c;
 
   dummy_config_free(c);
@@ -116,9 +117,9 @@ static conn_t *
 dummy_conn_create(config_t *cfg)
 {
   dummy_conn_t *conn = xzalloc(sizeof(dummy_conn_t));
-  conn->super.cfg = cfg;
-  conn->super.mode = downcast_config(cfg)->mode;
-  return upcast_conn(conn);
+  conn_t *c = upcast_conn(conn);
+  c->cfg = cfg;
+  return c;
 }
 
 static void

@@ -26,7 +26,6 @@ typedef struct dummy_config_t {
   config_t super;
   struct evutil_addrinfo *listen_addr;
   struct evutil_addrinfo *target_addr;
-  enum listen_mode mode;
 } dummy_config_t;
 
 typedef struct dummy_conn_t {

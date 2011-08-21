@@ -22,7 +22,6 @@ typedef struct x_dsteg_config_t {
   config_t super;
   struct evutil_addrinfo *listen_addr;
   struct evutil_addrinfo *target_addr;
-  enum listen_mode mode;
   const char *stegname;
 } x_dsteg_config_t;
 

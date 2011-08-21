@@ -194,7 +194,7 @@ listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
 
   conn->peername = peername;
   conn->buffer = buf;
-  switch (conn->mode) {
+  switch (conn->cfg->mode) {
   case LSN_SIMPLE_CLIENT: simple_client_listener_cb(conn); break;
   case LSN_SOCKS_CLIENT:  socks_client_listener_cb(conn);  break;
   case LSN_SIMPLE_SERVER: simple_server_listener_cb(conn); break;
@@ -211,7 +211,7 @@ static void
 simple_client_listener_cb(conn_t *conn)
 {
   obfs_assert(conn);
-  obfs_assert(conn->mode == LSN_SIMPLE_CLIENT);
+  obfs_assert(conn->cfg->mode == LSN_SIMPLE_CLIENT);
   log_debug("%s: simple client connection", conn->peername);
 
   bufferevent_setcb(conn->buffer, upstream_read_cb, NULL, error_cb, conn);
@@ -232,7 +232,7 @@ static void
 socks_client_listener_cb(conn_t *conn)
 {
   obfs_assert(conn);
-  obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
+  obfs_assert(conn->cfg->mode == LSN_SOCKS_CLIENT);
   log_debug("%s: socks client connection", conn->peername);
 
   circuit_create_socks(conn);
@@ -254,7 +254,7 @@ static void
 simple_server_listener_cb(conn_t *conn)
 {
   obfs_assert(conn);
-  obfs_assert(conn->mode == LSN_SIMPLE_SERVER);
+  obfs_assert(conn->cfg->mode == LSN_SIMPLE_SERVER);
   log_debug("%s: server connection", conn->peername);
 
   bufferevent_setcb(conn->buffer, downstream_read_cb, NULL, error_cb, conn);
