@@ -57,9 +57,15 @@ struct proto_vtable
       one such list. */
   struct evutil_addrinfo *(*config_get_target_addr)(config_t *cfg);
 
-  /** A connection has just been made to one of 'cfg's listener
-      addresses.  Return an extended 'conn_t' object, filling in the
-      'cfg' and 'mode' fields of the generic structure.  */
+  /** Return an extended 'circuit_t' object based on the configuration 'cfg'.
+      Must fill in the 'cfg' field of the generic structure. */
+  circuit_t *(*circuit_create)(config_t *cfg);
+
+  /** Destroy per-circuit, protocol-specific state. */
+  void (*circuit_free)(circuit_t *ckt);
+
+  /** Return an extended 'conn_t' object based on the configuration 'cfg'.
+      Must fill in the 'cfg' field of the generic structure.  */
   conn_t *(*conn_create)(config_t *cfg);
 
   /** Destroy per-connection, protocol-specific state.  */
@@ -110,6 +116,8 @@ extern const size_t n_supported_protocols;
     name##_config_free,                         \
     name##_config_get_listen_addrs,             \
     name##_config_get_target_addr,              \
+    name##_circuit_create,                      \
+    name##_circuit_free,                        \
     name##_conn_create,                         \
     name##_conn_free,                           \
     name##_handshake,                           \
@@ -132,6 +140,8 @@ extern const size_t n_supported_protocols;
     name##_config_get_listen_addrs(config_t *, size_t);                 \
   static struct evutil_addrinfo *                                       \
     name##_config_get_target_addr(config_t *);                          \
+  static circuit_t *name##_circuit_create(config_t *);                  \
+  static void name##_circuit_free(circuit_t *);                         \
   static conn_t *name##_conn_create(config_t *);                        \
   static void name##_conn_free(conn_t *);                               \
   static int name##_handshake(conn_t *);                                \
@@ -154,7 +164,11 @@ extern const size_t n_supported_protocols;
   static inline conn_t *upcast_conn(name##_conn_t *c)           \
   { return &c->super; }                                         \
   static inline name##_conn_t *downcast_conn(conn_t *c)         \
-  { return DOWNCAST(name##_conn_t, super, c); }
+  { return DOWNCAST(name##_conn_t, super, c); }                 \
+  static inline circuit_t *upcast_circuit(name##_circuit_t *c)  \
+  { return &c->super; }                                         \
+  static inline name##_circuit_t *downcast_circuit(circuit_t *c)\
+  { return DOWNCAST(name##_circuit_t, super, c); }
 
 #define PROTO_DEFINE_MODULE(name, stegp)        \
   PROTO_CAST_HELPERS(name)                      \

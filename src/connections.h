@@ -96,9 +96,13 @@ void conn_transmit_soon(conn_t *conn, unsigned long timeout);
    transmissions before closing it.  Both of these flags are used
    near-exclusively for assertion checks; the actual behavior is
    controlled by changing bufferevent callbacks on the connections.
+
+   Like conn_t, the protocol has an opportunity to add information to
+   this structure.
  */
 
 struct circuit_t {
+  config_t           *cfg;
   conn_t             *upstream;
   conn_t             *downstream;
   socks_state_t      *socks_state;
@@ -106,8 +110,8 @@ struct circuit_t {
   unsigned int        is_flushing : 1;
 };
 
-int circuit_create(conn_t *up, conn_t *down);
-void circuit_create_socks(conn_t *up);
+int circuit_create(config_t *cfg, conn_t *up, conn_t *down);
+void circuit_create_socks(config_t *cfg, conn_t *up);
 int circuit_add_down(circuit_t *circuit, conn_t *down);
 void circuit_free(circuit_t *circuit);
 

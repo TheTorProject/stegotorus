@@ -143,12 +143,12 @@ conn_transmit_soon(conn_t *conn, unsigned long timeout)
 /* Circuits.  Circuits are not tracked, they are owned by their connections. */
 
 int
-circuit_create(conn_t *up, conn_t *down)
+circuit_create(config_t *cfg, conn_t *up, conn_t *down)
 {
   if (!up || !down)
     return -1;
 
-  circuit_t *r = xzalloc(sizeof(circuit_t));
+  circuit_t *r = cfg->vtable->circuit_create(cfg);
   r->upstream = up;
   r->downstream = down;
   up->circuit = r;
@@ -157,11 +157,11 @@ circuit_create(conn_t *up, conn_t *down)
 }
 
 void
-circuit_create_socks(conn_t *up)
+circuit_create_socks(config_t *cfg, conn_t *up)
 {
   obfs_assert(up);
 
-  circuit_t *r = xzalloc(sizeof(circuit_t));
+  circuit_t *r = cfg->vtable->circuit_create(cfg);
   r->upstream = up;
   r->socks_state = socks_state_new();
   up->circuit = r;
@@ -191,5 +191,6 @@ circuit_free(circuit_t *circuit)
   }
   if (circuit->socks_state)
     socks_state_free(circuit->socks_state);
-  free(circuit);
+
+  circuit->cfg->vtable->circuit_free(circuit);
 }

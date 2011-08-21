@@ -30,6 +30,10 @@ typedef struct x_dsteg_conn_t {
   steg_t *steg;
 } x_dsteg_conn_t;
 
+typedef struct x_dsteg_circuit_t {
+  circuit_t super;
+} x_dsteg_circuit_t;
+
 #endif
 
 #endif

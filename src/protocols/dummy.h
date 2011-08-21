@@ -32,6 +32,10 @@ typedef struct dummy_conn_t {
   conn_t super;
 } dummy_conn_t;
 
+typedef struct dummy_circuit_t {
+  circuit_t super;
+} dummy_circuit_t;
+
 #endif
 
 #endif

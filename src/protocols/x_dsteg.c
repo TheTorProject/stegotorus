@@ -121,6 +121,22 @@ x_dsteg_config_get_target_addr(config_t *cfg)
   return downcast_config(cfg)->target_addr;
 }
 
+/* Create a circuit object. */
+static circuit_t *
+x_dsteg_circuit_create(config_t *c)
+{
+  circuit_t *ckt = upcast_circuit(xzalloc(sizeof(x_dsteg_circuit_t)));
+  ckt->cfg = c;
+  return ckt;
+}
+
+/* Destroy a circuit object. */
+static void
+x_dsteg_circuit_free(circuit_t *c)
+{
+  free(downcast_circuit(c));
+}
+
 /*
   This is called everytime we get a connection for the x_dsteg
   protocol.

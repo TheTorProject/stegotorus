@@ -216,7 +216,8 @@ simple_client_listener_cb(conn_t *conn)
 
   bufferevent_setcb(conn->buffer, upstream_read_cb, NULL, error_cb, conn);
 
-  if (circuit_create(conn, open_outbound(conn, downstream_read_cb))) {
+  if (circuit_create(conn->cfg, conn,
+                     open_outbound(conn, downstream_read_cb))) {
     conn_free(conn);
     return;
   }
@@ -235,7 +236,7 @@ socks_client_listener_cb(conn_t *conn)
   obfs_assert(conn->cfg->mode == LSN_SOCKS_CLIENT);
   log_debug("%s: socks client connection", conn->peername);
 
-  circuit_create_socks(conn);
+  circuit_create_socks(conn->cfg, conn);
 
   bufferevent_setcb(conn->buffer, socks_read_cb, NULL, error_cb, conn);
   bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
@@ -259,7 +260,7 @@ simple_server_listener_cb(conn_t *conn)
 
   bufferevent_setcb(conn->buffer, downstream_read_cb, NULL, error_cb, conn);
 
-  if (circuit_create(open_outbound(conn, upstream_read_cb), conn)) {
+  if (circuit_create(conn->cfg, open_outbound(conn, upstream_read_cb), conn)) {
     conn_free(conn);
     return;
   }
