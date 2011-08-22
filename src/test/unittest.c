@@ -42,6 +42,7 @@ main(int argc, const char **argv)
 #endif
 
   initialize_crypto();
+  conn_initialize();
   rv = tinytest_main(argc, argv, groups);
   conn_start_shutdown(1);
   cleanup_crypto();

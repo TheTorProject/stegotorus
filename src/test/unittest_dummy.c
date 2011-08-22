@@ -81,9 +81,9 @@ cleanup_dummy_state(const struct testcase_t *unused, void *state)
   struct test_dummy_state *s = (struct test_dummy_state *)state;
 
   if (s->conn_client)
-      conn_free(s->conn_client);
+      conn_close(s->conn_client);
   if (s->conn_server)
-      conn_free(s->conn_server);
+      conn_close(s->conn_server);
 
   if (s->cfg_client)
     config_free(s->cfg_client);
@@ -126,12 +126,6 @@ setup_dummy_state(const struct testcase_t *unused)
     config_create(ALEN(options_server), options_server);
   tt_assert(s->cfg_server);
 
-  s->conn_client = conn_create(s->cfg_client);
-  tt_assert(s->conn_client);
-
-  s->conn_server = conn_create(s->cfg_server);
-  tt_assert(s->conn_server);
-
   struct bufferevent *pair[2];
   tt_assert(bufferevent_pair_new(s->base, 0, pair) == 0);
   tt_assert(pair[0]);
@@ -139,8 +133,11 @@ setup_dummy_state(const struct testcase_t *unused)
   bufferevent_enable(pair[0], EV_READ|EV_WRITE);
   bufferevent_enable(pair[1], EV_READ|EV_WRITE);
 
-  s->conn_client->buffer = pair[0];
-  s->conn_server->buffer = pair[1];
+  s->conn_client = conn_create(s->cfg_client, pair[0], xstrdup("to-server"));
+  tt_assert(s->conn_client);
+
+  s->conn_server = conn_create(s->cfg_server, pair[1], xstrdup("to-client"));
+  tt_assert(s->conn_server);
 
   return s;
 

@@ -8,39 +8,48 @@
 #include <event2/bufferevent.h>
 
 /**
-   This struct defines the state of one socket-level connection.  Each
-   protocol may extend this structure with additional private data by
-   embedding it as the first member of a larger structure.  The
-   protocol's conn_create() method is responsible only for filling in
-   the |cfg| and |mode| fields of this structure, plus any private
-   data of course.
+   This struct defines the state of one downstream socket-level
+   connection.  Each protocol may extend this structure with
+   additional private data by embedding it as the first member of a
+   larger structure.  The protocol's conn_create() method is
+   responsible only for filling in the |cfg| and |mode| fields of this
+   structure, plus any private data of course.
 
-   An incoming connection is not associated with a circuit until the
-   destination for the other side of the circuit is known.  An outgoing
-   connection is associated with a circuit from its creation.
+   Connections are associated with circuits (and thus with upstream
+   socket-level connections) as quickly as possible.
  */
 struct conn_t {
   config_t           *cfg;
-  char               *peername;
   circuit_t          *circuit;
+  const char         *peername;
   struct bufferevent *buffer;
 };
 
+/** Initialize connection and circuit tracking.  Must be called before
+    any function that creates connections or circuits is called. */
+void conn_initialize(void);
+
+/** When all currently-open connections and circuits are closed, stop
+    the main event loop and exit the program.  If 'barbaric' is true,
+    forcibly close them all now, then stop the event loop.  It
+    is a bug to call any function that creates connections or circuits
+    after conn_start_shutdown has been called. */
+void conn_start_shutdown(int barbaric);
+
 /** Create a new connection from a configuration. */
-conn_t *conn_create(config_t *cfg);
+conn_t *conn_create(config_t *cfg, struct bufferevent *buf,
+                    const char *peername);
 
 /** Close and deallocate a connection.  If the connection is part of a
     circuit, close the other side of that circuit as well. */
-void conn_free(conn_t *conn);
+void conn_close(conn_t *conn);
+
+/** Flush any data from CONN that has not yet been transferred to the
+    upstream, then close it.  */
+void conn_flush_and_close(conn_t *conn);
 
 /** Report the number of currently-open connections. */
 unsigned long conn_count(void);
-
-/** When all currently-open connections are closed, stop the event
-    loop and exit the program.  If 'barbaric' is true, forcibly close
-    all connections now, then stop the event loop.  It is a bug to call
-    conn_create after conn_start_shutdown has been called. */
-void conn_start_shutdown(int barbaric);
 
 /** Retrieve the inbound evbuffer for a connection. */
 static inline struct evbuffer *conn_get_inbound(conn_t *conn)
@@ -82,20 +91,21 @@ void conn_transmit_soon(conn_t *conn, unsigned long timeout);
 /**
    This struct defines a pair of established connections.
 
-   The "upstream" connection is to the higher-level client or server
-   that we are proxying traffic for.  The "downstream" connection is
-   to the remote peer.  Circuits always have an upstream connection,
-   and normally also have a downstream connection; however, a circuit
+   The "upstream" connection (which does not have a conn_t) is to the
+   higher-level client or server that we are proxying traffic for.
+   The "downstream" connection (which does have a conn_t) to the
+   remote peer.  Circuits always have an upstream connection, and
+   normally also have a downstream connection; however, a circuit
    that's waiting for SOCKS directives from its upstream will have a
    non-null socks_state field instead.
 
    A circuit is "open" if both its upstream and downstream connections
-   have been established (not just if both conn_t objects exist).
-   It is "flushing" if one of the two connections has hit either EOF
-   or an error, and we are clearing out the other side's pending
+   have been established (not just if all the objects exist).  It is
+   "flushing" if one of the two connections has hit either EOF or an
+   error, and we are clearing out the other side's pending
    transmissions before closing it.  Both of these flags are used
    near-exclusively for assertion checks; the actual behavior is
-   controlled by changing bufferevent callbacks on the connections.
+   controlled by changing bufferevent callbacks.
 
    Like conn_t, the protocol has an opportunity to add information to
    this structure.
@@ -103,16 +113,23 @@ void conn_transmit_soon(conn_t *conn, unsigned long timeout);
 
 struct circuit_t {
   config_t           *cfg;
-  conn_t             *upstream;
+  struct bufferevent *up_buffer;
+  const char         *up_peer;
+
   conn_t             *downstream;
   socks_state_t      *socks_state;
   unsigned int        is_open : 1;
   unsigned int        is_flushing : 1;
 };
 
-int circuit_create(config_t *cfg, conn_t *up, conn_t *down);
-void circuit_create_socks(config_t *cfg, conn_t *up);
-int circuit_add_down(circuit_t *circuit, conn_t *down);
-void circuit_free(circuit_t *circuit);
+circuit_t *circuit_create(config_t *cfg, struct bufferevent *up,
+                          const char *peer);
+circuit_t *circuit_create_with_downstream(config_t *cfg, conn_t *down);
+
+void circuit_close(circuit_t *circuit);
+void circuit_flush_and_close(circuit_t *circuit);
+
+int circuit_open_downstream_from_cfg(circuit_t *circuit);
+int circuit_open_downstream_from_socks(circuit_t *circuit);
 
 #endif

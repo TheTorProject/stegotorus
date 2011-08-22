@@ -224,6 +224,7 @@ main(int argc, const char *const *argv)
   obfs_assert(smartlist_len(configs) > 0);
 
   /* Configurations have been established; proceed with initialization. */
+  conn_initialize();
 
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
