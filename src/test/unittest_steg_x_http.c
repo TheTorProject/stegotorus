@@ -119,7 +119,7 @@ test_s_x_http_transfer(void *state)
   static const char enc1[] =
     "GET /7468697320697320612035342d62797465206d6573736167652070617373"
     "65642066726f6d20636c69656e7420746f20736572766572 HTTP/1.1\r\n"
-    "Host: 127.0.0.1:1800\r\n"
+    "Host: to-server\r\n"
     "Connection: close\r\n\r\n";
   static const char enc2[] =
     "HTTP/1.1 200 OK\r\n"

@@ -232,6 +232,7 @@ circuit_create_with_downstream(config_t *cfg, conn_t *down)
   }
 
   ckt->downstream = down;
+  down->circuit = ckt;
   smartlist_add(circuits, ckt);
   return ckt;
 }
@@ -267,6 +268,7 @@ circuit_open_downstream_from_cfg(circuit_t *ckt)
   }
 
   ckt->downstream = down;
+  down->circuit = ckt;
   return 1;
 }
 
@@ -298,6 +300,7 @@ circuit_open_downstream_from_socks(circuit_t *ckt)
   }
 
   ckt->downstream = down;
+  down->circuit = ckt;
   return 1;
 }
 

@@ -140,7 +140,7 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   struct event_base *base = evconnlistener_get_base(evcl);
   struct bufferevent *buf = NULL;
   circuit_t *ckt = NULL;
-  int is_socks = lsn->cfg->mode == LSN_SIMPLE_CLIENT;
+  int is_socks = lsn->cfg->mode == LSN_SOCKS_CLIENT;
 
   obfs_assert(lsn->cfg->mode != LSN_SIMPLE_SERVER);
   log_info("%s: new connection to %sclient from %s\n",
@@ -243,7 +243,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
     bufferevent_disable(bev, EV_READ);
     socks5_send_reply(bufferevent_get_output(bev), socks,
                       SOCKS5_FAILED_UNSUPPORTED);
-    circuit_flush_and_close(ckt);
+    circuit_do_flush(ckt);
     return;
   }
 }
@@ -454,6 +454,7 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
      connection, and replace this callback with the regular event_cb */
   if (what & BEV_EVENT_CONNECTED) {
     circuit_t *ckt = conn->circuit;
+    obfs_assert(ckt);
     obfs_assert(!ckt->is_flushing);
     obfs_assert(!ckt->is_open);
     obfs_assert(ckt->up_peer);
