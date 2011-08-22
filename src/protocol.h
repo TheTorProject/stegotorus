@@ -28,6 +28,7 @@ struct evutil_addrinfo *config_get_target_addr(config_t *cfg);
 /**
    This struct defines a protocol and its methods; note that not all
    of them are methods on the same object in the C++ sense.
+   See connections.h for the definitions of 'conn_t' and 'circuit_t'.
 
    A filled-in, statically allocated proto_vtable object is the
    principal interface between each individual protocol and generic

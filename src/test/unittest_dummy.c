@@ -161,11 +161,11 @@ test_dummy_transfer(void *state)
   tt_int_op(0, ==, conn_handshake(s->conn_client));
 
   /* That should have put nothing into the output buffer */
-  tt_int_op(0, ==, evbuffer_get_length(conn_get_outbound(s->conn_client)));
+  tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
 
   /* Ditto on the server side */
   tt_int_op(0, ==, conn_handshake(s->conn_server));
-  tt_int_op(0, ==, evbuffer_get_length(conn_get_outbound(s->conn_server)));
+  tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
 
   const char *msg1 = "this is a 54-byte message passed from client to server";
   const char *msg2 = "this is a 55-byte message passed from server to client!";

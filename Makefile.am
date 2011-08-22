@@ -19,6 +19,7 @@ libobfsproxy_a_SOURCES = \
 	src/steg.c \
 	src/util.c \
 	src/protocols/dummy.c \
+	src/protocols/obfs2.c \
 	src/protocols/x_dsteg.c \
 	src/steg/x_http.c
 if NEED_SHA256
@@ -35,6 +36,7 @@ unittests_SOURCES = \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c \
 	src/test/unittest_dummy.c \
+	src/test/unittest_obfs2.c \
 	src/test/unittest_steg_x_http.c
 
 noinst_HEADERS = \
@@ -57,8 +59,6 @@ noinst_HEADERS = \
 	src/test/tinytest_macros.h
 
 EXTRA_DIST = doc/protocol-spec.txt \
-	src/protocols/obfs2.c \
-	src/test/unittest_obfs2.c \
 	src/test/tester.py
 
 check-local:

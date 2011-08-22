@@ -5,11 +5,12 @@
 #ifndef PROTOCOL_OBFS2_H
 #define PROTOCOL_OBFS2_H
 
-extern const proto_vtable obfs2_vtable;
+extern const proto_vtable p_obfs2_vtable;
 
 #ifdef PROTOCOL_OBFS2_PRIVATE
 
 #include "crypt.h"
+#include "connections.h"
 #include "protocol.h"
 
 /* ==========
@@ -33,13 +34,15 @@ extern const proto_vtable obfs2_vtable;
 
 #define SHARED_SECRET_LENGTH SHA256_LENGTH
 
-typedef struct obfs2_params_t {
-  protocol_params_t super;
+typedef struct obfs2_config_t {
+  config_t super;
+  struct evutil_addrinfo *listen_addr;
+  struct evutil_addrinfo *target_addr;
   uchar shared_secret[SHARED_SECRET_LENGTH];
-} obfs2_params_t;
+} obfs2_config_t;
 
-typedef struct obfs2_protocol_t {
-  protocol_t super;
+typedef struct obfs2_conn_t {
+  conn_t super;
 
   /** Current protocol state.  We start out waiting for key information.  Then
       we have a key and wait for padding to arrive.  Finally, we are sending
@@ -73,7 +76,11 @@ typedef struct obfs2_protocol_t {
 
   /** Number of padding bytes to read before we get to real data */
   int padding_left_to_read;
-} obfs2_protocol_t;
+} obfs2_conn_t;
+
+typedef struct obfs2_circuit_t {
+  circuit_t super;
+} obfs2_circuit_t;
 
 #endif
 

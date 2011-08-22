@@ -11,7 +11,7 @@ extern struct testcase_t container_tests[];
 extern struct testcase_t crypt_tests[];
 extern struct testcase_t socks_tests[];
 extern struct testcase_t dummy_tests[];
-/*extern struct testcase_t obfs2_tests[];*/
+extern struct testcase_t obfs2_tests[];
 extern struct testcase_t s_x_http_tests[];
 
 struct testgroup_t groups[] = {
@@ -19,7 +19,7 @@ struct testgroup_t groups[] = {
   { "crypt/", crypt_tests },
   { "socks/", socks_tests },
   { "dummy/", dummy_tests },
-  /*{ "obfs2/", obfs2_tests },*/
+  { "obfs2/", obfs2_tests },
   { "steg/x_http/", s_x_http_tests },
   END_OF_GROUPS
 };
@@ -33,6 +33,11 @@ int
 main(int argc, const char **argv)
 {
   int rv;
+  char *logminsev;
+
+  logminsev = getenv("TT_LOG");
+  if (logminsev)
+    log_set_min_severity(logminsev);
 
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
