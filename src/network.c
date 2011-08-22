@@ -102,7 +102,7 @@ static void pending_socks_cb(struct bufferevent *bev, short what, void *arg);
 struct evconnlistener *
 get_evconnlistener_by_config(config_t *cfg)
 {
-  obfs_assert(listeners); /* ? */
+  obfs_assert(listeners);
 
   SMARTLIST_FOREACH_BEGIN(listeners, listener_t *, l) {
     if (l->cfg == cfg)
@@ -723,7 +723,6 @@ error_cb(struct bufferevent *bev, short what, void *arg)
             what, errcode);
 
   /* It should be impossible to get here with BEV_EVENT_CONNECTED. */
-  obfs_assert(what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT));
   obfs_assert(!(what & BEV_EVENT_CONNECTED));
 
   if (what & BEV_EVENT_ERROR) {
@@ -732,8 +731,7 @@ error_cb(struct bufferevent *bev, short what, void *arg)
              evutil_socket_error_to_string(errcode));
   } else if (what & BEV_EVENT_EOF) {
     log_info("EOF from %s", conn->peername);
-  } else {
-    obfs_assert(what & BEV_EVENT_TIMEOUT);
+  } else if (what & BEV_EVENT_TIMEOUT) {
     log_info("Timeout talking to %s", conn->peername);
   }
   error_or_eof(conn);
@@ -752,7 +750,6 @@ flush_error_cb(struct bufferevent *bev, short what, void *arg)
             what, errcode);
 
   /* It should be impossible to get here with BEV_EVENT_CONNECTED. */
-  obfs_assert(what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT));
   obfs_assert(!(what & BEV_EVENT_CONNECTED));
 
   obfs_assert(conn->circuit);
@@ -890,7 +887,4 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
       upstream_read_cb(up->buffer, up);
     return;
   }
-
-  /* unknown event code */
-  obfs_abort();
 }

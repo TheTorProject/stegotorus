@@ -531,12 +531,10 @@ logv(int severity, const char *format, va_list ap)
   if (logging_method == LOG_METHOD_STDERR)
     fprintf(stderr, "%s", buf);
   else if (logging_method == LOG_METHOD_FILE) {
-    if (!logging_logfile)
-      abort();
-    if (write(logging_logfile, buf, strlen(buf)) < 0)
-      abort();
+    obfs_assert(logging_logfile);
+    obfs_assert(!(write(logging_logfile, buf, strlen(buf)) < 0));
   } else
-    abort();
+    obfs_assert(0);
 }
 
 /**** Public logging API. ****/
