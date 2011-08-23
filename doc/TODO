@@ -1,28 +1,31 @@
-Still to do:
+Design issues:
 
   - Get more eyes on the protocol
 
-Still to implement for minimal function:
+Immediate priority:
 
-  - Unit tests for all the crypto
-    - aes-ctr
-    - sha256
-    - random number generator
-  - Unit tests for the protocol functions
-    - Try sender and receive, make sure they can handshake right and
-      communicate
-    - Make sure handshake still works if data arrives in a trickle
-    - Make sure bogus handshake gets rejected
+  - conn_free'ing a downstream connection should not close the upstream
+    (IN PROGRESS)
+  - fix obfs2 end-to-end
+
+Necessary for 1:N:
+
+  - circuit_t::downstream belongs to the protocol
+  - upstream connection does not necessarily trigger downstream connection
+  - implement a demo 1:N protocol
 
 Later:
 
-  - Refactor how the network code calls the protocol code so that protocols
-    are pluggable.
-    - Instead of having the listener constructor take a shared secret, have
-      it take a "protocol state factory".
-    - Use the standard C function-pointer trick to turn "protocol state" into
-      a class-like thing
+  - implement a more serious 1:N protocol using crypto and steg
+
+  - automatic linkage of protocol and steg modules
+  - break up the integration tests sensibly
+
+  - make socks a protocol rather than a special case?
+
+  - configuration is way too duplicated
+    - split config/conn/circuit vtables?
+    - genericize configuration?
 
   - Drop the openssl dependency (?)
-  - some way to set a shared secret or two or three
   - Make it obey the xxx-pluggable-transport spec in Tor.

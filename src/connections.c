@@ -11,6 +11,8 @@
 #include "protocol.h"
 #include "socks.h"
 
+#include <event2/event.h>
+#include <event2/buffer.h>
 #include <event2/bufferevent.h>
 
 /** All active connections.  */
@@ -89,7 +91,9 @@ void
 conn_close(conn_t *conn)
 {
   if (conn->circuit) {
-    circuit_close(conn->circuit); /* will recurse and take care of us */
+    /* This will recurse into here after breaking circular references. */
+    circuit_downstream_shutdown(conn->circuit, conn,
+                                BEV_EVENT_READING|BEV_EVENT_WRITING);
     return;
   }
 
@@ -105,30 +109,6 @@ conn_close(conn_t *conn)
   conn->cfg->vtable->conn_free(conn);
 
   maybe_finish_shutdown(0);
-}
-
-void
-conn_flush_and_close(conn_t *conn)
-{
-  circuit_t *ckt;
-  if (!conn->circuit) {
-    conn_close(conn);
-    return;
-  }
-
-  ckt = conn->circuit;
-  if (!ckt->up_buffer || !ckt->is_open || ckt->is_flushing) {
-    conn_close(conn);
-    return;
-  }
-
-  /* prevent further events from the broken connection */
-  if (conn->buffer) {
-    bufferevent_free(conn->buffer);
-    conn->buffer = NULL;
-  }
-
-  circuit_do_flush(ckt);
 }
 
 /* Protocol methods of connections. */
@@ -332,18 +312,107 @@ circuit_close(circuit_t *ckt)
 }
 
 void
-circuit_flush_and_close(circuit_t *ckt)
+circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction)
 {
-  if (!ckt->downstream || !ckt->is_open || ckt->is_flushing) {
+  obfs_assert(direction != 0);
+  obfs_assert((direction & ~(BEV_EVENT_READING|BEV_EVENT_WRITING)) == 0);
+
+  if (direction & BEV_EVENT_READING) {
+    if (ckt->downstream) {
+      conn_send(ckt->downstream, bufferevent_get_input(ckt->up_buffer));
+      obfs_assert(!evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+
+      if (evbuffer_get_length(conn_get_outbound(ckt->downstream)))
+        conn_do_flush(ckt->downstream);
+      else {
+        bufferevent_disable(ckt->downstream->buffer, EV_WRITE);
+        shutdown(bufferevent_getfd(ckt->downstream->buffer), SHUT_WR);
+      }
+    } else
+      evbuffer_drain(bufferevent_get_input(ckt->up_buffer),
+                     evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+
+    bufferevent_disable(ckt->up_buffer, EV_READ);
+    shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_RD);
+  }
+
+  if (direction & BEV_EVENT_WRITING) {
+    bufferevent_disable(ckt->up_buffer, EV_WRITE);
+    shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
+
+    evbuffer_drain(bufferevent_get_output(ckt->up_buffer),
+                   evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)));
+
+    if (ckt->downstream) {
+      bufferevent_disable(ckt->downstream->buffer, EV_READ);
+      shutdown(bufferevent_getfd(ckt->downstream->buffer), SHUT_RD);
+      evbuffer_drain(conn_get_inbound(ckt->downstream),
+                     evbuffer_get_length(conn_get_inbound(ckt->downstream)));
+    }
+  }
+
+  /* If there is nothing left, we can close this circuit.  Do not
+     close the downstream connection if it has anything left to write.  */
+  if (!bufferevent_get_enabled(ckt->up_buffer)) {
+    conn_t *conn = ckt->downstream;
+    ckt->downstream = NULL;
+    conn->circuit = NULL;
     circuit_close(ckt);
-    return;
+    if (evbuffer_get_length(conn_get_outbound(conn)) == 0)
+      conn_close(conn);
+  }
+}
+
+void
+circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
+                            unsigned short direction)
+{
+  obfs_assert(direction != 0);
+  obfs_assert((direction & ~(BEV_EVENT_READING|BEV_EVENT_WRITING)) == 0);
+  obfs_assert(conn == ckt->downstream);
+  obfs_assert(ckt == conn->circuit);
+
+  if (direction & BEV_EVENT_READING) {
+    if (ckt->up_buffer) {
+      conn_recv(conn, bufferevent_get_output(ckt->up_buffer));
+      obfs_assert(!evbuffer_get_length(conn_get_inbound(conn)));
+
+      if (evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)))
+        circuit_do_flush(ckt);
+      else {
+        bufferevent_disable(ckt->up_buffer, EV_WRITE);
+        shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
+      }
+    } else
+      evbuffer_drain(conn_get_inbound(conn),
+                     evbuffer_get_length(conn_get_inbound(conn)));
+
+    bufferevent_disable(conn->buffer, EV_READ);
+    shutdown(bufferevent_getfd(conn->buffer), SHUT_RD);
   }
 
-  /* prevent further events from the broken connection */
-  if (ckt->up_buffer) {
-    bufferevent_free(ckt->up_buffer);
-    ckt->up_buffer = NULL;
+  if (direction & BEV_EVENT_WRITING) {
+    bufferevent_disable(conn->buffer, EV_WRITE);
+    shutdown(bufferevent_getfd(conn->buffer), SHUT_WR);
+
+    evbuffer_drain(conn_get_outbound(conn),
+                   evbuffer_get_length(conn_get_outbound(conn)));
+
+    if (ckt->up_buffer) {
+      bufferevent_disable(ckt->up_buffer, EV_READ);
+      shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_RD);
+      evbuffer_drain(bufferevent_get_input(ckt->up_buffer),
+                     evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+    }
   }
 
-  conn_do_flush(ckt->downstream);
+  /* If there is nothing left, we can close this connection.  Do not
+     close the circuit if its upstream buffer has anything left to write. */
+  if (!bufferevent_get_enabled(conn->buffer)) {
+    ckt->downstream = NULL;
+    conn->circuit = NULL;
+    conn_close(conn);
+    if (evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)) == 0)
+      circuit_close(ckt);
+  }
 }

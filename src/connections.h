@@ -44,10 +44,6 @@ conn_t *conn_create(config_t *cfg, struct bufferevent *buf,
     circuit, close the other side of that circuit as well. */
 void conn_close(conn_t *conn);
 
-/** Flush any data from CONN that has not yet been transferred to the
-    upstream, then close it.  */
-void conn_flush_and_close(conn_t *conn);
-
 /** Report the number of currently-open connections. */
 unsigned long conn_count(void);
 
@@ -119,17 +115,19 @@ struct circuit_t {
   conn_t             *downstream;
   socks_state_t      *socks_state;
   unsigned int        is_open : 1;
-  unsigned int        is_flushing : 1;
 };
 
 circuit_t *circuit_create(config_t *cfg, struct bufferevent *up,
                           const char *peer);
 circuit_t *circuit_create_with_downstream(config_t *cfg, conn_t *down);
 
-void circuit_close(circuit_t *circuit);
-void circuit_flush_and_close(circuit_t *circuit);
+int circuit_open_downstream_from_cfg(circuit_t *ckt);
+int circuit_open_downstream_from_socks(circuit_t *ckt);
 
-int circuit_open_downstream_from_cfg(circuit_t *circuit);
-int circuit_open_downstream_from_socks(circuit_t *circuit);
+void circuit_close(circuit_t *ckt);
+
+void circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction);
+void circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
+                                 unsigned short direction);
 
 #endif

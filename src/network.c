@@ -156,11 +156,12 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   }
 
   ckt = circuit_create(lsn->cfg, buf, peername);
-  bufferevent_setcb(buf, is_socks ? socks_read_cb : upstream_read_cb,
-                    NULL, upstream_event_cb, ckt);
-  if (is_socks)
+  if (is_socks) {
+    bufferevent_setcb(buf, socks_read_cb, NULL, upstream_event_cb, ckt);
+    /* We can't do anything more till we know where to connect to. */
     bufferevent_enable(buf, EV_READ|EV_WRITE);
-  else {
+  } else {
+    bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_event_cb, ckt);
     if (!circuit_open_downstream_from_cfg(ckt)) {
       log_warn("%s: outbound connection failed", peername);
       circuit_close(ckt);
@@ -263,7 +264,6 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
   obfs_assert(ckt->up_buffer == bev);
   obfs_assert(ckt->downstream);
   obfs_assert(ckt->is_open);
-  obfs_assert(!ckt->is_flushing);
 
   if (conn_send(ckt->downstream, bufferevent_get_input(ckt->up_buffer))) {
     log_debug("%s: error during transmit.", ckt->up_peer);
@@ -294,7 +294,6 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   obfs_assert(down->circuit);
   obfs_assert(down->circuit->up_buffer);
   obfs_assert(down->circuit->is_open);
-  obfs_assert(!down->circuit->is_flushing);
   up = down->circuit->up_buffer;
 
   r = conn_recv(down, bufferevent_get_output(up));
@@ -342,7 +341,9 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
     /* ignore events we don't understand */
     return;
   }
-  circuit_flush_and_close(ckt);
+
+  what &= BEV_EVENT_READING|BEV_EVENT_WRITING;
+  circuit_upstream_shutdown(ckt, what);
 }
 
 /**
@@ -367,13 +368,16 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
     /* ignore events we don't understand */
     return;
   }
-  /* this will forward to the circuit if appropriate */
-  conn_flush_and_close(conn);
+
+  what &= BEV_EVENT_READING|BEV_EVENT_WRITING;
+  if (conn->circuit)
+    circuit_downstream_shutdown(conn->circuit, conn, what);
+  else
+    conn_close(conn);
 }
 
 /**
-   Called when a circuit has finished writing out all pending data.
-   Only used when the circuit is being flushed.
+   Close a circuit when it has finished writing out all pending data.
  */
 static void
 upstream_flush_cb(struct bufferevent *bev, void *arg)
@@ -381,13 +385,17 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
   circuit_t *ckt = arg;
   log_debug("%s for %s", __func__, ckt->up_peer);
 
-  if (evbuffer_get_length(bufferevent_get_output(bev)) == 0)
-    circuit_close(ckt);
+  if (evbuffer_get_length(bufferevent_get_output(bev)) == 0) {
+    bufferevent_disable(bev, EV_WRITE);
+    if (bufferevent_get_enabled(bev))
+      shutdown(bufferevent_getfd(bev), SHUT_WR);
+    else
+      circuit_close(ckt);
+  }
 }
 
 /**
-   Called when a connection has finished writing out all pending data.
-   Only used when the connection is being flushed.
+   Close a connection when it has finished writing out all pending data.
 */
 static void
 downstream_flush_cb(struct bufferevent *bev, void *arg)
@@ -395,8 +403,13 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
   conn_t *conn = arg;
   log_debug("%s for %s", __func__, conn->peername);
 
-  if (evbuffer_get_length(bufferevent_get_output(bev)) == 0)
-    conn_close(conn);
+  if (evbuffer_get_length(bufferevent_get_output(bev)) == 0) {
+    bufferevent_disable(bev, EV_WRITE);
+    if (bufferevent_get_enabled(bev))
+      shutdown(bufferevent_getfd(bev), SHUT_WR);
+    else
+      conn_close(conn);
+  }
 }
 
 /**
@@ -412,7 +425,6 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
   /* Upon successful connection, enable traffic on both sides of the
      connection, and replace this callback with the regular event_cb */
   if (what & BEV_EVENT_CONNECTED) {
-    obfs_assert(!ckt->is_flushing);
     obfs_assert(!ckt->is_open);
     obfs_assert(ckt->downstream);
     obfs_assert(ckt->up_buffer == bev);
@@ -424,7 +436,7 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
     /* Queue handshake, if any. */
     if (conn_handshake(ckt->downstream) < 0) {
       log_debug("%s: Error during handshake", ckt->downstream->peername);
-      circuit_close(ckt);
+      conn_close(ckt->downstream);
       return;
     }
 
@@ -455,7 +467,6 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
   if (what & BEV_EVENT_CONNECTED) {
     circuit_t *ckt = conn->circuit;
     obfs_assert(ckt);
-    obfs_assert(!ckt->is_flushing);
     obfs_assert(!ckt->is_open);
     obfs_assert(ckt->up_peer);
     obfs_assert(ckt->downstream == conn);
@@ -468,7 +479,7 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
     /* Queue handshake, if any. */
     if (conn_handshake(conn) < 0) {
       log_debug("%s: Error during handshake", conn->peername);
-      circuit_close(ckt);
+      conn_close(conn);
       return;
     }
 
@@ -512,7 +523,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     if (socks_state_get_status(socks) == ST_HAVE_ADDR) {
       socks_send_reply(socks, bufferevent_get_output(ckt->up_buffer), err);
     }
-    conn_flush_and_close(conn);
+    conn_close(conn);
     return;
   }
 
@@ -524,7 +535,6 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     struct sockaddr *sa = (struct sockaddr*)&ss;
     socklen_t slen = sizeof(&ss);
 
-    obfs_assert(!ckt->is_flushing);
     obfs_assert(!ckt->is_open);
 
     /* Figure out where we actually connected to, and tell the socks client */
@@ -652,7 +662,6 @@ conn_create_outbound_socks(config_t *cfg, struct bufferevent *buf,
 void
 circuit_do_flush(circuit_t *ckt)
 {
-  ckt->is_flushing = 1;
   bufferevent_setcb(ckt->up_buffer,
                     upstream_read_cb,
                     upstream_flush_cb,
@@ -662,7 +671,6 @@ circuit_do_flush(circuit_t *ckt)
 void
 conn_do_flush(conn_t *conn)
 {
-  conn->circuit->is_flushing = 1;
   bufferevent_setcb(conn->buffer,
                     downstream_read_cb,
                     downstream_flush_cb,
