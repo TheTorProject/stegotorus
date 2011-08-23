@@ -1,25 +1,28 @@
-Design issues:
-
-  - Get more eyes on the protocol
-
 Immediate priority:
 
-  - conn_free'ing a downstream connection should not close the upstream
-    (IN PROGRESS)
-  - fix obfs2 end-to-end
-
-Necessary for 1:N:
-
   - circuit_t::downstream belongs to the protocol
-  - upstream connection does not necessarily trigger downstream connection
+  - upstream connection does not have to trigger downstream connection
+  - downstream can be disconnected and connected many times (for HTTP steg)
   - implement a demo 1:N protocol
 
-Later:
+Protocol design:
 
-  - implement a more serious 1:N protocol using crypto and steg
+  - Get more eyes on obfs2
+  - Design + code a serious 1:N protocol with crypto and optional steg
+
+Cleanup:
 
   - automatic linkage of protocol and steg modules
+  - real booleans
+  - consistent use of [u]intN_t throughout
+
+Testing:
+
   - break up the integration tests sensibly
+  - more thorough integration tests
+  - don't rely on timeouts so much in the integration tests
+
+Misc:
 
   - make socks a protocol rather than a special case?
 
