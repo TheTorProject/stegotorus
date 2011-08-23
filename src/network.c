@@ -201,7 +201,17 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
     log_warn("%s: failed to establish circuit for %s",
              lsn->address, peername);
     conn_close(conn);
+    return;
   }
+
+  /* Queue handshake, if any. */
+  if (conn_handshake(conn) < 0) {
+    log_debug("%s: Error during handshake", conn->peername);
+    conn_close(conn);
+    return;
+  }
+
+  bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
 }
 
 /**
@@ -442,18 +452,10 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 
     log_debug("%s: Successful connection", ckt->up_peer);
 
-    /* Queue handshake, if any. */
-    if (conn_handshake(ckt->downstream) < 0) {
-      log_debug("%s: Error during handshake", ckt->downstream->peername);
-      conn_close(ckt->downstream);
-      return;
-    }
-
     bufferevent_setcb(ckt->up_buffer,
                       upstream_read_cb, NULL, upstream_event_cb, ckt);
 
     bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
-    bufferevent_enable(ckt->downstream->buffer, EV_READ|EV_WRITE);
     return;
   }
 
