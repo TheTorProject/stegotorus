@@ -130,4 +130,6 @@ void circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction);
 void circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
                                  unsigned short direction);
 
+unsigned long circuit_count(void);
+
 #endif

@@ -12,6 +12,7 @@ import errno
 import Queue
 import os
 import re
+import shlex
 import signal
 import socket
 import struct
@@ -40,9 +41,26 @@ def diff(label, expected, received):
 # Helper: Run obfsproxy instances and confirm that they have
 # completed without any errors.
 
+# set MALLOC_CHECK_ in subprocess environment; this gets us
+# better memory-error behavior from glibc and is harmless
+# elsewhere.  Mode 2 is "abort immediately, without flooding
+# /dev/tty with useless diagnostics" (the documentation SAYS
+# they go to stderr, but they don't).
+obfsproxy_env = {}
+obfsproxy_env.update(os.environ)
+obfsproxy_env['MALLOC_CHECK_'] = '2'
+
+# check for a grinder
+if 'GRINDER' in obfsproxy_env:
+    obfsproxy_grindv = shlex.split(obfsproxy_env['GRINDER'])
+else:
+    obfsproxy_grindv = []
+
 class Obfsproxy(subprocess.Popen):
     def __init__(self, *args, **kwargs):
-        argv = ["./obfsproxy", "--log-min-severity=debug"]
+        argv = obfsproxy_grindv[:]
+        argv.extend(("./obfsproxy", "--log-min-severity=debug"))
+
         if len(args) == 1 and (isinstance(args[0], list) or
                                isinstance(args[0], tuple)):
             argv.extend(args[0])
@@ -57,9 +75,11 @@ class Obfsproxy(subprocess.Popen):
                                   stdin=open(os.path.devnull, "r"),
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
+                                  env=obfsproxy_env,
                                   **kwargs)
 
-    severe_error_re = re.compile(r"\[(?:warn|err(?:or)?)\]")
+    severe_error_re = re.compile(
+        r"\[(?:warn|err(?:or)?)\]|ERROR SUMMARY: [1-9]|LEAK SUMMARY:")
 
     def check_completion(self, label, force_stderr):
         if self.poll() is None:
@@ -112,12 +132,14 @@ class Obfsproxy(subprocess.Popen):
 
 def connect_with_retry(addr):
     retry = 0
+    if len(obfsproxy_grindv) == 0: maxretries = 20
+    else: maxretries = 100 # valgrind is slow, give it some more time
     while True:
         try:
             return socket.create_connection(addr)
         except socket.error, e:
             if e.errno != errno.ECONNREFUSED: raise
-            if retry == 20: raise
+            if retry >= maxretries: raise
             retry += 1
             time.sleep(0.05)
 
@@ -357,10 +379,10 @@ class SocksBad(SocksTest, unittest.TestCase):
     def test_socks5_bad_handshake_5(self):
         self.socksTest([ "\x05\x02\x01\x02", False ]) # should get "\x05\xFF"
 
-    def test_socks5_good_handshake_1(self):
+    def test_socks5_no_destination_1(self):
         self.socksTest([ "\x05\x01\x00", "\x05\x00", False ])
 
-    def test_socks5_good_handshake_2(self):
+    def test_socks5_no_destination_2(self):
         self.socksTest([ "\x05\x02\x00\x01", "\x05\x00", False ])
 
     def test_socks5_unsupported_method_1(self):

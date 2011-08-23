@@ -317,6 +317,28 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   }
 }
 
+/** Diagnostic-printing subroutine of upstream_event_cb and
+    downstream_event_cb. */
+static void
+report_event(short what, const char *peer, int errcode)
+{
+  if (what & BEV_EVENT_ERROR)
+    log_warn("%s: network error in %s: %s",
+             peer,
+             (what & BEV_EVENT_READING) ? "read" : "write",
+             evutil_socket_error_to_string(errcode));
+  else if (what & BEV_EVENT_EOF)
+    log_info("%s: %s",
+             peer,
+             (what & BEV_EVENT_READING)
+             ? "received EOF"
+             : "further transmissions squelched");
+  else if (what & BEV_EVENT_TIMEOUT)
+    log_warn("%s: %s timed out",
+             peer,
+             (what & BEV_EVENT_READING) ? "read" : "write");
+}
+
 /**
    Called when there is an "event" (error, eof, or timeout) on one of
    our upstream connections.
@@ -326,23 +348,16 @@ static void
 upstream_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   circuit_t *ckt = arg;
-  int errcode = EVUTIL_SOCKET_ERROR();
 
-  if (what & BEV_EVENT_ERROR) {
-    log_warn("Error talking to %s: %s",
-             ckt->up_peer, evutil_socket_error_to_string(errcode));
-  } else if (what & BEV_EVENT_EOF) {
-    log_info("EOF from %s", ckt->up_peer);
-  } else if (what & BEV_EVENT_TIMEOUT) {
-    log_info("Timeout talking to %s", ckt->up_peer);
+  if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
+    report_event(what, ckt->up_peer, EVUTIL_SOCKET_ERROR());
+    circuit_upstream_shutdown(ckt,
+                              what & (BEV_EVENT_READING|BEV_EVENT_WRITING));
   } else {
+    /* We should never get BEV_EVENT_CONNECTED here.
+       Ignore any events we don't understand. */
     obfs_assert(!(what & BEV_EVENT_CONNECTED));
-    /* ignore events we don't understand */
-    return;
   }
-
-  what &= BEV_EVENT_READING|BEV_EVENT_WRITING;
-  circuit_upstream_shutdown(ckt, what);
 }
 
 /**
@@ -353,26 +368,16 @@ static void
 downstream_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
-  int errcode = EVUTIL_SOCKET_ERROR();
 
-  if (what & BEV_EVENT_ERROR) {
-    log_warn("Error talking to %s: %s",
-             conn->peername, evutil_socket_error_to_string(errcode));
-  } else if (what & BEV_EVENT_EOF) {
-    log_info("EOF from %s", conn->peername);
-  } else if (what & BEV_EVENT_TIMEOUT) {
-    log_info("Timeout talking to %s", conn->peername);
+  if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
+    report_event(what, conn->peername, EVUTIL_SOCKET_ERROR());
+    circuit_downstream_shutdown(conn->circuit, conn,
+                                what & (BEV_EVENT_READING|BEV_EVENT_WRITING));
   } else {
+    /* We should never get BEV_EVENT_CONNECTED here.
+       Ignore any events we don't understand. */
     obfs_assert(!(what & BEV_EVENT_CONNECTED));
-    /* ignore events we don't understand */
-    return;
   }
-
-  what &= BEV_EVENT_READING|BEV_EVENT_WRITING;
-  if (conn->circuit)
-    circuit_downstream_shutdown(conn->circuit, conn, what);
-  else
-    conn_close(conn);
 }
 
 /**
@@ -382,14 +387,19 @@ static void
 upstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   circuit_t *ckt = arg;
-  log_debug("%s for %s", __func__, ckt->up_peer);
+  size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
+  log_debug("%s: %s, %ld bytes still to transmit",
+            ckt->up_peer, __func__, remain);
 
-  if (evbuffer_get_length(bufferevent_get_output(bev)) == 0) {
+  if (remain == 0) {
     bufferevent_disable(bev, EV_WRITE);
-    if (bufferevent_get_enabled(bev))
+    if (bufferevent_get_enabled(bev)) {
+      log_debug("%s: sending EOF", ckt->up_peer);
       shutdown(bufferevent_getfd(bev), SHUT_WR);
-    else
+    } else {
+      log_info("%s: closing circuit", ckt->up_peer);
       circuit_close(ckt);
+    }
   }
 }
 
@@ -400,14 +410,19 @@ static void
 downstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
-  log_debug("%s for %s", __func__, conn->peername);
+  size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
+  log_debug("%s: %s, %ld bytes still to transmit",
+            conn->peername, __func__, remain);
 
-  if (evbuffer_get_length(bufferevent_get_output(bev)) == 0) {
+  if (remain == 0) {
     bufferevent_disable(bev, EV_WRITE);
-    if (bufferevent_get_enabled(bev))
+    if (bufferevent_get_enabled(bev)) {
+      log_debug("%s: sending EOF", conn->peername);
       shutdown(bufferevent_getfd(bev), SHUT_WR);
-    else
+    } else {
+      log_info("%s: closing downstream connection", conn->peername);
       conn_close(conn);
+    }
   }
 }
 

@@ -38,8 +38,6 @@ static struct event_base *the_event_base;
 static void
 start_shutdown(int barbaric)
 {
-  log_debug("Beginning %s shutdown.", barbaric ? "barbaric" : "normal");
-
   listener_close_all();          /* prevent further connections */
   conn_start_shutdown(barbaric); /* possibly break existing connections */
 }
@@ -74,13 +72,17 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 
   if (signum == SIGINT && !got_sigint) {
     got_sigint++;
-    log_info("Normal shutdown on SIGINT (%ld connection%s remain)",
-             conn_count(), conn_count() == 1 ? "" : "s");
+    log_info("Normal shutdown on SIGINT "
+             "(%ld connection%s, %ld circuit%s remain)",
+             conn_count(), conn_count() == 1 ? "" : "s",
+             circuit_count(), circuit_count() == 1 ? "" : "s");
     start_shutdown(0);
   } else {
-    log_info("Barbaric shutdown on %s (%ld connection%s will be broken)",
+    log_info("Barbaric shutdown on %s "
+             "(%ld connection%s, %ld circuit%s will be broken)",
              signum == SIGINT ? "SIGINT" : "SIGTERM",
-             conn_count(), conn_count() == 1 ? "" : "s");
+             conn_count(), conn_count() == 1 ? "" : "s",
+             circuit_count(), circuit_count() == 1 ? "" : "s");
     start_shutdown(1);
   }
 }

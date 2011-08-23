@@ -34,37 +34,51 @@ conn_initialize()
 }
 
 static void
-maybe_finish_shutdown(int barbaric)
+maybe_finish_shutdown()
 {
-  if (!shutting_down) return;
+  if (!shutting_down)
+    return;
+  if ((circuits && smartlist_len(circuits) > 0) ||
+      (connections && smartlist_len(connections) > 0))
+    return;
 
-  if (barbaric ||
-      (smartlist_len(circuits) == 0 && smartlist_len(connections) == 0)) {
+  if (circuits)
     smartlist_free(circuits);
+  if (connections)
     smartlist_free(connections);
-    finish_shutdown();
-  }
+  finish_shutdown();
 }
 
 void
 conn_start_shutdown(int barbaric)
 {
-  shutting_down = 1;
+  /* Do not set 'shutting_down' until after we take care of barbaric
+     connection breakage, so that the calls below to circuit_close or
+     conn_close do not cause maybe_finish_shutdown to take one of the
+     lists out from under us. */
+  shutting_down = 0;
 
-  if (barbaric && smartlist_len(circuits) > 0) {
+  if (barbaric && circuits && smartlist_len(circuits) > 0) {
     SMARTLIST_FOREACH(circuits, circuit_t *, ckt, circuit_close(ckt));
   }
-  if (barbaric && smartlist_len(connections) > 0) {
+  if (barbaric && connections && smartlist_len(connections) > 0) {
     SMARTLIST_FOREACH(connections, conn_t *, conn, conn_close(conn));
   }
 
-  maybe_finish_shutdown(barbaric);
+  shutting_down = 1;
+  maybe_finish_shutdown();
 }
 
 unsigned long
 conn_count(void)
 {
   return smartlist_len(connections);
+}
+
+unsigned long
+circuit_count(void)
+{
+  return smartlist_len(circuits);
 }
 
 /**
@@ -108,7 +122,7 @@ conn_close(conn_t *conn)
 
   conn->cfg->vtable->conn_free(conn);
 
-  maybe_finish_shutdown(0);
+  maybe_finish_shutdown();
 }
 
 /* Protocol methods of connections. */
@@ -308,7 +322,7 @@ circuit_close(circuit_t *ckt)
 
   ckt->cfg->vtable->circuit_free(ckt);
 
-  maybe_finish_shutdown(0);
+  maybe_finish_shutdown();
 }
 
 void
@@ -318,36 +332,75 @@ circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction)
   obfs_assert((direction & ~(BEV_EVENT_READING|BEV_EVENT_WRITING)) == 0);
 
   if (direction & BEV_EVENT_READING) {
-    if (ckt->downstream) {
-      conn_send(ckt->downstream, bufferevent_get_input(ckt->up_buffer));
-      obfs_assert(!evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+    struct evbuffer *inbuf = bufferevent_get_input(ckt->up_buffer);
+    log_debug("%s: upstream read shutdown", ckt->up_peer);
 
-      if (evbuffer_get_length(conn_get_outbound(ckt->downstream)))
+    if (ckt->downstream) {
+      struct evbuffer *outbuf = conn_get_outbound(ckt->downstream);
+      if (evbuffer_get_length(inbuf)) {
+        log_debug("%s: %ld bytes of pending input",
+                  ckt->up_peer, (unsigned long)evbuffer_get_length(inbuf));
+        conn_send(ckt->downstream, inbuf);
+        if (evbuffer_get_length(inbuf)) {
+          log_debug("%s: discarding %ld bytes of pending input",
+                    ckt->up_peer, (unsigned long)evbuffer_get_length(inbuf));
+          evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
+        }
+      }
+
+      if (evbuffer_get_length(outbuf)) {
+        log_debug("%s: flushing %ld bytes to %s", ckt->up_peer,
+                  (unsigned long) evbuffer_get_length(outbuf),
+                  ckt->downstream->peername);
         conn_do_flush(ckt->downstream);
-      else {
+      } else {
+        log_debug("%s: sending EOF to %s",
+                  ckt->up_peer, ckt->downstream->peername);
         bufferevent_disable(ckt->downstream->buffer, EV_WRITE);
         shutdown(bufferevent_getfd(ckt->downstream->buffer), SHUT_WR);
       }
-    } else
-      evbuffer_drain(bufferevent_get_input(ckt->up_buffer),
-                     evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+    } else {
+      if (evbuffer_get_length(inbuf)) {
+        log_debug("%s: no downstream connection, discarding %ld bytes",
+                  ckt->up_peer, evbuffer_get_length(inbuf));
+        evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
+      }
+      /* If we don't have a downstream connection at this point,
+         we will never have one. */
+      bufferevent_disable(ckt->up_buffer, EV_WRITE);
+    }
 
     bufferevent_disable(ckt->up_buffer, EV_READ);
     shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_RD);
   }
 
   if (direction & BEV_EVENT_WRITING) {
+    struct evbuffer *outbuf = bufferevent_get_output(ckt->up_buffer);
+    log_debug("%s: upstream write shutdown", ckt->up_peer);
+
     bufferevent_disable(ckt->up_buffer, EV_WRITE);
     shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
 
-    evbuffer_drain(bufferevent_get_output(ckt->up_buffer),
-                   evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)));
+    if (evbuffer_get_length(outbuf)) {
+      log_debug("%s: discarding %ld bytes of pending output",
+                ckt->up_peer, (unsigned long)evbuffer_get_length(outbuf));
+      evbuffer_drain(outbuf, evbuffer_get_length(outbuf));
+    }
 
     if (ckt->downstream) {
+      struct evbuffer *inbuf = conn_get_inbound(ckt->downstream);
+      log_debug("%s: squelching further transmissions from %s",
+                ckt->up_peer, ckt->downstream->peername);
       bufferevent_disable(ckt->downstream->buffer, EV_READ);
       shutdown(bufferevent_getfd(ckt->downstream->buffer), SHUT_RD);
-      evbuffer_drain(conn_get_inbound(ckt->downstream),
-                     evbuffer_get_length(conn_get_inbound(ckt->downstream)));
+
+      if (evbuffer_get_length(inbuf)) {
+        log_debug("%s: discarding %ld bytes of pending input from %s",
+                  ckt->up_peer,
+                  (unsigned long) evbuffer_get_length(inbuf),
+                  ckt->downstream->peername);
+        evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
+      }
     }
   }
 
@@ -356,10 +409,18 @@ circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction)
   if (!bufferevent_get_enabled(ckt->up_buffer)) {
     conn_t *conn = ckt->downstream;
     ckt->downstream = NULL;
-    conn->circuit = NULL;
+
+    if (conn) {
+      conn->circuit = NULL;
+      if (evbuffer_get_length(conn_get_outbound(conn)) == 0) {
+        log_info("%s: closing downstream connection to %s",
+                 ckt->up_peer, conn->peername);
+        conn_close(conn);
+      }
+    }
+
+    log_info("%s: closing circuit", ckt->up_peer);
     circuit_close(ckt);
-    if (evbuffer_get_length(conn_get_outbound(conn)) == 0)
-      conn_close(conn);
   }
 }
 
@@ -373,36 +434,70 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
   obfs_assert(ckt == conn->circuit);
 
   if (direction & BEV_EVENT_READING) {
-    if (ckt->up_buffer) {
-      conn_recv(conn, bufferevent_get_output(ckt->up_buffer));
-      obfs_assert(!evbuffer_get_length(conn_get_inbound(conn)));
+    struct evbuffer *inbuf = conn_get_inbound(conn);
+    log_debug("%s: downstream read shutdown", conn->peername);
 
-      if (evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)))
+    if (ckt->up_buffer) {
+      struct evbuffer *outbuf = bufferevent_get_output(ckt->up_buffer);
+      if (evbuffer_get_length(inbuf)) {
+        log_debug("%s: %ld bytes of pending input",
+                  conn->peername, (unsigned long)evbuffer_get_length(inbuf));
+        conn_recv(conn, outbuf);
+        if (evbuffer_get_length(inbuf)) {
+          log_debug("%s: discarding %ld bytes of pending input",
+                    conn->peername, (unsigned long)evbuffer_get_length(inbuf));
+          evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
+        }
+      }
+
+      if (evbuffer_get_length(outbuf)) {
+        log_debug("%s: flushing %ld bytes to %s", conn->peername,
+                  (unsigned long) evbuffer_get_length(outbuf),
+                  ckt->up_peer);
         circuit_do_flush(ckt);
+      }
       else {
+        log_debug("%s: sending EOF to %s", conn->peername, ckt->up_peer);
         bufferevent_disable(ckt->up_buffer, EV_WRITE);
         shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
       }
-    } else
-      evbuffer_drain(conn_get_inbound(conn),
-                     evbuffer_get_length(conn_get_inbound(conn)));
+    } else if (evbuffer_get_length(inbuf)) {
+      log_debug("%s: no upstream connection, discarding %ld bytes",
+                conn->peername, evbuffer_get_length(inbuf));
+      evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
+    }
 
     bufferevent_disable(conn->buffer, EV_READ);
     shutdown(bufferevent_getfd(conn->buffer), SHUT_RD);
   }
 
   if (direction & BEV_EVENT_WRITING) {
+    struct evbuffer *outbuf = conn_get_outbound(conn);
+    log_debug("%s: downstream write shutdown", conn->peername);
+
     bufferevent_disable(conn->buffer, EV_WRITE);
     shutdown(bufferevent_getfd(conn->buffer), SHUT_WR);
 
-    evbuffer_drain(conn_get_outbound(conn),
-                   evbuffer_get_length(conn_get_outbound(conn)));
+    if (evbuffer_get_length(outbuf)) {
+      log_debug("%s: discarding %ld bytes of pending output",
+                conn->peername, (unsigned long)evbuffer_get_length(outbuf));
+      evbuffer_drain(outbuf, evbuffer_get_length(outbuf));
+    }
 
     if (ckt->up_buffer) {
+      struct evbuffer *inbuf = bufferevent_get_input(ckt->up_buffer);
+      log_debug("%s: squelching further transmissions from %s",
+                conn->peername, ckt->up_peer);
       bufferevent_disable(ckt->up_buffer, EV_READ);
       shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_RD);
-      evbuffer_drain(bufferevent_get_input(ckt->up_buffer),
-                     evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+
+      if (evbuffer_get_length(inbuf)) {
+        log_debug("%s: discarding %ld bytes of pending input from %s",
+                  conn->peername,
+                  (unsigned long) evbuffer_get_length(inbuf),
+                  ckt->up_peer);
+        evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
+      }
     }
   }
 
@@ -411,8 +506,13 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
   if (!bufferevent_get_enabled(conn->buffer)) {
     ckt->downstream = NULL;
     conn->circuit = NULL;
-    conn_close(conn);
-    if (evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)) == 0)
+    if (evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)) == 0) {
+      log_info("%s: closing circuit", ckt->up_peer);
       circuit_close(ckt);
+    }
+
+    log_info("%s: closing downstream connection to %s",
+             ckt->up_peer, conn->peername);
+    conn_close(conn);
   }
 }

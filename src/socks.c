@@ -120,7 +120,8 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   unsigned int buflength = evbuffer_get_length(source);
 
   if (buflength < SIZEOF_SOCKS5_STATIC_REQ+1) {
-    log_debug("socks: request packet is too small (1).");
+    log_debug("socks: request packet is too small %d:%d (1)",
+              buflength, SIZEOF_SOCKS5_STATIC_REQ+1);
     return SOCKS_INCOMPLETE;
   }
 
@@ -285,6 +286,9 @@ socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
   reply[0] = SOCKS5_VERSION;
 
   reply[1] = neg_was_success ? SOCKS5_METHOD_NOAUTH : SOCKS5_METHOD_FAIL;
+
+  log_debug("socks5: method negotiation %s",
+            neg_was_success ? "success" : "failure");
 
   if (evbuffer_add(dest, reply, 2) == -1 || !neg_was_success)
     return SOCKS_BROKEN;

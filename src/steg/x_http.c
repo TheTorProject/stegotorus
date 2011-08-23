@@ -254,7 +254,9 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       return RECV_INCOMPLETE;
     }
     if (s3.pos + sizeof http_query_3 - 1 != evbuffer_get_length(source)) {
-      log_debug("Unexpected HTTP query body");
+      log_debug("Unexpected HTTP query body (have %ld, want %ld)",
+                evbuffer_get_length(source),
+                s3.pos + sizeof http_query_3 - 1);
       return RECV_BAD;
     }
 
