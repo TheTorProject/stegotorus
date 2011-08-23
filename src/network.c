@@ -262,7 +262,6 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
 
   obfs_assert(ckt->up_buffer == bev);
   obfs_assert(ckt->downstream);
-  obfs_assert(ckt->is_open);
 
   if (conn_send(ckt->downstream, bufferevent_get_input(ckt->up_buffer))) {
     log_debug("%s: error during transmit.", ckt->up_peer);
@@ -292,7 +291,6 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   obfs_assert(down->buffer == bev);
   obfs_assert(down->circuit);
   obfs_assert(down->circuit->up_buffer);
-  obfs_assert(down->circuit->is_open);
   up = down->circuit->up_buffer;
 
   r = conn_recv(down, bufferevent_get_output(up));
@@ -439,11 +437,8 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
   /* Upon successful connection, enable traffic on both sides of the
      connection, and replace this callback with the regular event_cb */
   if (what & BEV_EVENT_CONNECTED) {
-    obfs_assert(!ckt->is_open);
     obfs_assert(ckt->downstream);
     obfs_assert(ckt->up_buffer == bev);
-
-    ckt->is_open = 1;
 
     log_debug("%s: Successful connection", ckt->up_peer);
 
@@ -481,12 +476,9 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
   if (what & BEV_EVENT_CONNECTED) {
     circuit_t *ckt = conn->circuit;
     obfs_assert(ckt);
-    obfs_assert(!ckt->is_open);
     obfs_assert(ckt->up_peer);
     obfs_assert(ckt->downstream == conn);
     obfs_assert(conn->buffer == bev);
-
-    ckt->is_open = 1;
 
     log_debug("%s: Successful connection", conn->peername);
 
@@ -549,8 +541,6 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     struct sockaddr *sa = (struct sockaddr*)&ss;
     socklen_t slen = sizeof(&ss);
 
-    obfs_assert(!ckt->is_open);
-
     /* Figure out where we actually connected to, and tell the socks client */
     if (getpeername(bufferevent_getfd(bev), sa, &slen) == 0) {
       socks_state_set_address(socks, sa);
@@ -561,7 +551,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     /* Switch to regular upstream behavior. */
     socks_state_free(socks);
     ckt->socks_state = NULL;
-    ckt->is_open = 1;
+
     log_debug("%s: Successful outbound connection to %s",
               ckt->up_peer, conn->peername);
 

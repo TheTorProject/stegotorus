@@ -122,7 +122,6 @@ struct circuit_t {
 
   conn_t             *downstream;
   socks_state_t      *socks_state;
-  unsigned int        is_open : 1;
 };
 
 circuit_t *circuit_create(config_t *cfg, struct bufferevent *up,
