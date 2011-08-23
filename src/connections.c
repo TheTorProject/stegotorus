@@ -145,6 +145,18 @@ conn_recv(conn_t *source, struct evbuffer *dest)
   return source->cfg->vtable->recv(source, dest);
 }
 
+int
+conn_send_eof(conn_t *dest)
+{
+  return dest->cfg->vtable->send_eof(dest);
+}
+
+enum recv_ret
+conn_recv_eof(conn_t *source, struct evbuffer *dest)
+{
+  return source->cfg->vtable->recv_eof(source, dest);
+}
+
 void
 conn_expect_close(conn_t *conn)
 {
@@ -340,15 +352,22 @@ circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction)
       if (evbuffer_get_length(inbuf)) {
         log_debug("%s: %ld bytes of pending input",
                   ckt->up_peer, (unsigned long)evbuffer_get_length(inbuf));
-        conn_send(ckt->downstream, inbuf);
+        if (conn_send(ckt->downstream, inbuf))
+          log_debug("%s: error during final transmit to %s", ckt->up_peer,
+                    ckt->downstream->peername);
         if (evbuffer_get_length(inbuf)) {
           log_debug("%s: discarding %ld bytes of pending input",
                     ckt->up_peer, (unsigned long)evbuffer_get_length(inbuf));
           evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
         }
       }
-
-      if (evbuffer_get_length(outbuf)) {
+      if (conn_send_eof(ckt->downstream)) {
+        log_debug("%s: error sending EOF indication to %s", ckt->up_peer,
+                  ckt->downstream->peername);
+        /* this might have failed because the downstream is waiting to
+           receive data before it can send, so don't disable writes yet */
+        conn_do_flush(ckt->downstream);
+      } else if (evbuffer_get_length(outbuf)) {
         log_debug("%s: flushing %ld bytes to %s", ckt->up_peer,
                   (unsigned long) evbuffer_get_length(outbuf),
                   ckt->downstream->peername);
@@ -435,6 +454,7 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
 
   if (direction & BEV_EVENT_READING) {
     struct evbuffer *inbuf = conn_get_inbound(conn);
+    enum recv_ret r;
     log_debug("%s: downstream read shutdown", conn->peername);
 
     if (ckt->up_buffer) {
@@ -442,12 +462,33 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
       if (evbuffer_get_length(inbuf)) {
         log_debug("%s: %ld bytes of pending input",
                   conn->peername, (unsigned long)evbuffer_get_length(inbuf));
-        conn_recv(conn, outbuf);
+
+        r = conn_recv(conn, outbuf);
+        if (r == RECV_BAD) {
+          log_debug("%s: error during final receive", conn->peername);
+        } else if (r == RECV_SEND_PENDING) {
+          log_debug("%s: reply of %lu bytes", conn->peername,
+                    (unsigned long)
+                    evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+          if (conn_send(conn, bufferevent_get_input(ckt->up_buffer)) < 0)
+            log_debug("%s: error during reply", conn->peername);
+        }
+
         if (evbuffer_get_length(inbuf)) {
           log_debug("%s: discarding %ld bytes of pending input",
                     conn->peername, (unsigned long)evbuffer_get_length(inbuf));
           evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
         }
+      }
+      r = conn_recv_eof(conn, outbuf);
+      if (r == RECV_BAD) {
+        log_debug("%s: error receiving EOF", conn->peername);
+      } else if (r == RECV_SEND_PENDING) {
+        log_debug("%s: reply of %lu bytes", conn->peername,
+                  (unsigned long)
+                  evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+        if (conn_send(conn, bufferevent_get_input(ckt->up_buffer)) < 0)
+          log_debug("%s: error during reply", conn->peername);
       }
 
       if (evbuffer_get_length(outbuf)) {
@@ -455,8 +496,7 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
                   (unsigned long) evbuffer_get_length(outbuf),
                   ckt->up_peer);
         circuit_do_flush(ckt);
-      }
-      else {
+      } else {
         log_debug("%s: sending EOF to %s", conn->peername, ckt->up_peer);
         bufferevent_disable(ckt->up_buffer, EV_WRITE);
         shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);

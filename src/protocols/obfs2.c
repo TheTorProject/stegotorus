@@ -340,17 +340,15 @@ obfs2_handshake(conn_t *s)
 
 /**
    Helper: encrypt every byte from 'source' using the key in 'crypto',
-   and write those bytes onto 'dest'.  Return 0 on success, -1 on failure.
+   and write those bytes onto 'dest'.
  */
-static int
+static void
 obfs2_crypt_and_transmit(crypt_t *crypto,
                          struct evbuffer *source, struct evbuffer *dest)
 {
   uchar data[1024];
-  while (1) {
-    int n = evbuffer_remove(source, data, 1024);
-    if (n <= 0)
-      return 0;
+  int n;
+  while ((n = evbuffer_remove(source, data, 1024)) > 0) {
     stream_crypt(crypto, data, n);
     evbuffer_add(dest, data, n);
     log_debug("%s: Processed %d bytes.", __func__, n);
@@ -384,7 +382,8 @@ obfs2_send(conn_t *s, struct evbuffer *source)
       log_debug("%s: transmitting %lu bytes.", __func__,
                 (unsigned long)evbuffer_get_length(source));
     }
-    return obfs2_crypt_and_transmit(state->send_crypto, source, dest);
+    obfs2_crypt_and_transmit(state->send_crypto, source, dest);
+    return 0;
   } else {
     /* Our crypto isn't set up yet, we'll have to queue the data */
     if (evbuffer_get_length(source)) {
@@ -564,4 +563,37 @@ obfs2_recv(conn_t *s, struct evbuffer *dest)
     return RECV_SEND_PENDING;
 
   return RECV_GOOD;
+}
+
+/** send EOF: flush out any queued data if possible */
+static int
+obfs2_send_eof(conn_t *s)
+{
+  obfs2_conn_t *state = downcast_conn(s);
+  struct evbuffer *dest = conn_get_outbound(s);
+
+  if (!state->pending_data_to_send)
+    return 0;
+
+  if (!state->send_crypto) {
+    log_debug("%s: handshake incomplete, cannot transmit queued data",
+              __func__);
+    return -1;
+  }
+
+  log_debug("%s: transmitting %lu bytes previously queued.", __func__,
+            (unsigned long)evbuffer_get_length(state->pending_data_to_send));
+  obfs2_crypt_and_transmit(state->send_crypto,
+                           state->pending_data_to_send,
+                           dest);
+  evbuffer_free(state->pending_data_to_send);
+  state->pending_data_to_send = NULL;
+  return 0;
+}
+
+static enum recv_ret
+obfs2_recv_eof(conn_t *source, struct evbuffer *dest)
+{
+  /* try once more to read anything that's in the queue */
+  return obfs2_recv(source, dest);
 }

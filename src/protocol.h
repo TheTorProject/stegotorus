@@ -81,6 +81,14 @@ struct proto_vtable
   /** Receive data from 'source' and pass it upstream to 'dest'. */
   enum recv_ret (*recv)(conn_t *source, struct evbuffer *dest);
 
+  /** Take any actions necessary upon an end-of-file notification from
+      upstream, such as flushing internally buffered data. */
+  int (*send_eof)(conn_t *dest);
+
+  /** Take any actions necessary upon an end-of-file notification from
+      the remote peer. */
+  enum recv_ret (*recv_eof)(conn_t *source, struct evbuffer *dest);
+
   /* The remaining methods are only required if your protocol makes
      use of steganography modules.  If you provide them, they must be
      effective. */
@@ -123,7 +131,9 @@ extern const size_t n_supported_protocols;
     name##_conn_free,                           \
     name##_handshake,                           \
     name##_send,                                \
-    name##_recv,
+    name##_recv,                                \
+    name##_send_eof,                            \
+    name##_recv_eof,
 
 #define PROTO_VTABLE_NOSTEG(name)               \
     NULL, NULL, NULL, NULL,
@@ -147,7 +157,9 @@ extern const size_t n_supported_protocols;
   static void name##_conn_free(conn_t *);                               \
   static int name##_handshake(conn_t *);                                \
   static int name##_send(conn_t *, struct evbuffer *);                  \
-  static enum recv_ret name##_recv(conn_t *, struct evbuffer *);
+  static enum recv_ret name##_recv(conn_t *, struct evbuffer *);        \
+  static int name##_send_eof(conn_t *);                                 \
+  static enum recv_ret name##_recv_eof(conn_t *, struct evbuffer *);
 
 #define PROTO_FWD_NOSTEG(name) /* nothing required */
 

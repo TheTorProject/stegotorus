@@ -402,13 +402,13 @@ class SocksBad(SocksTest, unittest.TestCase):
 #
 
 # fails, disabled
-#class DirectObfs2(DirectTest, unittest.TestCase):
-#    obfs_args = ("obfs2",
-#                 "--dest=127.0.0.1:%d" % EXIT_PORT,
-#                 "server", "127.0.0.1:%d" % SERVER_PORT,
-#                 "obfs2",
-#                 "--dest=127.0.0.1:%d" % SERVER_PORT,
-#                 "client", "127.0.0.1:%d" % ENTRY_PORT)
+class DirectObfs2(DirectTest, unittest.TestCase):
+    obfs_args = ("obfs2",
+                 "--dest=127.0.0.1:%d" % EXIT_PORT,
+                 "server", "127.0.0.1:%d" % SERVER_PORT,
+                 "obfs2",
+                 "--dest=127.0.0.1:%d" % SERVER_PORT,
+                 "client", "127.0.0.1:%d" % ENTRY_PORT)
 
 class DirectDummy(DirectTest, unittest.TestCase):
     obfs_args = ("dummy", "server",
@@ -427,12 +427,12 @@ class DirectXDstegXHttp(DirectTest, unittest.TestCase):
                  "127.0.0.1:%d" % SERVER_PORT, "x_http")
 
 # fails, disabled
-#class SocksObfs2(GoodSocksTest, unittest.TestCase):
-#    server_args = ("obfs2",
-#                   "--dest=127.0.0.1:%d" % EXIT_PORT,
-#                   "server", "127.0.0.1:%d" % SERVER_PORT)
-#    client_args = ("obfs2",
-#                   "socks", "127.0.0.1:%d" % ENTRY_PORT)
+class SocksObfs2(GoodSocksTest, unittest.TestCase):
+    server_args = ("obfs2",
+                   "--dest=127.0.0.1:%d" % EXIT_PORT,
+                   "server", "127.0.0.1:%d" % SERVER_PORT)
+    client_args = ("obfs2",
+                   "socks", "127.0.0.1:%d" % ENTRY_PORT)
 
 class SocksDummy(GoodSocksTest, unittest.TestCase):
     server_args = ("dummy", "server",

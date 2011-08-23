@@ -202,6 +202,21 @@ x_dsteg_recv(conn_t *s, struct evbuffer *dest)
   return steg_receive(source->steg, s, dest);
 }
 
+
+/** send EOF, recv EOF - no op */
+static int
+x_dsteg_send_eof(conn_t *dest)
+{
+  return 0;
+}
+
+static enum recv_ret
+x_dsteg_recv_eof(conn_t *source, struct evbuffer *dest)
+{
+  return RECV_GOOD;
+}
+
+
 /** XXX all steg callbacks are ignored */
 static void x_dsteg_expect_close(conn_t *conn) {}
 static void x_dsteg_cease_transmission(conn_t *conn) {}

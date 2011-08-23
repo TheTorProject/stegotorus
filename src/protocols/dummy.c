@@ -166,3 +166,16 @@ dummy_recv(conn_t *source, struct evbuffer *dest)
   else
     return RECV_GOOD;
 }
+
+/** send EOF, recv EOF - no op */
+static int
+dummy_send_eof(conn_t *dest)
+{
+  return 0;
+}
+
+static enum recv_ret
+dummy_recv_eof(conn_t *source, struct evbuffer *dest)
+{
+  return RECV_GOOD;
+}
