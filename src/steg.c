@@ -5,26 +5,14 @@
 #include "util.h"
 #include "steg.h"
 
-/**
-   All supported steganography modules go in this array.
-*/
-extern const steg_vtable s_x_http_vtable;
-
-const steg_vtable *const supported_steg[] =
-{
-  &s_x_http_vtable,
-};
-const size_t n_supported_steg =
-  sizeof(supported_steg)/sizeof(supported_steg[0]);
-
 /* Report whether a named steg-module is supported. */
 
 int
-is_supported_steg(const char *name)
+steg_is_supported(const char *name)
 {
-  size_t i;
-  for (i = 0; i < n_supported_steg; i++)
-    if (!strcmp(name, supported_steg[i]->name))
+  const steg_vtable *const *s;
+  for (s = supported_steganographers; *s; s++)
+    if (!strcmp(name, (*s)->name))
       return 1;
   return 0;
 }
@@ -33,10 +21,10 @@ is_supported_steg(const char *name)
 steg_t *
 steg_new(const char *name)
 {
-  size_t i;
-  for (i = 0; i < n_supported_steg; i++)
-    if (!strcmp(name, supported_steg[i]->name))
-      return supported_steg[i]->new(NULL, /*is_clientside=*/1);
+  const steg_vtable *const *s;
+  for (s = supported_steganographers; *s; s++)
+    if (!strcmp(name, (*s)->name))
+      return (*s)->new(NULL, /*is_clientside=*/1);
   return NULL;
 }
 
@@ -44,10 +32,10 @@ steg_new(const char *name)
 steg_t *
 steg_detect(conn_t *conn)
 {
-  size_t i;
-  for (i = 0; i < n_supported_steg; i++)
-    if (supported_steg[i]->detect(conn))
-      return supported_steg[i]->new(NULL, /*is_clientside=*/0);
+  const steg_vtable *const *s;
+  for (s = supported_steganographers; *s; s++)
+    if ((*s)->detect(conn))
+      return (*s)->new(NULL, /*is_clientside=*/0);
   return NULL;
 }
 

@@ -18,12 +18,12 @@ struct config_t
   enum listen_mode           mode;
 };
 
+int config_is_supported(const char *name);
 config_t *config_create(int n_options, const char *const *options);
 void config_free(config_t *cfg);
 
 struct evutil_addrinfo *config_get_listen_addrs(config_t *cfg, size_t n);
 struct evutil_addrinfo *config_get_target_addr(config_t *cfg);
-
 
 /**
    This struct defines a protocol and its methods; note that not all
@@ -112,7 +112,6 @@ struct proto_vtable
 };
 
 extern const proto_vtable *const supported_protocols[];
-extern const size_t n_supported_protocols;
 
 /** Use these macros to define protocol modules; they ensure all the
     methods are in the correct order in the vtable, enforce a

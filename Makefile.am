@@ -9,6 +9,14 @@ bin_PROGRAMS = obfsproxy
 noinst_LIBRARIES = libobfsproxy.a
 noinst_PROGRAMS = unittests
 
+PROTOCOLS = \
+	src/protocols/dummy.c \
+	src/protocols/obfs2.c \
+	src/protocols/x_dsteg.c
+
+STEGANOGRAPHERS = \
+	src/steg/x_http.c
+
 libobfsproxy_a_SOURCES = \
 	src/connections.c \
 	src/container.c \
@@ -18,10 +26,10 @@ libobfsproxy_a_SOURCES = \
 	src/socks.c \
 	src/steg.c \
 	src/util.c \
-	src/protocols/dummy.c \
-	src/protocols/obfs2.c \
-	src/protocols/x_dsteg.c \
-	src/steg/x_http.c
+	$(PROTOCOLS) $(STEGANOGRAPHERS)
+
+nodist_libobfsproxy_a_SOURCES = protolist.c steglist.c
+
 if NEED_SHA256
 libobfsproxy_a_SOURCES += src/sha256.c
 endif
@@ -58,9 +66,22 @@ noinst_HEADERS = \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h
 
-EXTRA_DIST = doc/protocol-spec.txt \
-	src/test/tester.py
+dist_noinst_SCRIPTS = src/genmodtable.sh src/test/tester.py
 
+EXTRA_DIST = doc
+
+# Generated source files
+CLEANFILES = $(nodist_libobfsproxy_a_SOURCES)
+
+protolist.c: $(PROTOCOLS) Makefile src/genmodtable.sh
+	$(SHELL) $(srcdir)/src/genmodtable.sh protocol PROTO proto p \
+		$@ $(filter-out %Makefile %genmodtable.sh, $^)
+
+steglist.c: $(STEGANOGRAPHERS) Makefile src/genmodtable.sh
+	$(SHELL) $(srcdir)/src/genmodtable.sh steganographer STEG steg s \
+		$@ $(filter-out %Makefile %genmodtable.sh, $^)
+
+# Testing
 check-local:
 	@echo --- Unit tests ---
 	./unittests

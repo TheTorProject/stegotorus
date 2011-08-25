@@ -12,7 +12,6 @@ Protocol design:
 
 Cleanup:
 
-  - automatic linkage of protocol and steg modules
   - real booleans
   - consistent use of [u]intN_t throughout
 

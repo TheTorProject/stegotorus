@@ -93,31 +93,20 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 static void ATTR_NORETURN
 usage(void)
 {
-  int i;
+  const proto_vtable *const *p;
+
   fputs("Usage: obfsproxy protocol_name [protocol_args] protocol_options "
         "protocol_name ...\n"
         "* Available protocols:\n", stderr);
   /* this is awful. */
-  for (i=0;i<n_supported_protocols;i++)
-    fprintf(stderr,"[%s] ", supported_protocols[i]->name);
+  for (p = supported_protocols; *p; p++)
+    fprintf(stderr,"[%s] ", (*p)->name);
   fprintf(stderr, "\n* Available arguments:\n"
           "--log-file=<file> ~ set logfile\n"
           "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
           "--no-log ~ disable logging\n");
 
   exit(1);
-}
-
-/** Return 1 if 'name' is the name of a supported protocol, otherwise 0. */
-static int
-is_supported_protocol(const char *name)
-{
-  int i;
-  for (i = 0; i < n_supported_protocols; i++)
-    if (!strcmp(name, supported_protocols[i]->name))
-      return 1;
-
-  return 0;
 }
 
 /**
@@ -194,12 +183,12 @@ main(int argc, const char *const *argv)
      Each configuration's subset consists of the entries in argv from
      its recognized protocol name, up to but not including the next
      recognized protocol name. */
-  if (!*begin || !is_supported_protocol(*begin))
+  if (!*begin || !config_is_supported(*begin))
     usage();
 
   do {
     end = begin+1;
-    while (*end && !is_supported_protocol(*end))
+    while (*end && !config_is_supported(*end))
       end++;
     if (log_do_debug()) {
       smartlist_t *s = smartlist_create();

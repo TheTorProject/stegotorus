@@ -11,17 +11,18 @@
 #include "protocols/x_dsteg.h"
 
 /**
-    All supported protocols should be put in this array.
-    It's used by main.c.
+   Return 1 if 'name' is the name of a supported protocol, otherwise 0.
 */
-const proto_vtable *const supported_protocols[] =
+int
+config_is_supported(const char *name)
 {
-  &p_dummy_vtable,
-  &p_obfs2_vtable,
-  &p_x_dsteg_vtable,
-};
-const size_t n_supported_protocols =
-  sizeof(supported_protocols)/sizeof(supported_protocols[0]);
+  const proto_vtable *const *p;
+  for (p = supported_protocols; *p; p++)
+    if (!strcmp(name, (*p)->name))
+      return 1;
+
+  return 0;
+}
 
 /**
    This function dispatches (by name) creation of a |config_t|
@@ -30,12 +31,12 @@ const size_t n_supported_protocols =
 config_t *
 config_create(int n_options, const char *const *options)
 {
-  size_t i;
-  for (i = 0; i < n_supported_protocols; i++)
-    if (!strcmp(*options, supported_protocols[i]->name))
+  const proto_vtable *const *p;
+  for (p = supported_protocols; *p; p++)
+    if (!strcmp(options[0], (*p)->name))
       /* Remove the first element of 'options' (which is always the
          protocol name) from the list passed to the init method. */
-      return supported_protocols[i]->config_create(n_options - 1, options + 1);
+      return (*p)->config_create(n_options - 1, options + 1);
 
   return NULL;
 }

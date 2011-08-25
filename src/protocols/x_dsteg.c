@@ -55,7 +55,7 @@ parse_and_set_options(int n_options, const char *const *options,
 
   if (c->mode != LSN_SIMPLE_SERVER) {
     cfg->stegname = options[c->mode == LSN_SOCKS_CLIENT ? 2 : 3];
-    if (!is_supported_steg(cfg->stegname))
+    if (!steg_is_supported(cfg->stegname))
       return -1;
   }
 
