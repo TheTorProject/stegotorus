@@ -132,6 +132,9 @@ int circuit_open_downstream(circuit_t *ckt);
 
 void circuit_close(circuit_t *ckt);
 
+void circuit_send(circuit_t *ckt);
+void circuit_recv(circuit_t *ckt, conn_t *down);
+
 void circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction);
 void circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
                                  unsigned short direction);

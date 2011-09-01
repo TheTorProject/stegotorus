@@ -272,17 +272,7 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
   log_debug("%s: %s, %lu bytes available", ckt->up_peer, __func__,
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
-  obfs_assert(ckt->up_buffer == bev);
-  obfs_assert(ckt->downstream);
-
-  if (conn_send(ckt->downstream, bufferevent_get_input(ckt->up_buffer))) {
-    log_debug("%s: error during transmit.", ckt->up_peer);
-    conn_close(ckt->downstream);
-  }
-  log_debug("%s: transmitted %lu bytes to %s", ckt->up_peer,
-            (unsigned long)
-            evbuffer_get_length(conn_get_outbound(ckt->downstream)),
-            ckt->downstream->peername);
+  circuit_send(ckt);
 }
 
 /**
@@ -294,37 +284,12 @@ static void
 downstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *down = arg;
-  struct bufferevent *up;
-  enum recv_ret r;
 
   log_debug("%s: %s, %lu bytes available", down->peername, __func__,
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
-  obfs_assert(down->buffer == bev);
   obfs_assert(down->circuit);
-  obfs_assert(down->circuit->up_buffer);
-  up = down->circuit->up_buffer;
-
-  r = conn_recv(down, bufferevent_get_output(up));
-
-  if (r == RECV_BAD) {
-    log_debug("%s: error during receive.", down->peername);
-    conn_close(down);
-  } else {
-    log_debug("%s: forwarded %lu bytes", down->peername,
-              (unsigned long)evbuffer_get_length(bufferevent_get_output(up)));
-    if (r == RECV_SEND_PENDING) {
-      log_debug("%s: reply of %lu bytes", down->peername,
-                (unsigned long)evbuffer_get_length(bufferevent_get_input(up)));
-
-      if (conn_send(down, bufferevent_get_input(up)) < 0) {
-        log_debug("%s: error during reply.", down->peername);
-        conn_close(down);
-      }
-      log_debug("%s: transmitted %lu bytes", down->peername,
-                (unsigned long)evbuffer_get_length(conn_get_outbound(down)));
-    }
-  }
+  circuit_recv(down->circuit, down);
 }
 
 /** Diagnostic-printing subroutine of upstream_event_cb and
@@ -449,14 +414,12 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
   /* Upon successful connection, enable traffic on both sides of the
      connection, and replace this callback with the regular event_cb */
   if (what & BEV_EVENT_CONNECTED) {
-    obfs_assert(ckt->downstream);
     obfs_assert(ckt->up_buffer == bev);
 
     log_debug("%s: Successful connection", ckt->up_peer);
 
     bufferevent_setcb(ckt->up_buffer,
                       upstream_read_cb, NULL, upstream_event_cb, ckt);
-
     bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
     return;
   }
@@ -481,7 +444,6 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
     circuit_t *ckt = conn->circuit;
     obfs_assert(ckt);
     obfs_assert(ckt->up_peer);
-    obfs_assert(ckt->downstream == conn);
     obfs_assert(conn->buffer == bev);
 
     log_debug("%s: Successful connection", conn->peername);
@@ -517,7 +479,6 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
   obfs_assert(ckt);
   obfs_assert(ckt->up_buffer);
   obfs_assert(ckt->socks_state);
-  obfs_assert(ckt->downstream == conn);
 
   socks = ckt->socks_state;
 

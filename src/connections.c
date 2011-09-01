@@ -313,6 +313,53 @@ circuit_close(circuit_t *ckt)
 }
 
 void
+circuit_send(circuit_t *ckt)
+{
+  obfs_assert(ckt->downstream);
+
+  if (conn_send(ckt->downstream, bufferevent_get_input(ckt->up_buffer))) {
+    log_debug("%s: error during transmit.", ckt->up_peer);
+    conn_close(ckt->downstream);
+  }
+  log_debug("%s: transmitted %lu bytes to %s", ckt->up_peer,
+            (unsigned long)
+            evbuffer_get_length(conn_get_outbound(ckt->downstream)),
+            ckt->downstream->peername);
+}
+
+void
+circuit_recv(circuit_t *ckt, conn_t *down)
+{
+  struct bufferevent *up;
+  enum recv_ret r;
+
+  obfs_assert(down->circuit == ckt);
+  obfs_assert(ckt->up_buffer);
+  up = ckt->up_buffer;
+
+  r = conn_recv(down, bufferevent_get_output(up));
+
+  if (r == RECV_BAD) {
+    log_debug("%s: error during receive.", down->peername);
+    conn_close(down);
+  } else {
+    log_debug("%s: forwarded %lu bytes", down->peername,
+              (unsigned long)evbuffer_get_length(bufferevent_get_output(up)));
+    if (r == RECV_SEND_PENDING) {
+      log_debug("%s: reply of %lu bytes", down->peername,
+                (unsigned long)evbuffer_get_length(bufferevent_get_input(up)));
+
+      if (conn_send(down, bufferevent_get_input(up)) < 0) {
+        log_debug("%s: error during reply.", down->peername);
+        conn_close(down);
+      }
+      log_debug("%s: transmitted %lu bytes", down->peername,
+                (unsigned long)evbuffer_get_length(conn_get_outbound(down)));
+    }
+  }
+}
+
+void
 circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction)
 {
   obfs_assert(direction != 0);
