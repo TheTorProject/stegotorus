@@ -157,14 +157,14 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
     return;
   }
 
-  ckt = circuit_create(lsn->cfg, buf, peername);
+  ckt = circuit_create_from_upstream(lsn->cfg, buf, peername);
   if (is_socks) {
     bufferevent_setcb(buf, socks_read_cb, NULL, upstream_event_cb, ckt);
     /* We can't do anything more till we know where to connect to. */
     bufferevent_enable(buf, EV_READ|EV_WRITE);
   } else {
     bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_event_cb, ckt);
-    if (!circuit_open_downstream_from_cfg(ckt)) {
+    if (!circuit_open_downstream(ckt)) {
       log_warn("%s: outbound connection failed", peername);
       circuit_close(ckt);
     }
@@ -199,7 +199,7 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   conn = conn_create(lsn->cfg, buf, peername);
   bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_event_cb, conn);
 
-  if (circuit_create_with_downstream(lsn->cfg, conn) == NULL) {
+  if (circuit_create_from_downstream(lsn->cfg, conn) == NULL) {
     log_warn("%s: failed to establish circuit for %s",
              lsn->address, peername);
     conn_close(conn);
@@ -237,7 +237,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 
     if (status == ST_HAVE_ADDR) {
       /* try to open the outbound connection */
-      circuit_open_downstream_from_socks(ckt);
+      circuit_open_downstream(ckt);
       return;
     }
 

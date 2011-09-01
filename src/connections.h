@@ -124,12 +124,11 @@ struct circuit_t {
   socks_state_t      *socks_state;
 };
 
-circuit_t *circuit_create(config_t *cfg, struct bufferevent *up,
-                          const char *peer);
-circuit_t *circuit_create_with_downstream(config_t *cfg, conn_t *down);
+circuit_t *circuit_create_from_upstream(config_t *cfg, struct bufferevent *up,
+                                        const char *peer);
+circuit_t *circuit_create_from_downstream(config_t *cfg, conn_t *down);
 
-int circuit_open_downstream_from_cfg(circuit_t *ckt);
-int circuit_open_downstream_from_socks(circuit_t *ckt);
+int circuit_open_downstream(circuit_t *ckt);
 
 void circuit_close(circuit_t *ckt);
 

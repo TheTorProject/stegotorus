@@ -188,7 +188,8 @@ conn_transmit_soon(conn_t *conn, unsigned long timeout)
 /* Circuits. */
 
 circuit_t *
-circuit_create(config_t *cfg, struct bufferevent *up, const char *peer)
+circuit_create_from_upstream(config_t *cfg, struct bufferevent *up,
+                             const char *peer)
 {
   circuit_t *ckt;
 
@@ -206,7 +207,7 @@ circuit_create(config_t *cfg, struct bufferevent *up, const char *peer)
 }
 
 circuit_t *
-circuit_create_with_downstream(config_t *cfg, conn_t *down)
+circuit_create_from_downstream(config_t *cfg, conn_t *down)
 {
   circuit_t *ckt;
   struct evutil_addrinfo *addr;
@@ -242,20 +243,13 @@ circuit_create_with_downstream(config_t *cfg, conn_t *down)
 }
 
 int
-circuit_open_downstream_from_cfg(circuit_t *ckt)
+circuit_open_downstream(circuit_t *ckt)
 {
   conn_t *down;
-  struct evutil_addrinfo *addr;
   struct bufferevent *buf;
 
   obfs_assert(!shutting_down);
-
-  addr = config_get_target_addr(ckt->cfg);
-
-  if (!addr) {
-    log_warn("%s: no target addresses available", ckt->up_peer);
-    return 0;
-  }
+  obfs_assert(ckt->cfg->mode != LSN_SIMPLE_SERVER);
 
   buf = bufferevent_socket_new(ckt->cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
@@ -263,7 +257,25 @@ circuit_open_downstream_from_cfg(circuit_t *ckt)
     return 0;
   }
 
-  down = conn_create_outbound(ckt->cfg, buf, addr);
+  if (ckt->cfg->mode == LSN_SIMPLE_CLIENT) {
+    struct evutil_addrinfo *addr = config_get_target_addr(ckt->cfg);
+    if (!addr) {
+      log_warn("%s: no target addresses available", ckt->up_peer);
+      bufferevent_free(buf);
+      return 0;
+    }
+    down = conn_create_outbound(ckt->cfg, buf, addr);
+  } else {
+    const char *hostname;
+    int af, port;
+    if (socks_state_get_address(ckt->socks_state, &af, &hostname, &port)) {
+      log_warn("%s: no SOCKS target available", ckt->up_peer);
+      bufferevent_free(buf);
+      return 0;
+    }
+    down = conn_create_outbound_socks(ckt->cfg, buf, af, hostname, port);
+  }
+
   if (!down) {
     bufferevent_free(buf);
     return 0;
@@ -273,37 +285,6 @@ circuit_open_downstream_from_cfg(circuit_t *ckt)
   down->circuit = ckt;
   return 1;
 }
-
-int
-circuit_open_downstream_from_socks(circuit_t *ckt)
-{
-  conn_t *down;
-  struct bufferevent *buf;
-  const char *hostname;
-  int af, port;
-
-  obfs_assert(!shutting_down);
-
-  if (socks_state_get_address(ckt->socks_state, &af, &hostname, &port))
-    log_error("%s: called from wrong socks state", __func__);
-
-  buf = bufferevent_socket_new(ckt->cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
-  if (!buf) {
-    log_warn("%s: unable to create outbound socket buffer", ckt->up_peer);
-    return 0;
-  }
-
-  down = conn_create_outbound_socks(ckt->cfg, buf, af, hostname, port);
-  if (!down) {
-    bufferevent_free(buf);
-    return 0;
-  }
-
-  ckt->downstream = down;
-  down->circuit = ckt;
-  return 1;
-}
-
 
 void
 circuit_close(circuit_t *ckt)
