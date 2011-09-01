@@ -15,6 +15,7 @@
 struct config_t
 {
   const struct proto_vtable *vtable;
+  struct event_base         *base;
   enum listen_mode           mode;
 };
 

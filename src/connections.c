@@ -210,20 +210,18 @@ circuit_create_with_downstream(config_t *cfg, conn_t *down)
 {
   circuit_t *ckt;
   struct evutil_addrinfo *addr;
-  struct event_base *base;
   struct bufferevent *buf;
 
   obfs_assert(!shutting_down);
 
   addr = config_get_target_addr(cfg);
-  base = bufferevent_get_base(down->buffer);
 
   if (!addr) {
     log_warn("%s: no target addresses available", down->peername);
     return NULL;
   }
 
-  buf = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+  buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
     log_warn("%s: unable to create outbound socket buffer", down->peername);
     return NULL;
@@ -248,20 +246,18 @@ circuit_open_downstream_from_cfg(circuit_t *ckt)
 {
   conn_t *down;
   struct evutil_addrinfo *addr;
-  struct event_base *base;
   struct bufferevent *buf;
 
   obfs_assert(!shutting_down);
 
   addr = config_get_target_addr(ckt->cfg);
-  base = bufferevent_get_base(ckt->up_buffer);
 
   if (!addr) {
     log_warn("%s: no target addresses available", ckt->up_peer);
     return 0;
   }
 
-  buf = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+  buf = bufferevent_socket_new(ckt->cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
     log_warn("%s: unable to create outbound socket buffer", ckt->up_peer);
     return 0;
@@ -282,18 +278,16 @@ int
 circuit_open_downstream_from_socks(circuit_t *ckt)
 {
   conn_t *down;
-  struct event_base *base;
   struct bufferevent *buf;
   const char *hostname;
   int af, port;
 
   obfs_assert(!shutting_down);
-  base = bufferevent_get_base(ckt->up_buffer);
 
   if (socks_state_get_address(ckt->socks_state, &af, &hostname, &port))
     log_error("%s: called from wrong socks state", __func__);
 
-  buf = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+  buf = bufferevent_socket_new(ckt->cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
     log_warn("%s: unable to create outbound socket buffer", ckt->up_peer);
     return 0;

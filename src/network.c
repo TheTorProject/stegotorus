@@ -67,6 +67,10 @@ listener_open(struct event_base *base, config_t *cfg)
   if (!listeners)
     listeners = smartlist_create();
 
+  /* We can now record the event_base to be used with this configuration. */
+  cfg->base = base;
+
+  /* Open listeners for every address in the configuration. */
   for (i = 0; ; i++) {
     addrs = config_get_listen_addrs(cfg, i);
     if (!addrs) break;
@@ -136,7 +140,6 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
 {
   listener_t *lsn = closure;
   char *peername = printable_address(peeraddr, peerlen);
-  struct event_base *base = evconnlistener_get_base(evcl);
   struct bufferevent *buf = NULL;
   circuit_t *ckt = NULL;
   int is_socks = lsn->cfg->mode == LSN_SOCKS_CLIENT;
@@ -145,7 +148,7 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   log_info("%s: new connection to %sclient from %s\n",
            lsn->address, is_socks ? "socks " : "", peername);
 
-  buf = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+  buf = bufferevent_socket_new(lsn->cfg->base, fd, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
     log_warn("%s: failed to set up new connection from %s",
              lsn->address, peername);
@@ -178,14 +181,13 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
 {
   listener_t *lsn = closure;
   char *peername = printable_address(peeraddr, peerlen);
-  struct event_base *base = evconnlistener_get_base(evcl);
   struct bufferevent *buf = NULL;
   conn_t *conn = NULL;
 
   obfs_assert(lsn->cfg->mode == LSN_SIMPLE_SERVER);
   log_info("%s: new connection to server from %s\n", lsn->address, peername);
 
-  buf = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+  buf = bufferevent_socket_new(lsn->cfg->base, fd, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
     log_warn("%s: failed to set up new connection from %s",
              lsn->address, peername);
