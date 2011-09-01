@@ -61,10 +61,10 @@ int conn_handshake(conn_t *conn);
 
 /** Encode the data in SOURCE according to the appropriate wire protocol,
     and transmit it on DEST. */
-int conn_send(conn_t *dest, struct evbuffer *source);
+void conn_send(conn_t *dest, struct evbuffer *source);
 
 /** Receive data from SOURCE, decode it, and write it to DEST. */
-enum recv_ret conn_recv(conn_t *source, struct evbuffer *dest);
+void conn_recv(conn_t *source, struct evbuffer *dest);
 
 /** Flush out any internally buffered data, and transmit an
     in-band end-of-file indicator to DEST if necessary.  */

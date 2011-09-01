@@ -132,7 +132,7 @@ test_s_x_http_transfer(void *state)
 
   /* client -> server */
   evbuffer_add(s->scratch, msg1, 54);
-  tt_int_op(0, ==, conn_send(s->conn_client, s->scratch));
+  conn_send(s->conn_client, s->scratch);
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
   tt_int_op(sizeof enc1-1, ==,
             evbuffer_get_length(conn_get_inbound(s->conn_server)));
@@ -140,7 +140,7 @@ test_s_x_http_transfer(void *state)
                                       sizeof enc1-1),
             sizeof enc1-1);
 
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_server, s->scratch));
+  conn_recv(s->conn_server, s->scratch);
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
   tt_int_op(54, ==, evbuffer_get_length(s->scratch));
   tt_stn_op(msg1, ==, evbuffer_pullup(s->scratch, 54), 54);
@@ -151,7 +151,7 @@ test_s_x_http_transfer(void *state)
 
   /* client <- server */
   evbuffer_add(s->scratch, msg2, 55);
-  tt_int_op(0, ==, conn_send(s->conn_server, s->scratch));
+  conn_send(s->conn_server, s->scratch);
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
   tt_int_op(sizeof enc2-1, ==,
             evbuffer_get_length(conn_get_inbound(s->conn_client)));
@@ -159,7 +159,7 @@ test_s_x_http_transfer(void *state)
                                       sizeof enc2-1),
             sizeof enc2-1);
 
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_client, s->scratch));
+  conn_recv(s->conn_client, s->scratch);
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
   tt_int_op(55, ==, evbuffer_get_length(s->scratch));
   tt_stn_op(msg2, ==, evbuffer_pullup(s->scratch, 55), 55);

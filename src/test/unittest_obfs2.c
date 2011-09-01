@@ -171,7 +171,7 @@ test_obfs2_handshake(void *state)
 
   /* Simulate the server receiving and processing the client's
      handshake message */
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_server, s->scratch));
+  conn_recv(s->conn_server, s->scratch);
 
   /* That should have put nothing into the upstream buffer */
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
@@ -179,7 +179,7 @@ test_obfs2_handshake(void *state)
   /* Same for server to client */
   tt_int_op(0, <=, conn_handshake(s->conn_server));
   tt_int_op(0, <, evbuffer_get_length(conn_get_inbound(s->conn_client)));
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_client, s->scratch));
+  conn_recv(s->conn_client, s->scratch);
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
 
   /* The handshake is now complete. We should have:
@@ -203,9 +203,9 @@ test_obfs2_transfer(void *state)
 
   /* Handshake */
   tt_int_op(0, <=, conn_handshake(s->conn_client));
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_server, s->scratch));
+  conn_recv(s->conn_server, s->scratch);
   tt_int_op(0, <=, conn_handshake(s->conn_server));
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_client, s->scratch));
+  conn_recv(s->conn_client, s->scratch);
   /* End of Handshake */
 
   /* Now let's pass some data around. */
@@ -214,11 +214,11 @@ test_obfs2_transfer(void *state)
 
   /* client -> server */
   evbuffer_add(s->scratch, msg1, 54);
-  tt_int_op(0, ==, conn_send(s->conn_client, s->scratch));
+  conn_send(s->conn_client, s->scratch);
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
   tt_int_op(54, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
 
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_server, s->scratch));
+  conn_recv(s->conn_server, s->scratch);
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
 
   n = evbuffer_peek(s->scratch, -1, NULL, &v[0], 2);
@@ -231,11 +231,11 @@ test_obfs2_transfer(void *state)
 
   /* client <- server */
   evbuffer_add(s->scratch, msg2, 55);
-  tt_int_op(0, ==, conn_send(s->conn_server, s->scratch));
+  conn_send(s->conn_server, s->scratch);
   tt_int_op(0, ==, evbuffer_get_length(s->scratch));
   tt_int_op(55, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
 
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_client, s->scratch));
+  conn_recv(s->conn_client, s->scratch);
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
 
   n = evbuffer_peek(s->scratch, -1, NULL, &v[1], 2);
@@ -295,7 +295,7 @@ test_obfs2_split_handshake(void *state)
                OBFUSCATE_SEED_LENGTH+8+plength1_msg1);
 
   /* Server receives handshake part 1 */
-  tt_int_op(RECV_INCOMPLETE, ==, conn_recv(s->conn_server, s->scratch));
+  conn_recv(s->conn_server, s->scratch);
   tt_int_op(ST_WAIT_FOR_PADDING, ==, server_state->state);
 
   /* Preparing client's handshake part 2 */
@@ -306,7 +306,7 @@ test_obfs2_split_handshake(void *state)
   evbuffer_add(conn_get_outbound(s->conn_client), msgclient_2, plength1_msg2);
 
   /* Server receives handshake part 2 */
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_server, s->scratch));
+  conn_recv(s->conn_server, s->scratch);
   tt_int_op(ST_OPEN, ==, server_state->state);
 
   /* Since everything went right, let's do a server to client handshake now! */
@@ -336,7 +336,7 @@ test_obfs2_split_handshake(void *state)
                msgserver_1, OBFUSCATE_SEED_LENGTH+8);
 
   /* Client receives handshake part 1 */
-  tt_int_op(RECV_INCOMPLETE, ==, conn_recv(s->conn_client, s->scratch));
+  conn_recv(s->conn_client, s->scratch);
   tt_int_op(ST_WAIT_FOR_PADDING, ==, client_state->state);
 
   /* Preparing client's handshake part 2 */
@@ -347,7 +347,7 @@ test_obfs2_split_handshake(void *state)
   evbuffer_add(conn_get_outbound(s->conn_server), msgserver_2, plength2);
 
   /* Client receives handshake part 2 */
-  tt_int_op(RECV_GOOD, ==, conn_recv(s->conn_client, s->scratch));
+  conn_recv(s->conn_client, s->scratch);
   tt_int_op(ST_OPEN, ==, client_state->state);
 
   /* The handshake is finally complete. We should have: */
@@ -395,7 +395,11 @@ test_obfs2_wrong_handshake_magic(void *state)
   evbuffer_add(conn_get_outbound(s->conn_client), msg,
                OBFUSCATE_SEED_LENGTH+8+plength);
 
-  tt_int_op(RECV_BAD, ==, conn_recv(s->conn_server, s->scratch));
+  /* If we call conn_recv here, and everything's working correctly,
+     it will blow away the connection before we can check for failure,
+     so use the vtable method directly. */
+  tt_int_op(RECV_BAD, ==,
+            s->conn_server->cfg->vtable->recv(s->conn_server, s->scratch));
   tt_int_op(ST_WAIT_FOR_KEY, ==, server_state->state);
 
  end:;
@@ -431,7 +435,11 @@ test_obfs2_wrong_handshake_plength(void *state)
   evbuffer_add(conn_get_outbound(s->conn_client), msg,
                OBFUSCATE_SEED_LENGTH+8+plength);
 
-  tt_int_op(RECV_BAD, ==, conn_recv(s->conn_server, s->scratch));
+  /* If we call conn_recv here, and everything's working correctly,
+     it will blow away the connection before we can check for failure,
+     so use the vtable method directly. */
+  tt_int_op(RECV_BAD, ==,
+            s->conn_server->cfg->vtable->recv(s->conn_server, s->scratch));
   tt_int_op(ST_WAIT_FOR_KEY, ==, server_state->state);
 
  end:;

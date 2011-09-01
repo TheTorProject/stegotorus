@@ -133,16 +133,42 @@ conn_handshake(conn_t *conn)
   return conn->cfg->vtable->handshake(conn);
 }
 
-int
-conn_send(conn_t *dest, struct evbuffer *source)
+static int
+conn_send_raw(conn_t *dest, struct evbuffer *source)
 {
   return dest->cfg->vtable->send(dest, source);
 }
 
-enum recv_ret
-conn_recv(conn_t *source, struct evbuffer *dest)
+void
+conn_send(conn_t *dest, struct evbuffer *source)
+{
+  obfs_assert(dest);
+  if (conn_send_raw(dest, source)) {
+    log_debug("%s: error during transmit.", dest->peername);
+    conn_close(dest);
+  } else {
+    log_debug("%s: transmitted %lu bytes.", dest->peername,
+              (unsigned long) evbuffer_get_length(conn_get_outbound(dest)));
+  }
+}
+
+static enum recv_ret
+conn_recv_raw(conn_t *source, struct evbuffer *dest)
 {
   return source->cfg->vtable->recv(source, dest);
+}
+
+void
+conn_recv(conn_t *source, struct evbuffer *dest)
+{
+  obfs_assert(source);
+  if (conn_recv_raw(source, dest) == RECV_BAD) {
+    log_debug("%s: error during receive.", source->peername);
+    conn_close(source);
+  } else {
+    log_debug("%s: received %lu bytes", source->peername,
+              (unsigned long)evbuffer_get_length(dest));
+  }
 }
 
 int
@@ -315,36 +341,13 @@ circuit_close(circuit_t *ckt)
 void
 circuit_send(circuit_t *ckt)
 {
-  obfs_assert(ckt->downstream);
-
-  if (conn_send(ckt->downstream, bufferevent_get_input(ckt->up_buffer))) {
-    log_debug("%s: error during transmit.", ckt->up_peer);
-    conn_close(ckt->downstream);
-  }
-  log_debug("%s: transmitted %lu bytes to %s", ckt->up_peer,
-            (unsigned long)
-            evbuffer_get_length(conn_get_outbound(ckt->downstream)),
-            ckt->downstream->peername);
+  conn_send(ckt->downstream, bufferevent_get_input(ckt->up_buffer));
 }
 
 void
 circuit_recv(circuit_t *ckt, conn_t *down)
 {
-  struct bufferevent *up;
-  enum recv_ret r;
-
-  obfs_assert(down->circuit == ckt);
-  obfs_assert(ckt->up_buffer);
-  up = ckt->up_buffer;
-
-  r = conn_recv(down, bufferevent_get_output(up));
-
-  if (r == RECV_BAD) {
-    log_debug("%s: error during receive.", down->peername);
-    conn_close(down);
-  }
-  log_debug("%s: received %lu bytes", down->peername,
-            (unsigned long)evbuffer_get_length(bufferevent_get_output(up)));
+  conn_recv(ckt->downstream, bufferevent_get_output(ckt->up_buffer));
 }
 
 void
@@ -362,7 +365,7 @@ circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction)
       if (evbuffer_get_length(inbuf)) {
         log_debug("%s: %ld bytes of pending input",
                   ckt->up_peer, (unsigned long)evbuffer_get_length(inbuf));
-        if (conn_send(ckt->downstream, inbuf))
+        if (conn_send_raw(ckt->downstream, inbuf))
           log_debug("%s: error during final transmit to %s", ckt->up_peer,
                     ckt->downstream->peername);
         if (evbuffer_get_length(inbuf)) {
@@ -473,7 +476,7 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
         log_debug("%s: %ld bytes of pending input",
                   conn->peername, (unsigned long)evbuffer_get_length(inbuf));
 
-        r = conn_recv(conn, outbuf);
+        r = conn_recv_raw(conn, outbuf);
         if (r == RECV_BAD) {
           log_debug("%s: error during final receive", conn->peername);
         }
