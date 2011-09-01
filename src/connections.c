@@ -342,21 +342,9 @@ circuit_recv(circuit_t *ckt, conn_t *down)
   if (r == RECV_BAD) {
     log_debug("%s: error during receive.", down->peername);
     conn_close(down);
-  } else {
-    log_debug("%s: forwarded %lu bytes", down->peername,
-              (unsigned long)evbuffer_get_length(bufferevent_get_output(up)));
-    if (r == RECV_SEND_PENDING) {
-      log_debug("%s: reply of %lu bytes", down->peername,
-                (unsigned long)evbuffer_get_length(bufferevent_get_input(up)));
-
-      if (conn_send(down, bufferevent_get_input(up)) < 0) {
-        log_debug("%s: error during reply.", down->peername);
-        conn_close(down);
-      }
-      log_debug("%s: transmitted %lu bytes", down->peername,
-                (unsigned long)evbuffer_get_length(conn_get_outbound(down)));
-    }
   }
+  log_debug("%s: received %lu bytes", down->peername,
+            (unsigned long)evbuffer_get_length(bufferevent_get_output(up)));
 }
 
 void
@@ -488,12 +476,6 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
         r = conn_recv(conn, outbuf);
         if (r == RECV_BAD) {
           log_debug("%s: error during final receive", conn->peername);
-        } else if (r == RECV_SEND_PENDING) {
-          log_debug("%s: reply of %lu bytes", conn->peername,
-                    (unsigned long)
-                    evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
-          if (conn_send(conn, bufferevent_get_input(ckt->up_buffer)) < 0)
-            log_debug("%s: error during reply", conn->peername);
         }
 
         if (evbuffer_get_length(inbuf)) {
@@ -505,14 +487,7 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
       r = conn_recv_eof(conn, outbuf);
       if (r == RECV_BAD) {
         log_debug("%s: error receiving EOF", conn->peername);
-      } else if (r == RECV_SEND_PENDING) {
-        log_debug("%s: reply of %lu bytes", conn->peername,
-                  (unsigned long)
-                  evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
-        if (conn_send(conn, bufferevent_get_input(ckt->up_buffer)) < 0)
-          log_debug("%s: error during reply", conn->peername);
       }
-
       if (evbuffer_get_length(outbuf)) {
         log_debug("%s: flushing %ld bytes to %s", conn->peername,
                   (unsigned long) evbuffer_get_length(outbuf),

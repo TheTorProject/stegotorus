@@ -78,14 +78,7 @@ enum recv_ret {
   /* Something went bad. */
   RECV_BAD,
   /* ...need...more...data... */
-  RECV_INCOMPLETE,
-
-  /* Originally needed by the obfs2 protocol but it might get other
-     users in the future.
-     It means:
-     "We have pending data that we have to send. You should do that by
-     calling proto_send() immediately." */
-  RECV_SEND_PENDING
+  RECV_INCOMPLETE
 };
 
 enum listen_mode {

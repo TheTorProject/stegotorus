@@ -355,6 +355,18 @@ obfs2_crypt_and_transmit(crypt_t *crypto,
   }
 }
 
+static void
+obfs2_send_pending(obfs2_conn_t *state, struct evbuffer *dest)
+{
+  log_debug("%s: transmitting %lu bytes previously queued.", __func__,
+            (unsigned long)evbuffer_get_length(state->pending_data_to_send));
+  obfs2_crypt_and_transmit(state->send_crypto,
+                           state->pending_data_to_send,
+                           dest);
+  evbuffer_free(state->pending_data_to_send);
+  state->pending_data_to_send = NULL;
+}
+
 /**
    Called when data arrives from the user side and we want to send the
    obfuscated version.  Copies and obfuscates data from 'source' into 'dest'
@@ -368,15 +380,9 @@ obfs2_send(conn_t *s, struct evbuffer *source)
 
   if (state->send_crypto) {
     /* First of all, send any data that we've been waiting to send. */
-    if (state->pending_data_to_send) {
-      log_debug("%s: transmitting %lu bytes previously queued.", __func__,
-                (unsigned long)evbuffer_get_length(state->pending_data_to_send));
-      obfs2_crypt_and_transmit(state->send_crypto,
-                               state->pending_data_to_send,
-                               dest);
-      evbuffer_free(state->pending_data_to_send);
-      state->pending_data_to_send = NULL;
-    }
+    if (state->pending_data_to_send)
+      obfs2_send_pending(state, dest);
+
     /* Our crypto is set up; just relay the bytes */
     if (evbuffer_get_length(source)) {
       log_debug("%s: transmitting %lu bytes.", __func__,
@@ -479,9 +485,6 @@ init_crypto(void *s)
  * RECV_GOOD to say that everything went fine.
  * RECV_BAD to say that something went bad.
  * RECV_INCOMPLETE to say that we need more data to form an opinion.
- * RECV_SEND_PENDING to say that everything went fine and on top of
- *  that we also have pending data that we have to send. This notifies
- *  our callers that they must call obfs2_send() immediately.
  */
 static enum recv_ret
 obfs2_recv(conn_t *s, struct evbuffer *dest)
@@ -560,7 +563,7 @@ obfs2_recv(conn_t *s, struct evbuffer *dest)
 
   /* If we have pending data to send, transmit it now. */
   if (state->pending_data_to_send)
-    return RECV_SEND_PENDING;
+    obfs2_send_pending(state, conn_get_outbound(s));
 
   return RECV_GOOD;
 }
@@ -581,13 +584,7 @@ obfs2_send_eof(conn_t *s)
     return -1;
   }
 
-  log_debug("%s: transmitting %lu bytes previously queued.", __func__,
-            (unsigned long)evbuffer_get_length(state->pending_data_to_send));
-  obfs2_crypt_and_transmit(state->send_crypto,
-                           state->pending_data_to_send,
-                           dest);
-  evbuffer_free(state->pending_data_to_send);
-  state->pending_data_to_send = NULL;
+  obfs2_send_pending(state, dest);
   return 0;
 }
 
