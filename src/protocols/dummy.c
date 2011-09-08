@@ -124,6 +124,21 @@ dummy_circuit_free(circuit_t *c)
   free(downcast_circuit(c));
 }
 
+/* Send data from circuit C. */
+static void
+dummy_circuit_send(circuit_t *c)
+{
+  conn_send(c->downstream, bufferevent_get_input(c->up_buffer));
+}
+
+/* Receive data from DOWN to circuit C. */
+static void
+dummy_circuit_recv(circuit_t *c, conn_t *down)
+{
+  obfs_assert(down == c->downstream);
+  conn_recv(down);
+}
+
 /*
   This is called everytime we get a connection for the dummy
   protocol.
@@ -146,20 +161,20 @@ dummy_conn_free(conn_t *c)
 
 /** Dummy has no handshake */
 static int
-dummy_handshake(conn_t *c)
+dummy_conn_handshake(conn_t *c)
 {
   return 0;
 }
 
 /** send, receive - just copy */
 static int
-dummy_send(conn_t *dest, struct evbuffer *source)
+dummy_conn_send(conn_t *dest, struct evbuffer *source)
 {
   return evbuffer_add_buffer(conn_get_outbound(dest), source);
 }
 
 static enum recv_ret
-dummy_recv(conn_t *source)
+dummy_conn_recv(conn_t *source)
 {
   if (evbuffer_add_buffer(bufferevent_get_output(source->circuit->up_buffer),
                           conn_get_inbound(source)))
@@ -170,13 +185,13 @@ dummy_recv(conn_t *source)
 
 /** send EOF, recv EOF - no op */
 static int
-dummy_send_eof(conn_t *dest)
+dummy_conn_send_eof(conn_t *dest)
 {
   return 0;
 }
 
 static enum recv_ret
-dummy_recv_eof(conn_t *source)
+dummy_conn_recv_eof(conn_t *source)
 {
   return RECV_GOOD;
 }

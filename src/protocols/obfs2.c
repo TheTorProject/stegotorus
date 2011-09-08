@@ -188,6 +188,21 @@ obfs2_circuit_free(circuit_t *c)
   free(downcast_circuit(c));
 }
 
+/* Send data from circuit C. */
+static void
+obfs2_circuit_send(circuit_t *c)
+{
+  conn_send(c->downstream, bufferevent_get_input(c->up_buffer));
+}
+
+/* Receive data from DOWN to circuit C. */
+static void
+obfs2_circuit_recv(circuit_t *c, conn_t *down)
+{
+  obfs_assert(down == c->downstream);
+  conn_recv(down);
+}
+
 /**
    Derive and return padding key of type 'keytype' from the seeds
    currently set in state 's'.
@@ -291,7 +306,7 @@ obfs2_conn_free(conn_t *s)
    the evbuffer 'buf'.  Return 0 on success, -1 on failure.
  */
 static int
-obfs2_handshake(conn_t *s)
+obfs2_conn_handshake(conn_t *s)
 {
   obfs2_conn_t *state = downcast_conn(s);
   struct evbuffer *buf = conn_get_outbound(s);
@@ -373,7 +388,7 @@ obfs2_send_pending(obfs2_conn_t *state, struct evbuffer *dest)
    using the state in 'state'.  Returns 0 on success, -1 on failure.
  */
 static int
-obfs2_send(conn_t *s, struct evbuffer *source)
+obfs2_conn_send(conn_t *s, struct evbuffer *source)
 {
   obfs2_conn_t *state = downcast_conn(s);
   struct evbuffer *dest = conn_get_outbound(s);
@@ -487,7 +502,7 @@ init_crypto(void *s)
  * RECV_INCOMPLETE to say that we need more data to form an opinion.
  */
 static enum recv_ret
-obfs2_recv(conn_t *s)
+obfs2_conn_recv(conn_t *s)
 {
   obfs2_conn_t *state = downcast_conn(s);
   struct evbuffer *source = conn_get_inbound(s);
@@ -571,7 +586,7 @@ obfs2_recv(conn_t *s)
 
 /** send EOF: flush out any queued data if possible */
 static int
-obfs2_send_eof(conn_t *s)
+obfs2_conn_send_eof(conn_t *s)
 {
   obfs2_conn_t *state = downcast_conn(s);
   struct evbuffer *dest = conn_get_outbound(s);
@@ -590,8 +605,8 @@ obfs2_send_eof(conn_t *s)
 }
 
 static enum recv_ret
-obfs2_recv_eof(conn_t *source)
+obfs2_conn_recv_eof(conn_t *source)
 {
   /* try once more to read anything that's in the queue */
-  return obfs2_recv(source);
+  return obfs2_conn_recv(source);
 }

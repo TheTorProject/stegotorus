@@ -66,6 +66,13 @@ struct proto_vtable
   /** Destroy per-circuit, protocol-specific state. */
   void (*circuit_free)(circuit_t *ckt);
 
+  /** Transmit data from the upstream to the downstream peer. */
+  void (*circuit_send)(circuit_t *ckt);
+
+  /** Receive data from the downstream peer on connection CONN and
+      pass it along to upstream. */
+  void (*circuit_recv)(circuit_t *ckt, conn_t *down);
+
   /** Return an extended 'conn_t' object based on the configuration 'cfg'.
       Must fill in the 'cfg' field of the generic structure.  */
   conn_t *(*conn_create)(config_t *cfg);
@@ -74,21 +81,21 @@ struct proto_vtable
   void (*conn_free)(conn_t *conn);
 
   /** Perform a connection handshake. Not all protocols have a handshake. */
-  int (*handshake)(conn_t *conn);
+  int (*conn_handshake)(conn_t *conn);
 
   /** Send data coming from the upstream 'source' along to 'dest'. */
-  int (*send)(conn_t *dest, struct evbuffer *source);
+  int (*conn_send)(conn_t *dest, struct evbuffer *source);
 
   /** Receive data from 'source' and pass it upstream (to the circuit). */
-  enum recv_ret (*recv)(conn_t *source);
+  enum recv_ret (*conn_recv)(conn_t *source);
 
   /** Take any actions necessary upon an end-of-file notification from
       upstream, such as flushing internally buffered data. */
-  int (*send_eof)(conn_t *dest);
+  int (*conn_send_eof)(conn_t *dest);
 
   /** Take any actions necessary upon an end-of-file notification from
       the remote peer. */
-  enum recv_ret (*recv_eof)(conn_t *source);
+  enum recv_ret (*conn_recv_eof)(conn_t *source);
 
   /* The remaining methods are only required if your protocol makes
      use of steganography modules.  If you provide them, they must be
@@ -96,20 +103,20 @@ struct proto_vtable
 
   /** It is an error if any further data is received from the remote
       peer on this connection. */
-  void (*expect_close)(conn_t *conn);
+  void (*conn_expect_close)(conn_t *conn);
 
   /** It is an error to transmit any further data to the remote peer
       on this connection.  However, the peer may still send data back. */
-  void (*cease_transmission)(conn_t *conn);
+  void (*conn_cease_transmission)(conn_t *conn);
 
   /** After all pending data is transmitted, close this connection.
       (This is stronger than cease_transmission - no reply is expected.) */
-  void (*close_after_transmit)(conn_t *conn);
+  void (*conn_close_after_transmit)(conn_t *conn);
 
   /** If TIMEOUT milliseconds elapse without anything having been
       transmitted on this connection, you need to make up some data
       and send it.  */
-  void (*transmit_soon)(conn_t *conn, unsigned long timeout);
+  void (*conn_transmit_soon)(conn_t *conn, unsigned long timeout);
 };
 
 extern const proto_vtable *const supported_protocols[];
@@ -127,22 +134,24 @@ extern const proto_vtable *const supported_protocols[];
     name##_config_get_target_addr,              \
     name##_circuit_create,                      \
     name##_circuit_free,                        \
+    name##_circuit_send,                        \
+    name##_circuit_recv,                        \
     name##_conn_create,                         \
     name##_conn_free,                           \
-    name##_handshake,                           \
-    name##_send,                                \
-    name##_recv,                                \
-    name##_send_eof,                            \
-    name##_recv_eof,
+    name##_conn_handshake,                      \
+    name##_conn_send,                           \
+    name##_conn_recv,                           \
+    name##_conn_send_eof,                       \
+    name##_conn_recv_eof,
 
 #define PROTO_VTABLE_NOSTEG(name)               \
     NULL, NULL, NULL, NULL,
 
 #define PROTO_VTABLE_STEG(name)                 \
-    name##_expect_close,                        \
-    name##_cease_transmission,                  \
-    name##_close_after_transmit,                \
-    name##_transmit_soon,
+    name##_conn_expect_close,                   \
+    name##_conn_cease_transmission,             \
+    name##_conn_close_after_transmit,           \
+    name##_conn_transmit_soon,
 
 #define PROTO_FWD_COMMON(name)                                          \
   static config_t *name##_config_create(int, const char *const *);      \
@@ -153,21 +162,23 @@ extern const proto_vtable *const supported_protocols[];
     name##_config_get_target_addr(config_t *);                          \
   static circuit_t *name##_circuit_create(config_t *);                  \
   static void name##_circuit_free(circuit_t *);                         \
+  static void name##_circuit_send(circuit_t *);                         \
+  static void name##_circuit_recv(circuit_t *, conn_t *);               \
   static conn_t *name##_conn_create(config_t *);                        \
   static void name##_conn_free(conn_t *);                               \
-  static int name##_handshake(conn_t *);                                \
-  static int name##_send(conn_t *, struct evbuffer *);                  \
-  static enum recv_ret name##_recv(conn_t *);                           \
-  static int name##_send_eof(conn_t *);                                 \
-  static enum recv_ret name##_recv_eof(conn_t *);
+  static int name##_conn_handshake(conn_t *);                           \
+  static int name##_conn_send(conn_t *, struct evbuffer *);             \
+  static enum recv_ret name##_conn_recv(conn_t *);                      \
+  static int name##_conn_send_eof(conn_t *);                            \
+  static enum recv_ret name##_conn_recv_eof(conn_t *);
 
 #define PROTO_FWD_NOSTEG(name) /* nothing required */
 
-#define PROTO_FWD_STEG(name)                                    \
-  static void name##_expect_close(conn_t *);                    \
-  static void name##_cease_transmission(conn_t *);              \
-  static void name##_close_after_transmit(conn_t *);            \
-  static void name##_transmit_soon(conn_t *, unsigned long);
+#define PROTO_FWD_STEG(name)                                            \
+  static void name##_conn_expect_close(conn_t *);                       \
+  static void name##_conn_cease_transmission(conn_t *);                 \
+  static void name##_conn_close_after_transmit(conn_t *);               \
+  static void name##_conn_transmit_soon(conn_t *, unsigned long);
 
 #define PROTO_CAST_HELPERS(name)                                \
   static inline config_t *upcast_config(name##_config_t *c)     \

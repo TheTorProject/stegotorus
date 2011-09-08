@@ -130,13 +130,13 @@ conn_close(conn_t *conn)
 int
 conn_handshake(conn_t *conn)
 {
-  return conn->cfg->vtable->handshake(conn);
+  return conn->cfg->vtable->conn_handshake(conn);
 }
 
 static int
 conn_send_raw(conn_t *dest, struct evbuffer *source)
 {
-  return dest->cfg->vtable->send(dest, source);
+  return dest->cfg->vtable->conn_send(dest, source);
 }
 
 void
@@ -155,7 +155,7 @@ conn_send(conn_t *dest, struct evbuffer *source)
 static enum recv_ret
 conn_recv_raw(conn_t *source)
 {
-  return source->cfg->vtable->recv(source);
+  return source->cfg->vtable->conn_recv(source);
 }
 
 void
@@ -174,7 +174,7 @@ conn_recv(conn_t *source)
 static int
 conn_send_eof_raw(conn_t *dest)
 {
-  return dest->cfg->vtable->send_eof(dest);
+  return dest->cfg->vtable->conn_send_eof(dest);
 }
 
 void
@@ -228,35 +228,31 @@ conn_squelch(conn_t *source)
 enum recv_ret
 conn_recv_eof(conn_t *source)
 {
-  return source->cfg->vtable->recv_eof(source);
+  return source->cfg->vtable->conn_recv_eof(source);
 }
 
 void
 conn_expect_close(conn_t *conn)
 {
-  obfs_assert(conn->cfg->vtable->expect_close);
-  conn->cfg->vtable->expect_close(conn);
+  conn->cfg->vtable->conn_expect_close(conn);
 }
 
 void
 conn_cease_transmission(conn_t *conn)
 {
-  obfs_assert(conn->cfg->vtable->cease_transmission);
-  conn->cfg->vtable->cease_transmission(conn);
+  conn->cfg->vtable->conn_cease_transmission(conn);
 }
 
 void
 conn_close_after_transmit(conn_t *conn)
 {
-  obfs_assert(conn->cfg->vtable->close_after_transmit);
-  conn->cfg->vtable->close_after_transmit(conn);
+  conn->cfg->vtable->conn_close_after_transmit(conn);
 }
 
 void
 conn_transmit_soon(conn_t *conn, unsigned long timeout)
 {
-  obfs_assert(conn->cfg->vtable->transmit_soon);
-  conn->cfg->vtable->transmit_soon(conn, timeout);
+  conn->cfg->vtable->conn_transmit_soon(conn, timeout);
 }
 
 /* Circuits. */
@@ -389,14 +385,14 @@ circuit_close(circuit_t *ckt)
 void
 circuit_send(circuit_t *ckt)
 {
-  conn_send(ckt->downstream, bufferevent_get_input(ckt->up_buffer));
+  ckt->cfg->vtable->circuit_send(ckt);
 }
 
 void
 circuit_recv(circuit_t *ckt, conn_t *down)
 {
   obfs_assert(down->circuit == ckt);
-  conn_recv(down);
+  ckt->cfg->vtable->circuit_recv(ckt, down);
 }
 
 void

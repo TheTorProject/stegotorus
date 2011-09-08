@@ -306,7 +306,7 @@ test_obfs2_wrong_handshake_magic(void *state)
      it will blow away the connection before we can check for failure,
      so use the vtable method directly. */
   tt_int_op(RECV_BAD, ==,
-            s->conn_server->cfg->vtable->recv(s->conn_server));
+            s->conn_server->cfg->vtable->conn_recv(s->conn_server));
   tt_int_op(ST_WAIT_FOR_KEY, ==, server_state->state);
 
  end:;
@@ -346,7 +346,7 @@ test_obfs2_wrong_handshake_plength(void *state)
      it will blow away the connection before we can check for failure,
      so use the vtable method directly. */
   tt_int_op(RECV_BAD, ==,
-            s->conn_server->cfg->vtable->recv(s->conn_server));
+            s->conn_server->cfg->vtable->conn_recv(s->conn_server));
   tt_int_op(ST_WAIT_FOR_KEY, ==, server_state->state);
 
  end:;

@@ -137,6 +137,21 @@ x_dsteg_circuit_free(circuit_t *c)
   free(downcast_circuit(c));
 }
 
+/* Send data from circuit C. */
+static void
+x_dsteg_circuit_send(circuit_t *c)
+{
+  conn_send(c->downstream, bufferevent_get_input(c->up_buffer));
+}
+
+/* Receive data from DOWN to circuit C. */
+static void
+x_dsteg_circuit_recv(circuit_t *c, conn_t *down)
+{
+  obfs_assert(down == c->downstream);
+  conn_recv(down);
+}
+
 /*
   This is called everytime we get a connection for the x_dsteg
   protocol.
@@ -171,14 +186,14 @@ x_dsteg_conn_free(conn_t *c)
 
 /** Dsteg has no handshake */
 static int
-x_dsteg_handshake(conn_t *conn)
+x_dsteg_conn_handshake(conn_t *conn)
 {
   return 0;
 }
 
 /** XXX ignores transmit_room */
 static int
-x_dsteg_send(conn_t *d, struct evbuffer *source)
+x_dsteg_conn_send(conn_t *d, struct evbuffer *source)
 {
   x_dsteg_conn_t *dest = downcast_conn(d);
   obfs_assert(dest->steg);
@@ -186,7 +201,7 @@ x_dsteg_send(conn_t *d, struct evbuffer *source)
 }
 
 static enum recv_ret
-x_dsteg_recv(conn_t *s)
+x_dsteg_conn_recv(conn_t *s)
 {
   x_dsteg_conn_t *source = downcast_conn(s);
   if (!source->steg) {
@@ -205,20 +220,20 @@ x_dsteg_recv(conn_t *s)
 
 /** send EOF, recv EOF - no op */
 static int
-x_dsteg_send_eof(conn_t *dest)
+x_dsteg_conn_send_eof(conn_t *dest)
 {
   return 0;
 }
 
 static enum recv_ret
-x_dsteg_recv_eof(conn_t *source)
+x_dsteg_conn_recv_eof(conn_t *source)
 {
   return RECV_GOOD;
 }
 
 
 /** XXX all steg callbacks are ignored */
-static void x_dsteg_expect_close(conn_t *conn) {}
-static void x_dsteg_cease_transmission(conn_t *conn) {}
-static void x_dsteg_close_after_transmit(conn_t *conn) {}
-static void x_dsteg_transmit_soon(conn_t *conn, unsigned long timeout) {}
+static void x_dsteg_conn_expect_close(conn_t *conn) {}
+static void x_dsteg_conn_cease_transmission(conn_t *conn) {}
+static void x_dsteg_conn_close_after_transmit(conn_t *conn) {}
+static void x_dsteg_conn_transmit_soon(conn_t *conn, unsigned long timeout) {}
