@@ -69,7 +69,8 @@ noinst_HEADERS = \
 
 dist_noinst_SCRIPTS = src/genmodtable.sh src/test/tester.py
 
-EXTRA_DIST = doc
+EXTRA_DIST = doc \
+	src/protocols/roundrobin.c
 
 # Generated source files
 CLEANFILES = $(nodist_libobfsproxy_a_SOURCES)
