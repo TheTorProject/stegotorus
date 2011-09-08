@@ -6,6 +6,8 @@
 
 Makefile
 Makefile.in
+protolist.c
+steglist.c
 
 /.deps
 /aclocal.m4

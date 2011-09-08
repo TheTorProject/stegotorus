@@ -153,21 +153,21 @@ conn_send(conn_t *dest, struct evbuffer *source)
 }
 
 static enum recv_ret
-conn_recv_raw(conn_t *source, struct evbuffer *dest)
+conn_recv_raw(conn_t *source)
 {
-  return source->cfg->vtable->recv(source, dest);
+  return source->cfg->vtable->recv(source);
 }
 
 void
-conn_recv(conn_t *source, struct evbuffer *dest)
+conn_recv(conn_t *source)
 {
   obfs_assert(source);
-  if (conn_recv_raw(source, dest) == RECV_BAD) {
+  if (conn_recv_raw(source) == RECV_BAD) {
     log_debug("%s: error during receive.", source->peername);
     conn_close(source);
   } else {
     log_debug("%s: received %lu bytes", source->peername,
-              (unsigned long)evbuffer_get_length(dest));
+              (unsigned long)evbuffer_get_length(bufferevent_get_output(source->circuit->up_buffer)));
   }
 }
 
@@ -178,9 +178,9 @@ conn_send_eof(conn_t *dest)
 }
 
 enum recv_ret
-conn_recv_eof(conn_t *source, struct evbuffer *dest)
+conn_recv_eof(conn_t *source)
 {
-  return source->cfg->vtable->recv_eof(source, dest);
+  return source->cfg->vtable->recv_eof(source);
 }
 
 void
@@ -347,7 +347,8 @@ circuit_send(circuit_t *ckt)
 void
 circuit_recv(circuit_t *ckt, conn_t *down)
 {
-  conn_recv(ckt->downstream, bufferevent_get_output(ckt->up_buffer));
+  obfs_assert(down->circuit == ckt);
+  conn_recv(down);
 }
 
 void
@@ -476,7 +477,7 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
         log_debug("%s: %ld bytes of pending input",
                   conn->peername, (unsigned long)evbuffer_get_length(inbuf));
 
-        r = conn_recv_raw(conn, outbuf);
+        r = conn_recv_raw(conn);
         if (r == RECV_BAD) {
           log_debug("%s: error during final receive", conn->peername);
         }
@@ -487,7 +488,7 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
           evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
         }
       }
-      r = conn_recv_eof(conn, outbuf);
+      r = conn_recv_eof(conn);
       if (r == RECV_BAD) {
         log_debug("%s: error receiving EOF", conn->peername);
       }

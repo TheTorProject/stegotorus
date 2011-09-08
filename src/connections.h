@@ -63,8 +63,8 @@ int conn_handshake(conn_t *conn);
     and transmit it on DEST. */
 void conn_send(conn_t *dest, struct evbuffer *source);
 
-/** Receive data from SOURCE, decode it, and write it to DEST. */
-void conn_recv(conn_t *source, struct evbuffer *dest);
+/** Receive data from SOURCE, decode it, and write it to upstream. */
+void conn_recv(conn_t *source);
 
 /** Flush out any internally buffered data, and transmit an
     in-band end-of-file indicator to DEST if necessary.  */
@@ -72,7 +72,7 @@ int conn_send_eof(conn_t *dest);
 
 /** No more data will be received from the peer; flush any internally
     buffered data to DEST. */
-enum recv_ret conn_recv_eof(conn_t *source, struct evbuffer *dest);
+enum recv_ret conn_recv_eof(conn_t *source);
 
 /* The next several conn_t methods are used by steganography modules to
    provide hints about appropriate higher-level behavior.  */

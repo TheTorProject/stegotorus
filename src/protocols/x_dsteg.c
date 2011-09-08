@@ -186,7 +186,7 @@ x_dsteg_send(conn_t *d, struct evbuffer *source)
 }
 
 static enum recv_ret
-x_dsteg_recv(conn_t *s, struct evbuffer *dest)
+x_dsteg_recv(conn_t *s)
 {
   x_dsteg_conn_t *source = downcast_conn(s);
   if (!source->steg) {
@@ -199,7 +199,7 @@ x_dsteg_recv(conn_t *s, struct evbuffer *dest)
       log_debug("Detected steg pattern %s", source->steg->vtable->name);
     }
   }
-  return steg_receive(source->steg, s, dest);
+  return steg_receive(source->steg, s, bufferevent_get_output(s->circuit->up_buffer));
 }
 
 
@@ -211,7 +211,7 @@ x_dsteg_send_eof(conn_t *dest)
 }
 
 static enum recv_ret
-x_dsteg_recv_eof(conn_t *source, struct evbuffer *dest)
+x_dsteg_recv_eof(conn_t *source)
 {
   return RECV_GOOD;
 }

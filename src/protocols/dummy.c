@@ -159,9 +159,10 @@ dummy_send(conn_t *dest, struct evbuffer *source)
 }
 
 static enum recv_ret
-dummy_recv(conn_t *source, struct evbuffer *dest)
+dummy_recv(conn_t *source)
 {
-  if (evbuffer_add_buffer(dest, conn_get_inbound(source)))
+  if (evbuffer_add_buffer(bufferevent_get_output(source->circuit->up_buffer),
+                          conn_get_inbound(source)))
     return RECV_BAD;
   else
     return RECV_GOOD;
@@ -175,7 +176,7 @@ dummy_send_eof(conn_t *dest)
 }
 
 static enum recv_ret
-dummy_recv_eof(conn_t *source, struct evbuffer *dest)
+dummy_recv_eof(conn_t *source)
 {
   return RECV_GOOD;
 }

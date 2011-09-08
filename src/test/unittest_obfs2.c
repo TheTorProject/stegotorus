@@ -4,6 +4,7 @@
 
 #include "util.h"
 #include "tinytest_macros.h"
+#include "unittest.h"
 
 #define PROTOCOL_OBFS2_PRIVATE
 #define CRYPT_PRIVATE
@@ -70,96 +71,10 @@ test_obfs2_option_parsing(void *unused)
   log_set_method(LOG_METHOD_STDERR, NULL);
 }
 
-/* All the tests below use this test environment: */
-struct test_obfs2_state
-{
-  struct event_base *base;
-  struct evbuffer *scratch;
-  config_t *cfg_client;
-  config_t *cfg_server;
-  conn_t *conn_client;
-  conn_t *conn_server;
-};
-
-static int
-cleanup_obfs2_state(const struct testcase_t *unused, void *state)
-{
-  struct test_obfs2_state *s = (struct test_obfs2_state *)state;
-
-  if (s->conn_client)
-      conn_close(s->conn_client);
-  if (s->conn_server)
-      conn_close(s->conn_server);
-
-  if (s->cfg_client)
-    config_free(s->cfg_client);
-  if (s->cfg_server)
-    config_free(s->cfg_server);
-
-  if (s->scratch)
-    evbuffer_free(s->scratch);
-  if (s->base)
-    event_base_free(s->base);
-
-  free(state);
-  return 1;
-}
-
-#define ALEN(x) (sizeof x/sizeof x[0])
-
-static const char *const options_client[] =
-  {"obfs2", "--shared-secret=hahaha", "socks", "127.0.0.1:1800"};
-
-static const char *const options_server[] =
-  {"obfs2", "--shared-secret=hahaha",
-   "--dest=127.0.0.1:1500", "server", "127.0.0.1:1800"};
-
-static void *
-setup_obfs2_state(const struct testcase_t *unused)
-{
-  struct test_obfs2_state *s = xzalloc(sizeof(struct test_obfs2_state));
-
-  s->base = event_base_new();
-  tt_assert(s->base);
-
-  s->scratch = evbuffer_new();
-  tt_assert(s->scratch);
-
-  s->cfg_client =
-    config_create(ALEN(options_client), options_client);
-  tt_assert(s->cfg_client);
-
-  s->cfg_server =
-    config_create(ALEN(options_server), options_server);
-  tt_assert(s->cfg_server);
-
-  struct bufferevent *pair[2];
-  tt_assert(bufferevent_pair_new(s->base, 0, pair) == 0);
-  tt_assert(pair[0]);
-  tt_assert(pair[1]);
-  bufferevent_enable(pair[0], EV_READ|EV_WRITE);
-  bufferevent_enable(pair[1], EV_READ|EV_WRITE);
-
-  s->conn_client = conn_create(s->cfg_client, pair[0], xstrdup("to-server"));
-  tt_assert(s->conn_client);
-
-  s->conn_server = conn_create(s->cfg_server, pair[1], xstrdup("to-client"));
-  tt_assert(s->conn_server);
-
-  return s;
-
- end:
-  cleanup_obfs2_state(NULL, s);
-  return NULL;
-}
-
-static const struct testcase_setup_t obfs2_fixture =
-  { setup_obfs2_state, cleanup_obfs2_state };
-
 static void
 test_obfs2_handshake(void *state)
 {
-  struct test_obfs2_state *s = (struct test_obfs2_state *)state;
+  struct proto_test_state *s = state;
   obfs2_conn_t *client_state = downcast_conn(s->conn_client);
   obfs2_conn_t *server_state = downcast_conn(s->conn_server);
 
@@ -171,16 +86,16 @@ test_obfs2_handshake(void *state)
 
   /* Simulate the server receiving and processing the client's
      handshake message */
-  conn_recv(s->conn_server, s->scratch);
+  conn_recv(s->conn_server);
 
   /* That should have put nothing into the upstream buffer */
-  tt_int_op(0, ==, evbuffer_get_length(s->scratch));
+  tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_server)));
 
   /* Same for server to client */
   tt_int_op(0, <=, conn_handshake(s->conn_server));
   tt_int_op(0, <, evbuffer_get_length(conn_get_inbound(s->conn_client)));
-  conn_recv(s->conn_client, s->scratch);
-  tt_int_op(0, ==, evbuffer_get_length(s->scratch));
+  conn_recv(s->conn_client);
+  tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_client)));
 
   /* The handshake is now complete. We should have:
      client's send_crypto == server's recv_crypto
@@ -197,15 +112,13 @@ test_obfs2_handshake(void *state)
 static void
 test_obfs2_transfer(void *state)
 {
-  struct test_obfs2_state *s = (struct test_obfs2_state *)state;
-  int n;
-  struct evbuffer_iovec v[2];
+  struct proto_test_state *s = state;
 
   /* Handshake */
   tt_int_op(0, <=, conn_handshake(s->conn_client));
-  conn_recv(s->conn_server, s->scratch);
+  conn_recv(s->conn_server);
   tt_int_op(0, <=, conn_handshake(s->conn_server));
-  conn_recv(s->conn_client, s->scratch);
+  conn_recv(s->conn_client);
   /* End of Handshake */
 
   /* Now let's pass some data around. */
@@ -213,34 +126,28 @@ test_obfs2_transfer(void *state)
   const char *msg2 = "this is a 55-byte message passed from server to client!";
 
   /* client -> server */
-  evbuffer_add(s->scratch, msg1, 54);
-  conn_send(s->conn_client, s->scratch);
-  tt_int_op(0, ==, evbuffer_get_length(s->scratch));
+  evbuffer_add(bufferevent_get_output(s->buf_client), msg1, 54);
+  circuit_send(s->ckt_client);
+  tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_client)));
   tt_int_op(54, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
 
-  conn_recv(s->conn_server, s->scratch);
+  conn_recv(s->conn_server);
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
-
-  n = evbuffer_peek(s->scratch, -1, NULL, &v[0], 2);
-  tt_int_op(1, ==, n); /* expect contiguous data */
-  tt_stn_op(msg1, ==, v[0].iov_base, 54);
-
-  /* empty scratch buffer before next test  */
-  size_t buffer_len = evbuffer_get_length(s->scratch);
-  tt_int_op(0, ==, evbuffer_drain(s->scratch, buffer_len));
+  tt_int_op(54, ==, evbuffer_get_length(bufferevent_get_input(s->buf_server)));
+  tt_stn_op(msg1, ==,
+            evbuffer_pullup(bufferevent_get_input(s->buf_server), 54), 54);
 
   /* client <- server */
-  evbuffer_add(s->scratch, msg2, 55);
-  conn_send(s->conn_server, s->scratch);
-  tt_int_op(0, ==, evbuffer_get_length(s->scratch));
+  evbuffer_add(bufferevent_get_output(s->buf_server), msg2, 55);
+  circuit_send(s->ckt_server);
+  tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_server)));
   tt_int_op(55, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
 
-  conn_recv(s->conn_client, s->scratch);
+  conn_recv(s->conn_client);
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
-
-  n = evbuffer_peek(s->scratch, -1, NULL, &v[1], 2);
-  tt_int_op(n, ==, 1); /* expect contiguous data */
-  tt_stn_op(msg2, ==, v[1].iov_base, 55);
+  tt_int_op(55, ==, evbuffer_get_length(bufferevent_get_input(s->buf_client)));
+  tt_stn_op(msg2, ==,
+            evbuffer_pullup(bufferevent_get_input(s->buf_client), 55), 55);
 
  end:;
 }
@@ -258,7 +165,7 @@ test_obfs2_transfer(void *state)
 static void
 test_obfs2_split_handshake(void *state)
 {
-  struct test_obfs2_state *s = (struct test_obfs2_state *)state;
+  struct proto_test_state *s = state;
   obfs2_conn_t *client_state = downcast_conn(s->conn_client);
   obfs2_conn_t *server_state = downcast_conn(s->conn_server);
 
@@ -295,7 +202,7 @@ test_obfs2_split_handshake(void *state)
                OBFUSCATE_SEED_LENGTH+8+plength1_msg1);
 
   /* Server receives handshake part 1 */
-  conn_recv(s->conn_server, s->scratch);
+  conn_recv(s->conn_server);
   tt_int_op(ST_WAIT_FOR_PADDING, ==, server_state->state);
 
   /* Preparing client's handshake part 2 */
@@ -306,7 +213,7 @@ test_obfs2_split_handshake(void *state)
   evbuffer_add(conn_get_outbound(s->conn_client), msgclient_2, plength1_msg2);
 
   /* Server receives handshake part 2 */
-  conn_recv(s->conn_server, s->scratch);
+  conn_recv(s->conn_server);
   tt_int_op(ST_OPEN, ==, server_state->state);
 
   /* Since everything went right, let's do a server to client handshake now! */
@@ -336,7 +243,7 @@ test_obfs2_split_handshake(void *state)
                msgserver_1, OBFUSCATE_SEED_LENGTH+8);
 
   /* Client receives handshake part 1 */
-  conn_recv(s->conn_client, s->scratch);
+  conn_recv(s->conn_client);
   tt_int_op(ST_WAIT_FOR_PADDING, ==, client_state->state);
 
   /* Preparing client's handshake part 2 */
@@ -347,7 +254,7 @@ test_obfs2_split_handshake(void *state)
   evbuffer_add(conn_get_outbound(s->conn_server), msgserver_2, plength2);
 
   /* Client receives handshake part 2 */
-  conn_recv(s->conn_client, s->scratch);
+  conn_recv(s->conn_client);
   tt_int_op(ST_OPEN, ==, client_state->state);
 
   /* The handshake is finally complete. We should have: */
@@ -369,7 +276,7 @@ test_obfs2_split_handshake(void *state)
 static void
 test_obfs2_wrong_handshake_magic(void *state)
 {
-  struct test_obfs2_state *s = (struct test_obfs2_state *)state;
+  struct proto_test_state *s = state;
   obfs2_conn_t *client_state = downcast_conn(s->conn_client);
   obfs2_conn_t *server_state = downcast_conn(s->conn_server);
 
@@ -399,7 +306,7 @@ test_obfs2_wrong_handshake_magic(void *state)
      it will blow away the connection before we can check for failure,
      so use the vtable method directly. */
   tt_int_op(RECV_BAD, ==,
-            s->conn_server->cfg->vtable->recv(s->conn_server, s->scratch));
+            s->conn_server->cfg->vtable->recv(s->conn_server));
   tt_int_op(ST_WAIT_FOR_KEY, ==, server_state->state);
 
  end:;
@@ -411,7 +318,7 @@ test_obfs2_wrong_handshake_magic(void *state)
 static void
 test_obfs2_wrong_handshake_plength(void *state)
 {
-  struct test_obfs2_state *s = (struct test_obfs2_state *)state;
+  struct proto_test_state *s = state;
   obfs2_conn_t *client_state = downcast_conn(s->conn_client);
   obfs2_conn_t *server_state = downcast_conn(s->conn_server);
 
@@ -439,17 +346,28 @@ test_obfs2_wrong_handshake_plength(void *state)
      it will blow away the connection before we can check for failure,
      so use the vtable method directly. */
   tt_int_op(RECV_BAD, ==,
-            s->conn_server->cfg->vtable->recv(s->conn_server, s->scratch));
+            s->conn_server->cfg->vtable->recv(s->conn_server));
   tt_int_op(ST_WAIT_FOR_KEY, ==, server_state->state);
 
  end:;
 }
 
+static const char *const options_client[] =
+  {"obfs2", "--shared-secret=hahaha", "socks", "127.0.0.1:1800"};
+
+static const char *const options_server[] =
+  {"obfs2", "--shared-secret=hahaha",
+   "--dest=127.0.0.1:1500", "server", "127.0.0.1:1800"};
+
+static const struct proto_test_args obfs2_args =
+  { ALEN(options_client), ALEN(options_server),
+    options_client, options_server };
+
 #define T(name) \
   { #name, test_obfs2_##name, 0, NULL, NULL }
 
 #define TF(name) \
-  { #name, test_obfs2_##name, 0, &obfs2_fixture, NULL }
+  { #name, test_obfs2_##name, 0, &proto_test_fixture, (void *)&obfs2_args }
 
 struct testcase_t obfs2_tests[] = {
   T(option_parsing),

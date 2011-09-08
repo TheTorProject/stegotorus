@@ -64,7 +64,8 @@ noinst_HEADERS = \
 	src/protocols/obfs2.h \
 	src/protocols/x_dsteg.h \
 	src/test/tinytest.h \
-	src/test/tinytest_macros.h
+	src/test/tinytest_macros.h \
+	src/test/unittest.h
 
 dist_noinst_SCRIPTS = src/genmodtable.sh src/test/tester.py
 

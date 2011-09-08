@@ -487,7 +487,7 @@ init_crypto(void *s)
  * RECV_INCOMPLETE to say that we need more data to form an opinion.
  */
 static enum recv_ret
-obfs2_recv(conn_t *s, struct evbuffer *dest)
+obfs2_recv(conn_t *s)
 {
   obfs2_conn_t *state = downcast_conn(s);
   struct evbuffer *source = conn_get_inbound(s);
@@ -559,7 +559,8 @@ obfs2_recv(conn_t *s, struct evbuffer *dest)
 
   log_debug("%s: Processing %lu bytes application data",
             __func__, (unsigned long)evbuffer_get_length(source));
-  obfs2_crypt_and_transmit(state->recv_crypto, source, dest);
+  obfs2_crypt_and_transmit(state->recv_crypto, source,
+                           bufferevent_get_output(s->circuit->up_buffer));
 
   /* If we have pending data to send, transmit it now. */
   if (state->pending_data_to_send)
@@ -589,8 +590,8 @@ obfs2_send_eof(conn_t *s)
 }
 
 static enum recv_ret
-obfs2_recv_eof(conn_t *source, struct evbuffer *dest)
+obfs2_recv_eof(conn_t *source)
 {
   /* try once more to read anything that's in the queue */
-  return obfs2_recv(source, dest);
+  return obfs2_recv(source);
 }
