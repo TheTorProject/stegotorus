@@ -66,13 +66,19 @@ void conn_send(conn_t *dest, struct evbuffer *source);
 /** Receive data from SOURCE, decode it, and write it to upstream. */
 void conn_recv(conn_t *source);
 
-/** Flush out any internally buffered data, and transmit an
-    in-band end-of-file indicator to DEST if necessary.  */
-int conn_send_eof(conn_t *dest);
+/** Transmit the contents of SOURCE, plus any internally buffered
+    data, plus an in-band end-of-file indicator (if necessary) to
+    DEST.  This will only be called once, and once it has been called,
+    conn_send will not be called again.  */
+void conn_send_eof(conn_t *dest, struct evbuffer *source);
 
 /** No more data will be received from the peer; flush any internally
     buffered data to DEST. */
 enum recv_ret conn_recv_eof(conn_t *source);
+
+/** Squelch further transmissions from SOURCE and discard any pending
+    input. */
+void conn_squelch(conn_t *source);
 
 /* The next several conn_t methods are used by steganography modules to
    provide hints about appropriate higher-level behavior.  */
@@ -131,9 +137,11 @@ circuit_t *circuit_create_from_downstream(config_t *cfg, conn_t *down);
 int circuit_open_downstream(circuit_t *ckt);
 
 void circuit_close(circuit_t *ckt);
+void circuit_squelch(circuit_t *ckt);
 
 void circuit_send(circuit_t *ckt);
 void circuit_recv(circuit_t *ckt, conn_t *down);
+void circuit_recv_eof(circuit_t *ckt, conn_t *down);
 
 void circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction);
 void circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
