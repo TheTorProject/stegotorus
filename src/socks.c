@@ -2,21 +2,14 @@
    See LICENSE for other credits and copying information
 */
 
+#include "util.h"
+
 #define SOCKS_PRIVATE
 #include "socks.h"
 
-#include "util.h"
-
-#include <assert.h>
 #include <errno.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include <event2/buffer.h>
-
-#ifdef _WIN32
-#include <ws2tcpip.h> /* sockaddr_in6 */
-#endif
 
 /**
    General SOCKS5 idea:
@@ -43,24 +36,19 @@
 typedef unsigned char uchar;
 
 /**
-   Creates a new SOCKS state.
-
-   Returns a 'socks_state_t' on success, NULL on fail.
+   Creates a new 'socks_state_t' object.
 */
 socks_state_t *
 socks_state_new(void)
 {
-  socks_state_t *state = calloc(1, sizeof(socks_state_t));
-  if (!state)
-    return NULL;
+  socks_state_t *state = xzalloc(sizeof(socks_state_t));
   state->state = ST_WAITING;
-
   return state;
 }
 
 /**
    Deallocates memory of socks_state_t 's'.
-*/ 
+*/
 void
 socks_state_free(socks_state_t *s)
 {
@@ -112,14 +100,14 @@ socks_errno_to_reply(socks_state_t *state, int error)
 /**
    Takes a SOCKS5 command request from 'source', it evaluates it and
    if it's legit it parses it into 'parsereq'.
-   
+
    It returns SOCKS_GOOD if everything went fine.
    It returns SOCKS_INCOMPLETE if we need more data from the client.
    It returns SOCKS_BROKEN if we didn't like something.
    It returns SOCKS_CMD_NOT_CONNECT if the client asked for something
    else other than CONNECT.  If that's the case we should send a reply
    back to the client telling him that we don't support it.
-   
+
 */
 enum socks_ret
 socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
@@ -194,19 +182,19 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
       goto err;
 
   if (evbuffer_remove(source, destaddr, addrlen) != addrlen)
-    assert(0);
+    obfs_abort();
 
   if (evbuffer_remove(source, (char *)&destport, 2) != 2)
-    assert(0);
+    obfs_abort();
 
   destaddr[addrlen] = '\0';
 
   if (af == AF_UNSPEC) {
-    assert(addrlen < sizeof(parsereq->addr));
+    obfs_assert(addrlen < sizeof(parsereq->addr));
     memcpy(parsereq->addr, destaddr, addrlen+1);
   } else {
     char a[16];
-    assert(addrlen <= 16);
+    obfs_assert(addrlen <= 16);
     memcpy(a, destaddr, addrlen);
     if (evutil_inet_ntop(af, destaddr, parsereq->addr,
                          sizeof(parsereq->addr)) == NULL)
@@ -318,8 +306,8 @@ socks5_handle_negotiation(struct evbuffer *source,
                           struct evbuffer *dest, socks_state_t *state)
 {
   unsigned int found_noauth, i;
-
   uchar nmethods;
+  uchar methods[0xFF];
 
   evbuffer_copyout(source, &nmethods, 1);
 
@@ -329,24 +317,15 @@ socks5_handle_negotiation(struct evbuffer *source,
 
   evbuffer_drain(source, 1);
 
-  uchar *p;
-  /* XXX user controlled malloc(). range should be: 0x00-0xff */
-  p = malloc(nmethods);
-  if (!p) {
-    log_warn("malloc failed!");
-    return SOCKS_BROKEN;
-  }
-  if (evbuffer_remove(source, p, nmethods) < 0)
-    assert(0);
+  if (evbuffer_remove(source, methods, nmethods) < 0)
+    obfs_abort();
 
   for (found_noauth=0, i=0; i<nmethods ; i++) {
-    if (p[i] == SOCKS5_METHOD_NOAUTH) {
+    if (methods[i] == SOCKS5_METHOD_NOAUTH) {
       found_noauth = 1;
       break;
     }
   }
-
-  free(p);
 
   return socks5_do_negotiation(dest,found_noauth);
 }
@@ -354,11 +333,11 @@ socks5_handle_negotiation(struct evbuffer *source,
 /**
    Takes a SOCKS4/SOCKS4a command request from 'source', it evaluates
    it and if it's legit it parses it into 'parsereq'.
-   
+
    It returns SOCKS_GOOD if everything went fine.
    It returns SOCKS_INCOMPLETE if we need more data from the client.
    It returns SOCKS_BROKEN if we didn't like something.
-*/   
+*/
 
 /* XXXX rename to socks4_handle_request or something. */
 enum socks_ret
@@ -485,7 +464,7 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
   }
 
   /* ST_SENT_REPLY connections shouldn't be here! */
-  assert(socks_state->state != ST_SENT_REPLY &&
+  obfs_assert(socks_state->state != ST_SENT_REPLY &&
          socks_state->state != ST_HAVE_ADDR);
 
   if (socks_state->version == 0) {
@@ -535,7 +514,7 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
         return SOCKS_CMD_NOT_CONNECT;
       } else if (r == SOCKS_BROKEN)
         goto broken;
-      assert(0);
+      obfs_abort();
     }
     break;
   default:
@@ -561,7 +540,7 @@ socks_state_get_status(const socks_state_t *state)
    If we have previously parsed a SOCKS CONNECT request, this function
    places the corresponding address/port to 'af_out', 'addr_out' and
    'port_out'.
-   
+
    It returns 0 on success and -1 if it was called unnecessarily.
 */
 int

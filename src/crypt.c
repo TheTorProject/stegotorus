@@ -2,13 +2,12 @@
    See LICENSE for other credits and copying information
 */
 
+#include "util.h"
+
 #define CRYPT_PRIVATE
 #include "crypt.h"
 
-#include <assert.h>
 #include <fcntl.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include <openssl/opensslv.h>
@@ -24,7 +23,7 @@
 #endif
 
 /**
-   Initializes the obfs2 crypto subsystem.
+   Initializes the crypto subsystem.
 */
 int
 initialize_crypto(void)
@@ -56,7 +55,7 @@ initialize_crypto(void)
 }
 
 /**
-   Cleans up the obfs2 crypto subsystem.
+   Cleans up the crypto subsystem.
 */
 void
 cleanup_crypto(void)
@@ -68,20 +67,24 @@ cleanup_crypto(void)
    Digests
    ===== */
 
-#ifdef USE_OPENSSL_SHA256
+#ifndef USE_OPENSSL_SHA256
+#define SHA256_CTX sha256_state
+#define SHA256_Init(ctx) sha256_init(ctx)
+#define SHA256_Update(ctx, buf, len) sha256_process(ctx, buf, len)
+#define SHA256_Final(buf, ctx) sha256_done(ctx, buf)
+#endif
+
 struct digest_t {
   SHA256_CTX ctx;
 };
 
 /**
-   Returns a new SHA256 digest container, or NULL on failure.
+   Returns a new SHA256 digest container.
 */
 digest_t *
 digest_new(void)
 {
-  digest_t *d = malloc(sizeof(digest_t));
-  if (!d)
-    return NULL;
+  digest_t *d = xmalloc(sizeof(digest_t));
   SHA256_Init(&d->ctx);
   return d;
 }
@@ -89,7 +92,7 @@ digest_new(void)
 /**
    Updates the contents of the SHA256 container 'd' with the first
    'len' bytes of 'buf'.
-*/ 
+*/
 void
 digest_update(digest_t *d, const uchar *buf, size_t len)
 {
@@ -102,46 +105,17 @@ digest_update(digest_t *d, const uchar *buf, size_t len)
 size_t
 digest_getdigest(digest_t *d, uchar *buf, size_t len)
 {
-  uchar tmp[SHA256_LENGTH];
-  int n = 32;
-  SHA256_Final(tmp, &d->ctx);
-  if (len < 32)
-    n = len;
-  memcpy(buf, tmp, n);
-  memset(tmp, 0, sizeof(tmp));
-  return n;
+  if (len >= SHA256_LENGTH) {
+    SHA256_Final(buf, &d->ctx);
+    return SHA256_LENGTH;
+  } else {
+    uchar tmp[SHA256_LENGTH];
+    SHA256_Final(tmp, &d->ctx);
+    memcpy(buf, tmp, len);
+    memset(tmp, 0, SHA256_LENGTH);
+    return len;
+  }
 }
-#else
-struct digest_t {
-  sha256_state ctx;
-};
-digest_t *
-digest_new(void)
-{
-  digest_t *d = malloc(sizeof(digest_t));
-  if (!d)
-    return NULL;
-  sha256_init(&d->ctx);
-  return d;
-}
-void
-digest_update(digest_t *d, const uchar *buf, size_t len)
-{
-  sha256_process(&d->ctx, buf, len);
-}
-size_t
-digest_getdigest(digest_t *d, uchar *buf, size_t len)
-{
-  uchar tmp[SHA256_LENGTH];
-  int n = 32;
-  sha256_done(&d->ctx, tmp);
-  if (len < 32)
-    n = len;
-  memcpy(buf, tmp, n);
-  memset(tmp, 0, sizeof(tmp));
-  return n;
-}
-#endif
 
 void
 digest_free(digest_t *d)
@@ -156,19 +130,15 @@ digest_free(digest_t *d)
 
 /**
    Initializes the AES cipher with 'key'.
-*/ 
+*/
 crypt_t *
 crypt_new(const uchar *key, size_t keylen)
 {
   crypt_t *k;
-  if (keylen < AES_BLOCK_SIZE)
-    return NULL;
 
-  k = calloc(1, sizeof(crypt_t));
-  if (k == NULL)
-    return NULL;
-
-  AES_set_encrypt_key(key, 128, &k->key);
+  obfs_assert(keylen == AES_BLOCK_SIZE);
+  k = xzalloc(sizeof(crypt_t));
+  AES_set_encrypt_key(key, AES_BLOCK_SIZE * CHAR_BIT, &k->key);
 
   return k;
 }
@@ -179,7 +149,7 @@ crypt_new(const uchar *key, size_t keylen)
 void
 crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
 {
-  assert(ivlen == sizeof(key->ivec));
+  obfs_assert(ivlen == sizeof(key->ivec));
   memcpy(key->ivec, iv, ivlen);
 }
 
@@ -189,8 +159,7 @@ crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
 void
 stream_crypt(crypt_t *key, uchar *buf, size_t len)
 {
-  AES_ctr128_encrypt(buf, buf, /* XXX make sure this is okay to do. */
-                     len,
+  AES_ctr128_encrypt(buf, buf, len,
                      &key->key, key->ivec, key->ecount_buf,
                      &key->pos);
 }
@@ -217,4 +186,28 @@ int
 random_bytes(uchar *buf, size_t buflen)
 {
   return RAND_bytes(buf, buflen) == 1 ? 0 : -1;
+}
+
+
+/** Return a pseudorandom integer, chosen uniformly from the values
+ * between 0 and <b>max</b>-1 inclusive.  <b>max</b> must be between 1 and
+ * INT_MAX+1, inclusive. */
+int
+random_int(unsigned int max)
+{
+  unsigned int val;
+  unsigned int cutoff;
+  obfs_assert(max <= ((unsigned int)INT_MAX)+1);
+  obfs_assert(max > 0); /* don't div by 0 */
+
+  /* We ignore any values that are >= 'cutoff,' to avoid biasing the
+   * distribution with clipping at the upper end of unsigned int's
+   * range.
+   */
+  cutoff = UINT_MAX - (UINT_MAX%max);
+  while (1) {
+    random_bytes((uchar*)&val, sizeof(val));
+    if (val < cutoff)
+      return val % max;
+  }
 }

@@ -5,10 +5,6 @@
 #ifndef SOCKS_H
 #define SOCKS_H
 
-typedef struct socks_state_t socks_state_t;
-struct evbuffer;
-struct sockaddr;
-
 enum socks_status_t {
   /* Waiting for initial socks4 or socks5 message */
   ST_WAITING,
@@ -30,7 +26,7 @@ enum socks_ret {
 enum socks_ret handle_socks(struct evbuffer *source,
                             struct evbuffer *dest,
                             socks_state_t *socks_state);
-socks_state_t *socks_state_new(void);
+socks_state_t *socks_state_new(void); /* cannot fail */
 void socks_state_free(socks_state_t *s);
 
 enum socks_status_t socks_state_get_status(const socks_state_t *state);

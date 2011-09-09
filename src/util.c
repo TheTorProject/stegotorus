@@ -4,29 +4,142 @@
 
 #include "util.h"
 
-#include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include <event2/dns.h>
-#include <event2/util.h>
-
-#ifdef _WIN32
-#include <ws2tcpip.h> /* addrinfo */
+#ifndef _WIN32
+#include <arpa/inet.h>
+#endif
+#ifdef AF_LOCAL
+#include <sys/un.h>
 #endif
 
 /** Any size_t larger than this amount is likely to be an underflow. */
 #define SIZE_T_CEILING  (SIZE_MAX/2 - 16)
 
+/**************************** Memory Allocation ******************************/
+
+static void ATTR_NORETURN
+die_oom(void)
+{
+  log_error("Memory allocation failed: %s",strerror(errno));
+}
+
+void *
+xmalloc(size_t size)
+{
+  void *result;
+
+  obfs_assert(size < SIZE_T_CEILING);
+
+  /* Some malloc() implementations return NULL when the input argument
+     is zero. We don't bother detecting whether the implementation we're
+     being compiled for does that, because it should hardly ever come up,
+     and avoiding it unconditionally does no harm. */
+  if (size == 0)
+    size = 1;
+
+  result = malloc(size);
+  if (result == NULL)
+    die_oom();
+
+  return result;
+}
+
+void *
+xrealloc(void *ptr, size_t size)
+{
+  void *result;
+  obfs_assert (size < SIZE_T_CEILING);
+  if (size == 0)
+    size = 1;
+
+  result = realloc(ptr, size);
+  if (result == NULL)
+    die_oom();
+
+  return result;
+}
+
+void *
+xzalloc(size_t size)
+{
+  void *result = xmalloc(size);
+  memset(result, 0, size);
+  return result;
+}
+
+void *
+xmemdup(const void *ptr, size_t size)
+{
+  void *copy = xmalloc(size);
+  memcpy(copy, ptr, size);
+  return copy;
+}
+
+char *
+xstrdup(const char *s)
+{
+  return xmemdup(s, strlen(s) + 1);
+}
+
+char *
+xstrndup(const char *s, size_t maxsize)
+{
+  char *copy;
+  size_t size;
+  /* strnlen is not in any standard :-( */
+  for (size = 0; size < maxsize; size++)
+    if (s[size] == '\0')
+      break;
+
+  copy = xmalloc(size + 1);
+  memcpy(copy, s, size);
+  copy[size] = '\0';
+  return copy;
+}
+
+/******************************** Mathematics ********************************/
+
+unsigned int
+ui64_log2(uint64_t u64)
+{
+  unsigned int r = 0;
+  if (u64 >= (((uint64_t)1)<<32)) {
+    u64 >>= 32;
+    r = 32;
+  }
+  if (u64 >= (((uint64_t)1)<<16)) {
+    u64 >>= 16;
+    r += 16;
+  }
+  if (u64 >= (((uint64_t)1)<<8)) {
+    u64 >>= 8;
+    r += 8;
+  }
+  if (u64 >= (((uint64_t)1)<<4)) {
+    u64 >>= 4;
+    r += 4;
+  }
+  if (u64 >= (((uint64_t)1)<<2)) {
+    u64 >>= 2;
+    r += 2;
+  }
+  if (u64 >= (((uint64_t)1)<<1)) {
+    u64 >>= 1;
+    r += 1;
+  }
+  return r;
+}
+
 /************************ Obfsproxy Network Routines *************************/
 
 /**
    Accepts a string 'address' of the form ADDRESS:PORT and attempts to
-   parse it into 'addr_out' and put it's length into 'addrlen_out'.
+   parse it into an 'evutil_addrinfo' structure.
 
    If 'nodns' is set it means that 'address' was an IP address.
    If 'passive' is set it means that the address is destined for
@@ -35,20 +148,15 @@
    If no port was given in 'address', we set 'default_port' as the
    port.
 */
-int
-resolve_address_port(const char *address,
-                     int nodns, int passive,
-                     struct sockaddr **addr_out,
-                     size_t *addrlen_out,
+struct evutil_addrinfo *
+resolve_address_port(const char *address, int nodns, int passive,
                      const char *default_port)
 {
   struct evutil_addrinfo *ai = NULL;
   struct evutil_addrinfo ai_hints;
-  int result = -1, ai_res;
-  char *a = strdup(address), *cp;
+  int ai_res, ai_errno;
+  char *a = xstrdup(address), *cp;
   const char *portstr;
-  if (!a)
-    return -1;
 
   if ((cp = strchr(a, ':'))) {
     portstr = cp+1;
@@ -57,7 +165,8 @@ resolve_address_port(const char *address,
     portstr = default_port;
   } else {
     log_debug("Error in address %s: port required.", address);
-    goto done;
+    free(a);
+    return NULL;
   }
 
   memset(&ai_hints, 0, sizeof(ai_hints));
@@ -69,26 +178,67 @@ resolve_address_port(const char *address,
   if (nodns)
     ai_hints.ai_flags |= EVUTIL_AI_NUMERICHOST;
 
-  if ((ai_res = evutil_getaddrinfo(a, portstr, &ai_hints, &ai))) {
-    log_warn("Error resolving %s (%s) (%s): %s",
-             address,  a, portstr, evutil_gai_strerror(ai_res));
-    goto done;
-  }
-  if (ai == NULL) {
-    log_warn("No result for address %s", address);
-    goto done;
-  }
-  struct sockaddr *addr = malloc(ai->ai_addrlen);
-  memcpy(addr, ai->ai_addr, ai->ai_addrlen);
-  *addr_out = addr;
-  *addrlen_out = ai->ai_addrlen;
-  result = 0;
+  ai_res = evutil_getaddrinfo(a, portstr, &ai_hints, &ai);
+  ai_errno = errno;
 
- done:
   free(a);
-  if (ai)
-    evutil_freeaddrinfo(ai);
-  return result;
+
+  if (ai_res) {
+    if (ai_res == EVUTIL_EAI_SYSTEM)
+      log_warn("Error resolving %s: %s [%s]",
+               address, evutil_gai_strerror(ai_res), strerror(ai_errno));
+    else
+      log_warn("Error resolving %s: %s", address, evutil_gai_strerror(ai_res));
+
+    if (ai) {
+      evutil_freeaddrinfo(ai);
+      ai = NULL;
+    }
+  } else if (ai == NULL) {
+    log_warn("No result for address %s", address);
+  }
+
+  return ai;
+}
+
+char *
+printable_address(struct sockaddr *addr, socklen_t addrlen)
+{
+  char apbuf[INET6_ADDRSTRLEN + 8]; /* []:65535 is 8 characters */
+
+  switch (addr->sa_family) {
+#ifndef _WIN32 /* Windows XP doesn't have inet_ntop. Fix later. */
+  case AF_INET: {
+    char abuf[INET6_ADDRSTRLEN];
+    struct sockaddr_in *sin = (struct sockaddr_in*)addr;
+    if (!inet_ntop(AF_INET, &sin->sin_addr, abuf, INET6_ADDRSTRLEN))
+      break;
+    obfs_snprintf(apbuf, sizeof apbuf, "%s:%d", abuf, ntohs(sin->sin_port));
+    return xstrdup(apbuf);
+  }
+
+  case AF_INET6: {
+    char abuf[INET6_ADDRSTRLEN];
+    struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)addr;
+    if (!inet_ntop(AF_INET, &sin6->sin6_addr, abuf, INET6_ADDRSTRLEN))
+      break;
+    obfs_snprintf(apbuf, sizeof apbuf, "[%s]:%d", abuf,
+                  ntohs(sin6->sin6_port));
+    return xstrdup(apbuf);
+  }
+#endif
+
+#ifdef AF_LOCAL
+  case AF_LOCAL:
+    return xstrdup(((struct sockaddr_un*)addr)->sun_path);
+#endif
+  default:
+    break;
+  }
+
+  obfs_snprintf(apbuf, sizeof apbuf,
+                "<addr family %d>", addr->sa_family);
+  return xstrdup(apbuf);
 }
 
 static struct evdns_base *the_evdns_base = NULL;
@@ -144,123 +294,40 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
     return -1;
   return r;
 }
-
-/************************ Doubly Linked List (DLL) ******************/
-
-/**
-   Insert 'new_node' after 'node' in the doubly linked list 'list'.
-*/
-static void
-dll_insert_after(dll_t *list, dll_node_t *node, dll_node_t *new_node)
-{
-  assert(node);
-  assert(new_node);
-
-  if (!list)
-    return;
-
-  new_node->prev = node;
-  new_node->next = node->next;
-  if (!node->next)
-    list->tail = new_node;
-  else
-    node->next->prev = new_node;
-  node->next = new_node;
-}
-
-/**
-   Insert 'new_node' before 'node' in the doubly linked list 'list'.
-*/ 
-static void
-dll_insert_before(dll_t *list, dll_node_t *node, dll_node_t *new_node)
-{
-  assert(node);
-  assert(new_node);
-
-  if (!list)
-    return;
-
-  new_node->prev = node->prev;
-  new_node->next = node;
-  if (!node->prev)
-    list->head = new_node;
-  else
-    node->prev->next = new_node;
-  node->prev = new_node;
-}
-
-/** Initialize <b>list</b> as an empty list. */
+/** Remove from the string <b>s</b> every character which appears in
+ * <b>strip</b>. */
 void
-dll_init(dll_t *list)
+ascii_strstrip(char *s, const char *strip)
 {
-  list->head = list->tail = NULL;
-}
-  
-/**
-   Insert 'node' in the beginning of the doubly linked 'list'.
-*/ 
-static void
-dll_insert_beginning(dll_t *list, dll_node_t *node)
-{
-  assert(node);
-
-  if (!list)
-    return;
-
-  if (!list->head) {
-    list->head = node;
-    list->tail = node;
-    node->prev = NULL;
-    node->next = NULL;
-  } else {
-    dll_insert_before(list, list->head, node);
+  char *read = s;
+  while (*read) {
+    if (strchr(strip, *read)) {
+      ++read;
+    } else {
+      *s++ = *read++;
+    }
   }
-}
-  
-/** 
-    Appends 'data' to the end of the doubly linked 'list'.
-    Returns 1 on success, -1 on fail.
-*/
-int
-dll_append(dll_t *list, dll_node_t *node)
-{
-  assert(list);
-  assert(node);
-
-  if (!list->tail)
-    dll_insert_beginning(list, node);
-  else
-    dll_insert_after(list, list->tail, node);
-
-  return 1;
+  *s = '\0';
 }
 
-/**
-   Removes 'node' from the doubly linked list 'list'.
-   It frees the list node, but leaves its data intact.
-*/ 
 void
-dll_remove(dll_t *list, dll_node_t *node)
+ascii_strlower(char *s)
 {
-  assert(node);
-
-  if (!list)
-    return;
-
-  if (!node->prev)
-    list->head = node->next;
-  else
-    node->prev->next = node->next;
-  if (!node->next)
-    list->tail = node->prev;
-  else
-    node->next->prev = node->prev;
+  while (*s) {
+    if (*s >= 'A' && *s <= 'Z')
+      *s = *s - 'A' + 'a';
+    ++s;
+  }
 }
 
 /************************ Logging Subsystem *************************/
 /** The code of this section was to a great extent shamelessly copied
     off tor. It's basicaly a stripped down version of tor's logging
     system. Thank you tor. */
+
+/* Note: obfs_assert and obfs_abort cannot be used anywhere in the
+   logging system, as they will recurse into the logging system and
+   cause an infinite loop.  We use plain old abort(3) instead. */
 
 /* Size of maximum log entry, including newline and NULL byte. */
 #define MAX_LOG_ENTRY 1024
@@ -271,12 +338,13 @@ dll_remove(dll_t *list, dll_node_t *node)
 
 /** Logging severities */
 
+#define LOG_SEV_ERR     4
 #define LOG_SEV_WARN    3
 #define LOG_SEV_INFO    2
 #define LOG_SEV_DEBUG   1
 
 /* logging method */
-static int logging_method=LOG_METHOD_STDOUT;
+static int logging_method=LOG_METHOD_STDERR;
 /* minimum logging severity */
 static int logging_min_sev=LOG_SEV_INFO;
 /* logfile fd */
@@ -287,11 +355,12 @@ static const char *
 sev_to_string(int severity)
 {
   switch (severity) {
+  case LOG_SEV_ERR:     return "error";
   case LOG_SEV_WARN:    return "warn";
   case LOG_SEV_INFO:    return "info";
   case LOG_SEV_DEBUG:   return "debug";
   default:
-    assert(0); return "UNKNOWN";
+    abort();
   }
 }
 
@@ -300,6 +369,8 @@ sev_to_string(int severity)
 static int
 string_to_sev(const char *string)
 {
+  if (!strcasecmp(string, "error"))
+    return LOG_SEV_ERR;
   if (!strcasecmp(string, "warn"))
     return LOG_SEV_WARN;
   else if (!strcasecmp(string, "info"))
@@ -317,7 +388,8 @@ string_to_sev(const char *string)
 static int
 sev_is_valid(int severity)
 {
-  return (severity == LOG_SEV_WARN ||
+  return (severity == LOG_SEV_ERR  ||
+          severity == LOG_SEV_WARN ||
           severity == LOG_SEV_INFO ||
           severity == LOG_SEV_DEBUG);
 }
@@ -400,6 +472,15 @@ log_set_min_severity(const char* sev_string)
   return 0;
 }
 
+/** True if the minimum log severity is "debug".  Used in a few places
+    to avoid some expensive formatting work if we are going to ignore the
+    result. */
+int
+log_do_debug(void)
+{
+  return logging_min_sev == LOG_SEV_DEBUG;
+}
+
 /**
     Logging worker function.
     Accepts a logging 'severity' and a 'format' string and logs the
@@ -409,7 +490,8 @@ log_set_min_severity(const char* sev_string)
 static void
 logv(int severity, const char *format, va_list ap)
 {
-  assert(sev_is_valid(severity));
+  if (!sev_is_valid(severity))
+    abort();
 
   if (logging_method == LOG_METHOD_NULL)
     return;
@@ -436,7 +518,8 @@ logv(int severity, const char *format, va_list ap)
       size_t offset = buflen-TRUNCATED_STR_LEN;
       r = obfs_snprintf(buf+offset, TRUNCATED_STR_LEN+1,
                         "%s", TRUNCATED_STR);
-      if (r < 0) assert(0);
+      if (r < 0)
+        abort();
     }
     n = buflen;
   } else
@@ -445,27 +528,27 @@ logv(int severity, const char *format, va_list ap)
   buf[n]='\n';
   buf[n+1]='\0';
 
-  if (logging_method == LOG_METHOD_STDOUT)
-    fprintf(stdout, "%s", buf);
+  if (logging_method == LOG_METHOD_STDERR)
+    fprintf(stderr, "%s", buf);
   else if (logging_method == LOG_METHOD_FILE) {
-    assert(logging_logfile);
-    if (write(logging_logfile, buf, strlen(buf)) < 0)
-      printf("%s(): Terrible write() error!!!\n", __func__);
+    obfs_assert(logging_logfile);
+    obfs_assert(!(write(logging_logfile, buf, strlen(buf)) < 0));
   } else
-    assert(0);
+    obfs_assert(0);
 }
 
 /**** Public logging API. ****/
 
 void
-log_info(const char *format, ...)
+log_error(const char *format, ...)
 {
   va_list ap;
   va_start(ap,format);
 
-  logv(LOG_SEV_INFO, format, ap);
+  logv(LOG_SEV_ERR, format, ap);
 
   va_end(ap);
+  exit(1);
 }
 
 void
@@ -475,6 +558,17 @@ log_warn(const char *format, ...)
   va_start(ap,format);
 
   logv(LOG_SEV_WARN, format, ap);
+
+  va_end(ap);
+}
+
+void
+log_info(const char *format, ...)
+{
+  va_list ap;
+  va_start(ap,format);
+
+  logv(LOG_SEV_INFO, format, ap);
 
   va_end(ap);
 }

@@ -5,86 +5,125 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#include <stddef.h>   /* for size_t */
-#include "network.h"  /* for recv_ret */
+/**
+   This struct defines a "configuration" of the proxy.
+   A configuration is a set of addresses to listen on, and what to do
+   when connections are received.  Almost all of a configuration is
+   protocol-private data, stored in the larger structure in which this
+   struct is embedded.
+ */
+struct config_t
+{
+  const struct protocol_vtable *vtable;
+};
 
-struct evbuffer;
-struct sockaddr;
-
-#define DUMMY_PROTOCOL      1
-#define OBFS2_PROTOCOL      2
+const char *get_transport_name_from_config(config_t *cfg);
 
 /**
-  This struct defines parameters of the protocol per-listener basis.
+   This struct defines a protocol and its methods; note that not all
+   of them are methods on the same object in the C++ sense.
 
-  By 'per-listener basis' I mean that the parameters defined here will
-  be inherited by *all* connections opened from the listener_t that
-  owns this protocol_params_t.
-*/
-typedef struct protocol_params_t {
-  struct sockaddr *target_address;
-  struct sockaddr *listen_address;
-  char *shared_secret;
-  size_t shared_secret_len;
-  size_t target_address_len;
-  size_t listen_address_len;
-  int is_initiator;
-  int mode;
-  int proto; /* Protocol that this listener can speak. */
-} protocol_params_t;
+   A filled-in, statically allocated protocol_vtable object is the
+   principal interface between each individual protocol and generic
+   code.  At present there is a static list of these objects in protocol.c.
+ */
+struct protocol_vtable
+{
+  /** The short name of this protocol. */
+  const char *name;
 
-struct protocol_t {
-  /* protocol vtable */
-  struct protocol_vtable *vtable;
+  /** Allocate a 'config_t' object and fill it in from the provided
+      'options' array. */
+  config_t *(*config_create)(int n_options, const char *const *options);
 
-  /* This protocol specific struct defines the state of the protocol
-     per-connection basis.
+  config_t *(*config_create_managed)(int is_server, const char *protocol,
+                                     const char *bindaddr, const char *orport);
 
-     By 'protocol specific' I mean that every protocol has it's own
-     state struct. (for example, obfs2 has obfs2_state_t)
+  /** Destroy the provided 'config_t' object.  */
+  void (*config_free)(config_t *cfg);
 
-     By 'per-connection basis' I mean that the every connection has a
-     different protocol_t struct, and that's precisely the reason that
-     this struct is owned by the conn_t struct.
-  */
-  void *state;
-};
-int set_up_protocol(int n_options, char **options,
-                    struct protocol_params_t *params);
-struct protocol_t *proto_new(struct protocol_params_t *params);
-void proto_destroy(struct protocol_t *proto);
-int proto_handshake(struct protocol_t *proto, void *buf);
-int proto_send(struct protocol_t *proto, void *source, void *dest);
-enum recv_ret proto_recv(struct protocol_t *proto, void *source, void *dest);
+  /** Return a set of addresses to listen on, in the form of an
+      'evutil_addrinfo' linked list.  There may be more than one list;
+      users of this function should call it repeatedly with successive
+      values of N, starting from zero, until it returns NULL, and
+      create listeners for every address returned. */
+  struct evutil_addrinfo *(*config_get_listen_addrs)(config_t *cfg, size_t n);
 
-void proto_params_free(protocol_params_t *params);
+  /** Return a set of addresses to attempt an outbound connection to,
+      in the form of an 'evutil_addrinfo' linked list.  There is only
+      one such list. */
+  struct evutil_addrinfo *(*config_get_target_addr)(config_t *cfg);
 
-typedef struct protocol_vtable {
-  /* Initialization function: Fills in the protocol vtable. */
-  int (*init)(int n_options, char **options,
-              struct protocol_params_t *params);
+  /** A connection has just been made to one of 'cfg's listener
+      addresses.  Return an extended 'conn_t' object, filling in the
+      'cfg' and 'mode' fields of the generic structure.  */
+  conn_t *(*conn_create)(config_t *cfg);
 
-  /* Destructor: Destroys the protocol state.  */
-  void (*destroy)(void *state);
+  /** Destroy per-connection, protocol-specific state.  */
+  void (*conn_free)(conn_t *state);
 
-  /* Constructor: Creates a protocol object. */
-  void *(*create)(struct protocol_t *proto_params,
-                  struct protocol_params_t *parameters);
+  /** A 'circuit_t' needs to be created. */
+  circuit_t *(*circuit_create)(config_t *cfg);
 
-  /* does handshake. Not all protocols have a handshake. */
-  int (*handshake)(void *state,
-                   struct evbuffer *buf);
+  /** Destroy a 'circuit_t'.  */
+  void (*circuit_free)(circuit_t *circuit);
 
-  /* send data function */
-  int (*send)(void *state,
+  /** Perform a connection handshake. Not all protocols have a handshake. */
+  int (*handshake)(conn_t *state, struct evbuffer *buf);
+
+  /** Send data coming downstream from 'source' along to 'dest'. */
+  int (*send)(conn_t *state,
               struct evbuffer *source,
               struct evbuffer *dest);
 
-  /* receive data function */
-  enum recv_ret (*recv)(void *state,
+  /** Receive data from 'source' and pass it upstream to 'dest'. */
+  enum recv_ret (*recv)(conn_t *state,
                         struct evbuffer *source,
                         struct evbuffer *dest);
 
-} protocol_vtable;
+};
+
+/**
+   Use this macro to define protocol_vtable objects; it ensures all
+   the methods are in the correct order and enforces a consistent
+   naming convention on protocol implementations.
+ */
+#define DEFINE_PROTOCOL_VTABLE(name)            \
+  const protocol_vtable name##_vtable = {       \
+    #name,                                      \
+    name##_config_create,                       \
+    name##_config_create_managed,               \
+    name##_config_free,                         \
+    name##_config_get_listen_addrs,             \
+    name##_config_get_target_addr,              \
+    name##_conn_create,                         \
+    name##_conn_free,                           \
+    name##_circuit_create,                      \
+    name##_circuit_free,                        \
+    name##_handshake, name##_send, name##_recv  \
+  }
+
+config_t *config_create(int n_options, const char *const *options);
+config_t *config_create_managed(int is_server, const char *protocol,
+                                const char *bindaddr, const char *orport);
+
+void config_free(config_t *cfg);
+
+struct evutil_addrinfo *config_get_listen_addrs(config_t *cfg, size_t n);
+struct evutil_addrinfo *config_get_target_addr(config_t *cfg);
+
+conn_t *proto_conn_create(config_t *cfg);
+void proto_conn_free(conn_t *conn);
+
+circuit_t *proto_circuit_create(config_t *cfg);
+void proto_circuit_free(circuit_t *conn, config_t *cfg);
+
+
+int proto_handshake(conn_t *conn, void *buf);
+int proto_send(conn_t *conn, void *source, void *dest);
+enum recv_ret proto_recv(conn_t *conn, void *source, void *dest);
+
+extern const protocol_vtable *const supported_protocols[];
+extern const size_t n_supported_protocols;
 
 #endif

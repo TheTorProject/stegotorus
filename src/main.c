@@ -2,49 +2,43 @@
    See LICENSE for other credits and copying information
 */
 
-#include <stdlib.h>
-#include <errno.h>
-#include <stdio.h>
-#include <string.h>
-#include <signal.h>
-
-#include <event2/event.h>
-#include "network.h"
 #include "util.h"
+
+#include "container.h"
+#include "crypt.h"
+#include "network.h"
 #include "protocol.h"
 
-#ifndef __GNUC__
-#define __attribute__(x)
-#endif
+#include "managed.h"
+#include "external.h"
 
-/* The character that seperates multiple listeners in the cli */
-#define SEPARATOR "+"
-/* Totally arbitrary. */
-#define MAXPROTOCOLS 20
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
 
-static void usage(void) __attribute__((noreturn));
-static int handle_obfsproxy_args(const char **argv);
+#include <event2/event.h>
+#include <event2/dns.h>
 
-/* protocol.c */
-extern char *supported_protocols[];
-extern int n_supported_protocols;
+static struct event_base *the_event_base;
+static struct event *sig_int;
+static struct event *sig_term;
 
-static struct event_base *the_event_base=NULL;
+/* Pluggable transport proxy mode. ('External' or 'Managed') */
+static int is_external_proxy=1;
 
 /**
    Prints the obfsproxy usage instructions then exits.
 */
-static void
+void ATTR_NORETURN
 usage(void)
 {
   int i;
-  fprintf(stderr,
-          "Usage: obfsproxy protocol_name [protocol_args] protocol_options %s protocol_name ...\n"
-          "* Available protocols:\n",
-          SEPARATOR);
+  fputs("Usage: obfsproxy protocol_name [protocol_args] protocol_options "
+        "protocol_name ...\n"
+        "* Available protocols:\n", stderr);
   /* this is awful. */
   for (i=0;i<n_supported_protocols;i++)
-    fprintf(stderr,"[%s] ", supported_protocols[i]);
+    fprintf(stderr,"[%s] ", supported_protocols[i]->name);
   fprintf(stderr, "\n* Available arguments:\n"
           "--log-file=<file> ~ set logfile\n"
           "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
@@ -72,7 +66,7 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 
   switch (signum) {
   case SIGINT:
-    free_all_listeners();
+    close_all_listeners();
     if (!got_sigint) {
       log_info("Got SIGINT. Preparing shutdown.");
       start_shutdown(0);
@@ -90,66 +84,57 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 }
 
 /**
-   Stops obfsproxy's event loop.
+   Returns the libevent event base used by obfsproxy.
+*/
+struct event_base *
+get_event_base(void)
+{
+  return the_event_base;
+}
 
-   Final cleanup happens in main().
-*/ 
+/** Stop obfsproxy's event loop. Final cleanup happens in main(). */
 void
 finish_shutdown(void)
 {
+  log_debug("Finishing shutdown.");
   event_base_loopexit(the_event_base, NULL);
 }
 
-/**
-   This function visits 'n_options' command line arguments off 'argv'
-   and writes them in 'options_string'.
-*/
-static void
-populate_options(char **options_string, 
-                 const char **argv, int n_options) 
+/** Return 1 if 'name' is the name of a supported protocol, otherwise 0. */
+int
+is_supported_protocol(const char *name)
 {
-  int g;
-  for (g=0;g<=n_options-1;g++)
-    options_string[g] = (char*) argv[g];
+  int i;
+  for (i = 0; i < n_supported_protocols; i++)
+    if (!strcmp(name, supported_protocols[i]->name))
+      return 1;
+
+  return 0;
 }
 
 /**
-   Return 0 if 'name' is the nmae of a supported protocol, otherwise
-   return -1.
-*/
-static int
-is_supported_protocol(const char *name) {
-  int f;
-  for (f=0;f<n_supported_protocols;f++) {
-    if (!strcmp(name,supported_protocols[f])) 
-      return 0;
-  }
-  return -1;
-}
+   Receives 'argv' and scans for any obfsproxy optional arguments and
+   tries to set them in effect.
 
-/**
-   Receives argv[1] as 'argv' and scans from thereafter for any
-   obfsproxy optional arguments and tries to set them in effect.
-   
    If it succeeds it returns the number of argv arguments its caller
    should skip to get past the optional arguments we already handled.
    If it fails, it exits obfsproxy.
 */
 static int
-handle_obfsproxy_args(const char **argv)
+handle_obfsproxy_args(const char *const *argv)
 {
   int logmethod_set=0;
   int logsev_set=0;
-  int i=0;
+  int i=1;
 
-  while (argv[i] && 
+  while (argv[i] &&
          !strncmp(argv[i],"--",2)) {
     if (!strncmp(argv[i], "--log-file=", 11)) {
       if (logmethod_set) {
-        log_warn("You've already set a log file!"); 
+        log_warn("You've already set a log file!");
         exit(1);
       }
-      if (log_set_method(LOG_METHOD_FILE, 
+      if (log_set_method(LOG_METHOD_FILE,
                          (char *)argv[i]+11) < 0) {
         log_warn("Failed creating logfile.");
         exit(1);
@@ -161,7 +146,7 @@ handle_obfsproxy_args(const char **argv)
         exit(1);
       }
       if (log_set_min_severity((char *)argv[i]+19) < 0) {
-        log_warn("Error at setting logging severity"); 
+        log_warn("Error at setting logging severity");
         exit(1);
       }
       logsev_set=1;
@@ -171,10 +156,21 @@ handle_obfsproxy_args(const char **argv)
           exit(1);
         }
         if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
-          printf("Error at setting logging severity.\n"); 
+          printf("Error at setting logging severity.\n");
           exit(1);
         }
         logsev_set=1;
+    } else if (!strncmp(argv[i], "--managed", 10)) {
+      if (logsev_set) {
+        printf("You can't combine --managed with other log options.\n");
+        exit(1);
+      }
+      if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
+        printf("Error at setting logging severity.\n");
+        exit(1);
+      }
+      logsev_set=1;
+      is_external_proxy=0;
     } else {
       log_warn("Unrecognizable obfsproxy argument '%s'", argv[i]);
       exit(1);
@@ -185,166 +181,36 @@ handle_obfsproxy_args(const char **argv)
   return i;
 }
 
-static void
-die_oom(void)
+/**
+   Initialize basic components of obfsproxy.
+*/
+void
+obfsproxy_init()
 {
-  log_warn("Memory allocation failed: %s",strerror(errno));
-  exit(1);
-}
-
-int
-main(int argc, const char **argv)
-{
-  struct event *sig_int;
-  struct event *sig_term;
-
-  /* Yes, these are three stars right there. This is an array of
-     arrays of strings! Every element of the array is an array of
-     strings that contains all the options of a protocol.
-     At runtime it should look like this:
-     char protocol_options[<number of protocols>][<number of options>][<length of option>]
-  */
-  char ***protocol_options = NULL;
-  /* This is an array of integers! Each integer is the number of
-     options of the respective protocol. */
-  int *n_options_array = NULL;
-  /* This is an integer! It contains the number of protocols that we
-     managed to recognize, by their protocol name.  Of course it's not
-     the *actual* actual_protocols since some of them could have wrong
-     options or arguments, but this will be resolved per-protocol by
-     set_up_protocol(). */
-  int actual_protocols=0;
-
-  int start;
-  int end;
-  int n_options;
-  void *realloc_temp;
-  int i;
-
-  /* The number of protocols. */
-  unsigned int n_protocols=1;
-  /* An array which holds the position in argv of the command line
-     options for each protocol. */
-  unsigned int *protocols=NULL;
-  /* keeps track of allocated space for the protocols array */ 
-  unsigned int n_alloc;
-
-  if (argc < 2) {
-    usage();
-  }
-
-  /** "Points" to the first argv string after the optional obfsproxy
-      arguments. Normally this should be where the protocols start. */
-  int start_of_protocols;
-  /** Handle optional obfsproxy arguments. */
-  start_of_protocols = handle_obfsproxy_args(&argv[1]);
-
-  protocols = calloc(sizeof(int), (n_protocols+1));
-  if (!protocols)
-    die_oom();
-  n_alloc = n_protocols+1;
-
-  /* Populate protocols and calculate n_protocols. */
-  for (i=start_of_protocols;i<argc;i++) {
-    if (!strcmp(argv[i],SEPARATOR)) {
-      protocols[n_protocols] = i;
-      n_protocols++;
-
-      /* Do we need to expand the protocols array? */
-      if (n_alloc <= n_protocols) {
-        n_alloc *= 2;
-        realloc_temp = realloc(protocols, sizeof(int)*(n_alloc));
-        if (!realloc_temp)
-          die_oom();
-        protocols = realloc_temp;
-      }
-    }
-  }
-
-  /* protocols[0] points right before the first option of the first
-     protocol. */
-  protocols[0] = start_of_protocols;
-  /* protocols[n_protocols] points right after the last command line
-     option. */
-  protocols[n_protocols] = argc;
-
-  log_debug("Found %d protocol(s).", n_protocols);
-
-  /* We now allocate enough space for our parsing adventures.
-     We first allocate space for n_protocols pointers in protocol_options,
-     that point to arrays carrying the options of the protocols.
-     Finally, we allocate enough space on the n_options_array so that
-     we can put the number of options there.
-  */ 
-  protocol_options = calloc(sizeof(char**), n_protocols);
-  if (!protocol_options)
-    die_oom();
-  n_options_array = calloc(sizeof(int), n_protocols);
-  if (!n_options_array)
-    die_oom();
-
-  /* Iterate through protocols. */
-  for (i=0;i<n_protocols;i++) {
-    log_debug("Parsing protocol %d.", i+1);
-    /* This "points" to the first argument of this protocol in argv. */
-    start = protocols[i]+1;
-    /* This "points" to the last argument of this protocol in argv. */
-    end = protocols[i+1]-1;
-    /* This is the number of options of this protocol. */
-    n_options = end-start+1;
-
-    if (start >= end) {
-      log_warn("No protocol options were given on protocol %d.", i+1);
-      continue;
-    }
-
-    /* First option should be protocol_name. See if we support it. */
-    if (is_supported_protocol(argv[start])<0) {
-      log_warn("We don't support protocol: %s", argv[start]); 
-      continue;
-    }
-
-    actual_protocols++;
-
-    /* Allocate space for the array carrying the options of this
-       protocol. */
-    protocol_options[actual_protocols-1] = 
-      calloc(sizeof(char*), (n_options));
-    if (!protocol_options[actual_protocols-1])
-      die_oom();
-
-    /* Write the number of options to the correct place in n_options_array[]. */
-    n_options_array[actual_protocols-1] = n_options;
-  
-    /* Finally! Let's fill protocol_options. */
-    populate_options(protocol_options[actual_protocols-1],
-                     &argv[start], n_options);
-  }
-
-  /* Excellent. Now we should have protocol_options populated with all
-     the protocol options we got from the user. */
-
-  /*  Ugly method to fix a Windows problem:
-      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
+  /* Ugly method to fix a Windows problem:
+     http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
 #ifdef _WIN32
   WSADATA wsaData;
   WSAStartup(0x101, &wsaData);
 #endif
 
+  /* Initialize crypto */
+  if (initialize_crypto() < 0) {
+    log_error("Failed to initialize cryptography.");
+  }
+
   /* Initialize libevent */
   the_event_base = event_base_new();
   if (!the_event_base) {
-    log_warn("Can't initialize Libevent; failing");
-    return 1;
+    log_error("Failed to initialize networking.");
   }
 
   /* ASN should this happen only when SOCKS is enabled? */
-  if (init_evdns_base(the_event_base) < 0) {
-    log_warn("Can't initialize evdns; failing");
-    return 1;
+  if (init_evdns_base(the_event_base)) {
+    log_error("Failed to initialize DNS resolver.");
   }
-  
-  /* Handle signals */
+
+  /* Handle signals. */
 #ifdef SIGPIPE
    signal(SIGPIPE, SIG_IGN);
 #endif
@@ -353,59 +219,47 @@ main(int argc, const char **argv)
   sig_term = evsignal_new(the_event_base, SIGTERM,
                           handle_signal_cb, NULL);
   if (event_add(sig_int,NULL) || event_add(sig_term,NULL)) {
-    log_warn("We can't even add events for signals! Exiting.");
-    return 1;
+    log_error("Failed to initialize signal handling.");
   }
+}
 
-  /*Let's open a new listener for each protocol. */ 
-  int h;
-  listener_t *temp_listener;
-  int n_listeners=0;
-  protocol_params_t *proto_params=NULL;
-  for (h=0;h<actual_protocols;h++) {
-    log_debug("Spawning listener %d!", h+1);
-
-    /** normally free'd in listener_free() */
-    proto_params = calloc(1, sizeof(protocol_params_t));
-    if (set_up_protocol(n_options_array[h],protocol_options[h],
-                        proto_params)<0) {
-      free(proto_params);
-      free(protocol_options[h]);
-      continue;
-    }
-
-    temp_listener = listener_new(the_event_base, proto_params);
-
-    /** Free the space allocated for this protocol's options. */
-    free(protocol_options[h]);
-
-    if (!temp_listener)
-      continue;
-
-    log_info("Succesfully created listener %d.", h+1);
-
-    n_listeners++;
-  }
-
-  log_debug("From the original %d protocols only %d "
-            "were parsed from main.c. In the end only "
-            "%d survived.",
-            n_protocols, actual_protocols,n_listeners);
-
-  /* run the event loop if at least a listener was created. */
-  if (n_listeners)
-    event_base_dispatch(the_event_base);
-
+/**
+   Clean the mess that obfsproxy made all over this computer's memory.
+*/
+void
+obfsproxy_cleanup()
+{
+  /* We have landed. */
   log_info("Exiting.");
 
+  close_all_listeners();
+  evdns_base_free(get_evdns_base(), 0);
+  event_free(sig_int);
+  event_free(sig_term);
+  event_base_free(get_event_base());
+
+  cleanup_crypto();
   close_obfsproxy_logfile();
+}
 
-  free_all_listeners(); /* free all listeners in our listener dll */
 
-  /* We are exiting. Clean everything. */
-  free(protocol_options);
-  free(n_options_array);
-  free(protocols);
+/** Entry point */
+int
+obfs_main(int argc, const char *const *argv)
+{
+  const char *const *begin;
+
+  /* Handle optional obfsproxy arguments. */
+  begin = argv + handle_obfsproxy_args(argv);
+
+  if (is_external_proxy) {
+    if (launch_external_proxy(begin) < 0)
+      return 1;
+  } else {
+    if (launch_managed_proxy() < 0)
+      return 1;
+  }
 
   return 0;
 }
+

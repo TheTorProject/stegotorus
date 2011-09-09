@@ -4,9 +4,9 @@
    LibTomCrypt, version 1.6.  Tor uses it on platforms where OpenSSL doesn't
    have a SHA256. */
 
+#include "util.h"
+
 #include "sha256.h"
-#include <assert.h>
-#include <string.h>
 #include <arpa/inet.h> /* for htonl/ntohl */
 
 #define STMT_BEGIN do {
@@ -23,7 +23,7 @@ get_uint32(const void *ptr)
   memcpy(&val, ptr, 4);
   return val;
 }
-#define LTC_ARGCHK(x) assert((x))
+#define LTC_ARGCHK(x) obfs_assert(x)
 
 #define CRYPT_OK 0
 #define CRYPT_NOP -1

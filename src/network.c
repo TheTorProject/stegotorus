@@ -2,60 +2,115 @@
    See LICENSE for other credits and copying information
 */
 
+#include "util.h"
+
 #define NETWORK_PRIVATE
 #include "network.h"
 
-#include "util.h"
+#include "container.h"
 #include "main.h"
 #include "socks.h"
 #include "protocol.h"
 
-#include <assert.h>
 #include <errno.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
+#include <event2/bufferevent_struct.h>
 #include <event2/listener.h>
-#include <event2/util.h>
 
-#ifdef _WIN32
-#include <ws2tcpip.h>  /* socklen_t */
-#endif
+/* Terminology used in this file:
 
-/** Doubly linked list holding all our listeners. */
-static dll_t listener_list = DLL_INIT();
+   A "connection" is a bidirectional communications channel, usually
+   backed by a network socket, and represented in this layer by a
+   'conn_t', wrapping a 'struct bufferevent'.
 
-struct listener_t {
-  dll_node_t dll_node;
+   A "circuit" is a _pair_ of connections, referred to as the
+   "upstream" and "downstream" connections.  A circuit is represented
+   by a 'circuit_t'.  The upstream connection of a circuit
+   communicates in cleartext with the higher-level program that wishes
+   to make use of our obfuscation service.  The downstream connection
+   commmunicates in an obfuscated fashion with the remote peer that
+   the higher-level client wishes to contact.
+
+   A "listener" is a listening socket bound to a particular
+   obfuscation protocol, represented in this layer by a 'listener_t'
+   and its 'config_t'.  Connecting to a listener creates one
+   connection of a circuit, and causes this program to initiate the
+   other connection (possibly after receiving in-band instructions
+   about where to connect to).  A listener is said to be a "client"
+   listener if connecting to it creates the _upstream_ connection, and
+   a "server" listener if connecting to it creates the _downstream_
+   connection.
+
+   There are two kinds of client listeners: a "simple" client listener
+   always connects to the same remote peer every time it needs to
+   initiate a downstream connection; a "socks" client listener can be
+   told to connect to an arbitrary remote peer using the SOCKS protocol
+   (version 4 or 5).
+*/
+
+/**
+  This struct defines the state of a listener on a particular address.
+ */
+typedef struct listener_t {
+  config_t *cfg;
   struct evconnlistener *listener;
-  protocol_params_t *proto_params;
-};
+  char *address;
+} listener_t;
 
-/** Doubly linked list holding all connections. */
-static dll_t conn_list = DLL_INIT();
-/** Active connection counter */
-static int n_connections=0;
+/** All our listeners. */
+static smartlist_t *listeners;
+
+/** All active connections.  */
+static smartlist_t *connections;
 
 /** Flag toggled when obfsproxy is shutting down. It blocks new
     connections and shutdowns when the last connection is closed. */
 static int shutting_down=0;
 
-static void simple_listener_cb(struct evconnlistener *evcl,
-   evutil_socket_t fd, struct sockaddr *sourceaddr, int socklen, void *arg);
+static void listener_free(listener_t *lsn);
+
+static void listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
+                        struct sockaddr *sourceaddr, int socklen,
+                        void *closure);
+
+static void simple_client_listener_cb(conn_t *conn);
+static void socks_client_listener_cb(conn_t *conn);
+static void simple_server_listener_cb(conn_t *conn);
 
 static void conn_free(conn_t *conn);
-static void close_all_connections(void);
+static void conn_free_on_flush(struct bufferevent *bev, void *arg);
 
-static void close_conn_on_flush(struct bufferevent *bev, void *arg);
-static void plaintext_read_cb(struct bufferevent *bev, void *arg);
+static void circuit_create_socks(conn_t *up);
+static int circuit_add_down(circuit_t *circuit, conn_t *down);
+static void circuit_free(circuit_t *circuit);
+static conn_t *open_outbound(conn_t *conn, bufferevent_data_cb readcb);
+
+static void upstream_read_cb(struct bufferevent *bev, void *arg);
+static void downstream_read_cb(struct bufferevent *bev, void *arg);
 static void socks_read_cb(struct bufferevent *bev, void *arg);
-/* ASN Changed encrypted_read_cb() to obfuscated_read_cb(), it sounds
-   a bit more obfsproxy generic. I still don't like it though. */
-static void obfuscated_read_cb(struct bufferevent *bev, void *arg);
-static void input_event_cb(struct bufferevent *bev, short what, void *arg);
-static void output_event_cb(struct bufferevent *bev, short what, void *arg);
+
+static void error_cb(struct bufferevent *bev, short what, void *arg);
+static void flush_error_cb(struct bufferevent *bev, short what, void *arg);
+static void pending_conn_cb(struct bufferevent *bev, short what, void *arg);
+static void pending_socks_cb(struct bufferevent *bev, short what, void *arg);
+
+/**
+   Return the evconnlistener that uses 'cfg'.
+*/
+struct evconnlistener *
+get_evconnlistener_by_config(config_t *cfg)
+{
+  obfs_assert(listeners);
+
+  SMARTLIST_FOREACH_BEGIN(listeners, listener_t *, l) {
+    if (l->cfg == cfg)
+      return l->listener;
+  } SMARTLIST_FOREACH_END(l);
+
+  return NULL;
+}
 
 /**
    Puts obfsproxy's networking subsystem on "closing time" mode. This
@@ -64,93 +119,87 @@ static void output_event_cb(struct bufferevent *bev, short what, void *arg);
 
    If 'barbaric' is set, we forcefully close all open connections and
    finish shutdown.
-   
+
    (Only called by signal handlers)
 */
 void
 start_shutdown(int barbaric)
 {
+  log_debug("Beginning %s shutdown.", barbaric ? "barbaric" : "normal");
+
   if (!shutting_down)
     shutting_down=1;
 
-  if (!n_connections) {
+  if (!connections) {
     finish_shutdown();
-    return;
+  } else if (smartlist_len(connections) == 0) {
+    smartlist_free(connections);
+    connections = NULL;
+    finish_shutdown();
+  } else if (barbaric) {
+    while (connections) /* last conn_free() will free connections smartlist */
+      conn_free(smartlist_get(connections,0));
   }
-
-  if (barbaric) {
-    if (n_connections)
-      close_all_connections();
-    return;
-  }
-}  
-
-/**
-   Closes all open connections.
-*/ 
-static void
-close_all_connections(void)
-{
-  /** Traverse the dll and close all connections */
-  while (conn_list.head) {
-    conn_t *conn = DOWNCAST(conn_t, dll_node, conn_list.head);
-    conn_free(conn); /* removes it */
-  }
-  assert(!n_connections);
 }
-/**
-   This function spawns a listener according to the 'proto_params'.
 
-   Returns the listener on success, NULL on fail.
-*/
-listener_t *
-listener_new(struct event_base *base,
-             protocol_params_t *proto_params)
+/**
+   This function opens listening sockets configured according to the
+   provided 'config_t'.
+   Returns 1 on success, 0 on failure.
+ */
+int
+open_listeners(struct event_base *base, config_t *cfg)
 {
   const unsigned flags =
     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE;
+  size_t i;
+  listener_t *lsn;
+  struct evutil_addrinfo *addrs;
 
-  listener_t *lsn = calloc(1, sizeof(listener_t));
-  if (!lsn) {
-    if (proto_params)
-      free(proto_params);
-    return NULL;
+  /* If we don't have a listener list, create one now. */
+  if (!listeners)
+    listeners = smartlist_create();
+
+  for (i = 0; ; i++) {
+    addrs = config_get_listen_addrs(cfg, i);
+    if (!addrs) break;
+    do {
+      lsn = xzalloc(sizeof(listener_t));
+      lsn->cfg = cfg;
+      lsn->address = printable_address(addrs->ai_addr, addrs->ai_addrlen);
+      lsn->listener =
+        evconnlistener_new_bind(base, listener_cb, lsn, flags, -1,
+                                addrs->ai_addr, addrs->ai_addrlen);
+
+      if (!lsn->listener) {
+        log_warn("Failed to open listening socket on %s: %s",
+                 lsn->address,
+                 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+        listener_free(lsn);
+        return 0;
+      }
+
+      smartlist_add(listeners, lsn);
+      log_debug("Now listening on %s for protocol %s.",
+                lsn->address, cfg->vtable->name);
+
+      addrs = addrs->ai_next;
+    } while (addrs);
   }
 
-  /** If we don't have a connection dll, create one now. */
-  lsn->proto_params = proto_params;
-
-  lsn->listener = evconnlistener_new_bind(base, simple_listener_cb, lsn,
-                                          flags,
-                                          -1,
-                                          proto_params->listen_address,
-                                          proto_params->listen_address_len);
-
-  if (!lsn->listener) {
-    log_warn("Failed to create listener!");
-    listener_free(lsn);
-    return NULL;
-  }
-
-  dll_append(&listener_list, &lsn->dll_node);
-
-  return lsn;
+  return 1;
 }
 
 /**
    Deallocates listener_t 'lsn'.
 */
-void
+static void
 listener_free(listener_t *lsn)
 {
   if (lsn->listener)
     evconnlistener_free(lsn->listener);
-  if (lsn->proto_params)
-    proto_params_free(lsn->proto_params);
-
-  dll_remove(&listener_list, &lsn->dll_node);
-
-  memset(lsn, 0xb0, sizeof(listener_t));
+  if (lsn->address)
+    free(lsn->address);
   free(lsn);
 }
 
@@ -158,132 +207,125 @@ listener_free(listener_t *lsn)
    Frees all active listeners.
 */
 void
-free_all_listeners(void)
+close_all_listeners(void)
 {
-  static int called_already=0;
-
-  if (called_already)
+  if (!listeners)
     return;
-
   log_info("Closing all listeners.");
 
-  /* Iterate listener doubly linked list and free them all. */
-  while (listener_list.head) {
-    listener_t *listener = DOWNCAST(listener_t, dll_node, listener_list.head);
-    listener_free(listener);
-  }
-
-  called_already++;
+  SMARTLIST_FOREACH(listeners, listener_t *, lsn,
+                    { listener_free(lsn); });
+  smartlist_free(listeners);
+  listeners = NULL;
 }
 
 /**
-   This function is called when a new connection is received.
+   This function is called when any listener receives a connection.
+ */
+static void
+listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
+            struct sockaddr *peeraddr, int peerlen,
+            void *closure)
+{
+  struct event_base *base = evconnlistener_get_base(evcl);
+  listener_t *lsn = closure;
+  char *peername = printable_address(peeraddr, peerlen);
+  conn_t *conn = proto_conn_create(lsn->cfg);
+  struct bufferevent *buf = bufferevent_socket_new(base, fd,
+                                                   BEV_OPT_CLOSE_ON_FREE);
 
-   It initializes the protocol we are using, sets up the necessary
-   callbacks for input/output and does the protocol handshake.
+  if (!conn || !buf) {
+    log_warn("%s: failed to set up new connection from %s.",
+             lsn->address, peername);
+    if (buf)
+      bufferevent_free(buf);
+    else
+      evutil_closesocket(fd);
+    if (conn)
+      proto_conn_free(conn);
+    free(peername);
+    return;
+  }
+
+  if (!connections)
+    connections = smartlist_create();
+  smartlist_add(connections, conn);
+  log_debug("%s: new connection from %s (%d total)", lsn->address, peername,
+            smartlist_len(connections));
+
+  conn->peername = peername;
+  conn->buffer = buf;
+  switch (conn->mode) {
+  case LSN_SIMPLE_CLIENT: simple_client_listener_cb(conn); break;
+  case LSN_SOCKS_CLIENT:  socks_client_listener_cb(conn);  break;
+  case LSN_SIMPLE_SERVER: simple_server_listener_cb(conn); break;
+  default:
+    obfs_abort();
+  }
+}
+
+/**
+   This function is called when an upstream client connects to us in
+   simple client mode.
 */
 static void
-simple_listener_cb(struct evconnlistener *evcl,
-                   evutil_socket_t fd, struct sockaddr *sourceaddr, 
-                   int socklen, void *arg)
+simple_client_listener_cb(conn_t *conn)
 {
-  listener_t *lsn = arg;
-  struct event_base *base;
-  conn_t *conn = calloc(1, sizeof(conn_t));
+  obfs_assert(conn);
+  obfs_assert(conn->mode == LSN_SIMPLE_CLIENT);
+  log_debug("%s: simple client connection", conn->peername);
 
-  n_connections++; /* If we call conn_free() later on error, it will decrement
-                    * n_connections.  Therefore, we had better increment it at
-                    * the start. */
+  bufferevent_setcb(conn->buffer, upstream_read_cb, NULL, error_cb, conn);
 
-  if (!conn)
-    goto err;
-
-  log_debug("Got a connection attempt.");
-
-  conn->mode = lsn->proto_params->mode;
-
-  conn->proto = proto_new(lsn->proto_params);
-  if (!conn->proto) {
-    log_warn("Creation of protocol object failed! Closing connection.");
-    goto err;
-  }
-
-  if (conn->mode == LSN_SOCKS_CLIENT) {
-    /* Construct SOCKS state. */
-    conn->socks_state = socks_state_new();
-    if (!conn->socks_state)
-      goto err;
-  }
-
-  /* New bufferevent to wrap socket we received. */
-  base = evconnlistener_get_base(lsn->listener);
-  conn->input = bufferevent_socket_new(base,
-                                       fd,
-                                       BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->input)
-    goto err;
-  fd = -1; /* prevent double-close */
-
-  if (conn->mode == LSN_SIMPLE_SERVER) {
-    bufferevent_setcb(conn->input,
-                      obfuscated_read_cb, NULL, input_event_cb, conn);
-  } else if (conn->mode == LSN_SIMPLE_CLIENT) {
-    bufferevent_setcb(conn->input,
-                      plaintext_read_cb, NULL, input_event_cb, conn);
-  } else {
-    assert(conn->mode == LSN_SOCKS_CLIENT);
-    bufferevent_setcb(conn->input,
-                      socks_read_cb, NULL, input_event_cb, conn);
-  }
-
-  bufferevent_enable(conn->input, EV_READ|EV_WRITE);
-
-  /* New bufferevent to connect to the target address */
-  conn->output = bufferevent_socket_new(base,
-                                        -1,
-                                        BEV_OPT_CLOSE_ON_FREE);
-  if (!conn->output)
-    goto err;
-
-  if (conn->mode == LSN_SIMPLE_SERVER)
-    bufferevent_setcb(conn->output,
-                      plaintext_read_cb, NULL, output_event_cb, conn);
-  else
-    bufferevent_setcb(conn->output,
-                      obfuscated_read_cb, NULL, output_event_cb, conn);
-
-  /* Queue output right now. */
-  struct bufferevent *encrypted =
-    conn->mode == LSN_SIMPLE_SERVER ? conn->input : conn->output;
-
-  /* ASN Will all protocols need to handshake here? Don't think so. */
-  if (proto_handshake(conn->proto,
-                      bufferevent_get_output(encrypted))<0)
-    goto err;
-
-  if (conn->mode == LSN_SIMPLE_SERVER || conn->mode == LSN_SIMPLE_CLIENT) {
-    /* Launch the connect attempt. */
-    if (bufferevent_socket_connect(conn->output,
-                                   lsn->proto_params->target_address,
-                                   lsn->proto_params->target_address_len)<0)
-      goto err;
-
-    bufferevent_enable(conn->output, EV_READ|EV_WRITE);
-  }
-
-  /* add conn to the linked list of connections */
-  if (dll_append(&conn_list, &conn->dll_node)<0)
-    goto err;
-
-  log_debug("Connection setup completed. "
-            "We currently have %d connections!", n_connections);
-
-  return;
- err:
-  if (conn)
+  if (circuit_create(conn, open_outbound(conn, downstream_read_cb))) {
     conn_free(conn);
-  if (fd >= 0)
-    evutil_closesocket(fd);
+    return;
+  }
+
+  log_debug("%s: setup complete", conn->peername);
+}
+
+/**
+   This function is called when an upstream client connects to us in
+   socks mode.
+*/
+static void
+socks_client_listener_cb(conn_t *conn)
+{
+  obfs_assert(conn);
+  obfs_assert(conn->mode == LSN_SOCKS_CLIENT);
+  log_debug("%s: socks client connection", conn->peername);
+
+  circuit_create_socks(conn);
+
+  bufferevent_setcb(conn->buffer, socks_read_cb, NULL, error_cb, conn);
+  bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
+
+  /* Do not create a circuit at this time; the socks handler will do
+     it after it learns the remote peer address. */
+
+  log_debug("%s: setup complete", conn->peername);
+}
+
+/**
+   This function is called when a remote client connects to us in
+   server mode.
+*/
+static void
+simple_server_listener_cb(conn_t *conn)
+{
+  obfs_assert(conn);
+  obfs_assert(conn->mode == LSN_SIMPLE_SERVER);
+  log_debug("%s: server connection", conn->peername);
+
+  bufferevent_setcb(conn->buffer, downstream_read_cb, NULL, error_cb, conn);
+
+  if (circuit_create(open_outbound(conn, upstream_read_cb), conn)) {
+    conn_free(conn);
+    return;
+  }
+
+  log_debug("%s: setup complete", conn->peername);
 }
 
 /**
@@ -292,269 +334,557 @@ simple_listener_cb(struct evconnlistener *evcl,
 static void
 conn_free(conn_t *conn)
 {
-  if (conn->proto)
-    proto_destroy(conn->proto);
-  if (conn->socks_state)
-    socks_state_free(conn->socks_state);
-  if (conn->input)
-    bufferevent_free(conn->input);
-  if (conn->output)
-    bufferevent_free(conn->output);
+  if (conn->circuit)
+    circuit_free(conn->circuit); /* will recurse and take care of us */
+  else {
+    if (connections) {
+      smartlist_remove(connections, conn);
+      log_debug("Closing connection with %s; %d remaining",
+                conn->peername, smartlist_len(connections));
+    }
+    if (conn->peername)
+      free(conn->peername);
+    if (conn->buffer)
+      bufferevent_free(conn->buffer);
+    proto_conn_free(conn);
 
-  /* remove conn from the linked list of connections */
-  dll_remove(&conn_list, &conn->dll_node);
-  n_connections--;
-
-  memset(conn, 0x99, sizeof(conn_t));
-  free(conn);
-
-  assert(n_connections>=0);
-  log_debug("Connection destroyed. "
-            "We currently have %d connections!", n_connections);
-
-  /** If this was the last connection AND we are shutting down,
-      finish shutdown. */
-  if (!n_connections && shutting_down) {
-    finish_shutdown();
+    /* If this was the last connection AND we are shutting down,
+       finish shutdown. */
+    if (shutting_down && connections && smartlist_len(connections) == 0) {
+      smartlist_free(connections);
+      connections = NULL;
+      finish_shutdown();
+    }
   }
 }
 
 /**
    Closes associated connection if the output evbuffer of 'bev' is
    empty.
-*/ 
+*/
 static void
-close_conn_on_flush(struct bufferevent *bev, void *arg)
+conn_free_on_flush(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
+  log_debug("%s for %s", __func__, conn->peername);
 
-  if (0 == evbuffer_get_length(bufferevent_get_output(bev)))
+  if (evbuffer_get_length(bufferevent_get_output(bev)) == 0)
     conn_free(conn);
 }
 
-/** 
-    This callback is responsible for handling SOCKS traffic. 
+int
+circuit_create(conn_t *up, conn_t *down)
+{
+  if (!up || !down)
+    return -1;
+
+  obfs_assert(up->cfg == down->cfg);
+
+  circuit_t *r = proto_circuit_create(up->cfg);
+  r->upstream = up;
+  r->downstream = down;
+  up->circuit = r;
+  down->circuit = r;
+  return 0;
+}
+
+static void
+circuit_create_socks(conn_t *up)
+{
+  obfs_assert(up);
+
+  circuit_t *r = proto_circuit_create(up->cfg);
+  r->upstream = up;
+  r->socks_state = socks_state_new();
+  up->circuit = r;
+}
+
+static int
+circuit_add_down(circuit_t *circuit, conn_t *down)
+{
+  if (!down)
+    return -1;
+  circuit->downstream = down;
+  down->circuit = circuit;
+  return 0;
+}
+
+static void
+circuit_free(circuit_t *circuit)
+{
+  /* keep the cfg so that we can use its vtable for proto_circuit_free() */
+  config_t *cfg = circuit->upstream->cfg;
+  obfs_assert(cfg);
+
+  /* break the circular references before deallocating each side */
+  circuit->upstream->circuit = NULL;
+  conn_free(circuit->upstream);
+  if (circuit->downstream) {
+    circuit->downstream->circuit = NULL;
+    conn_free(circuit->downstream);
+  }
+  if (circuit->socks_state)
+    socks_state_free(circuit->socks_state);
+
+  proto_circuit_free(circuit, cfg);
+}
+
+/**
+   Make the outbound connection for a circuit.
+*/
+static conn_t *
+open_outbound(conn_t *conn, bufferevent_data_cb readcb)
+{
+  struct evutil_addrinfo *addr = config_get_target_addr(conn->cfg);
+  struct event_base *base = bufferevent_get_base(conn->buffer);
+  struct bufferevent *buf;
+  char *peername;
+  conn_t *newconn;
+
+  if (!addr) {
+    log_warn("%s: no target addresses available", conn->peername);
+    return NULL;
+  }
+
+  buf = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!buf) {
+    log_warn("%s: unable to create outbound socket buffer", conn->peername);
+    return NULL;
+  }
+
+  newconn = proto_conn_create(conn->cfg);
+  if (!conn) {
+    log_warn("%s: failed to allocate state for outbound connection",
+             conn->peername);
+    bufferevent_free(buf);
+    return NULL;
+  }
+
+  newconn->buffer = buf;
+  bufferevent_setcb(buf, readcb, NULL, pending_conn_cb, newconn);
+
+  do {
+    peername = printable_address(addr->ai_addr, addr->ai_addrlen);
+    log_info("%s (%s): trying to connect to %s",
+             conn->peername, conn->cfg->vtable->name, peername);
+    if (bufferevent_socket_connect(buf, addr->ai_addr, addr->ai_addrlen) >= 0)
+      goto success;
+    log_info("%s: connection to %s failed: %s",
+             conn->peername, peername,
+             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    free(peername);
+    addr = addr->ai_next;
+  } while (addr);
+
+  log_warn("%s: all outbound connection attempts failed",
+           conn->peername);
+
+  conn_free(newconn);
+  return NULL;
+
+ success:
+  bufferevent_enable(buf, EV_READ|EV_WRITE);
+  newconn->peername = peername;
+  obfs_assert(connections);
+  smartlist_add(connections, newconn);
+  return newconn;
+}
+
+/**
+   As open_outbound, but uses bufferevent_socket_connect_hostname
+   rather than bufferevent_socket_connect.
+*/
+static conn_t *
+open_outbound_hostname(conn_t *conn, int af, const char *addr, int port)
+{
+  struct event_base *base = bufferevent_get_base(conn->buffer);
+  struct bufferevent *buf;
+  conn_t *newconn;
+
+  buf = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!buf) {
+    log_warn("%s: unable to create outbound socket buffer", conn->peername);
+    return NULL;
+  }
+  newconn = proto_conn_create(conn->cfg);
+  if (!conn) {
+    log_warn("%s: failed to allocate state for outbound connection",
+             conn->peername);
+    bufferevent_free(buf);
+    return NULL;
+  }
+  newconn->buffer = buf;
+  bufferevent_setcb(buf, downstream_read_cb, NULL, pending_socks_cb, newconn);
+  if (bufferevent_socket_connect_hostname(buf, get_evdns_base(),
+                                          af, addr, port) < 0) {
+    log_warn("%s: outbound connection to %s:%d failed: %s",
+             conn->peername, addr, port,
+             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    conn_free(newconn);
+    return NULL;
+  }
+
+  bufferevent_enable(buf, EV_READ|EV_WRITE);
+  obfs_assert(connections);
+  smartlist_add(connections, newconn);
+  return newconn;
+}
+
+/**
+    This callback is responsible for handling SOCKS traffic.
 */
 static void
 socks_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
-  //struct bufferevent *other;
+  socks_state_t *socks;
   enum socks_ret socks_ret;
-  assert(bev == conn->input); /* socks must be on the initial bufferevent */
 
+  log_debug("%s: %s", conn->peername, __func__);
+  obfs_assert(conn->circuit);
+  obfs_assert(conn->circuit->socks_state);
+  socks = conn->circuit->socks_state;
 
   do {
-    enum socks_status_t status = socks_state_get_status(conn->socks_state);
+    enum socks_status_t status = socks_state_get_status(socks);
     if (status == ST_SENT_REPLY) {
       /* We shouldn't be here. */
-      assert(0);
+      obfs_abort();
     } else if (status == ST_HAVE_ADDR) {
       int af, r, port;
       const char *addr=NULL;
-      r = socks_state_get_address(conn->socks_state, &af, &addr, &port);
-      assert(r==0);
-      r = bufferevent_socket_connect_hostname(conn->output,
-                                              get_evdns_base(),
-                                              af, addr, port);
-      bufferevent_enable(conn->output, EV_READ|EV_WRITE);
-      log_debug("socket_connect_hostname said %d! (%s,%d)", r, addr, port);
-
-      if (r < 0) {
+      r = socks_state_get_address(socks, &af, &addr, &port);
+      obfs_assert(r==0);
+      log_info("%s: socks: trying to connect to %s:%u",
+               conn->peername, addr, port);
+      if (circuit_add_down(conn->circuit,
+                           open_outbound_hostname(conn, af, addr, port))) {
         /* XXXX send socks reply */
         conn_free(conn);
         return;
       }
-      bufferevent_disable(conn->input, EV_READ|EV_WRITE);
-      /* ignore data XXX */
+      /* further upstream data will be processed once the downstream
+         side is established */
+      bufferevent_disable(conn->buffer, EV_READ|EV_WRITE);
       return;
     }
 
     socks_ret = handle_socks(bufferevent_get_input(bev),
-                     bufferevent_get_output(bev), conn->socks_state);
+                             bufferevent_get_output(bev),
+                             socks);
   } while (socks_ret == SOCKS_GOOD);
 
   if (socks_ret == SOCKS_INCOMPLETE)
     return; /* need to read more data. */
   else if (socks_ret == SOCKS_BROKEN)
-    conn_free(conn); /* XXXX maybe send socks reply */
+    conn_free(conn); /* XXXX send socks reply */
   else if (socks_ret == SOCKS_CMD_NOT_CONNECT) {
     bufferevent_enable(bev, EV_WRITE);
     bufferevent_disable(bev, EV_READ);
-    socks5_send_reply(bufferevent_get_output(bev), conn->socks_state,
+    socks5_send_reply(bufferevent_get_output(bev), socks,
                       SOCKS5_FAILED_UNSUPPORTED);
     bufferevent_setcb(bev, NULL,
-                      close_conn_on_flush, output_event_cb, conn);
+                      conn_free_on_flush, flush_error_cb, conn);
     return;
   }
 }
 
 /**
-   This callback is responsible for handling plaintext traffic.
-*/
+   This callback is responsible for handling "upstream" traffic --
+   traffic coming in from the higher-level client or server that needs
+   to be obfuscated and transmitted.
+ */
 static void
-plaintext_read_cb(struct bufferevent *bev, void *arg)
+upstream_read_cb(struct bufferevent *bev, void *arg)
 {
-  conn_t *conn = arg;
-  struct bufferevent *other;
-  other = (bev == conn->input) ? conn->output : conn->input;
+  conn_t *up = arg;
+  conn_t *down;
+  log_debug("%s: %s, %lu bytes available", up->peername, __func__,
+            (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
-  log_debug("Got data on plaintext side");
-  if (proto_send(conn->proto,
-                 bufferevent_get_input(bev),
-                 bufferevent_get_output(other)) < 0)
-    conn_free(conn);
+  obfs_assert(up->buffer == bev);
+  obfs_assert(up->circuit);
+  obfs_assert(up->circuit->downstream);
+  obfs_assert(up->circuit->is_open);
+  obfs_assert(!up->circuit->is_flushing);
+
+  down = up->circuit->downstream;
+  if (proto_send(up,
+                 bufferevent_get_input(up->buffer),
+                 bufferevent_get_output(down->buffer))) {
+    log_debug("%s: error during transmit.", up->peername);
+    conn_free(up);
+  }
+  log_debug("%s: transmitted %lu bytes", down->peername,
+            (unsigned long)
+            evbuffer_get_length(bufferevent_get_output(down->buffer)));
 }
 
 /**
-   This callback is responsible for handling obfusacted 
-   traffic -- traffic that has already been obfuscated 
-   by our protocol.
-*/
+   This callback is responsible for handling "downstream" traffic --
+   traffic coming in from our remote peer that needs to be deobfuscated
+   and passed to the upstream client or server.
+ */
 static void
-obfuscated_read_cb(struct bufferevent *bev, void *arg)
+downstream_read_cb(struct bufferevent *bev, void *arg)
 {
-  conn_t *conn = arg;
-  struct bufferevent *other;
-  other = (bev == conn->input) ? conn->output : conn->input;
+  conn_t *down = arg;
+  conn_t *up;
   enum recv_ret r;
 
-  log_debug("Got data on encrypted side");
-  r = proto_recv(conn->proto,
-                 bufferevent_get_input(bev),
-                 bufferevent_get_output(other));
+  log_debug("%s: %s, %lu bytes available", down->peername, __func__,
+            (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
-  if (r == RECV_BAD)
-    conn_free(conn);
-  else if (r == RECV_SEND_PENDING)
-    proto_send(conn->proto,
-               bufferevent_get_input(conn->input),
-               bufferevent_get_output(conn->output));
+  obfs_assert(down->buffer == bev);
+  obfs_assert(down->circuit);
+  obfs_assert(down->circuit->upstream);
+  obfs_assert(down->circuit->is_open);
+  obfs_assert(!down->circuit->is_flushing);
+  up = down->circuit->upstream;
+
+
+  r = proto_recv(down,
+                 bufferevent_get_input(down->buffer),
+                 bufferevent_get_output(up->buffer));
+
+  if (r == RECV_BAD) {
+    log_debug("%s: error during receive.", down->peername);
+    conn_free(down);
+  } else {
+    log_debug("%s: forwarded %lu bytes", down->peername,
+              (unsigned long)
+              evbuffer_get_length(bufferevent_get_output(up->buffer)));
+    if (r == RECV_SEND_PENDING) {
+      log_debug("%s: reply of %lu bytes", down->peername,
+                (unsigned long)
+                evbuffer_get_length(bufferevent_get_input(up->buffer)));
+      if (proto_send(up,
+                     bufferevent_get_input(up->buffer),
+                     bufferevent_get_output(down->buffer)) < 0) {
+        log_debug("%s: error during reply.", down->peername);
+        conn_free(down);
+      }
+      log_debug("%s: transmitted %lu bytes", down->peername,
+                (unsigned long)
+                evbuffer_get_length(bufferevent_get_output(down->buffer)));
+    }
+  }
 }
 
 /**
-   Something broke in our connection or we reached EOF.
+   Something broke one side of the connection, or we reached EOF.
    We prepare the connection to be closed ASAP.
-*/
+ */
 static void
-error_or_eof(conn_t *conn,
-             struct bufferevent *bev_err, struct bufferevent *bev_flush)
+error_or_eof(conn_t *conn)
 {
-  log_debug("error_or_eof");
+  circuit_t *circ = conn->circuit;
+  struct bufferevent *bev_err = conn->buffer;
+  struct bufferevent *bev_flush;
 
-  if (conn->flushing || ! conn->is_open ||
-      0 == evbuffer_get_length(bufferevent_get_output(bev_flush))) {
+  log_debug("%s for %s", __func__, conn->peername);
+  if (!circ || !circ->upstream || !circ->downstream || !circ->is_open
+      || circ->is_flushing) {
     conn_free(conn);
     return;
   }
 
-  conn->flushing = 1;
+  bev_flush = (conn == circ->upstream) ? circ->downstream->buffer
+                                       : circ->upstream->buffer;
+  if (evbuffer_get_length(bufferevent_get_output(bev_flush)) == 0) {
+    conn_free(conn);
+    return;
+  }
+
+  circ->is_flushing = 1;
+
   /* Stop reading and writing; wait for the other side to flush if it has
    * data. */
   bufferevent_disable(bev_err, EV_READ|EV_WRITE);
-  bufferevent_disable(bev_flush, EV_READ);
+  bufferevent_setcb(bev_err, NULL, NULL, flush_error_cb, conn);
 
-  bufferevent_setcb(bev_flush, NULL,
-                    close_conn_on_flush, output_event_cb, conn);
-  bufferevent_enable(bev_flush, EV_WRITE);
+  /* XXX Dirty access to bufferevent guts.  There appears to be no
+     official API to retrieve the callback functions and/or change
+     just one callback while leaving the others intact. */
+  bufferevent_setcb(bev_flush, bev_flush->readcb,
+                    conn_free_on_flush, flush_error_cb, conn);
 }
 
 /**
-   We land in here when an event happens on conn->input.
+   Called when an "event" happens on an already-connected socket.
+   This can only be an error or EOF.
 */
 static void
-input_event_cb(struct bufferevent *bev, short what, void *arg)
+error_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
-  assert(bev == conn->input);
+  int errcode = EVUTIL_SOCKET_ERROR();
+  log_debug("%s for %s: what=0x%04x errno=%d", __func__, conn->peername,
+            what, errcode);
 
-  if (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
-    log_warn("Got error: %s",
-           evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-    error_or_eof(conn, bev, conn->output);
-  }
-  /* XXX we don't expect any other events */
-}
+  /* It should be impossible to get here with BEV_EVENT_CONNECTED. */
+  obfs_assert(!(what & BEV_EVENT_CONNECTED));
 
-/**
-   We land in here when an event happens on conn->output.
-*/
-static void
-output_event_cb(struct bufferevent *bev, short what, void *arg)
-{
-  conn_t *conn = arg;
-  assert(bev == conn->output);
-
-  /**
-     If we got the BEV_EVENT_ERROR flag *AND* we are in socks mode
-     *AND* we are in the ST_HAVE_ADDR state, chances are that we
-     failed connecting to the host requested by the CONNECT call. This
-     means that we should send a negative SOCKS reply back to the
-     client and terminate the connection.
-  */
   if (what & BEV_EVENT_ERROR) {
-    if ((conn->mode == LSN_SOCKS_CLIENT) &&
-        (conn->socks_state) &&
-        (socks_state_get_status(conn->socks_state) == ST_HAVE_ADDR)) {
-      log_debug("Connection failed") ;
-      /* Enable EV_WRITE so that we can send the response.
-         Disable EV_READ so that we don't get more stuff from the client. */
-      bufferevent_enable(conn->input, EV_WRITE);
-      bufferevent_disable(conn->input, EV_READ);
-      socks_send_reply(conn->socks_state, bufferevent_get_output(conn->input),
-                       evutil_socket_geterror(bufferevent_getfd(bev)));
-      bufferevent_setcb(conn->input, NULL,
-                        close_conn_on_flush, output_event_cb, conn);
+    log_warn("Error talking to %s: %s",
+             conn->peername,
+             evutil_socket_error_to_string(errcode));
+  } else if (what & BEV_EVENT_EOF) {
+    log_info("EOF from %s", conn->peername);
+  } else if (what & BEV_EVENT_TIMEOUT) {
+    log_info("Timeout talking to %s", conn->peername);
+  }
+  error_or_eof(conn);
+}
+
+/**
+   Called when an event happens on a socket that's in the process of
+   being flushed and closed.  As above, this can only be an error.
+*/
+static void
+flush_error_cb(struct bufferevent *bev, short what, void *arg)
+{
+  conn_t *conn = arg;
+  int errcode = EVUTIL_SOCKET_ERROR();
+  log_debug("%s for %s: what=0x%04x errno=%d", __func__, conn->peername,
+            what, errcode);
+
+  /* It should be impossible to get here with BEV_EVENT_CONNECTED. */
+  obfs_assert(!(what & BEV_EVENT_CONNECTED));
+
+  obfs_assert(conn->circuit);
+  obfs_assert(conn->circuit->is_flushing);
+
+  log_warn("Error during flush of connection with %s: %s",
+           conn->peername,
+           evutil_socket_error_to_string(errcode));
+  conn_free(conn);
+  return;
+}
+
+/**
+   Called when an event happens on a socket that's still waiting to
+   be connected.  We expect to get BEV_EVENT_CONNECTED, which
+   indicates that the connection is now open, but we might also get
+   errors as above.
+*/
+static void
+pending_conn_cb(struct bufferevent *bev, short what, void *arg)
+{
+  conn_t *conn = arg;
+  log_debug("%s: %s", conn->peername, __func__);
+
+  /* Upon successful connection, enable traffic on both sides of the
+     connection, and replace this callback with the regular error_cb */
+  if (what & BEV_EVENT_CONNECTED) {
+    circuit_t *circ = conn->circuit;
+    obfs_assert(circ);
+    obfs_assert(!circ->is_flushing);
+
+    circ->is_open = 1;
+
+    log_debug("%s: Successful connection", conn->peername);
+
+    /* Queue handshake, if any. */
+    if (proto_handshake(circ->downstream,
+                        bufferevent_get_output(circ->downstream->buffer))<0) {
+      log_debug("%s: Error during handshake", conn->peername);
+      conn_free(conn);
       return;
     }
-  }
 
-  /**
-     If the connection is terminating *OR* if we got a BEV_EVENT_ERROR
-     but we don't match the case above, we most probably have to close
-     this connection soon.
-  */
-  if (conn->flushing || (what & (BEV_EVENT_EOF|BEV_EVENT_ERROR))) {
-    log_warn("Got error: %s",
-           evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-    error_or_eof(conn, bev, conn->input);
+    bufferevent_setcb(circ->upstream->buffer,
+                      upstream_read_cb, NULL, error_cb, circ->upstream);
+    bufferevent_setcb(circ->downstream->buffer,
+                      downstream_read_cb, NULL, error_cb, circ->downstream);
+
+    bufferevent_enable(circ->upstream->buffer, EV_READ|EV_WRITE);
+    bufferevent_enable(circ->downstream->buffer, EV_READ|EV_WRITE);
     return;
   }
 
-  /**
-     If we got the BEV_EVENT_CONNECTED flag it means that a connection
-     request was succesfull and normally that should have been off a
-     CONNECT request by the SOCKS client. If that's the case we should
-     send a happy response to the client and switch to start serving
-     our pluggable transport protocol.
-  */
-  if (what & BEV_EVENT_CONNECTED) {
-    /* woo, we're connected.  Now the input buffer can start reading. */
-    conn->is_open = 1;
-    log_debug("Connection done") ;
-    bufferevent_enable(conn->input, EV_READ|EV_WRITE);
-    if (conn->mode == LSN_SOCKS_CLIENT) {
-      struct sockaddr_storage ss;
-      struct sockaddr *sa = (struct sockaddr*)&ss;
-      socklen_t slen = sizeof(&ss);
-      assert(conn->socks_state);
-      if (getpeername(bufferevent_getfd(bev), sa, &slen) == 0) {
-        /* Figure out where we actually connected to so that we can tell the
-         * socks client */
-        socks_state_set_address(conn->socks_state, sa);
-      }
-      socks_send_reply(conn->socks_state,
-                       bufferevent_get_output(conn->input), 0);
-      /* we sent a socks reply.  We can finally move over to being a regular
-         input bufferevent. */
-      socks_state_free(conn->socks_state);
-      conn->socks_state = NULL;
-      bufferevent_setcb(conn->input,
-                        plaintext_read_cb, NULL, input_event_cb, conn);
-      if (evbuffer_get_length(bufferevent_get_input(conn->input)) != 0)
-        obfuscated_read_cb(bev, conn->input);
+  /* Otherwise, must be an error */
+  error_cb(bev, what, arg);
+}
+
+/**
+   Called when an event happens on a socket in socks mode.
+   Both connections and errors are possible; must generate
+   appropriate socks messages on the upstream side.
+ */
+static void
+pending_socks_cb(struct bufferevent *bev, short what, void *arg)
+{
+  conn_t *down = arg;
+  circuit_t *circ = down->circuit;
+  conn_t *up;
+  socks_state_t *socks;
+
+  log_debug("%s: %s", down->peername, __func__);
+
+  obfs_assert(circ);
+  obfs_assert(circ->upstream);
+  obfs_assert(circ->socks_state);
+  obfs_assert(circ->downstream == down);
+
+  up = circ->upstream;
+  socks = circ->socks_state;
+
+  /* If we got an error while in the ST_HAVE_ADDR state, chances are
+     that we failed connecting to the host requested by the CONNECT
+     call. This means that we should send a negative SOCKS reply back
+     to the client and terminate the connection.
+     XXX properly distinguish BEV_EVENT_EOF from BEV_EVENT_ERROR;
+     errno isn't meaningful in that case...  */
+  if ((what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT))) {
+    int err = EVUTIL_SOCKET_ERROR();
+    log_warn("Connection error: %s", evutil_socket_error_to_string(err));
+    if (socks_state_get_status(socks) == ST_HAVE_ADDR) {
+      socks_send_reply(socks, bufferevent_get_output(up->buffer), err);
     }
+    error_or_eof(down);
     return;
   }
-  /* XXX we don't expect any other events */
+
+  /* Additional work to do for BEV_EVENT_CONNECTED: send a happy
+     response to the client and switch to the actual obfuscated
+     protocol handlers. */
+  if (what & BEV_EVENT_CONNECTED) {
+    struct sockaddr_storage ss;
+    struct sockaddr *sa = (struct sockaddr*)&ss;
+    socklen_t slen = sizeof(&ss);
+
+    obfs_assert(!circ->is_flushing);
+
+    /* Figure out where we actually connected to, and tell the socks client */
+    if (getpeername(bufferevent_getfd(bev), sa, &slen) == 0) {
+      socks_state_set_address(socks, sa);
+      if (!down->peername)
+        down->peername = printable_address(sa, slen);
+    }
+    socks_send_reply(socks, bufferevent_get_output(up->buffer), 0);
+
+    /* Switch to regular upstream behavior. */
+    socks_state_free(socks);
+    circ->socks_state = NULL;
+    circ->is_open = 1;
+    log_debug("%s: Successful outbound connection to %s",
+              up->peername, down->peername);
+
+    bufferevent_setcb(up->buffer, upstream_read_cb, NULL, error_cb, up);
+    bufferevent_setcb(down->buffer, downstream_read_cb, NULL, error_cb, down);
+    bufferevent_enable(up->buffer, EV_READ|EV_WRITE);
+    bufferevent_enable(down->buffer, EV_READ|EV_WRITE);
+
+    /* Queue handshake, if any. */
+    if (proto_handshake(down, bufferevent_get_output(down->buffer))) {
+      log_debug("%s: Error during handshake", down->peername);
+      conn_free(down);
+      return;
+    }
+
+    if (evbuffer_get_length(bufferevent_get_input(up->buffer)) > 0)
+      upstream_read_cb(up->buffer, up);
+    return;
+  }
 }

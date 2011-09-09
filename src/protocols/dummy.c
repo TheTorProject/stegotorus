@@ -2,152 +2,218 @@
    See LICENSE for other credits and copying information
 */
 
-#include "dummy.h"
-#include "../protocol.h"
-#include "../util.h"
+#include "util.h"
 
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#define PROTOCOL_DUMMY_PRIVATE
+#include "dummy.h"
 
 #include <event2/buffer.h>
 
-static int dummy_send(void *nothing,
-                      struct evbuffer *source, struct evbuffer *dest);
-static enum recv_ret dummy_recv(void *nothing, struct evbuffer *source,
-                                struct evbuffer *dest);
-static void usage(void);
-static int parse_and_set_options(int n_options, char **options,
-                                 struct protocol_params_t *params);
+/* type-safe downcast wrappers */
+static inline dummy_config_t *
+downcast_config(config_t *p)
+{
+  return DOWNCAST(dummy_config_t, super, p);
+}
 
-static protocol_vtable *vtable=NULL;
+static inline dummy_conn_t *
+downcast_conn(conn_t *p)
+{
+  return DOWNCAST(dummy_conn_t, super, p);
+}
+
+static inline dummy_circuit_t *
+downcast_circuit(circuit_t *p)
+{
+  return DOWNCAST(dummy_circuit_t, super, p);
+}
 
 /**
-   This function populates 'params' according to 'options' and sets up
-   the protocol vtable.
-
-   'options' is an array like this:
-   {"dummy","socks","127.0.0.1:6666"}
+   Helper: Parses 'options' and fills 'cfg'.
 */
-int
-dummy_init(int n_options, char **options,
-           struct protocol_params_t *params)
+static int
+parse_and_set_options(int n_options, const char *const *options,
+                      dummy_config_t *cfg)
 {
-  if (parse_and_set_options(n_options,options,params) < 0) {
-    usage();
+  const char* defport;
+
+  if (n_options < 1)
     return -1;
+
+  if (!strcmp(options[0], "client")) {
+    defport = "48988"; /* bf5c */
+    cfg->mode = LSN_SIMPLE_CLIENT;
+  } else if (!strcmp(options[0], "socks")) {
+    defport = "23548"; /* 5bf5 */
+    cfg->mode = LSN_SOCKS_CLIENT;
+  } else if (!strcmp(options[0], "server")) {
+    defport = "11253"; /* 2bf5 */
+    cfg->mode = LSN_SIMPLE_SERVER;
+  } else
+    return -1;
+
+  if (n_options != (cfg->mode == LSN_SOCKS_CLIENT ? 2 : 3))
+      return -1;
+
+  cfg->listen_addr = resolve_address_port(options[1], 1, 1, defport);
+  if (!cfg->listen_addr)
+    return -1;
+
+  if (cfg->mode != LSN_SOCKS_CLIENT) {
+    cfg->target_addr = resolve_address_port(options[2], 1, 0, NULL);
+    if (!cfg->target_addr)
+      return -1;
   }
-
-  /* XXX memleak. */
-  vtable = calloc(1, sizeof(protocol_vtable));
-  if (!vtable)
-    return -1;
-
-  vtable->destroy = NULL;
-  vtable->create = dummy_new;
-  vtable->handshake = NULL;
-  vtable->send = dummy_send;
-  vtable->recv = dummy_recv;
 
   return 0;
 }
 
-/**
-   Helper: Parses 'options' and fills 'params'.
-*/ 
-static int
-parse_and_set_options(int n_options, char **options,
-                      struct protocol_params_t *params)
+/* Deallocate 'cfg'. */
+static void
+dummy_config_free(config_t *c)
 {
-  const char* defport;
-
-  if (n_options != 3)
-    return -1;
-
-  assert(!strcmp(options[0],"dummy"));
-  params->proto = DUMMY_PROTOCOL;
-
-  if (!strcmp(options[1], "client")) {
-    defport = "48988"; /* bf5c */
-    params->mode = LSN_SIMPLE_CLIENT;
-  } else if (!strcmp(options[1], "socks")) {
-    defport = "23548"; /* 5bf5 */
-    params->mode = LSN_SOCKS_CLIENT;
-  } else if (!strcmp(options[1], "server")) {
-    defport = "11253"; /* 2bf5 */
-    params->mode = LSN_SIMPLE_SERVER;
-  } else
-    return -1;
-
-  if (resolve_address_port(options[2], 1, 1,
-                           &params->listen_address,
-                           &params->listen_address_len, defport) < 0) {
-    log_warn("addr");
-    return -1;
-  }
-
-  return 1;
+  dummy_config_t *cfg = downcast_config(c);
+  if (cfg->listen_addr)
+    evutil_freeaddrinfo(cfg->listen_addr);
+  if (cfg->target_addr)
+    evutil_freeaddrinfo(cfg->target_addr);
+  free(cfg);
 }
 
 /**
-   Prints dummy protocol usage information.
+   Populate 'cfg' according to 'options', which is an array like this:
+   {"socks","127.0.0.1:6666"}
 */
-static void
-usage(void)
+static config_t *
+dummy_config_create(int n_options, const char *const *options)
 {
-  printf("Great... You can't even form a dummy protocol line:\n"
-         "dummy syntax:\n"
-         "\tdummy dummy_opts\n"
-         "\t'dummy_opts':\n"
-         "\t\tmode ~ server|client|socks\n"
-         "\t\tlisten address ~ host:port\n"
-         "Example:\n"
-         "\tobfsproxy dummy socks 127.0.0.1:5000\n");
+  dummy_config_t *cfg = xzalloc(sizeof(dummy_config_t));
+  cfg->super.vtable = &dummy_vtable;
+
+  if (parse_and_set_options(n_options, options, cfg) == 0)
+    return &cfg->super;
+
+  dummy_config_free(&cfg->super);
+  log_warn("dummy syntax:\n"
+           "\tdummy <mode> <listen_address> [<target_address>]\n"
+           "\t\tmode ~ server|client|socks\n"
+           "\t\tlisten_address, target_address ~ host:port\n"
+           "\ttarget_address is required for server and client mode,\n"
+           "\tand forbidden for socks mode.\n"
+           "Examples:\n"
+           "\tobfsproxy dummy socks 127.0.0.1:5000\n"
+           "\tobfsproxy dummy client 127.0.0.1:5000 192.168.1.99:11253\n"
+           "\tobfsproxy dummy server 192.168.1.99:11253 127.0.0.1:9005");
+  return NULL;
+}
+
+/**
+   Return a config_t for a managed proxy listener.
+*/
+static config_t *
+dummy_config_create_managed(int is_server, const char *protocol,
+                            const char *bindaddr, const char *orport)
+{
+  const char* defport;
+
+  dummy_config_t *cfg = xzalloc(sizeof(dummy_config_t));
+  cfg->super.vtable = &dummy_vtable;
+
+  if (is_server) {
+    defport = "11253"; /* 2bf5 */
+    cfg->mode = LSN_SIMPLE_SERVER;
+  } else {
+    defport = "23548"; /* 5bf5 */
+    cfg->mode = LSN_SOCKS_CLIENT;
+  }
+
+  cfg->listen_addr = resolve_address_port(bindaddr, 1, 1, defport);
+  if (!cfg->listen_addr)
+    goto err;
+
+  if (is_server) {
+    cfg->target_addr = resolve_address_port(orport, 1, 0, NULL);
+    if (!cfg->target_addr)
+      goto err;
+  }
+
+  return &cfg->super;
+
+ err:
+  dummy_config_free(&cfg->super);
+  return NULL;
+}
+
+/** Retrieve the 'n'th set of listen addresses for this configuration. */
+static struct evutil_addrinfo *
+dummy_config_get_listen_addrs(config_t *cfg, size_t n)
+{
+  if (n > 0)
+    return 0;
+  return downcast_config(cfg)->listen_addr;
+}
+
+/* Retrieve the target address for this configuration. */
+static struct evutil_addrinfo *
+dummy_config_get_target_addr(config_t *cfg)
+{
+  return downcast_config(cfg)->target_addr;
 }
 
 /*
   This is called everytime we get a connection for the dummy
   protocol.
-
-  It sets up the protocol vtable in 'proto_struct'.
 */
-void *
-dummy_new(struct protocol_t *proto_struct,
-          struct protocol_params_t *params)
-{
-  proto_struct->vtable = vtable;
 
-  /* Dodging state check.
-     This is terrible I know.*/
-  return (void *)666U;
+static conn_t *
+dummy_conn_create(config_t *cfg)
+{
+  dummy_conn_t *proto = xzalloc(sizeof(dummy_conn_t));
+  proto->super.cfg = cfg;
+  proto->super.mode = downcast_config(cfg)->mode;
+  return &proto->super;
 }
 
-/**
-   Responsible for sending data according to the dummy protocol.
+static void
+dummy_conn_free(conn_t *proto)
+{
+  free(downcast_conn(proto));
+}
 
-   The dummy protocol just puts the data of 'source' in 'dest'.
-*/
+static circuit_t *
+dummy_circuit_create(config_t *cfg)
+{
+  dummy_circuit_t *circuit = xzalloc(sizeof(dummy_circuit_t));
+  return &circuit->super;
+}
+
+static void
+dummy_circuit_free(circuit_t *circ)
+{
+  free(downcast_circuit(circ));
+}
+
+/** Dummy has no handshake */
 static int
-dummy_send(void *nothing,
-           struct evbuffer *source, struct evbuffer *dest) {
-  (void)nothing;
+dummy_handshake(conn_t *proto, struct evbuffer *buf)
+{
+  return 0;
+}
 
+/** send, receive - just copy */
+static int
+dummy_send(conn_t *proto, struct evbuffer *source, struct evbuffer *dest)
+{
   return evbuffer_add_buffer(dest,source);
 }
 
-/*
-  Responsible for receiving data according to the dummy protocol.
-
-  The dummy protocol just puts the data of 'source' into 'dest'.
-*/
 static enum recv_ret
-dummy_recv(void *nothing,
-           struct evbuffer *source, struct evbuffer *dest) {
-  (void)nothing;
-
+dummy_recv(conn_t *proto, struct evbuffer *source, struct evbuffer *dest)
+{
   if (evbuffer_add_buffer(dest,source)<0)
     return RECV_BAD;
   else
     return RECV_GOOD;
 }
+
+DEFINE_PROTOCOL_VTABLE(dummy);

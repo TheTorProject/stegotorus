@@ -2,39 +2,103 @@
    See LICENSE for other credits and copying information
 */
 
+#include "util.h"
+#include "network.h"
 #include "protocol.h"
-#include "protocols/obfs2.h"
+
 #include "protocols/dummy.h"
-
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
-
+#include "protocols/obfs2.h"
 
 /**
     All supported protocols should be put in this array.
     It's used by main.c.
 */
-char *supported_protocols[] = { "obfs2", "dummy" };
-int n_supported_protocols = 2;
+const protocol_vtable *const supported_protocols[] =
+{
+  &dummy_vtable,
+  &obfs2_vtable
+};
+const size_t n_supported_protocols =
+  sizeof(supported_protocols)/sizeof(supported_protocols[0]);
 
 /**
-   This function figures out which protocol we want to set up, and
-   gives 'n_options', 'options' and 'params' to the appropriate
-   protocol-specific initalization function.
-   This function is called once for every listener through the runtime
-   of obfsproxy.
-*/
-int
-set_up_protocol(int n_options, char **options,
-                struct protocol_params_t *params)
+   This function dispatches (by name) creation of a |config_t|
+   to the appropriate protocol-specific initalization function.
+ */
+config_t *
+config_create(int n_options, const char *const *options)
 {
-  if (!strcmp(*options,"dummy"))
-    return dummy_init(n_options, options, params);
-  else if (!strcmp(*options,"obfs2"))
-    return obfs2_init(n_options, options, params);
-  else
-    return -1;
+  size_t i;
+  for (i = 0; i < n_supported_protocols; i++)
+    if (!strcmp(*options, supported_protocols[i]->name))
+      /* Remove the first element of 'options' (which is always the
+         protocol name) from the list passed to the init method. */
+      return supported_protocols[i]->config_create(n_options - 1, options + 1);
+
+  return NULL;
+}
+
+/**
+   Return the transport name for 'cfg'.
+*/
+const char *
+get_transport_name_from_config(config_t *cfg)
+{
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->name);
+
+  return cfg->vtable->name;
+}
+
+/**
+   Create a config_t for a managed proxy listener.
+*/
+config_t *
+config_create_managed(int is_server, const char *protocol,
+                      const char *bindaddr, const char *orport)
+{
+  size_t i;
+  for (i = 0; i < n_supported_protocols; i++)
+    if (!strcmp(protocol, supported_protocols[i]->name)) {
+      /* Remove the first element of 'options' (which is always the
+         protocol name) from the list passed to the init method. */
+      return supported_protocols[i]->config_create_managed(is_server,
+                                                           protocol,
+                                                           bindaddr, orport);
+    }
+
+  return NULL;
+}
+
+/**
+   This function destroys the protocol-specific part of a listener object.
+*/
+void
+config_free(config_t *cfg)
+{
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->config_free);
+  cfg->vtable->config_free(cfg);
+}
+
+struct evutil_addrinfo *
+config_get_listen_addrs(config_t *cfg, size_t n)
+{
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->config_get_listen_addrs);
+  return cfg->vtable->config_get_listen_addrs(cfg, n);
+}
+
+struct evutil_addrinfo *
+config_get_target_addr(config_t *cfg)
+{
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->config_get_target_addr);
+  return cfg->vtable->config_get_target_addr(cfg);
 }
 
 /**
@@ -43,18 +107,13 @@ set_up_protocol(int n_options, char **options,
 
    Return a 'protocol_t' if successful, NULL otherwise.
 */
-struct protocol_t *
-proto_new(protocol_params_t *params) {
-  struct protocol_t *proto = calloc(1, sizeof(struct protocol_t));
-  if (!proto)
-    return NULL;
-
-  if (params->proto == OBFS2_PROTOCOL)
-    proto->state = obfs2_new(proto, params);
-  else if (params->proto == DUMMY_PROTOCOL)
-    proto->state = dummy_new(proto, NULL);
-
-  return proto->state ? proto : NULL;
+conn_t *
+proto_conn_create(config_t *cfg)
+{
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->conn_create);
+  return cfg->vtable->conn_create(cfg);
 }
 
 /**
@@ -62,67 +121,71 @@ proto_new(protocol_params_t *params) {
    Not all protocols have a handshake.
 */
 int
-proto_handshake(struct protocol_t *proto, void *buf) {
-  assert(proto);
-  if (proto->vtable->handshake)
-    return proto->vtable->handshake(proto->state, buf);
-  else /* It's okay with me, protocol didn't have a handshake */
-    return 0;
+proto_handshake(conn_t *conn, void *buf) {
+  obfs_assert(conn);
+  obfs_assert(conn->cfg);
+  obfs_assert(conn->cfg->vtable);
+  obfs_assert(conn->cfg->vtable->handshake);
+  return conn->cfg->vtable->handshake(conn, buf);
 }
 
 /**
    This function is responsible for sending protocol data.
 */
 int
-proto_send(struct protocol_t *proto, void *source, void *dest) {
-  assert(proto);
-  if (proto->vtable->send)
-    return proto->vtable->send(proto->state, source, dest);
-  else
-    return -1;
+proto_send(conn_t *conn, void *source, void *dest) {
+  obfs_assert(conn);
+  obfs_assert(conn->cfg);
+  obfs_assert(conn->cfg->vtable);
+  obfs_assert(conn->cfg->vtable->send);
+  return conn->cfg->vtable->send(conn, source, dest);
 }
 
 /**
    This function is responsible for receiving protocol data.
 */
 enum recv_ret
-proto_recv(struct protocol_t *proto, void *source, void *dest) {
-  assert(proto);
-  if (proto->vtable->recv)
-    return proto->vtable->recv(proto->state, source, dest);
-  else
-    return -1;
+proto_recv(conn_t *conn, void *source, void *dest) {
+  obfs_assert(conn);
+  obfs_assert(conn->cfg);
+  obfs_assert(conn->cfg->vtable);
+  obfs_assert(conn->cfg->vtable->recv);
+  return conn->cfg->vtable->recv(conn, source, dest);
 }
 
 /**
-   This function destroys 'proto'.
+   This function destroys 'conn'.
    It's called everytime we close a connection.
 */
 void
-proto_destroy(struct protocol_t *proto) {
-  assert(proto);
-  assert(proto->state);
-
-  if (proto->vtable->destroy)
-    proto->vtable->destroy(proto->state);
-
-  free(proto);
+proto_conn_free(conn_t *conn) {
+  obfs_assert(conn);
+  obfs_assert(conn->cfg);
+  obfs_assert(conn->cfg->vtable);
+  obfs_assert(conn->cfg->vtable->conn_free);
+  conn->cfg->vtable->conn_free(conn);
 }
 
 /**
-   This function destroys 'params'.
-   It's called everytime we free a listener.
+   This protocol is called everytime a circuit has to be created.
+   Return a circuit_t on success or a NULL on fail.
+*/
+circuit_t *
+proto_circuit_create(config_t *cfg)
+{
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->circuit_create);
+  return cfg->vtable->circuit_create(cfg);
+}
+
+/**
+   This function destroys 'circuit', using the vtable off 'cfg'.
 */
 void
-proto_params_free(protocol_params_t *params)
-{
-  assert(params);
-
-  if (params->target_address)
-    free(params->target_address);
-  if (params->listen_address)
-    free(params->listen_address);
-  if (params->shared_secret)
-    free(params->shared_secret);
-  free(params);
+proto_circuit_free(circuit_t *circuit, config_t *cfg) {
+  obfs_assert(cfg);
+  obfs_assert(cfg->vtable);
+  obfs_assert(cfg->vtable->circuit_free);
+  cfg->vtable->circuit_free(circuit);
 }

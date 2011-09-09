@@ -2,27 +2,19 @@
    See LICENSE for other credits and copying information
 */
 
-#ifndef OBFS2_H
-#define OBFS2_H
+#ifndef PROTOCOL_OBFS2_H
+#define PROTOCOL_OBFS2_H
 
-typedef struct obfs2_state_t obfs2_state_t;
-struct evbuffer;
-struct protocol_t;
-struct protocol_params_t;
-struct listener_t;
+extern const protocol_vtable obfs2_vtable;
 
-int obfs2_init(int n_options, char **options, struct protocol_params_t *params);
-void *obfs2_new(struct protocol_t *proto_struct,
-                struct protocol_params_t *params);
-int parse_and_set_options(int n_options, char **options,
-                          struct protocol_params_t *params);
+#ifdef PROTOCOL_OBFS2_PRIVATE
 
-#ifdef CRYPT_PROTOCOL_PRIVATE
-
-#include "../crypt.h"
+#include "crypt.h"
+#include "protocol.h"
+#include "network.h"
 
 /* ==========
-   These definitions are not part of the crypt_protocol interface.
+   These definitions are not part of the obfs2_protocol interface.
    They're exposed here so that the unit tests can use them.
    ==========
 */
@@ -33,7 +25,6 @@ int parse_and_set_options(int n_options, char **options,
 #define OBFUSCATE_MAGIC_VALUE        0x2BF5CA7E
 #define OBFUSCATE_SEED_LENGTH        16
 #define OBFUSCATE_MAX_PADDING        8192
-#define OBFUSCATE_ZERO_SEED "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 #define OBFUSCATE_HASH_ITERATIONS     100000
 
 #define INITIATOR_PAD_TYPE "Initiator obfuscation padding"
@@ -43,7 +34,7 @@ int parse_and_set_options(int n_options, char **options,
 
 #define SHARED_SECRET_LENGTH SHA256_LENGTH
 
-struct obfs2_state_t {
+typedef struct obfs2_state_t {
   /** Current protocol state.  We start out waiting for key information.  Then
       we have a key and wait for padding to arrive.  Finally, we are sending
       and receiving bytes on the connection.
@@ -76,7 +67,25 @@ struct obfs2_state_t {
 
   /** Number of padding bytes to read before we get to real data */
   int padding_left_to_read;
-};
+} obfs2_state_t;
+
+typedef struct obfs2_config_t {
+  config_t super;
+  struct evutil_addrinfo *listen_addr;
+  struct evutil_addrinfo *target_addr;
+  enum listen_mode mode;
+  uchar shared_secret[SHARED_SECRET_LENGTH];
+} obfs2_config_t;
+
+typedef struct obfs2_conn_t {
+  conn_t super;
+} obfs2_conn_t;
+
+typedef struct obfs2_circuit_t {
+  circuit_t super;
+  obfs2_state_t *state;
+} obfs2_circuit_t;
+
 #endif
 
 #endif

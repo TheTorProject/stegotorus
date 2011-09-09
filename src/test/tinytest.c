@@ -23,13 +23,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "tinytest.h"
 #include "tinytest_macros.h"
 
 #include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -367,3 +363,20 @@ _tinytest_set_test_skipped(void)
 		cur_test_outcome = SKIP;
 }
 
+char *
+tt_base16_encode(const char *value, size_t vlen)
+{
+  static const char hex[] = "0123456789abcdef";
+  char *print = malloc(vlen * 2 + 1);
+  char *p = print;
+  const char *v = value, *vl = value + vlen;
+
+  assert(print);
+  while (v < vl) {
+    unsigned char c = *v++;
+    *p++ = hex[(c >> 4) & 0x0f];
+    *p++ = hex[(c >> 0) & 0x0f];
+  }
+  *p = '\0';
+  return print;
+}
