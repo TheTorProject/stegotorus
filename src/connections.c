@@ -7,7 +7,6 @@
 
 #include "container.h"
 #include "main.h"
-#include "network.h"
 #include "protocol.h"
 #include "socks.h"
 

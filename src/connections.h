@@ -40,6 +40,11 @@ void conn_start_shutdown(int barbaric);
 conn_t *conn_create(config_t *cfg, struct bufferevent *buf,
                     const char *peername);
 
+conn_t *conn_create_outbound(config_t *cfg, struct bufferevent *buf,
+                             struct evutil_addrinfo *addr);
+conn_t *conn_create_outbound_socks(config_t *cfg, struct bufferevent *buf,
+                                   int af, const char *hostname, int port);
+
 /** Close and deallocate a connection.  If the connection is part of a
     circuit, close the other side of that circuit as well. */
 void conn_close(conn_t *conn);
@@ -79,6 +84,8 @@ enum recv_ret conn_recv_eof(conn_t *source);
 /** Squelch further transmissions from SOURCE and discard any pending
     input. */
 void conn_squelch(conn_t *source);
+
+void conn_do_flush(conn_t *conn);
 
 /* The next several conn_t methods are used by steganography modules to
    provide hints about appropriate higher-level behavior.  */
@@ -136,6 +143,9 @@ circuit_t *circuit_create_from_downstream(config_t *cfg, conn_t *down);
 
 int circuit_open_downstream(circuit_t *ckt);
 
+int circuit_connect_to_upstream(circuit_t *ckt, struct bufferevent *buf,
+                                struct evutil_addrinfo *addr);
+
 void circuit_close(circuit_t *ckt);
 void circuit_squelch(circuit_t *ckt);
 
@@ -146,6 +156,7 @@ void circuit_recv_eof(circuit_t *ckt, conn_t *down);
 void circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction);
 void circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
                                  unsigned short direction);
+void circuit_do_flush(circuit_t *ckt);
 
 unsigned long circuit_count(void);
 
