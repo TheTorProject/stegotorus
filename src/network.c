@@ -150,14 +150,23 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
 
   buf = bufferevent_socket_new(lsn->cfg->base, fd, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
-    log_warn("%s: failed to set up new connection from %s",
+    log_warn("%s: failed to create buffer for new connection from %s",
              lsn->address, peername);
     evutil_closesocket(fd);
     free(peername);
     return;
   }
 
-  ckt = circuit_create_from_upstream(lsn->cfg, buf, peername);
+  ckt = circuit_create(lsn->cfg);
+  if (!ckt) {
+    log_warn("%s: failed to create circuit for new connection from %s",
+             lsn->address, peername);
+    bufferevent_free(buf);
+    free(peername);
+    return;
+  }
+
+  circuit_add_upstream(ckt, buf, peername);
   if (is_socks) {
     bufferevent_setcb(buf, socks_read_cb, NULL, upstream_event_cb, ckt);
     /* We can't do anything more till we know where to connect to. */
@@ -181,15 +190,16 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
 {
   listener_t *lsn = closure;
   char *peername = printable_address(peeraddr, peerlen);
-  struct bufferevent *buf = NULL;
-  conn_t *conn = NULL;
+  struct bufferevent *buf;
+  conn_t *conn;
+  circuit_t *ckt;
 
   obfs_assert(lsn->cfg->mode == LSN_SIMPLE_SERVER);
   log_info("%s: new connection to server from %s\n", lsn->address, peername);
 
   buf = bufferevent_socket_new(lsn->cfg->base, fd, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
-    log_warn("%s: failed to set up new connection from %s",
+    log_warn("%s: failed to create buffer for new connection from %s",
              lsn->address, peername);
     evutil_closesocket(fd);
     free(peername);
@@ -197,14 +207,26 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   }
 
   conn = conn_create(lsn->cfg, buf, peername);
-  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_event_cb, conn);
-
-  if (circuit_create_from_downstream(lsn->cfg, conn) == NULL) {
-    log_warn("%s: failed to establish circuit for %s",
+  if (!conn) {
+    log_warn("%s: failed to create connection structure for %s",
              lsn->address, peername);
-    conn_close(conn);
+    bufferevent_free(buf);
+    free(peername);
     return;
   }
+
+  ckt = circuit_create(lsn->cfg);
+  if (!ckt) {
+    log_warn("%s: failed to create circuit structure for %s",
+             lsn->address, peername);
+    conn_close(conn);
+    free(peername);
+    return;
+  }
+
+  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_event_cb, conn);
+  circuit_add_downstream(ckt, conn);
+  circuit_open_upstream(ckt);
 
   /* Queue handshake, if any. */
   if (conn_handshake(conn) < 0) {
@@ -547,10 +569,24 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
    need access to the bufferevent callback functions. */
 
 int
-circuit_connect_to_upstream(circuit_t *ckt, struct bufferevent *buf,
-                            struct evutil_addrinfo *addr)
+circuit_open_upstream(circuit_t *ckt)
 {
+  struct evutil_addrinfo *addr;
+  struct bufferevent *buf;
   char *peername;
+
+  addr = config_get_target_addr(ckt->cfg);
+
+  if (!addr) {
+    log_warn("no target addresses available");
+    return -1;
+  }
+
+  buf = bufferevent_socket_new(ckt->cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!buf) {
+    log_warn("unable to create outbound socket buffer");
+    return -1;
+  }
 
   bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_connect_cb, ckt);
 
@@ -567,13 +603,13 @@ circuit_connect_to_upstream(circuit_t *ckt, struct bufferevent *buf,
 
   } while (addr);
 
-  return 0;
+  bufferevent_free(buf);
+  return -1;
 
  success:
   bufferevent_enable(buf, EV_READ|EV_WRITE);
-  ckt->up_buffer = buf;
-  ckt->up_peer = peername;
-  return 1;
+  circuit_add_upstream(ckt, buf, peername);
+  return 0;
 }
 
 conn_t *

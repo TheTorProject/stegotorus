@@ -137,14 +137,14 @@ struct circuit_t {
   socks_state_t      *socks_state;
 };
 
-circuit_t *circuit_create_from_upstream(config_t *cfg, struct bufferevent *up,
-                                        const char *peer);
-circuit_t *circuit_create_from_downstream(config_t *cfg, conn_t *down);
+circuit_t *circuit_create(config_t *cfg);
 
+void circuit_add_upstream(circuit_t *ckt,
+                          struct bufferevent *buf, const char *peer);
+int circuit_open_upstream(circuit_t *ckt);
+
+void circuit_add_downstream(circuit_t *ckt, conn_t *down);
 int circuit_open_downstream(circuit_t *ckt);
-
-int circuit_connect_to_upstream(circuit_t *ckt, struct bufferevent *buf,
-                                struct evutil_addrinfo *addr);
 
 void circuit_close(circuit_t *ckt);
 void circuit_squelch(circuit_t *ckt);

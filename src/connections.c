@@ -257,16 +257,13 @@ conn_transmit_soon(conn_t *conn, unsigned long timeout)
 /* Circuits. */
 
 circuit_t *
-circuit_create_from_upstream(config_t *cfg, struct bufferevent *up,
-                             const char *peer)
+circuit_create(config_t *cfg)
 {
   circuit_t *ckt;
 
   obfs_assert(!shutting_down);
 
   ckt = cfg->vtable->circuit_create(cfg);
-  ckt->up_buffer = up;
-  ckt->up_peer = peer;
 
   if (cfg->mode == LSN_SOCKS_CLIENT)
     ckt->socks_state = socks_state_new();
@@ -275,40 +272,26 @@ circuit_create_from_upstream(config_t *cfg, struct bufferevent *up,
   return ckt;
 }
 
-circuit_t *
-circuit_create_from_downstream(config_t *cfg, conn_t *down)
+void
+circuit_add_upstream(circuit_t *ckt, struct bufferevent *buf, const char *peer)
 {
-  circuit_t *ckt;
-  struct evutil_addrinfo *addr;
-  struct bufferevent *buf;
+  obfs_assert(!ckt->up_buffer);
+  obfs_assert(!ckt->up_peer);
 
-  obfs_assert(!shutting_down);
+  ckt->up_buffer = buf;
+  ckt->up_peer = peer;
+}
 
-  addr = config_get_target_addr(cfg);
+/* circuit_open_upstream is in network.c */
 
-  if (!addr) {
-    log_warn("%s: no target addresses available", down->peername);
-    return NULL;
-  }
-
-  buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
-  if (!buf) {
-    log_warn("%s: unable to create outbound socket buffer", down->peername);
-    return NULL;
-  }
-
-  ckt = cfg->vtable->circuit_create(cfg);
-
-  if (!circuit_connect_to_upstream(ckt, buf, addr)) {
-    ckt->cfg->vtable->circuit_free(ckt);
-    bufferevent_free(buf);
-    return NULL;
-  }
+void
+circuit_add_downstream(circuit_t *ckt, conn_t *down)
+{
+  obfs_assert(!down->circuit);
+  obfs_assert(!ckt->downstream);
 
   ckt->downstream = down;
   down->circuit = ckt;
-  smartlist_add(circuits, ckt);
-  return ckt;
 }
 
 int
@@ -317,7 +300,6 @@ circuit_open_downstream(circuit_t *ckt)
   conn_t *down;
   struct bufferevent *buf;
 
-  obfs_assert(!shutting_down);
   obfs_assert(ckt->cfg->mode != LSN_SIMPLE_SERVER);
 
   buf = bufferevent_socket_new(ckt->cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
@@ -350,8 +332,7 @@ circuit_open_downstream(circuit_t *ckt)
     return 0;
   }
 
-  ckt->downstream = down;
-  down->circuit = ckt;
+  circuit_add_downstream(ckt, down);
   return 1;
 }
 

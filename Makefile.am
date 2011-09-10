@@ -52,8 +52,8 @@ noinst_HEADERS = \
 	src/container.h \
 	src/crypt.h \
 	src/ht.h \
+	src/listener.h \
 	src/main.h \
-	src/network.h \
 	src/protocol.h \
 	src/rng.h \
 	src/sha256.h \
