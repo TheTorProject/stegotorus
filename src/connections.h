@@ -36,14 +36,13 @@ void conn_initialize(void);
     after conn_start_shutdown has been called. */
 void conn_start_shutdown(int barbaric);
 
-/** Create a new connection from a configuration. */
+/** Create a new inbound connection from a configuration and a
+    bufferevent wrapping a socket. */
 conn_t *conn_create(config_t *cfg, struct bufferevent *buf,
                     const char *peername);
 
-conn_t *conn_create_outbound(config_t *cfg, struct bufferevent *buf,
-                             struct evutil_addrinfo *addr);
-conn_t *conn_create_outbound_socks(config_t *cfg, struct bufferevent *buf,
-                                   int af, const char *hostname, int port);
+/** Create a new outbound connection for a circuit. */
+conn_t *conn_create_outbound(circuit_t *ckt);
 
 /** Close and deallocate a connection.  If the connection is part of a
     circuit, close the other side of that circuit as well. */

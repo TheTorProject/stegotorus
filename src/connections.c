@@ -297,40 +297,9 @@ circuit_add_downstream(circuit_t *ckt, conn_t *down)
 int
 circuit_open_downstream(circuit_t *ckt)
 {
-  conn_t *down;
-  struct bufferevent *buf;
-
-  obfs_assert(ckt->cfg->mode != LSN_SIMPLE_SERVER);
-
-  buf = bufferevent_socket_new(ckt->cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
-  if (!buf) {
-    log_warn("%s: unable to create outbound socket buffer", ckt->up_peer);
+  conn_t *down = conn_create_outbound(ckt);
+  if (!down)
     return 0;
-  }
-
-  if (ckt->cfg->mode == LSN_SIMPLE_CLIENT) {
-    struct evutil_addrinfo *addr = config_get_target_addr(ckt->cfg);
-    if (!addr) {
-      log_warn("%s: no target addresses available", ckt->up_peer);
-      bufferevent_free(buf);
-      return 0;
-    }
-    down = conn_create_outbound(ckt->cfg, buf, addr);
-  } else {
-    const char *hostname;
-    int af, port;
-    if (socks_state_get_address(ckt->socks_state, &af, &hostname, &port)) {
-      log_warn("%s: no SOCKS target available", ckt->up_peer);
-      bufferevent_free(buf);
-      return 0;
-    }
-    down = conn_create_outbound_socks(ckt->cfg, buf, af, hostname, port);
-  }
-
-  if (!down) {
-    bufferevent_free(buf);
-    return 0;
-  }
 
   circuit_add_downstream(ckt, down);
   return 1;

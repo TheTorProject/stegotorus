@@ -613,56 +613,73 @@ circuit_open_upstream(circuit_t *ckt)
 }
 
 conn_t *
-conn_create_outbound(config_t *cfg, struct bufferevent *buf,
-                     struct evutil_addrinfo *addr)
+conn_create_outbound(circuit_t *ckt)
 {
+  config_t *cfg = ckt->cfg;
   char *peername;
+  struct bufferevent *buf;
+  bufferevent_event_cb connect_cb;
   conn_t *conn;
 
-  do {
-    peername = printable_address(addr->ai_addr, addr->ai_addrlen);
-    log_info("Trying to connect to %s", peername);
-    if (bufferevent_socket_connect(buf, addr->ai_addr, addr->ai_addrlen) >= 0)
+  buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!buf) {
+    log_warn("unable to create outbound socket buffer");
+    return NULL;
+  }
+
+  if (cfg->mode == LSN_SIMPLE_CLIENT) {
+    struct evutil_addrinfo *addr = config_get_target_addr(cfg);
+    if (!addr) {
+      log_warn("no target addresses available");
+      goto failure;
+    }
+
+    connect_cb = downstream_connect_cb;
+    do {
+      peername = printable_address(addr->ai_addr, addr->ai_addrlen);
+      log_info("Trying to connect to %s", peername);
+      if (bufferevent_socket_connect(buf,
+                                     addr->ai_addr,
+                                     addr->ai_addrlen) >= 0)
+        goto success;
+
+      log_info("Connection to %s failed: %s", peername,
+               evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+      free(peername);
+      addr = addr->ai_next;
+    } while (addr);
+
+  } else {
+    const char *host;
+    int af, port;
+    struct evdns_base *dns = get_evdns_base();
+
+    obfs_assert(cfg->mode == LSN_SOCKS_CLIENT);
+    if (socks_state_get_address(ckt->socks_state, &af, &host, &port)) {
+      log_warn("no SOCKS target available");
+      goto failure;
+    }
+
+    connect_cb = downstream_socks_connect_cb;
+    peername = NULL;
+    log_info("Trying to connect to %s:%u", host, port);
+    if (bufferevent_socket_connect_hostname(buf, dns, af, host, port) >= 0)
       goto success;
 
-    log_info("Connection to %s failed: %s", peername,
+    log_info("Connection to %s:%d failed: %s", host, port,
              evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-    free(peername);
-    addr = addr->ai_next;
+  }
 
-  } while (addr);
-
+ failure:
+  bufferevent_free(buf);
   return NULL;
 
  success:
   conn = conn_create(cfg, buf, peername);
-  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_connect_cb, conn);
+  bufferevent_setcb(buf, downstream_read_cb, NULL, connect_cb, conn);
   bufferevent_enable(buf, EV_READ|EV_WRITE);
   return conn;
 }
-
-conn_t *
-conn_create_outbound_socks(config_t *cfg, struct bufferevent *buf,
-                           int af, const char *host, int port)
-{
-  conn_t *conn;
-  struct evdns_base *dns = get_evdns_base();
-
-  log_info("Trying to connect to %s:%u", host, port);
-  if (bufferevent_socket_connect_hostname(buf, dns, af, host, port) < 0) {
-    log_warn("Connection to %s:%d failed: %s", host, port,
-             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-    return NULL;
-  }
-
-  /* we don't know the peername yet */
-  conn = conn_create(cfg, buf, NULL);
-  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_socks_connect_cb,
-                    conn);
-  bufferevent_enable(buf, EV_READ|EV_WRITE);
-  return conn;
-}
-
 
 void
 circuit_do_flush(circuit_t *ckt)
