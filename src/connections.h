@@ -143,7 +143,6 @@ void circuit_add_upstream(circuit_t *ckt,
 int circuit_open_upstream(circuit_t *ckt);
 
 void circuit_add_downstream(circuit_t *ckt, conn_t *down);
-int circuit_open_downstream(circuit_t *ckt);
 
 void circuit_close(circuit_t *ckt);
 void circuit_squelch(circuit_t *ckt);

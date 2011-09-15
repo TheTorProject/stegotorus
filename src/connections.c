@@ -267,17 +267,6 @@ circuit_add_downstream(circuit_t *ckt, conn_t *down)
   down->circuit = ckt;
 }
 
-int
-circuit_open_downstream(circuit_t *ckt)
-{
-  conn_t *down = conn_create_outbound(ckt);
-  if (!down)
-    return 0;
-
-  circuit_add_downstream(ckt, down);
-  return 1;
-}
-
 void
 circuit_close(circuit_t *ckt)
 {

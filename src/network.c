@@ -168,15 +168,18 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
 
   circuit_add_upstream(ckt, buf, peername);
   if (is_socks) {
-    bufferevent_setcb(buf, socks_read_cb, NULL, upstream_event_cb, ckt);
     /* We can't do anything more till we know where to connect to. */
     bufferevent_enable(buf, EV_READ|EV_WRITE);
+    bufferevent_setcb(buf, socks_read_cb, NULL, upstream_event_cb, ckt);
   } else {
-    bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_event_cb, ckt);
-    if (!circuit_open_downstream(ckt)) {
+    conn_t *down = conn_create_outbound(ckt);
+    if (!down) {
       log_warn("%s: outbound connection failed", peername);
       circuit_close(ckt);
+      return;
     }
+    circuit_add_downstream(ckt, down);
+    bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_event_cb, ckt);
   }
 }
 
@@ -253,7 +256,11 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 
     if (status == ST_HAVE_ADDR) {
       /* try to open the outbound connection */
-      circuit_open_downstream(ckt);
+      conn_t *down = conn_create_outbound(ckt);
+      if (down)
+        circuit_add_downstream(ckt, down);
+      else
+        circuit_close(ckt); /* XXXX send socks reply */
       return;
     }
 
