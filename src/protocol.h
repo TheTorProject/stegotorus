@@ -76,6 +76,14 @@ struct proto_vtable
   /** Destroy per-connection, protocol-specific state.  */
   void (*conn_free)(conn_t *conn);
 
+  /** Create an upstream circuit for this connection, if it is
+      possible to do so without receiving data from the downstream
+      peer.  If data must be received first, this method should do
+      nothing (but return success), and the |conn_recv| method is
+      responsible for creating the upstream circuit when appropriate.
+      Must return 0 on success, -1 on failure. */
+  int (*conn_maybe_open_upstream)(conn_t *conn);
+
   /** Perform a connection handshake. Not all protocols have a handshake. */
   int (*conn_handshake)(conn_t *conn);
 
@@ -130,6 +138,7 @@ extern const proto_vtable *const supported_protocols[];
     name##_circuit_send,                        \
     name##_conn_create,                         \
     name##_conn_free,                           \
+    name##_conn_maybe_open_upstream,            \
     name##_conn_handshake,                      \
     name##_conn_recv,                           \
     name##_conn_send_eof,                       \
@@ -156,6 +165,7 @@ extern const proto_vtable *const supported_protocols[];
   static int name##_circuit_send(circuit_t *);                          \
   static conn_t *name##_conn_create(config_t *);                        \
   static void name##_conn_free(conn_t *);                               \
+  static int name##_conn_maybe_open_upstream(conn_t *conn);             \
   static int name##_conn_handshake(conn_t *);                           \
   static enum recv_ret name##_conn_recv(conn_t *);                      \
   static int name##_conn_send_eof(conn_t *);                            \

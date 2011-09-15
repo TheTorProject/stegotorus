@@ -59,6 +59,10 @@ static inline struct evbuffer *conn_get_inbound(conn_t *conn)
 static inline struct evbuffer *conn_get_outbound(conn_t *conn)
 { return conn->buffer ? bufferevent_get_output(conn->buffer) : NULL; }
 
+/** Connect to upstream, if it is possible to do so without receiving
+    data from the downstream peer first. */
+int conn_maybe_open_upstream(conn_t *conn);
+
 /** Transmit the protocol-specific handshake message (if any) for a
     connection. */
 int conn_handshake(conn_t *conn);

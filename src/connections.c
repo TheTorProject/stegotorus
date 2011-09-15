@@ -127,6 +127,12 @@ conn_close(conn_t *conn)
 /* Protocol methods of connections. */
 
 int
+conn_maybe_open_upstream(conn_t *conn)
+{
+  return conn->cfg->vtable->conn_maybe_open_upstream(conn);
+}
+
+int
 conn_handshake(conn_t *conn)
 {
   return conn->cfg->vtable->conn_handshake(conn);

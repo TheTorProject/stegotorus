@@ -192,7 +192,6 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   char *peername = printable_address(peeraddr, peerlen);
   struct bufferevent *buf;
   conn_t *conn;
-  circuit_t *ckt;
 
   obfs_assert(lsn->cfg->mode == LSN_SIMPLE_SERVER);
   log_info("%s: new connection to server from %s\n", lsn->address, peername);
@@ -215,18 +214,12 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
     return;
   }
 
-  ckt = circuit_create(lsn->cfg);
-  if (!ckt) {
-    log_warn("%s: failed to create circuit structure for %s",
-             lsn->address, peername);
+  /* If appropriate at this point, connect to upstream. */
+  if (conn_maybe_open_upstream(conn) < 0) {
+    log_debug("%s: Error opening upstream connection", conn->peername);
     conn_close(conn);
-    free(peername);
     return;
   }
-
-  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_event_cb, conn);
-  circuit_add_downstream(ckt, conn);
-  circuit_open_upstream(ckt);
 
   /* Queue handshake, if any. */
   if (conn_handshake(conn) < 0) {
@@ -235,6 +228,7 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
     return;
   }
 
+  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_event_cb, conn);
   bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
 }
 

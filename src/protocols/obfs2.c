@@ -285,6 +285,18 @@ obfs2_conn_free(conn_t *s)
   free(state);
 }
 
+/** Obfs2 inbound-to-outbound connections are 1:1 */
+static int
+obfs2_conn_maybe_open_upstream(conn_t *conn)
+{
+  circuit_t *ckt = circuit_create(conn->cfg);
+  if (!ckt)
+    return -1;
+
+  circuit_add_downstream(ckt, conn);
+  circuit_open_upstream(ckt);
+  return 0;
+}
 
 /**
    Write the initial protocol setup and padding message for state 's' to

@@ -152,6 +152,19 @@ dummy_conn_free(conn_t *c)
   free(downcast_conn(c));
 }
 
+/** Dummy inbound-to-outbound connections are 1:1 */
+static int
+dummy_conn_maybe_open_upstream(conn_t *conn)
+{
+  circuit_t *ckt = circuit_create(conn->cfg);
+  if (!ckt)
+    return -1;
+
+  circuit_add_downstream(ckt, conn);
+  circuit_open_upstream(ckt);
+  return 0;
+}
+
 /** Dummy has no handshake */
 static int
 dummy_conn_handshake(conn_t *c)

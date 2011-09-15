@@ -169,6 +169,21 @@ x_dsteg_conn_free(conn_t *c)
   free(conn);
 }
 
+/** FIXME: Whether or not inbound-to-outbound connections are 1:1
+    depends on the steg module we're wrapping.  Treat it as always so
+    for now.  */
+static int
+x_dsteg_conn_maybe_open_upstream(conn_t *conn)
+{
+  circuit_t *ckt = circuit_create(conn->cfg);
+  if (!ckt)
+    return -1;
+
+  circuit_add_downstream(ckt, conn);
+  circuit_open_upstream(ckt);
+  return 0;
+}
+
 /** Dsteg has no handshake */
 static int
 x_dsteg_conn_handshake(conn_t *conn)
