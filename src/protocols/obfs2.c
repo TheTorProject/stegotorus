@@ -188,13 +188,6 @@ obfs2_circuit_free(circuit_t *c)
   free(downcast_circuit(c));
 }
 
-/* Send data from circuit C. */
-static void
-obfs2_circuit_send(circuit_t *c)
-{
-  conn_send(c->downstream, bufferevent_get_input(c->up_buffer));
-}
-
 /**
    Derive and return padding key of type 'keytype' from the seeds
    currently set in state 's'.
@@ -380,10 +373,11 @@ obfs2_send_pending(obfs2_conn_t *state, struct evbuffer *dest)
    using the state in 'state'.  Returns 0 on success, -1 on failure.
  */
 static int
-obfs2_conn_send(conn_t *s, struct evbuffer *source)
+obfs2_circuit_send(circuit_t *s)
 {
-  obfs2_conn_t *state = downcast_conn(s);
-  struct evbuffer *dest = conn_get_outbound(s);
+  struct evbuffer *source = bufferevent_get_input(s->up_buffer);
+  struct evbuffer *dest = conn_get_outbound(s->downstream);
+  obfs2_conn_t *state = downcast_conn(s->downstream);
 
   if (state->send_crypto) {
     /* First of all, send any data that we've been waiting to send. */

@@ -125,10 +125,11 @@ dummy_circuit_free(circuit_t *c)
 }
 
 /* Send data from circuit C. */
-static void
+static int
 dummy_circuit_send(circuit_t *c)
 {
-  conn_send(c->downstream, bufferevent_get_input(c->up_buffer));
+  return evbuffer_add_buffer(conn_get_outbound(c->downstream),
+                             bufferevent_get_input(c->up_buffer));
 }
 
 /*
@@ -158,13 +159,7 @@ dummy_conn_handshake(conn_t *c)
   return 0;
 }
 
-/** send, receive - just copy */
-static int
-dummy_conn_send(conn_t *dest, struct evbuffer *source)
-{
-  return evbuffer_add_buffer(conn_get_outbound(dest), source);
-}
-
+/** Receive data from connection SOURCE */
 static enum recv_ret
 dummy_conn_recv(conn_t *source)
 {

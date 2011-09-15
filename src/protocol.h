@@ -67,7 +67,7 @@ struct proto_vtable
   void (*circuit_free)(circuit_t *ckt);
 
   /** Transmit data from the upstream to the downstream peer. */
-  void (*circuit_send)(circuit_t *ckt);
+  int (*circuit_send)(circuit_t *ckt);
 
   /** Return an extended 'conn_t' object based on the configuration 'cfg'.
       Must fill in the 'cfg' field of the generic structure.  */
@@ -78,9 +78,6 @@ struct proto_vtable
 
   /** Perform a connection handshake. Not all protocols have a handshake. */
   int (*conn_handshake)(conn_t *conn);
-
-  /** Send data coming from the upstream 'source' along to 'dest'. */
-  int (*conn_send)(conn_t *dest, struct evbuffer *source);
 
   /** Receive data from 'source' and pass it upstream (to the circuit). */
   enum recv_ret (*conn_recv)(conn_t *source);
@@ -134,7 +131,6 @@ extern const proto_vtable *const supported_protocols[];
     name##_conn_create,                         \
     name##_conn_free,                           \
     name##_conn_handshake,                      \
-    name##_conn_send,                           \
     name##_conn_recv,                           \
     name##_conn_send_eof,                       \
     name##_conn_recv_eof,
@@ -157,11 +153,10 @@ extern const proto_vtable *const supported_protocols[];
     name##_config_get_target_addr(config_t *);                          \
   static circuit_t *name##_circuit_create(config_t *);                  \
   static void name##_circuit_free(circuit_t *);                         \
-  static void name##_circuit_send(circuit_t *);                         \
+  static int name##_circuit_send(circuit_t *);                          \
   static conn_t *name##_conn_create(config_t *);                        \
   static void name##_conn_free(conn_t *);                               \
   static int name##_conn_handshake(conn_t *);                           \
-  static int name##_conn_send(conn_t *, struct evbuffer *);             \
   static enum recv_ret name##_conn_recv(conn_t *);                      \
   static int name##_conn_send_eof(conn_t *);                            \
   static enum recv_ret name##_conn_recv_eof(conn_t *);

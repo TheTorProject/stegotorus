@@ -137,13 +137,6 @@ x_dsteg_circuit_free(circuit_t *c)
   free(downcast_circuit(c));
 }
 
-/* Send data from circuit C. */
-static void
-x_dsteg_circuit_send(circuit_t *c)
-{
-  conn_send(c->downstream, bufferevent_get_input(c->up_buffer));
-}
-
 /*
   This is called everytime we get a connection for the x_dsteg
   protocol.
@@ -185,8 +178,10 @@ x_dsteg_conn_handshake(conn_t *conn)
 
 /** XXX ignores transmit_room */
 static int
-x_dsteg_conn_send(conn_t *d, struct evbuffer *source)
+x_dsteg_circuit_send(circuit_t *c)
 {
+  conn_t *d = c->downstream;
+  struct evbuffer *source = bufferevent_get_input(c->up_buffer);
   x_dsteg_conn_t *dest = downcast_conn(d);
   obfs_assert(dest->steg);
   return steg_transmit(dest->steg, source, d);

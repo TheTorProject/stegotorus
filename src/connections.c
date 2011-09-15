@@ -132,25 +132,6 @@ conn_handshake(conn_t *conn)
   return conn->cfg->vtable->conn_handshake(conn);
 }
 
-static int
-conn_send_raw(conn_t *dest, struct evbuffer *source)
-{
-  return dest->cfg->vtable->conn_send(dest, source);
-}
-
-void
-conn_send(conn_t *dest, struct evbuffer *source)
-{
-  obfs_assert(dest);
-  if (conn_send_raw(dest, source)) {
-    log_debug("%s: error during transmit.", dest->peername);
-    conn_close(dest);
-  } else {
-    log_debug("%s: transmitted %lu bytes.", dest->peername,
-              (unsigned long) evbuffer_get_length(conn_get_outbound(dest)));
-  }
-}
-
 static enum recv_ret
 conn_recv_raw(conn_t *source)
 {
@@ -174,20 +155,9 @@ conn_send_eof_raw(conn_t *dest)
 }
 
 void
-conn_send_eof(conn_t *dest, struct evbuffer *source)
+conn_send_eof(conn_t *dest)
 {
   struct evbuffer *outbuf = conn_get_outbound(dest);
-  if (evbuffer_get_length(source)) {
-    log_debug("%s: %ld bytes of pending input",
-              dest->peername, (unsigned long)evbuffer_get_length(source));
-    if (conn_send_raw(dest, source))
-      log_debug("%s: error during final transmit", dest->peername);
-    if (evbuffer_get_length(source)) {
-      log_debug("%s: discarding %ld bytes of pending input",
-                dest->peername, (unsigned long)evbuffer_get_length(source));
-      evbuffer_drain(source, evbuffer_get_length(source));
-    }
-  }
   if (conn_send_eof_raw(dest)) {
     log_debug("%s: error sending EOF indication", dest->peername);
     /* this might have failed because the downstream is waiting to
@@ -328,10 +298,19 @@ circuit_close(circuit_t *ckt)
   maybe_finish_shutdown();
 }
 
+static int
+circuit_send_raw(circuit_t *ckt)
+{
+  return ckt->cfg->vtable->circuit_send(ckt);
+}
+
 void
 circuit_send(circuit_t *ckt)
 {
-  ckt->cfg->vtable->circuit_send(ckt);
+  if (circuit_send_raw(ckt)) {
+    log_info("%s: error during transmit", ckt->up_peer);
+    circuit_close(ckt);
+  }
 }
 
 void
@@ -404,7 +383,17 @@ circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction)
     log_debug("%s: upstream read shutdown", ckt->up_peer);
 
     if (ckt->downstream) {
-      conn_send_eof(ckt->downstream, inbuf);
+      if (evbuffer_get_length(inbuf)) {
+        if (circuit_send_raw(ckt)) {
+          log_debug("%s: error during final transmission", ckt->up_peer);
+        }
+        if (evbuffer_get_length(inbuf)) {
+          log_debug("%s: discarding %ld bytes untransmitted",
+                    ckt->up_peer, (unsigned long)evbuffer_get_length(inbuf));
+          evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
+        }
+      }
+      conn_send_eof(ckt->downstream);
     } else {
       if (evbuffer_get_length(inbuf)) {
         log_debug("%s: no downstream connection, discarding %ld bytes",

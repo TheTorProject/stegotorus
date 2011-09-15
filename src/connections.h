@@ -63,18 +63,13 @@ static inline struct evbuffer *conn_get_outbound(conn_t *conn)
     connection. */
 int conn_handshake(conn_t *conn);
 
-/** Encode the data in SOURCE according to the appropriate wire protocol,
-    and transmit it on DEST. */
-void conn_send(conn_t *dest, struct evbuffer *source);
+/** Transmit any internally buffered data, plus an in-band end-of-file
+    indicator (if necessary), to DEST.  This will only be called once
+    per connection. */
+void conn_send_eof(conn_t *dest);
 
 /** Receive data from SOURCE, decode it, and write it to upstream. */
 void conn_recv(conn_t *source);
-
-/** Transmit the contents of SOURCE, plus any internally buffered
-    data, plus an in-band end-of-file indicator (if necessary) to
-    DEST.  This will only be called once, and once it has been called,
-    conn_send will not be called again.  */
-void conn_send_eof(conn_t *dest, struct evbuffer *source);
 
 /** No more data will be received from the peer; flush any internally
     buffered data to DEST. */

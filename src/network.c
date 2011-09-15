@@ -294,6 +294,7 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
   log_debug("%s: %s, %lu bytes available", ckt->up_peer, __func__,
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
+  obfs_assert(ckt->up_buffer == bev);
   circuit_send(ckt);
 }
 
