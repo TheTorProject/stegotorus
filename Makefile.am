@@ -43,8 +43,8 @@ unittests_SOURCES = \
 	src/test/unittest_container.c \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c \
-	src/test/unittest_dummy.c \
 	src/test/unittest_obfs2.c \
+	src/test/unittest_config.c \
 	src/test/unittest_transfer.c
 
 noinst_HEADERS = \

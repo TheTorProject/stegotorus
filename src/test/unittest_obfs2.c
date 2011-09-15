@@ -18,60 +18,6 @@
 PROTO_CAST_HELPERS(obfs2)
 
 static void
-test_obfs2_option_parsing(void *unused)
-{
-  struct option_parsing_case {
-    config_t *result;
-    short should_succeed;
-    short n_opts;
-    const char *const opts[6];
-  };
-  static struct option_parsing_case cases[] = {
-    /** good option list */
-    { 0, 1, 4, {"obfs2", "--shared-secret=a", "socks", "127.0.0.1:0"} },
-    /** two --dest. */
-    { 0, 0, 5, {"obfs2", "--dest=127.0.0.1:5555", "--dest=a",
-                "server", "127.0.0.1:5552"} },
-    /** unknown arg */
-    { 0, 0, 4, {"obfs2", "--gabura=a", "server", "127.0.0.1:5552"} },
-    /** too many args */
-    { 0, 0, 6, {"obfs2", "1", "2", "3", "4", "5" } },
-    /** wrong mode  */
-    { 0, 0, 4, {"obfs2", "--dest=1:1", "gladiator", "127.0.0.1:5552"} },
-    /** bad listen addr */
-    { 0, 0, 4, {"obfs2", "--dest=1:1", "server", "127.0.0.1:a"} },
-    /** bad dest addr */
-    { 0, 0, 4, {"obfs2", "--dest=1:b", "server", "127.0.0.1:1"} },
-    /** socks with dest */
-    { 0, 0, 4, {"obfs2", "--dest=1:2", "socks", "127.0.0.1:1"} },
-    /** server without dest */
-    { 0, 0, 4, {"obfs2", "--shared-secret=a", "server", "127.0.0.1:1"} },
-
-    { 0, 0, 0, {0} }
-  };
-
-  /* Suppress logs for the duration of this function. */
-  log_set_method(LOG_METHOD_NULL, NULL);
-
-  struct option_parsing_case *c;
-  for (c = cases; c->n_opts; c++) {
-    c->result = config_create(c->n_opts, c->opts);
-    if (c->should_succeed)
-      tt_ptr_op(c->result, !=, NULL);
-    else
-      tt_ptr_op(c->result, ==, NULL);
-  }
-
- end:
-  for (c = cases; c->n_opts; c++)
-    if (c->result)
-      config_free(c->result);
-
-  /* Unsuspend logging */
-  log_set_method(LOG_METHOD_STDERR, NULL);
-}
-
-static void
 test_obfs2_handshake(void *state)
 {
   struct proto_test_state *s = state;
@@ -321,16 +267,12 @@ static const struct proto_test_args obfs2_args =
     options_client, options_server };
 
 #define T(name) \
-  { #name, test_obfs2_##name, 0, NULL, NULL }
-
-#define TF(name) \
   { #name, test_obfs2_##name, 0, &proto_test_fixture, (void *)&obfs2_args }
 
 struct testcase_t obfs2_tests[] = {
-  T(option_parsing),
-  TF(handshake),
-  TF(split_handshake),
-  TF(wrong_handshake_magic),
-  TF(wrong_handshake_plength),
+  T(handshake),
+  T(split_handshake),
+  T(wrong_handshake_magic),
+  T(wrong_handshake_plength),
   END_OF_TESTCASES
 };
