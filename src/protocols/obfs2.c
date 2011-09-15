@@ -188,6 +188,14 @@ obfs2_circuit_free(circuit_t *c)
   free(downcast_circuit(c));
 }
 
+/* Add a connection to this circuit. */
+static void
+obfs2_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
+{
+  obfs_assert(!ckt->downstream);
+  ckt->downstream = conn;
+}
+
 /**
    Derive and return padding key of type 'keytype' from the seeds
    currently set in state 's'.

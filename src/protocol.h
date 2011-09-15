@@ -66,6 +66,9 @@ struct proto_vtable
   /** Destroy per-circuit, protocol-specific state. */
   void (*circuit_free)(circuit_t *ckt);
 
+  /** Add a downstream connection to this circuit. */
+  void (*circuit_add_downstream)(circuit_t *ckt, conn_t *conn);
+
   /** Transmit data from the upstream to the downstream peer. */
   int (*circuit_send)(circuit_t *ckt);
 
@@ -135,6 +138,7 @@ extern const proto_vtable *const supported_protocols[];
     name##_config_get_target_addr,              \
     name##_circuit_create,                      \
     name##_circuit_free,                        \
+    name##_circuit_add_downstream,              \
     name##_circuit_send,                        \
     name##_conn_create,                         \
     name##_conn_free,                           \
@@ -162,10 +166,11 @@ extern const proto_vtable *const supported_protocols[];
     name##_config_get_target_addr(config_t *);                          \
   static circuit_t *name##_circuit_create(config_t *);                  \
   static void name##_circuit_free(circuit_t *);                         \
+  static void name##_circuit_add_downstream(circuit_t *, conn_t *);     \
   static int name##_circuit_send(circuit_t *);                          \
   static conn_t *name##_conn_create(config_t *);                        \
   static void name##_conn_free(conn_t *);                               \
-  static int name##_conn_maybe_open_upstream(conn_t *conn);             \
+  static int name##_conn_maybe_open_upstream(conn_t *);                 \
   static int name##_conn_handshake(conn_t *);                           \
   static enum recv_ret name##_conn_recv(conn_t *);                      \
   static int name##_conn_send_eof(conn_t *);                            \

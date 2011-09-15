@@ -124,6 +124,14 @@ dummy_circuit_free(circuit_t *c)
   free(downcast_circuit(c));
 }
 
+/* Add a connection to this circuit. */
+static void
+dummy_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
+{
+  obfs_assert(!ckt->downstream);
+  ckt->downstream = conn;
+}
+
 /* Send data from circuit C. */
 static int
 dummy_circuit_send(circuit_t *c)

@@ -261,10 +261,8 @@ void
 circuit_add_downstream(circuit_t *ckt, conn_t *down)
 {
   obfs_assert(!down->circuit);
-  obfs_assert(!ckt->downstream);
-
-  ckt->downstream = down;
   down->circuit = ckt;
+  ckt->cfg->vtable->circuit_add_downstream(ckt, down);
 }
 
 void

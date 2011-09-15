@@ -137,6 +137,14 @@ x_dsteg_circuit_free(circuit_t *c)
   free(downcast_circuit(c));
 }
 
+/* Add a connection to this circuit. */
+static void
+x_dsteg_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
+{
+  obfs_assert(!ckt->downstream);
+  ckt->downstream = conn;
+}
+
 /*
   This is called everytime we get a connection for the x_dsteg
   protocol.
