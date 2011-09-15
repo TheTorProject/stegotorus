@@ -45,7 +45,7 @@ unittests_SOURCES = \
 	src/test/unittest_socks.c \
 	src/test/unittest_dummy.c \
 	src/test/unittest_obfs2.c \
-	src/test/unittest_steg_x_http.c
+	src/test/unittest_transfer.c
 
 noinst_HEADERS = \
 	src/connections.h \

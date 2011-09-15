@@ -74,7 +74,7 @@ void _tinytest_set_test_skipped(void);
 int _tinytest_get_verbosity(void);
 /** Implementation: Set a flag on tests matching a name; returns number
  * of tests that matched. */
-int _tinytest_set_flag(struct testgroup_t *, const char *, unsigned long);
+int _tinytest_set_flag(const struct testgroup_t *, const char *, unsigned long);
 /** Implementation: Helper function for tt_mem_op. */
 char * tt_base16_encode(const char *value, size_t vlen);
 
@@ -86,6 +86,7 @@ char * tt_base16_encode(const char *value, size_t vlen);
 int testcase_run_one(const struct testgroup_t *,const struct testcase_t *);
 /** Run a set of testcases from an END_OF_GROUPS-terminated array of groups,
     as selected from the command line. */
-int tinytest_main(int argc, const char **argv, struct testgroup_t *groups);
+int tinytest_main(int argc, const char **argv,
+                  const struct testgroup_t *groups);
 
 #endif

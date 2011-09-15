@@ -62,7 +62,7 @@ const char *cur_test_name = NULL;
 static const char *commandname = NULL;
 #endif
 
-static void usage(struct testgroup_t *groups, int list_groups)
+static void usage(const struct testgroup_t *groups, int list_groups)
   __attribute__((noreturn));
 
 static enum outcome
@@ -238,7 +238,8 @@ testcase_run_one(const struct testgroup_t *group,
 }
 
 int
-_tinytest_set_flag(struct testgroup_t *groups, const char *arg, unsigned long flag)
+_tinytest_set_flag(const struct testgroup_t *groups,
+                   const char *arg, unsigned long flag)
 {
 	int i, j;
 	size_t length = LONGEST_TEST_NAME;
@@ -262,7 +263,7 @@ _tinytest_set_flag(struct testgroup_t *groups, const char *arg, unsigned long fl
 }
 
 static void
-usage(struct testgroup_t *groups, int list_groups)
+usage(const struct testgroup_t *groups, int list_groups)
 {
 	puts("Options are: [--verbose|--quiet|--terse] [--no-fork]");
 	puts("	Specify tests by name, or using a prefix ending with '..'");
@@ -275,7 +276,7 @@ usage(struct testgroup_t *groups, int list_groups)
 }
 
 int
-tinytest_main(int c, const char **v, struct testgroup_t *groups)
+tinytest_main(int c, const char **v, const struct testgroup_t *groups)
 {
 	int i, j, n=0;
 

@@ -209,6 +209,8 @@ x_dsteg_conn_recv(conn_t *s)
   x_dsteg_conn_t *source = downcast_conn(s);
   if (!source->steg) {
     obfs_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
+    if (evbuffer_get_length(conn_get_inbound(s)) == 0)
+      return RECV_INCOMPLETE;
     source->steg = steg_detect(s);
     if (!source->steg) {
       log_debug("No recognized steg pattern detected");

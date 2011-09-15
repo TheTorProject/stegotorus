@@ -138,7 +138,7 @@ conn_handshake(conn_t *conn)
   return conn->cfg->vtable->conn_handshake(conn);
 }
 
-static enum recv_ret
+enum recv_ret
 conn_recv_raw(conn_t *source)
 {
   return source->cfg->vtable->conn_recv(source);

@@ -74,6 +74,7 @@ void conn_send_eof(conn_t *dest);
 
 /** Receive data from SOURCE, decode it, and write it to upstream. */
 void conn_recv(conn_t *source);
+enum recv_ret conn_recv_raw(conn_t *source);
 
 /** No more data will be received from the peer; flush any internally
     buffered data to DEST. */

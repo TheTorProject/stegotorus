@@ -3,8 +3,8 @@
 */
 
 #include "util.h"
-#include "connections.h"
 #include "crypt.h"
+#include "connections.h"
 #include "protocol.h"
 #include "tinytest.h"
 #include "unittest.h"
@@ -13,20 +13,22 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 
+#include <openssl/rand.h>
+
 extern struct testcase_t container_tests[];
 extern struct testcase_t crypt_tests[];
 extern struct testcase_t socks_tests[];
 extern struct testcase_t dummy_tests[];
 extern struct testcase_t obfs2_tests[];
-extern struct testcase_t s_x_http_tests[];
+extern struct testcase_t transfer_tests[];
 
-static struct testgroup_t groups[] = {
+static const struct testgroup_t groups[] = {
   { "container/", container_tests },
   { "crypt/", crypt_tests },
   { "socks/", socks_tests },
   { "dummy/", dummy_tests },
   { "obfs2/", obfs2_tests },
-  { "steg/x_http/", s_x_http_tests },
+  { "transfer/", transfer_tests },
   END_OF_GROUPS
 };
 
@@ -36,6 +38,7 @@ setup_proto_test_state(const struct testcase_t *tcase)
   struct proto_test_state *s = xzalloc(sizeof(struct proto_test_state));
   const struct proto_test_args *args = tcase->setup_data;
 
+  s->args = args;
   s->base = event_base_new();
 
   struct bufferevent *pairs[3][2];
@@ -126,5 +129,6 @@ main(int argc, const char **argv)
   rv = tinytest_main(argc, argv, groups);
   conn_start_shutdown(1);
   cleanup_crypto();
+
   return rv;
 }

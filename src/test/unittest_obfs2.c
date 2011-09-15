@@ -109,49 +109,6 @@ test_obfs2_handshake(void *state)
  end:;
 }
 
-static void
-test_obfs2_transfer(void *state)
-{
-  struct proto_test_state *s = state;
-
-  /* Handshake */
-  tt_int_op(0, <=, conn_handshake(s->conn_client));
-  conn_recv(s->conn_server);
-  tt_int_op(0, <=, conn_handshake(s->conn_server));
-  conn_recv(s->conn_client);
-  /* End of Handshake */
-
-  /* Now let's pass some data around. */
-  const char *msg1 = "this is a 54-byte message passed from client to server";
-  const char *msg2 = "this is a 55-byte message passed from server to client!";
-
-  /* client -> server */
-  evbuffer_add(bufferevent_get_output(s->buf_client), msg1, 54);
-  circuit_send(s->ckt_client);
-  tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_client)));
-  tt_int_op(54, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
-
-  conn_recv(s->conn_server);
-  tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
-  tt_int_op(54, ==, evbuffer_get_length(bufferevent_get_input(s->buf_server)));
-  tt_stn_op(msg1, ==,
-            evbuffer_pullup(bufferevent_get_input(s->buf_server), 54), 54);
-
-  /* client <- server */
-  evbuffer_add(bufferevent_get_output(s->buf_server), msg2, 55);
-  circuit_send(s->ckt_server);
-  tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_server)));
-  tt_int_op(55, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
-
-  conn_recv(s->conn_client);
-  tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
-  tt_int_op(55, ==, evbuffer_get_length(bufferevent_get_input(s->buf_client)));
-  tt_stn_op(msg2, ==,
-            evbuffer_pullup(bufferevent_get_input(s->buf_client), 55), 55);
-
- end:;
-}
-
 /* We are going to split client's handshake into:
    msgclient_1 = [OBFUSCATE_SEED_LENGTH + 8 + <one fourth of padding>]
    and msgclient_2 = [<rest of padding>].
@@ -372,7 +329,6 @@ static const struct proto_test_args obfs2_args =
 struct testcase_t obfs2_tests[] = {
   T(option_parsing),
   TF(handshake),
-  TF(transfer),
   TF(split_handshake),
   TF(wrong_handshake_magic),
   TF(wrong_handshake_plength),
