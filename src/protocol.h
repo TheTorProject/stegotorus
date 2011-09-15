@@ -69,10 +69,6 @@ struct proto_vtable
   /** Transmit data from the upstream to the downstream peer. */
   void (*circuit_send)(circuit_t *ckt);
 
-  /** Receive data from the downstream peer on connection CONN and
-      pass it along to upstream. */
-  void (*circuit_recv)(circuit_t *ckt, conn_t *down);
-
   /** Return an extended 'conn_t' object based on the configuration 'cfg'.
       Must fill in the 'cfg' field of the generic structure.  */
   conn_t *(*conn_create)(config_t *cfg);
@@ -135,7 +131,6 @@ extern const proto_vtable *const supported_protocols[];
     name##_circuit_create,                      \
     name##_circuit_free,                        \
     name##_circuit_send,                        \
-    name##_circuit_recv,                        \
     name##_conn_create,                         \
     name##_conn_free,                           \
     name##_conn_handshake,                      \
@@ -163,7 +158,6 @@ extern const proto_vtable *const supported_protocols[];
   static circuit_t *name##_circuit_create(config_t *);                  \
   static void name##_circuit_free(circuit_t *);                         \
   static void name##_circuit_send(circuit_t *);                         \
-  static void name##_circuit_recv(circuit_t *, conn_t *);               \
   static conn_t *name##_conn_create(config_t *);                        \
   static void name##_conn_free(conn_t *);                               \
   static int name##_conn_handshake(conn_t *);                           \

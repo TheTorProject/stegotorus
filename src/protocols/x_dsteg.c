@@ -144,14 +144,6 @@ x_dsteg_circuit_send(circuit_t *c)
   conn_send(c->downstream, bufferevent_get_input(c->up_buffer));
 }
 
-/* Receive data from DOWN to circuit C. */
-static void
-x_dsteg_circuit_recv(circuit_t *c, conn_t *down)
-{
-  obfs_assert(down == c->downstream);
-  conn_recv(down);
-}
-
 /*
   This is called everytime we get a connection for the x_dsteg
   protocol.
@@ -200,6 +192,7 @@ x_dsteg_conn_send(conn_t *d, struct evbuffer *source)
   return steg_transmit(dest->steg, source, d);
 }
 
+/* Receive data from S. */
 static enum recv_ret
 x_dsteg_conn_recv(conn_t *s)
 {
@@ -214,7 +207,8 @@ x_dsteg_conn_recv(conn_t *s)
       log_debug("Detected steg pattern %s", source->steg->vtable->name);
     }
   }
-  return steg_receive(source->steg, s, bufferevent_get_output(s->circuit->up_buffer));
+  return steg_receive(source->steg, s,
+                      bufferevent_get_output(s->circuit->up_buffer));
 }
 
 

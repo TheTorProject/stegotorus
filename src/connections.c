@@ -164,9 +164,6 @@ conn_recv(conn_t *source)
   if (conn_recv_raw(source) == RECV_BAD) {
     log_debug("%s: error during receive.", source->peername);
     conn_close(source);
-  } else {
-    log_debug("%s: received %lu bytes", source->peername,
-              (unsigned long)evbuffer_get_length(bufferevent_get_output(source->circuit->up_buffer)));
   }
 }
 
@@ -335,13 +332,6 @@ void
 circuit_send(circuit_t *ckt)
 {
   ckt->cfg->vtable->circuit_send(ckt);
-}
-
-void
-circuit_recv(circuit_t *ckt, conn_t *down)
-{
-  obfs_assert(down->circuit == ckt);
-  ckt->cfg->vtable->circuit_recv(ckt, down);
 }
 
 void

@@ -483,8 +483,8 @@ roundrobin_circuit_send(roundrobin_circuit_t *ckt)
   }
 }
 
-enum recv_ret
-roundrobin_circuit_recv(roundrobin_circuit_t *ckt, roundrobin_conn_t *conn)
+static enum recv_ret
+rr_circuit_recv(roundrobin_circuit_t *ckt, roundrobin_conn_t *conn)
 {
   rr_header hdr;
   struct evbuffer *block;
@@ -547,5 +547,5 @@ roundrobin_conn_recv(conn_t *source)
       return RECV_BAD;
   }
 
-  return roundrobin_circuit_recv(source->circuit, source);
+  return rr_circuit_recv(source->circuit, source);
 }

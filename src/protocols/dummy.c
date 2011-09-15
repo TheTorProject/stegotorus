@@ -131,14 +131,6 @@ dummy_circuit_send(circuit_t *c)
   conn_send(c->downstream, bufferevent_get_input(c->up_buffer));
 }
 
-/* Receive data from DOWN to circuit C. */
-static void
-dummy_circuit_recv(circuit_t *c, conn_t *down)
-{
-  obfs_assert(down == c->downstream);
-  conn_recv(down);
-}
-
 /*
   This is called everytime we get a connection for the dummy
   protocol.
@@ -176,6 +168,7 @@ dummy_conn_send(conn_t *dest, struct evbuffer *source)
 static enum recv_ret
 dummy_conn_recv(conn_t *source)
 {
+  obfs_assert(source->circuit);
   if (evbuffer_add_buffer(bufferevent_get_output(source->circuit->up_buffer),
                           conn_get_inbound(source)))
     return RECV_BAD;

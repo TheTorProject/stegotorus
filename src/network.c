@@ -310,8 +310,8 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   log_debug("%s: %s, %lu bytes available", down->peername, __func__,
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
-  obfs_assert(down->circuit);
-  circuit_recv(down->circuit, down);
+  obfs_assert(down->buffer == bev);
+  conn_recv(down);
 }
 
 /** Diagnostic-printing subroutine of upstream_event_cb and

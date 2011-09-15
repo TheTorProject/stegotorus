@@ -195,14 +195,6 @@ obfs2_circuit_send(circuit_t *c)
   conn_send(c->downstream, bufferevent_get_input(c->up_buffer));
 }
 
-/* Receive data from DOWN to circuit C. */
-static void
-obfs2_circuit_recv(circuit_t *c, conn_t *down)
-{
-  obfs_assert(down == c->downstream);
-  conn_recv(down);
-}
-
 /**
    Derive and return padding key of type 'keytype' from the seeds
    currently set in state 's'.
