@@ -199,15 +199,27 @@ x_dsteg_conn_handshake(conn_t *conn)
   return 0;
 }
 
-/** XXX ignores transmit_room */
 static int
 x_dsteg_circuit_send(circuit_t *c)
 {
   conn_t *d = c->downstream;
   struct evbuffer *source = bufferevent_get_input(c->up_buffer);
+  struct evbuffer *chunk = evbuffer_new();
   x_dsteg_conn_t *dest = downcast_conn(d);
-  obfs_assert(dest->steg);
-  return steg_transmit(dest->steg, source, d);
+  steg_t *steg = dest->steg;
+
+  obfs_assert(steg);
+  if (evbuffer_remove_buffer(source, chunk, steg_transmit_room(steg, d)) < 0) {
+    evbuffer_free(chunk);
+    return -1;
+  }
+  if (steg_transmit(steg, chunk, d)) {
+    /* undo undo undo */
+    evbuffer_prepend_buffer(source, chunk);
+    evbuffer_free(chunk);
+    return -1;
+  }
+  return 0;
 }
 
 /* Receive data from S. */

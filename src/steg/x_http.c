@@ -118,7 +118,9 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     /* On the client side, we have to embed the data in a GET query somehow;
        the only plausible places to put it are the URL and cookies.  This
        presently uses the URL. And it can't be binary. */
-    struct evbuffer *scratch = evbuffer_new();
+    struct evbuffer *scratch;
+    struct evbuffer_iovec *iv;
+    int i, nv;
 
     /* Convert all the data in 'source' to hexadecimal and write it to
        'scratch'. Data is padded to a multiple of four characters with
@@ -129,25 +131,33 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     dlen = dlen + 3 - (dlen-1)%4;
     if (dlen == 0) dlen = 4;
 
+    scratch = evbuffer_new();
+    if (!scratch) return -1;
     if (evbuffer_expand(scratch, dlen)) {
       evbuffer_free(scratch);
       return -1;
     }
 
-    /* XXX Failures past this point consume data in 'source'. */
-    while (evbuffer_get_length(source) > 0) {
-      size_t chunk = evbuffer_get_contiguous_space(source);
-      unsigned char *data = evbuffer_pullup(source, chunk);
+    nv = evbuffer_peek(source, slen, NULL, NULL, 0);
+    iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
+    if (evbuffer_peek(source, slen, NULL, iv, nv) != nv) {
+      evbuffer_free(scratch);
+      free(iv);
+      return -1;
+    }
+
+    for (i = 0; i < nv; i++) {
+      const unsigned char *p = iv[i].iov_base;
+      const unsigned char *limit = p + iv[i].iov_len;
       char hex[2], c;
-      size_t i;
-      for (i = 0; i < chunk; i++) {
-        c = data[i];
+      while (p < limit) {
+        c = *p++;
         hex[0] = "0123456789abcdef"[(c & 0xF0) >> 4];
         hex[1] = "0123456789abcdef"[(c & 0x0F) >> 0];
         evbuffer_add(scratch, hex, 2);
       }
-      evbuffer_drain(source, chunk);
     }
+    free(iv);
     while (evbuffer_get_length(scratch) == 0 ||
            evbuffer_get_length(scratch) % 4 != 0)
       evbuffer_add(scratch, "=", 1);
@@ -162,6 +172,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     }
 
     evbuffer_free(scratch);
+    evbuffer_drain(source, slen);
     conn_cease_transmission(conn);
     return 0;
 
@@ -187,127 +198,135 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
   if (s->is_clientside) {
-    /* Linearize the buffer out past the longest possible
-       Content-Length header and subsequent blank line.  2**64 fits in
-       20 characters, and then we have two CRLFs; minus one for the
-       NUL in sizeof http_response_1. Note that this does _not_
-       guarantee that that much data is available. */
+    /* This loop should not be necessary, but we are currently not
+       enforcing the query-response pattern, so we can get more than
+       one response per request. */
+    do {
+      /* Linearize the buffer out past the longest possible
+         Content-Length header and subsequent blank line.  2**64 fits in
+         20 characters, and then we have two CRLFs; minus one for the
+         NUL in sizeof http_response_1. Note that this does _not_
+         guarantee that that much data is available. */
 
-    unsigned char *data = evbuffer_pullup(source, sizeof http_response_1 + 23);
-    size_t hlen = evbuffer_get_length(source);
-    if (hlen > sizeof http_response_1 + 23)
-      hlen = sizeof http_response_1 + 23;
+      unsigned char *data = evbuffer_pullup(source, sizeof http_response_1 + 23);
+      size_t hlen = evbuffer_get_length(source);
+      if (hlen > sizeof http_response_1 + 23)
+        hlen = sizeof http_response_1 + 23;
 
-    /* Validate response headers. */
-    if (hlen < sizeof http_response_1 - 1)
-      return RECV_INCOMPLETE;
-    if (memcmp(data, http_response_1, sizeof http_response_1 - 1))
-      return RECV_BAD;
+      /* Validate response headers. */
+      if (hlen < sizeof http_response_1 - 1)
+        return RECV_INCOMPLETE;
+      if (memcmp(data, http_response_1, sizeof http_response_1 - 1))
+        return RECV_BAD;
 
-    /* There should be an unsigned number immediately after the text of
-       http_response_1, followed by the four characters \r\n\r\n.
-       We may not have the complete number yet. */
-    unsigned char *p = data + sizeof http_response_1 - 1;
-    unsigned char *limit = data + hlen;
-    uint64_t clen = 0;
-    while (p < limit && '0' <= *p && *p <= '9') {
-      clen = clen*10 + *p - '0';
-      p++;
-    }
-    if (p+4 > limit)
-      return RECV_INCOMPLETE;
-    if (p[0] != '\r' || p[1] != '\n' || p[2] != '\r' || p[3] != '\n')
-      return RECV_BAD;
+      /* There should be an unsigned number immediately after the text of
+         http_response_1, followed by the four characters \r\n\r\n.
+         We may not have the complete number yet. */
+      unsigned char *p = data + sizeof http_response_1 - 1;
+      unsigned char *limit = data + hlen;
+      uint64_t clen = 0;
+      while (p < limit && '0' <= *p && *p <= '9') {
+        clen = clen*10 + *p - '0';
+        p++;
+      }
+      if (p+4 > limit)
+        return RECV_INCOMPLETE;
+      if (p[0] != '\r' || p[1] != '\n' || p[2] != '\r' || p[3] != '\n')
+        return RECV_BAD;
 
-    p += 4;
-    hlen = p - data;
-    /* Now we know how much data we're expecting after the blank line. */
-    if (evbuffer_get_length(source) < hlen + clen)
-      return RECV_INCOMPLETE;
-    if (evbuffer_get_length(source) > hlen + clen)
-      return RECV_BAD;
+      p += 4;
+      hlen = p - data;
+      /* Now we know how much data we're expecting after the blank line. */
+      if (evbuffer_get_length(source) < hlen + clen)
+        return RECV_INCOMPLETE;
 
-    /* we are go */
-    if (evbuffer_drain(source, hlen))
-      return RECV_BAD;
+      /* we are go */
+      if (evbuffer_drain(source, hlen))
+        return RECV_BAD;
 
-    if (evbuffer_remove_buffer(source, dest, clen) != clen)
-      return RECV_BAD;
+      if (evbuffer_remove_buffer(source, dest, clen) != clen)
+        return RECV_BAD;
+
+    } while (evbuffer_get_length(source));
 
     conn_expect_close(conn);
     return RECV_GOOD;
   } else {
-    /* Search for the second and third invariant bits of the query headers
-       we expect.  We completely ignore the contents of the Host header. */
-    struct evbuffer_ptr s2 = evbuffer_search(source, http_query_2,
-                                             sizeof http_query_2 - 1,
-                                             NULL);
-    if (s2.pos == -1) {
-      log_debug("Did not find second piece of HTTP query");
-      return RECV_INCOMPLETE;
-    }
-    struct evbuffer_ptr s3 = evbuffer_search(source, http_query_3,
-                                             sizeof http_query_3 - 1,
-                                             &s2);
-    if (s3.pos == -1) {
-      log_debug("Did not find third piece of HTTP query");
-      return RECV_INCOMPLETE;
-    }
-    if (s3.pos + sizeof http_query_3 - 1 != evbuffer_get_length(source)) {
-      log_debug("Unexpected HTTP query body (have %ld, want %ld)",
-                evbuffer_get_length(source),
-                s3.pos + sizeof http_query_3 - 1);
-      return RECV_BAD;
-    }
-
-    unsigned char *data = evbuffer_pullup(source, s2.pos);
-    if (memcmp(data, "GET /", sizeof "GET /"-1)) {
-      log_debug("Unexpected HTTP verb: %.*s", 5, data);
-      return RECV_BAD;
-    }
-
-    unsigned char *p = data + sizeof "GET /"-1;
-    unsigned char *limit = data + s2.pos;
-
     /* We need a scratch buffer here because the contract is that if
        we hit a decode error we *don't* write anything to 'dest'. */
-    struct evbuffer *scratch = evbuffer_new();
-    if (evbuffer_expand(scratch, (limit - p)/2)) {
-      evbuffer_free(scratch);
-      return RECV_BAD;
-    }
+    struct evbuffer *scratch;
 
-    unsigned char c, h, secondhalf = 0;
-    while (p < limit) {
-      if (!secondhalf) c = 0;
-      if ('0' <= *p && *p <= '9') h = *p - '0';
-      else if ('a' <= *p && *p <= 'f') h = *p - 'a' + 10;
-      else if ('A' <= *p && *p <= 'F') h = *p - 'A' + 10;
-      else if (*p == '=' && !secondhalf) {
-        p++;
-        continue;
-      } else {
-        evbuffer_free(scratch);
-        log_debug("Decode error: unexpected URI character %c", *p);
+    /* This loop should not be necessary either, but is, for the same
+       reason given above */
+    do {
+      /* Search for the second and third invariant bits of the query headers
+         we expect.  We completely ignore the contents of the Host header. */
+      struct evbuffer_ptr s2 = evbuffer_search(source, http_query_2,
+                                               sizeof http_query_2 - 1,
+                                               NULL);
+      if (s2.pos == -1) {
+        log_debug("Did not find second piece of HTTP query");
+        return RECV_INCOMPLETE;
+      }
+      struct evbuffer_ptr s3 = evbuffer_search(source, http_query_3,
+                                               sizeof http_query_3 - 1,
+                                               &s2);
+      if (s3.pos == -1) {
+        log_debug("Did not find third piece of HTTP query");
+        return RECV_INCOMPLETE;
+      }
+      obfs_assert(s3.pos + sizeof http_query_3 - 1
+                  <= evbuffer_get_length(source));
+
+      unsigned char *data = evbuffer_pullup(source, s2.pos);
+      if (memcmp(data, "GET /", sizeof "GET /"-1)) {
+        log_debug("Unexpected HTTP verb: %.*s", 5, data);
         return RECV_BAD;
       }
 
-      c = (c << 4) + h;
-      if (secondhalf)
-        evbuffer_add(scratch, &c, 1);
-      secondhalf = !secondhalf;
-      p++;
-    }
+      unsigned char *p = data + sizeof "GET /"-1;
+      unsigned char *limit = data + s2.pos;
 
-    if (evbuffer_add_buffer(dest, scratch)) {
+      scratch = evbuffer_new();
+      if (!scratch) return RECV_BAD;
+      if (evbuffer_expand(scratch, (limit - p)/2)) {
+        evbuffer_free(scratch);
+        return RECV_BAD;
+      }
+
+      unsigned char c, h, secondhalf = 0;
+      while (p < limit) {
+        if (!secondhalf) c = 0;
+        if ('0' <= *p && *p <= '9') h = *p - '0';
+        else if ('a' <= *p && *p <= 'f') h = *p - 'a' + 10;
+        else if ('A' <= *p && *p <= 'F') h = *p - 'A' + 10;
+        else if (*p == '=' && !secondhalf) {
+          p++;
+          continue;
+        } else {
+          evbuffer_free(scratch);
+          log_debug("Decode error: unexpected URI character %c", *p);
+          return RECV_BAD;
+        }
+
+        c = (c << 4) + h;
+        if (secondhalf)
+          evbuffer_add(scratch, &c, 1);
+        secondhalf = !secondhalf;
+        p++;
+      }
+
+      if (evbuffer_add_buffer(dest, scratch)) {
+        evbuffer_free(scratch);
+        log_debug("Failed to transfer buffer");
+        return RECV_BAD;
+      }
+      evbuffer_drain(source, s3.pos + sizeof http_query_3 - 1);
       evbuffer_free(scratch);
-      log_debug("Failed to transfer buffer");
-      return RECV_BAD;
-    } else {
-      evbuffer_drain(source, evbuffer_get_length(source));
-      evbuffer_free(scratch);
-      conn_transmit_soon(conn, 100);
-      return RECV_GOOD;
-    }
+
+    } while (evbuffer_get_length(source));
+
+    conn_transmit_soon(conn, 100);
+    return RECV_GOOD;
   }
 }
