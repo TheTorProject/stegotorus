@@ -4,7 +4,6 @@
 
 #include "util.h"
 #include "connections.h"
-
 #include "container.h"
 #include "main.h"
 #include "protocol.h"
@@ -12,7 +11,6 @@
 
 #include <event2/event.h>
 #include <event2/buffer.h>
-#include <event2/bufferevent.h>
 
 /** All active connections.  */
 static smartlist_t *connections;

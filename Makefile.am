@@ -60,9 +60,7 @@ noinst_HEADERS = \
 	src/socks.h \
 	src/steg.h \
 	src/util.h \
-	src/protocols/dummy.h \
 	src/protocols/obfs2.h \
-	src/protocols/x_dsteg.h \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h \
 	src/test/unittest.h

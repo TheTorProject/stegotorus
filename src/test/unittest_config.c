@@ -3,14 +3,9 @@
 */
 
 #include "util.h"
-#include "connections.h"
-#include "protocol.h"
-#include "tinytest_macros.h"
 #include "unittest.h"
 
-#include <event2/event.h>
-#include <event2/buffer.h>
-#include <event2/bufferevent.h>
+#include "protocol.h"
 
 struct option_parsing_case {
   config_t *result;

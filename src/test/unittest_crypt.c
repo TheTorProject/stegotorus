@@ -3,7 +3,7 @@
 */
 
 #include "util.h"
-#include "tinytest_macros.h"
+#include "unittest.h"
 
 #define CRYPT_PRIVATE
 #include "crypt.h"

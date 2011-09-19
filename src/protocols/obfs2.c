@@ -4,7 +4,6 @@
 
 #include "util.h"
 
-#define PROTOCOL_OBFS2_PRIVATE
 #include "obfs2.h"
 
 #include <event2/buffer.h>

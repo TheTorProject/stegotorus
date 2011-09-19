@@ -3,11 +3,11 @@
 */
 
 #include "util.h"
-#include "tinytest_macros.h"
+#include "unittest.h"
 
 #define SOCKS_PRIVATE
 #include "socks.h"
-#include "crypt.h"
+#include "crypt.h" // for uchar
 
 #include <event2/buffer.h>
 

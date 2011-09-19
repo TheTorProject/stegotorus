@@ -3,11 +3,24 @@
 */
 
 #include "util.h"
-
-#define PROTOCOL_DUMMY_PRIVATE
-#include "dummy.h"
+#include "connections.h"
+#include "protocol.h"
 
 #include <event2/buffer.h>
+
+typedef struct dummy_config_t {
+  config_t super;
+  struct evutil_addrinfo *listen_addr;
+  struct evutil_addrinfo *target_addr;
+} dummy_config_t;
+
+typedef struct dummy_conn_t {
+  conn_t super;
+} dummy_conn_t;
+
+typedef struct dummy_circuit_t {
+  circuit_t super;
+} dummy_circuit_t;
 
 PROTO_DEFINE_MODULE(dummy, NOSTEG);
 

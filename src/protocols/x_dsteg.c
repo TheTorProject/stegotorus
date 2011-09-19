@@ -3,11 +3,27 @@
 */
 
 #include "util.h"
-
-#define PROTOCOL_X_DSTEG_PRIVATE
-#include "x_dsteg.h"
+#include "connections.h"
+#include "protocol.h"
+#include "steg.h"
 
 #include <event2/buffer.h>
+
+typedef struct x_dsteg_config_t {
+  config_t super;
+  struct evutil_addrinfo *listen_addr;
+  struct evutil_addrinfo *target_addr;
+  const char *stegname;
+} x_dsteg_config_t;
+
+typedef struct x_dsteg_conn_t {
+  conn_t super;
+  steg_t *steg;
+} x_dsteg_conn_t;
+
+typedef struct x_dsteg_circuit_t {
+  circuit_t super;
+} x_dsteg_circuit_t;
 
 PROTO_DEFINE_MODULE(x_dsteg, STEG);
 

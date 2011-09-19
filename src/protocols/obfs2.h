@@ -5,10 +5,6 @@
 #ifndef PROTOCOL_OBFS2_H
 #define PROTOCOL_OBFS2_H
 
-extern const proto_vtable p_obfs2_vtable;
-
-#ifdef PROTOCOL_OBFS2_PRIVATE
-
 #include "crypt.h"
 #include "connections.h"
 #include "protocol.h"
@@ -18,8 +14,6 @@ extern const proto_vtable p_obfs2_vtable;
    They're exposed here so that the unit tests can use them.
    ==========
 */
-/* from brl's obfuscated-ssh standard. */
-//#define OBFUSCATE_MAGIC_VALUE        0x0BF5CA7E
 
 /* our own, since we break brl's spec */
 #define OBFUSCATE_MAGIC_VALUE        0x2BF5CA7E
@@ -81,7 +75,5 @@ typedef struct obfs2_conn_t {
 typedef struct obfs2_circuit_t {
   circuit_t super;
 } obfs2_circuit_t;
-
-#endif
 
 #endif

@@ -5,6 +5,8 @@
 #ifndef UNITTEST_H
 #define UNITTEST_H
 
+#include "tinytest_macros.h"
+
 /* Test fixture shared by most protocol tests. */
 
 struct proto_test_state

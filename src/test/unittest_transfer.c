@@ -3,14 +3,10 @@
 */
 
 #include "util.h"
-#include "connections.h"
-#include "protocol.h"
-#include "tinytest_macros.h"
 #include "unittest.h"
+#include "connections.h"
 
-#include <event2/event.h>
 #include <event2/buffer.h>
-#include <event2/bufferevent.h>
 
 static const char msg1[] =
   "this is a 54-byte message passed from client to server";

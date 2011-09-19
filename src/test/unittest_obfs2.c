@@ -3,17 +3,13 @@
 */
 
 #include "util.h"
-#include "tinytest_macros.h"
 #include "unittest.h"
 
-#define PROTOCOL_OBFS2_PRIVATE
 #define CRYPT_PRIVATE
-#include "protocols/obfs2.h"
 #include "crypt.h"
+#include "protocols/obfs2.h"
 
-#include <event2/event.h>
 #include <event2/buffer.h>
-#include <event2/bufferevent.h>
 
 PROTO_CAST_HELPERS(obfs2)
 

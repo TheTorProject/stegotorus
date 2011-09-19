@@ -3,12 +3,7 @@
 */
 
 #include "util.h"
-#include "connections.h"
 #include "protocol.h"
-
-#include "protocols/dummy.h"
-#include "protocols/obfs2.h"
-#include "protocols/x_dsteg.h"
 
 /**
    Return 1 if 'name' is the name of a supported protocol, otherwise 0.

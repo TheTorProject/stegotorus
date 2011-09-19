@@ -3,17 +3,14 @@
 */
 
 #include "util.h"
+#include "unittest.h"
+
 #include "crypt.h"
 #include "connections.h"
 #include "protocol.h"
-#include "tinytest.h"
-#include "unittest.h"
 
 #include <event2/event.h>
-#include <event2/buffer.h>
 #include <event2/bufferevent.h>
-
-#include <openssl/rand.h>
 
 extern struct testcase_t container_tests[];
 extern struct testcase_t crypt_tests[];

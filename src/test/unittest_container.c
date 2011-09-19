@@ -4,7 +4,7 @@
 /* See LICENSE for licensing information */
 
 #include "util.h"
-#include "tinytest_macros.h"
+#include "unittest.h"
 
 #include "container.h"
 #include "crypt.h"
