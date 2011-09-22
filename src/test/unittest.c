@@ -47,13 +47,9 @@ static void ut_rand_seed(const void *buf, int num)
 
 static uint32_t taus88(struct taus_state *s)
 {
-  uint32_t b;
-  b     = (((s->s1 << 13) ^ s->s1) >> 19);
-  s->s1 = (((s->s1 & 4294967294u) << 12) ^ b);
-  b     = (((s->s2 << 2) ^ s->s2) >> 25);
-  s->s2 = (((s->s2 & 4294967288u) << 4) ^ b);
-  b     = (((s->s3 << 3) ^ s->s3) >> 11);
-  s->s3 = (((s->s3 & 4294967280u) << 17) ^ b);
+  s->s1 = ((s->s1 & 0xFFFFFFFEu) << 12) ^ (((s->s1 << 13) ^ s->s1) >> 19);
+  s->s2 = ((s->s2 & 0xFFFFFFF8u) <<  4) ^ (((s->s2 <<  2) ^ s->s2) >> 25);
+  s->s3 = ((s->s3 & 0xFFFFFFF0u) << 17) ^ (((s->s3 <<  3) ^ s->s3) >> 11);
 
   return s->s1 ^ s->s2 ^ s->s3;
 }
