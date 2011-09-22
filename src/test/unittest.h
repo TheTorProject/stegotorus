@@ -50,4 +50,8 @@ extern const struct testgroup_t unittest_groups[];
 
 #define ALEN(x) (sizeof x/sizeof x[0])
 
+/* Hooks to force OpenSSL's RNG to be predictable. */
+void ut_enable_predictable_rng(void);
+void ut_disable_predictable_rng(void);
+
 #endif

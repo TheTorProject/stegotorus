@@ -38,13 +38,10 @@ test_transfer(void *state)
   tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_client)));
   tt_int_op(a->len_c2s_on_wire, ==,
             evbuffer_get_length(conn_get_inbound(s->conn_server)));
-  /* Hack: if c2s_on_wire consists entirely of 'x'es, that means the
-     buffer contents are unpredictable. */
-  if (strspn(a->c2s_on_wire, "x") != a->len_c2s_on_wire)
-    tt_mem_op(a->c2s_on_wire, ==,
-              evbuffer_pullup(conn_get_inbound(s->conn_server),
-                              a->len_c2s_on_wire),
-              a->len_c2s_on_wire);
+  tt_mem_op(a->c2s_on_wire, ==,
+            evbuffer_pullup(conn_get_inbound(s->conn_server),
+                            a->len_c2s_on_wire),
+            a->len_c2s_on_wire);
 
   conn_recv(s->conn_server);
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
@@ -60,13 +57,10 @@ test_transfer(void *state)
   tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_server)));
   tt_int_op(a->len_s2c_on_wire, ==,
             evbuffer_get_length(conn_get_inbound(s->conn_client)));
-  /* Hack: if s2c_on_wire consists entirely of 'x'es, that means the
-     buffer contents are unpredictable. */
-  if (strspn(a->s2c_on_wire, "x") != a->len_s2c_on_wire)
-    tt_mem_op(a->s2c_on_wire, ==,
-              evbuffer_pullup(conn_get_inbound(s->conn_client),
-                              a->len_s2c_on_wire),
-              a->len_s2c_on_wire);
+  tt_mem_op(a->s2c_on_wire, ==,
+            evbuffer_pullup(conn_get_inbound(s->conn_client),
+                            a->len_s2c_on_wire),
+            a->len_s2c_on_wire);
 
   conn_recv(s->conn_client);
   tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
@@ -83,9 +77,14 @@ test_transfer(void *state)
 #define enc2_dummy msg2
 
 static const char enc1_obfs2[] =
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+  "\x48\x63\x37\x28\xbf\x68\xd4\x7c\x86\x59\x89\x71\x19\x88\x47\x07\xb1\x75"
+  "\xb3\x85\x55\x1a\x02\x4b\x76\xa2\x4e\x88\x04\x4e\xa4\x4a\xaf\x61\x84\x23"
+  "\xd6\x95\x44\xfe\x3a\x5b\x5b\x72\x09\xf7\x3c\xcc\xb1\xfc\x68\xd5\x57\x90";
 static const char enc2_obfs2[] =
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+  "\x6c\xe0\xe3\xb5\x49\x9e\x3e\x0e\x1d\xea\x04\x4d\x69\xf8\x1f\x30\x53\x7f"
+  "\xfd\x36\xaa\x77\x17\xb4\x69\x2b\x7b\x68\x34\x98\xaa\x7f\x7f\xc7\xdc\x6a"
+  "\x91\x58\x00\xc5\x2f\xf9\x30\xd4\x82\x48\xc3\xb6\xda\x51\xf0\x2f\xe0\x7e"
+  "\x6d";
 
 static const char enc1_s_x_http[] =
     "GET /7468697320697320612035342d62797465206d6573736167652070617373"
