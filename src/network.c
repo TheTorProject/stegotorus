@@ -388,7 +388,7 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
   circuit_t *ckt = arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
   log_debug("%s: %s, %ld bytes still to transmit",
-            ckt->up_peer, __func__, remain);
+            ckt->up_peer, __func__, (unsigned long)remain);
 
   if (remain == 0) {
     bufferevent_disable(bev, EV_WRITE);
@@ -411,7 +411,7 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
   conn_t *conn = arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
   log_debug("%s: %s, %ld bytes still to transmit",
-            conn->peername, __func__, remain);
+            conn->peername, __func__, (unsigned long)remain);
 
   if (remain == 0) {
     bufferevent_disable(bev, EV_WRITE);

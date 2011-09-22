@@ -15,9 +15,13 @@
 #include <string.h>
 
 #include <event2/util.h> /* evutil_addrinfo */
+
 #ifdef _WIN32
 #include <ws2tcpip.h> /* addrinfo (event2/util.h should do this,
                          but it doesn't) */
+
+#define SHUT_RD SD_RECEIVE
+#define SHUT_WR SD_SEND
 #endif
 
 struct bufferevent;

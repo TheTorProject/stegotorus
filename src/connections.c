@@ -337,7 +337,7 @@ circuit_recv_eof(circuit_t *ckt, conn_t *conn)
 
   outlen = evbuffer_get_length(outbuf);
   if (outlen) {
-    log_debug("%s: flushing %ld bytes", ckt->up_peer, outlen);
+    log_debug("%s: flushing %ld bytes", ckt->up_peer, (unsigned long)outlen);
     circuit_do_flush(ckt);
   } else {
     log_debug("%s: sending EOF", ckt->up_peer);
@@ -359,7 +359,7 @@ circuit_squelch(circuit_t *ckt)
 
     if (inlen) {
       log_debug("%s: discarding %ld bytes of pending input",
-                ckt->up_peer, inlen);
+                ckt->up_peer, (unsigned long)inlen);
       evbuffer_drain(inbuf, inlen);
     }
   }
@@ -390,7 +390,7 @@ circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction)
     } else {
       if (evbuffer_get_length(inbuf)) {
         log_debug("%s: no downstream connection, discarding %ld bytes",
-                  ckt->up_peer, evbuffer_get_length(inbuf));
+                  ckt->up_peer, (unsigned long)evbuffer_get_length(inbuf));
         evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
       }
       /* If we don't have a downstream connection at this point,
@@ -456,7 +456,7 @@ circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
       circuit_recv_eof(ckt, conn);
     } else if (evbuffer_get_length(inbuf)) {
       log_debug("%s: no upstream connection, discarding %ld bytes",
-                conn->peername, evbuffer_get_length(inbuf));
+                conn->peername, (unsigned long)evbuffer_get_length(inbuf));
       evbuffer_drain(inbuf, evbuffer_get_length(inbuf));
     }
 
