@@ -15,22 +15,8 @@
 
 #include <openssl/rand.h>
 
-extern struct testcase_t container_tests[];
-extern struct testcase_t crypt_tests[];
-extern struct testcase_t socks_tests[];
-extern struct testcase_t obfs2_tests[];
-extern struct testcase_t config_tests[];
-extern struct testcase_t transfer_tests[];
-
-static const struct testgroup_t groups[] = {
-  { "container/", container_tests },
-  { "crypt/", crypt_tests },
-  { "socks/", socks_tests },
-  { "obfs2/", obfs2_tests },
-  { "config/", config_tests },
-  { "transfer/", transfer_tests },
-  END_OF_GROUPS
-};
+/* Generic test fixture for protocol tests (currently used by obfs2
+   and transfer). */
 
 static void *
 setup_proto_test_state(const struct testcase_t *tcase)
@@ -52,8 +38,10 @@ setup_proto_test_state(const struct testcase_t *tcase)
   s->cfg_client = config_create(args->nopts_client, args->opts_client);
   s->cfg_server = config_create(args->nopts_server, args->opts_server);
 
-  s->conn_client = conn_create(s->cfg_client, pairs[0][0], xstrdup("to-server"));
-  s->conn_server = conn_create(s->cfg_server, pairs[0][1], xstrdup("to-client"));
+  s->conn_client = conn_create(s->cfg_client, pairs[0][0],
+                               xstrdup("to-server"));
+  s->conn_server = conn_create(s->cfg_server, pairs[0][1],
+                               xstrdup("to-client"));
 
   s->buf_client = pairs[1][0];
   s->buf_server = pairs[2][0];
@@ -61,8 +49,10 @@ setup_proto_test_state(const struct testcase_t *tcase)
   s->ckt_client = circuit_create(s->cfg_client);
   s->ckt_server = circuit_create(s->cfg_server);
 
-  circuit_add_upstream(s->ckt_client, pairs[1][1], xstrdup("to-harness-client"));
-  circuit_add_upstream(s->ckt_server, pairs[2][1], xstrdup("to-harness-server"));
+  circuit_add_upstream(s->ckt_client, pairs[1][1],
+                       xstrdup("to-harness-client"));
+  circuit_add_upstream(s->ckt_server, pairs[2][1],
+                       xstrdup("to-harness-server"));
 
   circuit_add_downstream(s->ckt_client, s->conn_client);
   circuit_add_downstream(s->ckt_server, s->conn_server);
@@ -126,7 +116,7 @@ main(int argc, const char **argv)
 
   initialize_crypto();
   conn_initialize();
-  rv = tinytest_main(argc, argv, groups);
+  rv = tinytest_main(argc, argv, unittest_groups);
   conn_start_shutdown(1);
   cleanup_crypto();
 

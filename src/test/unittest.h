@@ -45,6 +45,9 @@ struct proto_test_args
   const char *s2c_on_wire;
 };
 
+/* Master group list - defined in unitgrplist.c (which is generated). */
+extern const struct testgroup_t unittest_groups[];
+
 #define ALEN(x) (sizeof x/sizeof x[0])
 
 #endif
