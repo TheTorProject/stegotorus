@@ -120,6 +120,8 @@ setup_proto_test_state(const struct testcase_t *tcase)
 
   s->cfg_client = config_create(args->nopts_client, args->opts_client);
   s->cfg_server = config_create(args->nopts_server, args->opts_server);
+  s->cfg_client->base = s->base;
+  s->cfg_server->base = s->base;
 
   s->conn_client = conn_create(s->cfg_client, pairs[0][0],
                                xstrdup("to-server"));
