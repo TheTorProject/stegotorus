@@ -13,7 +13,7 @@ modules=$(sed -ne \
     's/'"$deftag"'_DEFINE_MODULE(\([a-zA-Z_][a-zA-Z0-9_]*\),.*$/\1/p' \
     "$@")
 
-trap "rm -f $output.$$" 0
+trap "rm -f '$output.$$'" 0
 exec 1> "$output.$$"
 
 printf \

@@ -37,15 +37,20 @@ endif
 obfsproxy_SOURCES = \
 	src/main.c
 
-unittests_SOURCES = \
-	src/test/tinytest.c \
-	src/test/unittest.c \
+UTGROUPS = \
 	src/test/unittest_container.c \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c \
 	src/test/unittest_obfs2.c \
 	src/test/unittest_config.c \
 	src/test/unittest_transfer.c
+
+unittests_SOURCES = \
+	src/test/tinytest.c \
+	src/test/unittest.c \
+	$(UTGROUPS)
+
+nodist_unittests_SOURCES = unitgrplist.c
 
 noinst_HEADERS = \
 	src/connections.h \
@@ -65,13 +70,16 @@ noinst_HEADERS = \
 	src/test/tinytest_macros.h \
 	src/test/unittest.h
 
-dist_noinst_SCRIPTS = src/genmodtable.sh src/test/tester.py
+dist_noinst_SCRIPTS = \
+	src/genmodtable.sh \
+	src/test/genunitgrps.sh \
+	src/test/tester.py
 
 EXTRA_DIST = doc \
 	src/protocols/roundrobin.c
 
 # Generated source files
-CLEANFILES = $(nodist_libobfsproxy_a_SOURCES)
+CLEANFILES = $(nodist_libobfsproxy_a_SOURCES) $(nodist_unittests_SOURCES)
 
 protolist.c: $(PROTOCOLS) Makefile src/genmodtable.sh
 	$(SHELL) $(srcdir)/src/genmodtable.sh protocol PROTO proto p \
@@ -80,6 +88,10 @@ protolist.c: $(PROTOCOLS) Makefile src/genmodtable.sh
 steglist.c: $(STEGANOGRAPHERS) Makefile src/genmodtable.sh
 	$(SHELL) $(srcdir)/src/genmodtable.sh steganographer STEG steg s \
 		$@ $(filter-out %Makefile %genmodtable.sh, $^)
+
+unitgrplist.c: $(UTGROUPS) Makefile src/test/genunitgrps.sh
+	$(SHELL) $(srcdir)/src/test/genunitgrps.sh \
+		$@ $(filter-out %Makefile %genunitgrps.sh, $^)
 
 # Testing
 check-local:

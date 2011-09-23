@@ -1,15 +1,10 @@
 *~
 *.o
+*.pyc
 *.gcov
 *.gcda
 *.gcno
 
-Makefile
-Makefile.in
-protolist.c
-steglist.c
-
-/.deps
 /aclocal.m4
 /autom4te.cache
 /config.guess
@@ -20,11 +15,18 @@ steglist.c
 /config.sub
 /configure
 /depcomp
+/.deps
 /install-sh
+/Makefile
+/Makefile.in
 /missing
 /stamp-h1
+
+/protolist.c
+/steglist.c
+/unitgrplist.c
+
 /libobfsproxy.a
 /obfsproxy
 /unittests
-/src/test/*.pyc
 

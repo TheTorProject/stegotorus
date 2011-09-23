@@ -220,21 +220,41 @@ x_dsteg_circuit_send(circuit_t *c)
 {
   conn_t *d = c->downstream;
   struct evbuffer *source = bufferevent_get_input(c->up_buffer);
-  struct evbuffer *chunk = evbuffer_new();
+  struct evbuffer *chunk;
   x_dsteg_conn_t *dest = downcast_conn(d);
   steg_t *steg = dest->steg;
+  size_t room;
+  int rv = 0;
 
-  obfs_assert(steg);
-  if (evbuffer_remove_buffer(source, chunk, steg_transmit_room(steg, d)) < 0) {
+  circuit_disarm_flush_timer(c);
+
+  /* If we haven't detected a steg target yet, we can't transmit.
+     This is not an error condition, we just have to wait for the
+     client to say something. */
+  if (!steg) return 0;
+
+  /* Only transmit if we have room. */
+  room = steg_transmit_room(steg, d);
+  if (room) {
+    chunk = evbuffer_new();
+    if (!chunk) return -1;
+
+    rv = evbuffer_remove_buffer(source, chunk, room);
+    if (rv >= 0)
+      rv = steg_transmit(steg, chunk, d);
     evbuffer_free(chunk);
-    return -1;
   }
-  if (steg_transmit(steg, chunk, d)) {
-    /* undo undo undo */
-    evbuffer_prepend_buffer(source, chunk);
-    evbuffer_free(chunk);
+
+  if (rv < 0)
     return -1;
-  }
+
+  /* If that was successful, but we still have data pending, receipt
+     of a response will trigger another transmission.  But in case
+     that doesn't happen set a timer to force more data out in a few
+     hundred milliseconds. */
+  if (evbuffer_get_length(source) > 0)
+    circuit_arm_flush_timer(c, 200);
+
   return 0;
 }
 
@@ -243,6 +263,8 @@ static enum recv_ret
 x_dsteg_conn_recv(conn_t *s)
 {
   x_dsteg_conn_t *source = downcast_conn(s);
+  enum recv_ret ret;
+
   if (!source->steg) {
     obfs_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
     if (evbuffer_get_length(conn_get_inbound(s)) == 0)
@@ -255,8 +277,16 @@ x_dsteg_conn_recv(conn_t *s)
       log_debug("Detected steg pattern %s", source->steg->vtable->name);
     }
   }
-  return steg_receive(source->steg, s,
-                      bufferevent_get_output(s->circuit->up_buffer));
+  ret = steg_receive(source->steg, s,
+                     bufferevent_get_output(s->circuit->up_buffer));
+  if (ret != RECV_GOOD)
+    return ret;
+
+  /* check for pending transmissions */
+  if (evbuffer_get_length(bufferevent_get_input(s->circuit->up_buffer)) == 0)
+    return RECV_GOOD;
+
+  return x_dsteg_circuit_send(s->circuit) ? RECV_BAD : RECV_GOOD;
 }
 
 
