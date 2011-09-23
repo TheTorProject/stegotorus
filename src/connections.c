@@ -229,6 +229,15 @@ conn_transmit_soon(conn_t *conn, unsigned long timeout)
 
 /* Circuits. */
 
+static void
+flush_timer_cb(evutil_socket_t fd, short what, void *arg)
+{
+  circuit_t *ckt = arg;
+  log_debug("%s: flush timer expired, %ld bytes available", ckt->up_peer,
+            evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+  circuit_send(ckt);
+}
+
 circuit_t *
 circuit_create(config_t *cfg)
 {
@@ -240,6 +249,8 @@ circuit_create(config_t *cfg)
 
   if (cfg->mode == LSN_SOCKS_CLIENT)
     ckt->socks_state = socks_state_new();
+
+  ckt->flush_timer = evtimer_new(cfg->base, flush_timer_cb, ckt);
 
   smartlist_add(circuits, ckt);
   return ckt;
@@ -285,6 +296,8 @@ circuit_close(circuit_t *ckt)
     free((void *)ckt->up_peer);
   if (ckt->socks_state)
     socks_state_free(ckt->socks_state);
+  if (ckt->flush_timer)
+    event_free(ckt->flush_timer);
 
   ckt->cfg->vtable->circuit_free(ckt);
 
@@ -363,6 +376,21 @@ circuit_squelch(circuit_t *ckt)
       evbuffer_drain(inbuf, inlen);
     }
   }
+}
+
+void
+circuit_arm_flush_timer(circuit_t *ckt, unsigned int milliseconds)
+{
+  struct timeval tv;
+  tv.tv_sec = 0;
+  tv.tv_usec = milliseconds * 1000;
+  evtimer_add(ckt->flush_timer, &tv);
+}
+
+void
+circuit_disarm_flush_timer(circuit_t *ckt)
+{
+  evtimer_del(ckt->flush_timer);
 }
 
 void

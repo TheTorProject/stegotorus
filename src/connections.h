@@ -129,6 +129,7 @@ void conn_transmit_soon(conn_t *conn, unsigned long timeout);
 
 struct circuit_t {
   config_t           *cfg;
+  struct event       *flush_timer;
   struct bufferevent *up_buffer;
   const char         *up_peer;
 
@@ -149,6 +150,9 @@ void circuit_squelch(circuit_t *ckt);
 
 void circuit_send(circuit_t *ckt);
 void circuit_recv_eof(circuit_t *ckt, conn_t *down);
+
+void circuit_arm_flush_timer(circuit_t *ckt, unsigned int milliseconds);
+void circuit_disarm_flush_timer(circuit_t *ckt);
 
 void circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction);
 void circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
