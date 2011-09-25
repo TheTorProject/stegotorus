@@ -7,7 +7,7 @@ LDADD = libobfsproxy.a @libevent_LIBS@ @libcrypto_LIBS@ @ws32_LIBS@
 
 bin_PROGRAMS = obfsproxy
 noinst_LIBRARIES = libobfsproxy.a
-noinst_PROGRAMS = unittests
+noinst_PROGRAMS = unittests tltester
 
 PROTOCOLS = \
 	src/protocols/dummy.c \
@@ -51,6 +51,8 @@ unittests_SOURCES = \
 	$(UTGROUPS)
 
 nodist_unittests_SOURCES = unitgrplist.c
+
+tltester_SOURCES = src/test/tltester.c
 
 noinst_HEADERS = \
 	src/connections.h \

@@ -11,6 +11,7 @@
 #include <stdarg.h> /* va_list */
 #include <stddef.h> /* size_t, ptrdiff_t, offsetof, NULL */
 #include <stdint.h> /* intN_t, uintN_t */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -129,6 +130,8 @@ int obfs_vsnprintf(char *str, size_t size,
 int obfs_snprintf(char *str, size_t size,
                   const char *format, ...)
   ATTR_PRINTF_3;
+
+size_t obfs_getline(char **lineptr, size_t *nptr, FILE *stream);
 
 /***** Logging. *****/
 

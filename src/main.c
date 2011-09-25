@@ -12,7 +12,6 @@
 
 #include <errno.h>
 #include <signal.h>
-#include <stdio.h>
 
 #include <event2/event.h>
 #include <event2/dns.h>

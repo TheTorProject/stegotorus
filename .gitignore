@@ -28,5 +28,6 @@
 
 /libobfsproxy.a
 /obfsproxy
+/tltester
 /unittests
 

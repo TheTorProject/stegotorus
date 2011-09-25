@@ -6,7 +6,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <unistd.h>
 
 #include <event2/dns.h>
@@ -257,7 +256,8 @@ init_evdns_base(struct event_base *base)
 }
 
 /************************ String Functions *************************/
-/** The functions in this section were carbon copied off tor. Thank you tor! */
+/** Many of the functions in this section were carbon copied off tor.
+    Thank you tor! */
 
 /** Replacement for snprintf.  Differs from platform snprintf in two
  * ways: First, always NUL-terminates its output.  Second, always
@@ -294,6 +294,60 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
     return -1;
   return r;
 }
+
+/** getline() as standardized by POSIX-1.2008, except:
+ *
+ *  - The return type is unsigned. The return value on EOF
+ *    or error is 0, not -1, and we guarantee to fill in
+ *    *lineptr and *nptr regardless.
+ *
+ *  - Implements "universal newline" handling, i.e. the line
+ *    terminator may be '\n', '\r', or '\r\n' regardless of
+ *    the system convention. For this to work correctly,
+ *    |stream| should have been opened in binary mode.
+ */
+size_t
+obfs_getline(char **lineptr, size_t *nptr, FILE *stream)
+{
+  char *line = *lineptr;
+  size_t asize = *nptr;
+  size_t linelen = 0;
+  int c;
+
+  if (!line) {
+    /* start with an 80-character buffer */
+    line = xmalloc(80);
+    asize = 80;
+  }
+
+  while ((c = getc(stream)) != EOF) {
+    if (linelen >= asize) {
+      asize *= 2;
+      line = xrealloc(line, asize);
+    }
+
+    line[linelen++] = c;
+    if (c == '\n')
+      break;
+    if (c == '\r') {
+      line[linelen-1] = '\n'; /* canonicalize */
+      c = getc(stream);
+      if (c != '\n')
+        ungetc(c, stream);
+      break;
+    }
+  }
+
+  if (linelen >= asize) {
+    asize++;
+    line = xrealloc(line, asize);
+  }
+  line[linelen] = '\0';
+  *lineptr = line;
+  *nptr = asize;
+  return linelen;
+}
+
 /** Remove from the string <b>s</b> every character which appears in
  * <b>strip</b>. */
 void
