@@ -215,12 +215,7 @@ socket_event_cb(struct bufferevent *buf, short what, void *arg)
     }
   }
 
-  /* timeout and connect are just logged */
-  if (what & BEV_EVENT_TIMEOUT) {
-    what &= ~BEV_EVENT_TIMEOUT;
-    fprintf(st->transcript, "%c %c bufferevent timeout\n",
-            near ? '{' : '}', reading ? 'R' : 'W');
-  }
+  /* connect is just logged */
   if (what & BEV_EVENT_CONNECTED) {
     what &= ~BEV_EVENT_CONNECTED;
     fprintf(st->transcript, "%c\n", near ? '(' : ')');
@@ -421,30 +416,154 @@ script_next_action(tstate *st)
   }
 }
 
+static void
+init_sockets_internal(tstate *st)
+{
+  /* The behavior of pair bufferevents is sufficiently unlike the behavior
+     of socket bufferevents that we don't want them here. Use the kernel's
+     socketpair() instead. */
+  evutil_socket_t pair[2];
+  int rv;
+
+#ifdef AF_LOCAL
+  rv = evutil_socketpair(AF_LOCAL, SOCK_STREAM, 0, pair);
+#else
+  rv = evutil_socketpair(AF_INET, SOCK_STREAM, 0, pair);
+#endif
+  if (rv == -1) {
+    fprintf(stderr, "socketpair: %s\n",
+            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    exit(1);
+  }
+
+  st->near = bufferevent_socket_new(st->base, pair[0], BEV_OPT_CLOSE_ON_FREE);
+  st->far = bufferevent_socket_new(st->base, pair[1], BEV_OPT_CLOSE_ON_FREE);
+  if (!st->near || !st->far) {
+    fprintf(stderr, "creating socket buffers: %s\n",
+            strerror(errno));
+    exit(1);
+  }
+}
+
+static void
+init_sockets_external(tstate *st, const char *near, const char *far)
+{
+  /* We don't bother using libevent's async connection logic for this,
+     because we have nothing else to do while waiting for the
+     connections to happen, so we might as well just block in
+     connect() and accept().  [XXX It's possible that we will need to
+     change this in order to work correctly on Windows; libevent has
+     substantial coping-with-Winsock logic that *may* be needed here.]
+     However, take note of the order of operations: create both
+     sockets, bind the listening socket, *then* call connect(), *then*
+     accept().  The code under test triggers outbound connections when
+     it receives inbound connections, so any other order will either
+     fail or deadlock. */
+  evutil_socket_t nearfd, farfd, listenfd;
+
+  struct evutil_addrinfo *near_addr =
+    resolve_address_port(near, 1, 0, "5000");
+  struct evutil_addrinfo *far_addr =
+    resolve_address_port(far, 1, 1, "5001");
+
+  if (!near_addr || !far_addr)
+    exit(2); /* diagnostic already printed */
+
+  nearfd = socket(near_addr->ai_addr->sa_family, SOCK_STREAM, 0);
+  if (!nearfd) {
+    fprintf(stderr, "socket(%s): %s\n", near,
+            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    exit(1);
+  }
+  listenfd = socket(far_addr->ai_addr->sa_family, SOCK_STREAM, 0);
+  if (!listenfd) {
+    fprintf(stderr, "socket(%s): %s\n", far,
+            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    exit(1);
+  }
+
+  if (evutil_make_listen_socket_reuseable(listenfd)) {
+    fprintf(stderr, "setsockopt(%s, SO_REUSEADDR): %s\n", far,
+            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    exit(1);
+  }
+  if (bind(listenfd, far_addr->ai_addr, far_addr->ai_addrlen)) {
+    fprintf(stderr, "bind(%s): %s\n", far,
+            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    exit(1);
+  }
+  if (listen(listenfd, 1)) {
+    fprintf(stderr, "listen(%s): %s\n", far,
+            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    exit(1);
+  }
+
+  if (connect(nearfd, near_addr->ai_addr, near_addr->ai_addrlen)) {
+    fprintf(stderr, "connect(%s): %s\n", near,
+            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    exit(1);
+  }
+
+  farfd = accept(listenfd, NULL, NULL);
+  if (farfd == -1) {
+    fprintf(stderr, "accept(%s): %s\n", far,
+            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    exit(1);
+  }
+
+  /* Done listening now. */
+  evutil_closesocket(listenfd);
+  evutil_freeaddrinfo(near_addr);
+  evutil_freeaddrinfo(far_addr);
+
+  /* Now we're all hooked up, switch to nonblocking mode and
+     create bufferevents. */
+  if (evutil_make_socket_nonblocking(nearfd) ||
+      evutil_make_socket_nonblocking(farfd)) {
+    fprintf(stderr, "setsockopt(SO_NONBLOCK): %s\n",
+            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    exit(1);
+  }
+  st->near = bufferevent_socket_new(st->base, nearfd, BEV_OPT_CLOSE_ON_FREE);
+  st->far = bufferevent_socket_new(st->base, farfd, BEV_OPT_CLOSE_ON_FREE);
+  if (!st->near || !st->far) {
+    fprintf(stderr, "creating socket buffers: %s\n",
+            strerror(errno));
+    exit(1);
+  }
+}
+
 int
 main(int argc, char **argv)
 {
   tstate st;
   memset(&st, 0, sizeof(tstate));
 
+  if (argc != 1 && argc != 3) {
+    char *name = strrchr(argv[0], '/');
+    name = name ? name+1 : argv[0];
+    fprintf(stderr, "usage: %s [near-addr far-addr]\n", name);
+    return 2;
+  }
+
   st.script = stdin;
   st.transcript = stdout;
   st.base = event_base_new();
-  st.pause_timer = evtimer_new(st.base, pause_expired_cb, &st);
-
-  {
-    /* The behavior of pair bufferevents is sufficiently unlike the behavior
-       of socket bufferevents that we don't want them here. Use the kernel's
-       socketpair() instead. */
-    evutil_socket_t pair[2];
-#ifdef AF_LOCAL
-    evutil_socketpair(AF_LOCAL, SOCK_STREAM, 0, pair);
-#else
-    evutil_socketpair(AF_INET, SOCK_STREAM, 0, pair);
-#endif
-    st.near = bufferevent_socket_new(st.base, pair[0], BEV_OPT_CLOSE_ON_FREE);
-    st.far = bufferevent_socket_new(st.base, pair[1], BEV_OPT_CLOSE_ON_FREE);
+  if (!st.base) {
+    fprintf(stderr, "creating event_base: %s\n", strerror(errno));
+    return 1;
   }
+  st.pause_timer = evtimer_new(st.base, pause_expired_cb, &st);
+  if (!st.pause_timer) {
+    fprintf(stderr, "creating pause timer: %s\n", strerror(errno));
+    return 1;
+  }
+
+  if (argc == 1)
+    init_sockets_internal(&st);
+  else
+    init_sockets_external(&st, argv[1], argv[2]);
+
   bufferevent_setcb(st.near,
                     socket_read_cb, socket_drain_cb, socket_event_cb, &st);
   bufferevent_setcb(st.far,
