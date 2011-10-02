@@ -99,7 +99,9 @@ unitgrplist.c: $(UTGROUPS) Makefile src/test/genunitgrps.sh
 check-local:
 	@echo --- Unit tests ---
 	./unittests
-if HAVE_PYTHON
+if INTEGRATION_TESTS
 	@echo --- Integration tests ---
-	$(PYTHON) $(srcdir)/src/test/tester.py --verbose
+	$(PYTHON) -m unittest discover -s $(srcdir)/src/test -p 'test_*.py' -v
+else
+	@echo !!! Integration tests skipped !!!
 endif

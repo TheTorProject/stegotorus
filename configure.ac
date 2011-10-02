@@ -13,14 +13,21 @@ m4_pushdef([AC_INCLUDES_DEFAULT], [$1])
 
 AC_PROG_CC
 AC_PROG_RANLIB
-
-AM_PATH_PYTHON([2.6],, [:])
-AM_CONDITIONAL([HAVE_PYTHON], [test "$PYTHON" != ":"])
-if test "$PYTHON" == ":"; then
-  AC_MSG_WARN([Python interpreter not found; integration tests disabled.])
-fi
-
 PKG_PROG_PKG_CONFIG
+
+# We need python 2.7 for TestLoader.discover().
+# The unit tests presently only work on POSIX systems.
+AM_PATH_PYTHON([2.7],, [:])
+if test "$PYTHON" = ":"; then
+  AC_MSG_WARN([Python interpreter not found; integration tests disabled.])
+  PYOS=none
+else
+  PYOS=`$PYTHON -c 'import os; print os.name'`
+  if test "$PYOS" != "posix"; then
+    AC_MSG_WARN([Not a POSIX platform; integration tests disabled.])
+  fi
+fi
+AM_CONDITIONAL([INTEGRATION_TESTS], [test "$PYOS" = "posix"])
 
 ### Libraries ###
 
