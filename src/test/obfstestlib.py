@@ -10,6 +10,11 @@ import subprocess
 import threading
 import time
 
+# Helper: stick "| " at the beginning of each line of |s|.
+
+def indent(s):
+    return "| " + "\n| ".join(s.strip().split("\n"))
+
 # Helper: generate unified-format diffs between two named strings.
 # Pythonic escaped-string syntax is used for unprintable characters.
 
@@ -17,13 +22,13 @@ def diff(label, expected, received):
     if expected == received:
         return ""
     else:
-        return (label + "\n"
-                + "\n".join(s.encode("string_escape")
-                            for s in
-                            difflib.unified_diff(expected.split("\n"),
-                                                 received.split("\n"),
-                                                 "expected", "received",
-                                                 lineterm=""))
+        return (label + "\n| "
+                + "\n| ".join(s.encode("string_escape")
+                              for s in
+                              difflib.unified_diff(expected.split("\n"),
+                                                   received.split("\n"),
+                                                   "expected", "received",
+                                                   lineterm=""))
                 + "\n")
 
 # Helper: Run obfsproxy instances and confirm that they have
@@ -69,7 +74,7 @@ class Obfsproxy(subprocess.Popen):
     severe_error_re = re.compile(
         r"\[(?:warn|err(?:or)?)\]|ERROR SUMMARY: [1-9]|LEAK SUMMARY:")
 
-    def check_completion(self, label, force_stderr):
+    def check_completion(self, label, force_stderr=False):
         if self.poll() is None:
             # subprocess.communicate has no timeout; arrange to blow
             # the process away if it doesn't respond to the initial
@@ -83,8 +88,6 @@ class Obfsproxy(subprocess.Popen):
         (out, err) = self.communicate()
 
         report = ""
-        def indent(s):
-            return "| " + "\n| ".join(s.strip().split("\n"))
 
         # exit status should be zero
         if self.returncode > 0:
