@@ -123,7 +123,7 @@ struct proto_vtable
   void (*conn_transmit_soon)(conn_t *conn, unsigned long timeout);
 };
 
-extern const proto_vtable *const supported_protocols[];
+extern const proto_vtable *const supported_protos[];
 
 /** Use these macros to define protocol modules; they ensure all the
     methods are in the correct order in the vtable, enforce a

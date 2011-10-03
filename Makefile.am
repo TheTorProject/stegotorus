@@ -74,21 +74,23 @@ noinst_HEADERS = \
 
 dist_noinst_SCRIPTS = \
 	src/genmodtable.sh \
-	src/test/genunitgrps.sh \
-	src/test/tester.py
+	src/test/genunitgrps.sh
 
 EXTRA_DIST = doc \
-	src/protocols/roundrobin.c
+	src/protocols/roundrobin.c \
+	src/test/obfstestlib.py \
+	src/test/test_endtoend.py \
+	src/test/test_socks.py
 
 # Generated source files
 CLEANFILES = $(nodist_libobfsproxy_a_SOURCES) $(nodist_unittests_SOURCES)
 
 protolist.c: $(PROTOCOLS) Makefile src/genmodtable.sh
-	$(SHELL) $(srcdir)/src/genmodtable.sh protocol PROTO proto p \
+	$(SHELL) $(srcdir)/src/genmodtable.sh \
 		$@ $(filter-out %Makefile %genmodtable.sh, $^)
 
 steglist.c: $(STEGANOGRAPHERS) Makefile src/genmodtable.sh
-	$(SHELL) $(srcdir)/src/genmodtable.sh steganographer STEG steg s \
+	$(SHELL) $(srcdir)/src/genmodtable.sh \
 		$@ $(filter-out %Makefile %genmodtable.sh, $^)
 
 unitgrplist.c: $(UTGROUPS) Makefile src/test/genunitgrps.sh

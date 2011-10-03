@@ -37,5 +37,8 @@ done
 printf '  END_OF_GROUPS\n};\n'
 
 exec 1>&-
-mv -f "$output.$$" "$output"
+if cmp -s "$output.$$" "$output"
+then rm -f "$output.$$"; echo "$output" is unchanged >&2
+else mv -f "$output.$$" "$output"
+fi
 trap "" 0

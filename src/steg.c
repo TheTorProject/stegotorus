@@ -11,7 +11,7 @@ int
 steg_is_supported(const char *name)
 {
   const steg_vtable *const *s;
-  for (s = supported_steganographers; *s; s++)
+  for (s = supported_stegs; *s; s++)
     if (!strcmp(name, (*s)->name))
       return 1;
   return 0;
@@ -22,7 +22,7 @@ steg_t *
 steg_new(const char *name)
 {
   const steg_vtable *const *s;
-  for (s = supported_steganographers; *s; s++)
+  for (s = supported_stegs; *s; s++)
     if (!strcmp(name, (*s)->name))
       return (*s)->new(NULL, /*is_clientside=*/1);
   return NULL;
@@ -33,7 +33,7 @@ steg_t *
 steg_detect(conn_t *conn)
 {
   const steg_vtable *const *s;
-  for (s = supported_steganographers; *s; s++)
+  for (s = supported_stegs; *s; s++)
     if ((*s)->detect(conn))
       return (*s)->new(NULL, /*is_clientside=*/0);
   return NULL;

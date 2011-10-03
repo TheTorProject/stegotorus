@@ -98,7 +98,7 @@ usage(void)
         "protocol_name ...\n"
         "* Available protocols:\n", stderr);
   /* this is awful. */
-  for (p = supported_protocols; *p; p++)
+  for (p = supported_protos; *p; p++)
     fprintf(stderr,"[%s] ", (*p)->name);
   fprintf(stderr, "\n* Available arguments:\n"
           "--log-file=<file> ~ set logfile\n"

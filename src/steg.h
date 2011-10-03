@@ -78,7 +78,7 @@ struct steg_vtable
   enum recv_ret (*receive)(steg_t *state, conn_t *conn, struct evbuffer *dest);
 };
 
-extern const steg_vtable *const supported_steganographers[];
+extern const steg_vtable *const supported_stegs[];
 
 int steg_is_supported(const char *name);
 
