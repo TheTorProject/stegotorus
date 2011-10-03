@@ -20,7 +20,7 @@
 /Makefile
 /Makefile.in
 /missing
-/stamp-h1
+/stamp-*
 
 /protolist.c
 /steglist.c

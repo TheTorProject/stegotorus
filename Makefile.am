@@ -83,19 +83,23 @@ EXTRA_DIST = doc \
 	src/test/test_socks.py
 
 # Generated source files
-CLEANFILES = $(nodist_libobfsproxy_a_SOURCES) $(nodist_unittests_SOURCES)
+CLEANFILES = protolist.c steglist.c unitgrplist.c \
+	stamp-protolist stamp-steglist stamp-unitgrplist
 
-protolist.c: $(PROTOCOLS) Makefile src/genmodtable.sh
-	$(SHELL) $(srcdir)/src/genmodtable.sh \
-		$@ $(filter-out %Makefile %genmodtable.sh, $^)
+protolist.c: stamp-protolist ;
+stamp-protolist: $(PROTOCOLS) Makefile src/genmodtable.sh
+	$(SHELL) $(srcdir)/src/genmodtable.sh protolist.c $(filter %.c, $^)
+	touch stamp-protolist
 
-steglist.c: $(STEGANOGRAPHERS) Makefile src/genmodtable.sh
-	$(SHELL) $(srcdir)/src/genmodtable.sh \
-		$@ $(filter-out %Makefile %genmodtable.sh, $^)
+steglist.c: stamp-steglist ;
+stamp-steglist: $(STEGANOGRAPHERS) Makefile src/genmodtable.sh
+	$(SHELL) $(srcdir)/src/genmodtable.sh steglist.c $(filter %.c, $^)
+	touch stamp-steglist
 
-unitgrplist.c: $(UTGROUPS) Makefile src/test/genunitgrps.sh
-	$(SHELL) $(srcdir)/src/test/genunitgrps.sh \
-		$@ $(filter-out %Makefile %genunitgrps.sh, $^)
+unitgrplist.c: stamp-unitgrplist ;
+stamp-unitgrplist: $(UTGROUPS) Makefile src/test/genunitgrps.sh
+	$(SHELL) $(srcdir)/src/test/genunitgrps.sh unitgrplist.c $(filter %.c, $^)
+	touch stamp-unitgrplist
 
 # Testing
 check-local:
