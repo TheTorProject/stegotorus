@@ -55,7 +55,7 @@ class SocksTest(object):
         return self.output_reader.get()
 
     def socksTest(self, sequence):
-        input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
+        input_chan = socket.create_connection(("127.0.0.1", ENTRY_PORT))
         input_chan.settimeout(1.0)
 
         try:

@@ -5,7 +5,6 @@ import errno
 import os
 import re
 import shlex
-import signal
 import socket
 import subprocess
 import threading
@@ -56,33 +55,31 @@ class Obfsproxy(subprocess.Popen):
         else:
             argv.extend(args)
 
-        # Windows needs an extra argument passed to parent __init__,
-        # but the constant isn't defined on Unix.
-        try: kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
-        except AttributeError: pass
         subprocess.Popen.__init__(self, argv,
-                                  stdin=open(os.path.devnull, "r"),
+                                  stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
                                   env=obfsproxy_env,
+                                  close_fds=True,
                                   **kwargs)
+        # wait for startup completion, which is signaled by
+        # the subprocess closing its stdout
+        self.stdout.read()
 
     severe_error_re = re.compile(
         r"\[(?:warn|err(?:or)?)\]|ERROR SUMMARY: [1-9]|LEAK SUMMARY:")
 
     def check_completion(self, label, force_stderr):
         if self.poll() is None:
-            try: signo = signal.CTRL_C_EVENT # Windows
-            except AttributeError: signo = signal.SIGINT # Unix
-
             # subprocess.communicate has no timeout; arrange to blow
-            # the process away if it doesn't respond to the original
-            # signal in a timely fashion.
+            # the process away if it doesn't respond to the initial
+            # shutdown request in a timely fashion.
             timeout = threading.Thread(target=self.stop, args=(1.0,))
             timeout.daemon = True
             timeout.start()
-            self.send_signal(signo)
 
+        # this will close the subprocess's stdin as its first act, which
+        # will trigger a clean shutdown
         (out, err) = self.communicate()
 
         report = ""
@@ -115,23 +112,6 @@ class Obfsproxy(subprocess.Popen):
                 if self.poll() is not None: return
             self.terminate()
 
-
-# Helper: Repeatedly try to connect to the specified server socket
-# until either it succeeds or one full second has elapsed.  (Surely
-# there is a better way to do this?)
-
-def connect_with_retry(addr):
-    retry = 0
-    if len(obfsproxy_grindv) == 0: maxretries = 20
-    else: maxretries = 100 # valgrind is slow, give it some more time
-    while True:
-        try:
-            return socket.create_connection(addr)
-        except socket.error, e:
-            if e.errno != errno.ECONNREFUSED: raise
-            if retry >= maxretries: raise
-            retry += 1
-            time.sleep(0.05)
 
 # Helper: In a separate thread (to avoid deadlock), listen on a
 # specified socket.  The first time something connects to that socket,

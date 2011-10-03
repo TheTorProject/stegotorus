@@ -19,7 +19,7 @@ class DirectTest(object):
     def setUp(self):
         self.output_reader = ReadWorker(("127.0.0.1", EXIT_PORT))
         self.obfs = Obfsproxy(self.obfs_args)
-        self.input_chan = connect_with_retry(("127.0.0.1", ENTRY_PORT))
+        self.input_chan = socket.create_connection(("127.0.0.1", ENTRY_PORT))
         self.input_chan.settimeout(1.0)
 
     def tearDown(self):

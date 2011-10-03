@@ -12,6 +12,7 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <sys/stat.h>
 
 #include <event2/event.h>
 #include <event2/dns.h>
@@ -35,8 +36,15 @@ static struct event_base *the_event_base;
    (Only called by signal handlers)
 */
 static void
-start_shutdown(int barbaric)
+start_shutdown(int barbaric, const char *label)
 {
+  log_info("%s shutdown triggered by %s "
+           "(%ld connection%s, %ld circuit%s %s)",
+           barbaric ? "barbaric" : "normal", label,
+           conn_count(), conn_count() == 1 ? "" : "s",
+           circuit_count(), circuit_count() == 1 ? "" : "s",
+           barbaric ? "will be broken" : "remain");
+
   listener_close_all();          /* prevent further connections */
   conn_start_shutdown(barbaric); /* possibly break existing connections */
 }
@@ -71,18 +79,35 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 
   if (signum == SIGINT && !got_sigint) {
     got_sigint++;
-    log_info("Normal shutdown on SIGINT "
-             "(%ld connection%s, %ld circuit%s remain)",
-             conn_count(), conn_count() == 1 ? "" : "s",
-             circuit_count(), circuit_count() == 1 ? "" : "s");
-    start_shutdown(0);
+    start_shutdown(0, "SIGINT");
   } else {
-    log_info("Barbaric shutdown on %s "
-             "(%ld connection%s, %ld circuit%s will be broken)",
-             signum == SIGINT ? "SIGINT" : "SIGTERM",
-             conn_count(), conn_count() == 1 ? "" : "s",
-             circuit_count(), circuit_count() == 1 ? "" : "s");
-    start_shutdown(1);
+    start_shutdown(1, signum == SIGINT ? "SIGINT" : "SIGTERM");
+  }
+}
+
+/**
+   Largely because Windows and signals don't mix for beans, there is
+   another way to trigger a clean shutdown: if standard input is a
+   pipe, socket, or terminal, we will shut down non-barbarically when
+   that channel receives an EOF.
+*/
+static void
+stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
+{
+  size_t nread = 0;
+  ev_ssize_t r;
+  char buf[4096];
+  for (;;) {
+    r = read(fd, buf, sizeof buf);
+    if (r <= 0) break;
+    nread += r;
+  }
+
+  log_debug("read %lu bytes from stdin", nread);
+  if (nread == 0) {
+    struct event *ev = arg;
+    event_del(ev);
+    start_shutdown(0, "EOF on stdin");
   }
 }
 
@@ -171,9 +196,11 @@ main(int argc, const char *const *argv)
 {
   struct event *sig_int;
   struct event *sig_term;
+  struct event *stdin_eof;
   smartlist_t *configs = smartlist_create();
   const char *const *begin;
   const char *const *end;
+  struct stat st;
 
   /* Handle optional obfsproxy arguments. */
   begin = argv + handle_obfsproxy_args(argv);
@@ -252,6 +279,25 @@ main(int argc, const char *const *argv)
     return 1;
   }
 
+  /* Handle EOF-on-stdin. */
+  if (!fstat(STDIN_FILENO, &st) &&
+      ((S_ISCHR(st.st_mode) && isatty(STDIN_FILENO)) ||
+       S_ISFIFO(st.st_mode) || S_ISSOCK(st.st_mode))) {
+    /* We do this this way because we want to make the event itself the
+       callback argument. */
+    stdin_eof = xmalloc(event_get_struct_event_size());
+    evutil_make_socket_nonblocking(STDIN_FILENO);
+    event_assign(stdin_eof, the_event_base,
+                 STDIN_FILENO, EV_READ|EV_PERSIST,
+                 stdin_detect_eof_cb, stdin_eof);
+    if (event_add(stdin_eof, 0)) {
+      log_error("Failed to initialize stdin monitor.");
+      return 1;
+    }
+  } else {
+    stdin_eof = NULL;
+  }
+
   /* Open listeners for each configuration. */
   SMARTLIST_FOREACH(configs, config_t *, cfg, {
     if (!listener_open(the_event_base, cfg)) {
@@ -260,9 +306,11 @@ main(int argc, const char *const *argv)
     }
   });
 
-  /* We are go for launch. */
+  /* We are go for launch. As a signal to any monitoring process that may
+     be running, close stdout now. */
   log_info("Obfsproxy process %lu now initialized",
            (unsigned long)getpid());
+  fclose(stdout);
 
   event_base_dispatch(the_event_base);
 
@@ -278,6 +326,7 @@ main(int argc, const char *const *argv)
   evdns_base_free(get_evdns_base(), 0);
   event_free(sig_int);
   event_free(sig_term);
+  free(stdin_eof);
   event_base_free(the_event_base);
 
   cleanup_crypto();
