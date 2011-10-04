@@ -28,15 +28,15 @@ class TimelineTest(object):
         errors = ""
         try:
             testtl = tester.check_completion(label + " tester")
+            if testtl != self.reftl:
+                errors += diff("errors in transfer:", self.reftl, testtl)
+
         except AssertionError, e:
             errors += e.message
         except Exception, e:
             errors += repr(e)
 
         errors += obfs.check_completion(label + " proxy", errors != "")
-
-        if testtl != self.reftl:
-            errors += diff("errors in transfer:", self.reftl, testtl)
 
         if errors != "":
             self.fail("\n" + errors)
