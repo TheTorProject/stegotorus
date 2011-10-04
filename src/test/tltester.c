@@ -58,17 +58,30 @@
    { W message    - write error on the near socket
    { S            - transmission squelch on the near socket
 
+   Because TCP makes no guarantees about arrival of packets in one
+   direction relative to arrival of packets in the other direction
+   (how could it?) the output transcript is segregated: first all
+   far-socket traffic and events, then all near-socket traffic and
+   events.  Because TCP does not preserve packet boundaries for the
+   socket API, we rewrap output >/< lines at 64-character intervals,
+   ignoring the chunks which they came in.  The relative order of text
+   and event lines for one traffic direction, however, is exact.
+
    The program exits when it reaches the end of the script _and_ has
    received EOFs in both directions from its sockets.
 
    If a script line is ill-formed or cannot be executed for any
    reason, it is skipped but copied to the transcript, with a ! at the
-   beginning of the line.  */
+   beginning of the line.  (These will all be at the very beginning.) */
 
 typedef struct tstate
 {
   struct bufferevent *near;
   struct bufferevent *far;
+  struct evbuffer *neartext;
+  struct evbuffer *fartext;
+  struct evbuffer *neartrans;
+  struct evbuffer *fartrans;
   FILE *script;
   FILE *transcript;
   char *lbuf;
@@ -91,39 +104,92 @@ static void script_next_action(tstate *st);
 /* Helpers */
 
 static void
-write_quoting_unprintables(FILE *fp, const char *p, const char *limit)
+flush_text(tstate *st, bool near)
 {
-  for (; p < limit; p++)
-    if (*p >= 0x20 && *p <= 0x7E && *p != '\\')
-      putc(*p, fp);
-    else
-      fprintf(fp, "\\x%02x", (unsigned char)*p);
+  struct evbuffer *frombuf, *tobuf;
+  size_t avail;
+  int nseg, i, ll;
+  struct evbuffer_iovec *v;
+  char tag[2] = { '<', ' ' };
+  char nl[1] = { '\n' };
+
+  if (near) {
+    frombuf = st->neartext;
+    tobuf = st->neartrans;
+  } else {
+    frombuf = st->fartext;
+    tobuf = st->fartrans;
+    tag[0] = '>';
+  }
+
+  avail = evbuffer_get_length(frombuf);
+  if (avail == 0)
+    return;
+
+  nseg = evbuffer_peek(frombuf, avail, NULL, NULL, 0);
+  v = xzalloc(nseg * sizeof(struct evbuffer_iovec));
+  ll = 0;
+  evbuffer_peek(frombuf, avail, NULL, v, nseg);
+  evbuffer_expand(tobuf, avail + ((avail/64)+1)*3);
+
+  for (i = 0; i < nseg; i++) {
+    const char *p = v[i].iov_base;
+    const char *limit = v[i].iov_base + v[i].iov_len;
+    for (; p < limit; p++) {
+      if (ll == 0)
+        evbuffer_add(tobuf, tag, 2);
+
+      if (*p >= 0x20 && *p <= 0x7E && *p != '\\') {
+        evbuffer_add(tobuf, p, 1);
+        ll++;
+      } else {
+        evbuffer_add_printf(tobuf, "\\x%02x", (unsigned char)*p);
+        ll += 4;
+      }
+      if (ll >= 64) {
+        evbuffer_add(tobuf, nl, 1);
+        ll = 0;
+      }
+    }
+  }
+  free(v);
+  evbuffer_drain(frombuf, avail);
+  if (ll > 0)
+    evbuffer_add(tobuf, nl, 1);
 }
 
 static void
-send_eof(tstate *st, struct bufferevent *buf)
+send_eof(tstate *st, struct bufferevent *bev)
 {
-  evutil_socket_t fd = bufferevent_getfd(buf);
-  bufferevent_disable(buf, EV_WRITE);
+  evutil_socket_t fd = bufferevent_getfd(bev);
+  bufferevent_disable(bev, EV_WRITE);
   if (fd == -1)
     return;
-  if (shutdown(fd, SHUT_WR))
-    fprintf(st->transcript, "%c W sending EOF: %s\n",
-            buf == st->near ? '{' : '}',
-            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+  if (shutdown(fd, SHUT_WR) &&
+      EVUTIL_SOCKET_ERROR() != ENOTCONN) {
+    flush_text(st, bev == st->near);
+    evbuffer_add_printf(bev == st->near ? st->neartrans : st->fartrans,
+                        "%c W sending EOF: %s\n",
+                        bev == st->near ? '{' : '}',
+                        evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+  }
 }
 
 static void
-send_squelch(tstate *st, struct bufferevent *buf)
+send_squelch(tstate *st, struct bufferevent *bev)
 {
-  evutil_socket_t fd = bufferevent_getfd(buf);
-  bufferevent_disable(buf, EV_READ);
+  evutil_socket_t fd = bufferevent_getfd(bev);
+  bufferevent_disable(bev, EV_READ);
   if (fd == -1)
     return;
-  if (shutdown(fd, SHUT_RD))
-    fprintf(st->transcript, "%c W sending squelch: %s\n",
-            buf == st->near ? '{' : '}',
-            evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+  if (shutdown(fd, SHUT_RD) &&
+      EVUTIL_SOCKET_ERROR() != ENOTCONN) {
+    flush_text(st, bev == st->near);
+    evbuffer_add_printf(bev == st->near ? st->neartrans : st->fartrans,
+                        "%c W sending squelch: %s\n",
+                        bev == st->near ? '{' : '}',
+                        evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+  }
 }
 
 /* Event callbacks */
@@ -132,49 +198,36 @@ static void
 socket_read_cb(struct bufferevent *bev, void *arg)
 {
   tstate *st = arg;
-  struct evbuffer *buf = bufferevent_get_input(bev);
-  size_t avail = evbuffer_get_length(buf);
-  int nseg = evbuffer_peek(buf, avail, NULL, NULL, 0);
-  struct evbuffer_iovec *v = xzalloc(nseg * sizeof(struct evbuffer_iovec));
-  int i;
-
-  putc(bev == st->near ? '>' : '<', st->transcript);
-  putc(' ', st->transcript);
-
-  nseg = evbuffer_peek(buf, avail, NULL, v, nseg);
-  for (i = 0; i < nseg; i++)
-    write_quoting_unprintables(st->transcript, v[i].iov_base,
-                               v[i].iov_base + v[i].iov_len);
-  evbuffer_drain(buf, avail);
-  free(v);
-
-  putc('\n', st->transcript);
+  evbuffer_add_buffer(bev == st->near ? st->neartext : st->fartext,
+                      bufferevent_get_input(bev));
   script_next_action(st);
 }
 
 static void
-socket_drain_cb(struct bufferevent *buf, void *arg)
+socket_drain_cb(struct bufferevent *bev, void *arg)
 {
   tstate *st = arg;
 
-  if (evbuffer_get_length(bufferevent_get_output(buf)) > 0)
+  if (evbuffer_get_length(bufferevent_get_output(bev)) > 0)
     return;
 
-  if ((buf == st->near && st->sent_eof_near) ||
-      (buf == st->far && st->sent_eof_far)) {
-    send_eof(st, buf);
+  if ((bev == st->near && st->sent_eof_near) ||
+      (bev == st->far && st->sent_eof_far)) {
+    send_eof(st, bev);
   }
 
   script_next_action(st);
 }
 
 static void
-socket_event_cb(struct bufferevent *buf, short what, void *arg)
+socket_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   tstate *st = arg;
-  bool near = buf == st->near;
+  bool near = bev == st->near;
   bool reading = (what & BEV_EVENT_READING);
+  struct evbuffer *log = near ? st->neartrans : st->fartrans;
 
+  flush_text(st, near);
   what &= ~(BEV_EVENT_READING|BEV_EVENT_WRITING);
 
   /* EOF, timeout, and error all have the same consequence: we stop
@@ -184,30 +237,30 @@ socket_event_cb(struct bufferevent *buf, short what, void *arg)
     if (what & BEV_EVENT_EOF) {
       what &= ~BEV_EVENT_EOF;
       if (reading)
-        fprintf(st->transcript, "%c\n", near ? '[' : ']');
+        evbuffer_add_printf(log, "%c\n", near ? '[' : ']');
       else
-        fprintf(st->transcript, "%c S\n", near ? '{' : '}');
+        evbuffer_add_printf(log, "%c S\n", near ? '{' : '}');
     }
     if (what & BEV_EVENT_ERROR) {
       what &= ~BEV_EVENT_ERROR;
-      fprintf(st->transcript, "%c %c %s\n",
-              near ? '{' : '}', reading ? 'R' : 'W',
-              evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+      evbuffer_add_printf(log, "%c %c %s\n",
+                          near ? '{' : '}', reading ? 'R' : 'W',
+                          evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     }
     if (what & BEV_EVENT_TIMEOUT) {
       what &= ~BEV_EVENT_TIMEOUT;
-      fprintf(st->transcript, "%c %c --timeout--\n",
-              near ? '{' : '}', reading ? 'R' : 'W');
+      evbuffer_add_printf(log, "%c %c --timeout--\n",
+                          near ? '{' : '}', reading ? 'R' : 'W');
     }
 
     if (reading) {
-      send_squelch(st, buf);
+      send_squelch(st, bev);
       if (near)
         st->rcvd_eof_near = true;
       else
         st->rcvd_eof_far = true;
     } else {
-      send_eof(st, buf);
+      send_eof(st, bev);
       if (near)
         st->sent_eof_near = true;
       else
@@ -218,13 +271,13 @@ socket_event_cb(struct bufferevent *buf, short what, void *arg)
   /* connect is just logged */
   if (what & BEV_EVENT_CONNECTED) {
     what &= ~BEV_EVENT_CONNECTED;
-    fprintf(st->transcript, "%c\n", near ? '(' : ')');
+    evbuffer_add_printf(log, "%c\n", near ? '(' : ')');
   }
 
   /* unrecognized events are also just logged */
   if (what) {
-    fprintf(st->transcript, "%c %c unrecognized events: %04x\n",
-            near ? '{' : '}', reading ? 'R' : 'W', what);
+    evbuffer_add_printf(log, "%c %c unrecognized events: %04x\n",
+                        near ? '{' : '}', reading ? 'R' : 'W', what);
   }
 
   script_next_action(st);
@@ -244,11 +297,16 @@ queue_text(tstate *st, bool near, const char *p, size_t n)
 {
   errno = 0;
   if (evbuffer_add(bufferevent_get_output(near ? st->near : st->far), p, n)) {
-    st->saw_error = true;
-    fprintf(st->transcript, "%c W evbuffer_add failed", near ? '{' : '}');
+    struct evbuffer *log = near ? st->neartrans : st->fartrans;
+    char nl[1] = { '\n' };
+
+    flush_text(st, near);
+    evbuffer_add_printf(log, "%c W evbuffer_add failed", near ? '{' : '}');
     if (errno)
-      fprintf(st->transcript, ": %s", strerror(errno));
-    putc('\n', st->transcript);
+      evbuffer_add_printf(log, ": %s", strerror(errno));
+    evbuffer_add(log, nl, 1);
+
+    st->saw_error = true;
   }
 }
 
@@ -298,11 +356,7 @@ static void
 script_syntax_error(tstate *st, const char *p, size_t n)
 {
   st->saw_error = true;
-
-  putc('!', st->transcript);
-  putc(' ', st->transcript);
-  write_quoting_unprintables(st->transcript, p, p + n);
-  putc('\n', st->transcript);
+  fprintf(st->transcript, "! %.*s\n", (int)n, p);
 }
 
 static void
@@ -549,8 +603,13 @@ main(int argc, char **argv)
   st.script = stdin;
   st.transcript = stdout;
   st.base = event_base_new();
-  if (!st.base) {
-    fprintf(stderr, "creating event_base: %s\n", strerror(errno));
+  st.neartext = evbuffer_new();
+  st.neartrans = evbuffer_new();
+  st.fartext = evbuffer_new();
+  st.fartrans = evbuffer_new();
+  if (!st.base || !st.neartext || !st.neartrans ||
+      !st.fartext || !st.fartrans) {
+    fprintf(stderr, "creating event base and buffers: %s\n", strerror(errno));
     return 1;
   }
   st.pause_timer = evtimer_new(st.base, pause_expired_cb, &st);
@@ -574,9 +633,22 @@ main(int argc, char **argv)
   script_next_action(&st);
   event_base_dispatch(st.base);
 
+  flush_text(&st, true);
+  flush_text(&st, false);
+  fflush(st.transcript);
+  if (evbuffer_write(st.neartrans, fileno(st.transcript)) < 0 ||
+      evbuffer_write(st.fartrans, fileno(st.transcript)) < 0) {
+    fprintf(stderr, "writing transcript: %s\n", strerror(errno));
+    st.saw_error = true;
+  }
+
   bufferevent_free(st.near);
   bufferevent_free(st.far);
   event_free(st.pause_timer);
+  evbuffer_free(st.neartext);
+  evbuffer_free(st.neartrans);
+  evbuffer_free(st.fartext);
+  evbuffer_free(st.fartrans);
   event_base_free(st.base);
   free(st.lbuf);
 

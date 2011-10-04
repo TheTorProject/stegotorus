@@ -115,97 +115,52 @@ class Obfsproxy(subprocess.Popen):
                 if self.poll() is not None: return
             self.terminate()
 
+# As above, but for the 'tltester' test helper rather than for
+# obfsproxy itself.
+class Tltester(subprocess.Popen):
+    def __init__(self, timeline, extra_args=(), **kwargs):
+        argv = obfsproxy_grindv[:]
+        argv.append("./tltester")
+        argv.extend(extra_args)
 
-# Helper: In a separate thread (to avoid deadlock), listen on a
-# specified socket.  The first time something connects to that socket,
-# read all available data, stick it in a string, and post the string
-# to the output queue.  Then close both sockets and exit.
+        subprocess.Popen.__init__(self, argv,
+                                  stdin=open(timeline, "rU"),
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE,
+                                  env=obfsproxy_env,
+                                  close_fds=True,
+                                  **kwargs)
 
-class ReadWorker(threading.Thread):
-    def run(self):
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.settimeout(0.1)
-        listener.bind(self.address)
-        listener.listen(1)
-        try:
-            (conn, remote) = listener.accept()
-        except Exception, e:
-            self.data = "|ACCEPT ERROR: " + str(e)
-            return
-        if not self.running: return
-        listener.close()
-        conn.settimeout(0.1)
-        data = ""
-        try:
-            while True:
-                chunk = conn.recv(4096)
-                if not self.running: raise socket.timeout
-                if chunk == "": break
-                data += chunk
-        except Exception, e:
-            data += "|RECV ERROR: " + str(e)
-        conn.close()
-        self.data = data
+    def stop(self, delay=None):
+        if self.poll() is None:
+            if delay is not None:
+                time.sleep(delay)
+                if self.poll() is not None: return
+            self.terminate()
 
-    def __init__(self, address):
-        self.address = address
-        self.data = ""
-        self.running = True
-        threading.Thread.__init__(self)
-        self.start()
+    def check_completion(self, label):
+        if self.poll() is None:
+            # subprocess.communicate has no timeout; arrange to blow
+            # the process away if it doesn't finish what it's doing in
+            # a timely fashion.
+            timeout = threading.Thread(target=self.stop, args=(2.0,))
+            timeout.daemon = True
+            timeout.start()
 
-    def get(self):
-        self.join(0.5)
-        return self.data
+        (out, err) = self.communicate()
 
-    def stop(self):
-        self.running = False
-        self.join(0.5)
+        # exit status should be zero, and there should be nothing on
+        # stderr
+        if self.returncode != 0 or err != "":
+            report = ""
+            # exit status should be zero
+            if self.returncode > 0:
+                report += label + " exit code: %d\n" % self.returncode
+            elif self.returncode < 0:
+                report += label + " killed: signal %d\n" % -self.returncode
+            if err != "":
+                report += label + " stderr:\n%s\n" % indent(err)
+            raise AssertionError(report)
 
-# Globals expected by some of the tests.
-
-ENTRY_PORT  = 4999
-SERVER_PORT = 5000
-EXIT_PORT   = 5001
-
-TEST_FILE = """\
-THIS IS A TEST FILE. IT'S USED BY THE INTEGRATION TESTS.
-THIS IS A TEST FILE. IT'S USED BY THE INTEGRATION TESTS.
-THIS IS A TEST FILE. IT'S USED BY THE INTEGRATION TESTS.
-THIS IS A TEST FILE. IT'S USED BY THE INTEGRATION TESTS.
-
-"Can entropy ever be reversed?"
-"THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER."
-"Can entropy ever be reversed?"
-"THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER."
-"Can entropy ever be reversed?"
-"THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER."
-"Can entropy ever be reversed?"
-"THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER."
-"Can entropy ever be reversed?"
-"THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER."
-"Can entropy ever be reversed?"
-"THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER."
-"Can entropy ever be reversed?"
-"THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER."
-"Can entropy ever be reversed?"
-"THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER."
-
-    In obfuscatory age geeky warfare did I wage
-      For hiding bits from nasty censors' sight
-    I was hacker to my set in that dim dark age of net
-      And I hacked from noon till three or four at night
-
-    Then a rival from Helsinki said my protocol was dinky
-      So I flamed him with a condescending laugh,
-    Saying his designs for stego might as well be made of lego
-      And that my bikeshed was prettier by half.
-
-    But Claude Shannon saw my shame. From his noiseless channel came
-       A message sent with not a wasted byte
-    "There are nine and sixty ways to disguise communiques
-       And RATHER MORE THAN ONE OF THEM IS RIGHT"
-
-		    (apologies to Rudyard Kipling.)
-"""
+        # caller will crunch the output
+        return out
