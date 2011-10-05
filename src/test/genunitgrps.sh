@@ -6,7 +6,7 @@ output="$1"
 shift 1
 
 groups=$(sed -ne \
-    's/^struct testcase_t \([a-z0-9]\+\)_tests\[\] = {$/\1/p' \
+    's/^struct testcase_t \([a-zA-Z][a-zA-Z0-9_]*\)_tests\[\] = {$/\1/p' \
     "$@")
 
 trap "rm -f '$output.$$'" 0
