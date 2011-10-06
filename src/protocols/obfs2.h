@@ -40,8 +40,7 @@ typedef struct obfs2_conn_t {
 
   /** Current protocol state.  We start out waiting for key information.  Then
       we have a key and wait for padding to arrive.  Finally, we are sending
-      and receiving bytes on the connection.
-  */
+      and receiving bytes on the connection.  */
   enum {
     ST_WAIT_FOR_KEY,
     ST_WAIT_FOR_PADDING,
@@ -55,6 +54,8 @@ typedef struct obfs2_conn_t {
   uchar secret_seed[SHARED_SECRET_LENGTH];
   /** True iff we opened this connection */
   int we_are_initiator;
+  /** True if we need to send pending data before we can close the connection */
+  int close_after_send;
 
   /** key used to encrypt outgoing data */
   crypt_t *send_crypto;

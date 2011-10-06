@@ -119,8 +119,7 @@ class Obfsproxy(subprocess.Popen):
 # obfsproxy itself.
 class Tltester(subprocess.Popen):
     def __init__(self, timeline, extra_args=(), **kwargs):
-        argv = obfsproxy_grindv[:]
-        argv.append("./tltester")
+        argv = ["./tltester"]
         argv.extend(extra_args)
 
         subprocess.Popen.__init__(self, argv,

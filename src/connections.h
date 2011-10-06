@@ -67,23 +67,14 @@ int conn_maybe_open_upstream(conn_t *conn);
     connection. */
 int conn_handshake(conn_t *conn);
 
-/** Transmit any internally buffered data, plus an in-band end-of-file
-    indicator (if necessary), to DEST.  This will only be called once
-    per connection. */
-void conn_send_eof(conn_t *dest);
-
 /** Receive data from SOURCE, decode it, and write it to upstream. */
-void conn_recv(conn_t *source);
-enum recv_ret conn_recv_raw(conn_t *source);
+enum recv_ret conn_recv(conn_t *source);
 
 /** No more data will be received from the peer; flush any internally
-    buffered data to DEST. */
+    buffered data to your upstream. */
 enum recv_ret conn_recv_eof(conn_t *source);
 
-/** Squelch further transmissions from SOURCE and discard any pending
-    input. */
-void conn_squelch(conn_t *source);
-
+void conn_send_eof(conn_t *conn);
 void conn_do_flush(conn_t *conn);
 
 /* The next several conn_t methods are used by steganography modules to
@@ -144,19 +135,17 @@ void circuit_add_upstream(circuit_t *ckt,
 int circuit_open_upstream(circuit_t *ckt);
 
 void circuit_add_downstream(circuit_t *ckt, conn_t *down);
+void circuit_drop_downstream(circuit_t *ckt, conn_t *down);
 
 void circuit_close(circuit_t *ckt);
-void circuit_squelch(circuit_t *ckt);
+void circuit_recv_eof(circuit_t *ckt);
 
 void circuit_send(circuit_t *ckt);
-void circuit_recv_eof(circuit_t *ckt, conn_t *down);
+void circuit_send_eof(circuit_t *ckt);
 
 void circuit_arm_flush_timer(circuit_t *ckt, unsigned int milliseconds);
 void circuit_disarm_flush_timer(circuit_t *ckt);
 
-void circuit_upstream_shutdown(circuit_t *ckt, unsigned short direction);
-void circuit_downstream_shutdown(circuit_t *ckt, conn_t *conn,
-                                 unsigned short direction);
 void circuit_do_flush(circuit_t *ckt);
 
 unsigned long circuit_count(void);

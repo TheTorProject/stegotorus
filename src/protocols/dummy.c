@@ -152,12 +152,32 @@ dummy_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
   ckt->downstream = conn;
 }
 
+/* Drop a connection from this circuit.  If this happens in this
+   protocol, it is because of a network error, and the whole circuit
+   should be closed.  */
+static void
+dummy_circuit_drop_downstream(circuit_t *ckt, conn_t *conn)
+{
+  obfs_assert(ckt->downstream == conn);
+  ckt->downstream = NULL;
+  circuit_close(ckt);
+}
+
 /* Send data from circuit C. */
 static int
 dummy_circuit_send(circuit_t *c)
 {
   return evbuffer_add_buffer(conn_get_outbound(c->downstream),
                              bufferevent_get_input(c->up_buffer));
+}
+
+/* Send an EOF on circuit C. */
+static int
+dummy_circuit_send_eof(circuit_t *c)
+{
+  if (c->downstream)
+    conn_send_eof(c->downstream);
+  return 0;
 }
 
 /*
@@ -212,15 +232,16 @@ dummy_conn_recv(conn_t *source)
     return RECV_GOOD;
 }
 
-/** send EOF, recv EOF - no op */
-static int
-dummy_conn_send_eof(conn_t *dest)
-{
-  return 0;
-}
-
+/** Receive EOF from connection SOURCE */
 static enum recv_ret
 dummy_conn_recv_eof(conn_t *source)
 {
+  if (source->circuit) {
+    if (evbuffer_get_length(conn_get_inbound(source)) > 0)
+      if (dummy_conn_recv(source) == RECV_BAD)
+        return RECV_BAD;
+
+    circuit_recv_eof(source->circuit);
+  }
   return RECV_GOOD;
 }

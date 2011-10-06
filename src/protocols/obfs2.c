@@ -202,6 +202,17 @@ obfs2_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
   ckt->downstream = conn;
 }
 
+/* Drop a connection from this circuit.  If this happens in this
+   protocol, it is because of a network error, and the whole circuit
+   should be closed.  */
+static void
+obfs2_circuit_drop_downstream(circuit_t *ckt, conn_t *conn)
+{
+  obfs_assert(ckt->downstream == conn);
+  ckt->downstream = NULL;
+  circuit_close(ckt);
+}
+
 /**
    Derive and return padding key of type 'keytype' from the seeds
    currently set in state 's'.
@@ -568,21 +579,23 @@ obfs2_conn_recv(conn_t *s)
 
   /* If we're still looking for padding, start pulling off bytes and
      discarding them. */
-  while (state->padding_left_to_read) {
-    int n = state->padding_left_to_read;
-    size_t sourcelen = evbuffer_get_length(source);
-    if (!sourcelen)
-      return RECV_INCOMPLETE;
-    if ((size_t) n > sourcelen)
-      n = sourcelen;
-    evbuffer_drain(source, n);
-    state->padding_left_to_read -= n;
-    log_debug("%s: consumed %d bytes padding, %d still to come",
-              __func__, n, state->padding_left_to_read);
+  if (state->state == ST_WAIT_FOR_PADDING) {
+    while (state->padding_left_to_read) {
+      int n = state->padding_left_to_read;
+      size_t sourcelen = evbuffer_get_length(source);
+      if (!sourcelen)
+        return RECV_INCOMPLETE;
+      if ((size_t) n > sourcelen)
+        n = sourcelen;
+      evbuffer_drain(source, n);
+      state->padding_left_to_read -= n;
+      log_debug("%s: consumed %d bytes padding, %d still to come",
+                __func__, n, state->padding_left_to_read);
+    }
+    /* Okay; now we're definitely open.  Process whatever data we have. */
+    state->state = ST_OPEN;
   }
 
-  /* Okay; now we're definitely open.  Process whatever data we have. */
-  state->state = ST_OPEN;
 
   log_debug("%s: Processing %lu bytes application data",
             __func__, (unsigned long)evbuffer_get_length(source));
@@ -590,35 +603,48 @@ obfs2_conn_recv(conn_t *s)
                            bufferevent_get_output(s->circuit->up_buffer));
 
   /* If we have pending data to send, transmit it now. */
-  if (state->pending_data_to_send)
+  if (state->pending_data_to_send) {
     obfs2_send_pending(state, conn_get_outbound(s));
+    if (state->close_after_send)
+      conn_send_eof(s);
+  }
 
   return RECV_GOOD;
 }
 
 /** send EOF: flush out any queued data if possible */
 static int
-obfs2_conn_send_eof(conn_t *s)
+obfs2_circuit_send_eof(circuit_t *c)
 {
-  obfs2_conn_t *state = downcast_conn(s);
-  struct evbuffer *dest = conn_get_outbound(s);
+  if (c->downstream) {
+    obfs2_conn_t *state = downcast_conn(c->downstream);
+    struct evbuffer *dest = conn_get_outbound(c->downstream);
 
-  if (!state->pending_data_to_send)
-    return 0;
+    if (state->pending_data_to_send) {
+      if (!state->send_crypto) {
+        log_debug("%s: handshake incomplete, cannot transmit queued data",
+                  __func__);
+        state->close_after_send = 1;
+        return -1;
+      }
+      obfs2_send_pending(state, dest);
+    }
 
-  if (!state->send_crypto) {
-    log_debug("%s: handshake incomplete, cannot transmit queued data",
-              __func__);
-    return -1;
+    conn_send_eof(c->downstream);
   }
-
-  obfs2_send_pending(state, dest);
   return 0;
 }
 
+/** Receive EOF from connection SOURCE */
 static enum recv_ret
 obfs2_conn_recv_eof(conn_t *source)
 {
-  /* try once more to read anything that's in the queue */
-  return obfs2_conn_recv(source);
+  if (source->circuit) {
+    if (evbuffer_get_length(conn_get_inbound(source)) > 0)
+      if (obfs2_conn_recv(source) == RECV_BAD)
+        return RECV_BAD;
+
+    circuit_recv_eof(source->circuit);
+  }
+  return RECV_GOOD;
 }

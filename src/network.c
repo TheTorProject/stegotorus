@@ -309,8 +309,10 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   log_debug("%s: %s, %lu bytes available", down->peername, __func__,
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
-  obfs_assert(down->buffer == bev);
-  conn_recv(down);
+  if (conn_recv(down) == RECV_BAD) {
+    log_debug("%s: error during receive.", down->peername);
+    conn_close(down);
+  }
 }
 
 /** Diagnostic-printing subroutine of upstream_event_cb and
@@ -347,8 +349,12 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
 
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
     report_event(what, ckt->up_peer, EVUTIL_SOCKET_ERROR());
-    circuit_upstream_shutdown(ckt,
-                              what & (BEV_EVENT_READING|BEV_EVENT_WRITING));
+    if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
+      /* Upstream is done sending us data. */
+      circuit_send_eof(ckt);
+    } else {
+      circuit_close(ckt);
+    }
   } else {
     /* We should never get BEV_EVENT_CONNECTED here.
        Ignore any events we don't understand. */
@@ -367,8 +373,12 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
 
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
     report_event(what, conn->peername, EVUTIL_SOCKET_ERROR());
-    circuit_downstream_shutdown(conn->circuit, conn,
-                                what & (BEV_EVENT_READING|BEV_EVENT_WRITING));
+    if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
+      /* Peer is done sending us data. */
+      conn_recv_eof(conn);
+    } else {
+      conn_close(conn);
+    }
   } else {
     /* We should never get BEV_EVENT_CONNECTED here.
        Ignore any events we don't understand. */
@@ -515,8 +525,10 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     if (socks_state_get_status(socks) == ST_HAVE_ADDR) {
       bufferevent_enable(ckt->up_buffer, EV_WRITE);
       socks_send_reply(socks, bufferevent_get_output(ckt->up_buffer), err);
+      circuit_do_flush(ckt);
+    } else {
+      circuit_close(ckt);
     }
-    conn_close(conn);
     return;
   }
 

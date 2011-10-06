@@ -23,9 +23,9 @@ test_transfer(void *state)
 
   /* Handshake */
   tt_int_op(0, ==, conn_handshake(s->conn_client));
-  tt_int_op(RECV_BAD, !=, conn_recv_raw(s->conn_server));
+  tt_int_op(RECV_BAD, !=, conn_recv(s->conn_server));
   tt_int_op(0, ==, conn_handshake(s->conn_server));
-  tt_int_op(RECV_BAD, !=, conn_recv_raw(s->conn_client));
+  tt_int_op(RECV_BAD, !=, conn_recv(s->conn_client));
   /* End of Handshake */
 
   /* client -> server */

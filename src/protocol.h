@@ -69,8 +69,18 @@ struct proto_vtable
   /** Add a downstream connection to this circuit. */
   void (*circuit_add_downstream)(circuit_t *ckt, conn_t *conn);
 
+  /** Drop a downstream connection which is no longer usable. */
+  void (*circuit_drop_downstream)(circuit_t *ckt, conn_t *conn);
+
   /** Transmit data from the upstream to the downstream peer. */
   int (*circuit_send)(circuit_t *ckt);
+
+  /** Transmit any buffered data and an EOF indication to the downstream
+      peer.  This will only be called once per circuit, and circuit_send
+      will not be called again after this has been called; if you need
+      periodic "can we flush more data now?" callbacks, and conn_recv
+      events won't do it, you have to set them up yourself. */
+  int (*circuit_send_eof)(circuit_t *ckt);
 
   /** Return an extended 'conn_t' object based on the configuration 'cfg'.
       Must fill in the 'cfg' field of the generic structure.  */
@@ -93,12 +103,10 @@ struct proto_vtable
   /** Receive data from 'source' and pass it upstream (to the circuit). */
   enum recv_ret (*conn_recv)(conn_t *source);
 
-  /** Take any actions necessary upon an end-of-file notification from
-      upstream, such as flushing internally buffered data. */
-  int (*conn_send_eof)(conn_t *dest);
-
-  /** Take any actions necessary upon an end-of-file notification from
-      the remote peer. */
+  /** Take any actions necessary upon receipt of an end-of-transmission
+      indication from the remote peer.  Note that this is _not_
+      necessarily the same as "end of file" at the circuit level,
+      depending on the protocol.  */
   enum recv_ret (*conn_recv_eof)(conn_t *source);
 
   /* The remaining methods are only required if your protocol makes
@@ -139,13 +147,14 @@ extern const proto_vtable *const supported_protos[];
     name##_circuit_create,                      \
     name##_circuit_free,                        \
     name##_circuit_add_downstream,              \
+    name##_circuit_drop_downstream,             \
     name##_circuit_send,                        \
+    name##_circuit_send_eof,                    \
     name##_conn_create,                         \
     name##_conn_free,                           \
     name##_conn_maybe_open_upstream,            \
     name##_conn_handshake,                      \
     name##_conn_recv,                           \
-    name##_conn_send_eof,                       \
     name##_conn_recv_eof,
 
 #define PROTO_VTABLE_NOSTEG(name)               \
@@ -167,13 +176,14 @@ extern const proto_vtable *const supported_protos[];
   static circuit_t *name##_circuit_create(config_t *);                  \
   static void name##_circuit_free(circuit_t *);                         \
   static void name##_circuit_add_downstream(circuit_t *, conn_t *);     \
+  static void name##_circuit_drop_downstream(circuit_t *, conn_t *);    \
   static int name##_circuit_send(circuit_t *);                          \
+  static int name##_circuit_send_eof(circuit_t *);                      \
   static conn_t *name##_conn_create(config_t *);                        \
   static void name##_conn_free(conn_t *);                               \
   static int name##_conn_maybe_open_upstream(conn_t *);                 \
   static int name##_conn_handshake(conn_t *);                           \
   static enum recv_ret name##_conn_recv(conn_t *);                      \
-  static int name##_conn_send_eof(conn_t *);                            \
   static enum recv_ret name##_conn_recv_eof(conn_t *);
 
 #define PROTO_FWD_NOSTEG(name) /* nothing required */

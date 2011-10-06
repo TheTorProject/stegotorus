@@ -23,6 +23,7 @@ typedef struct x_dsteg_conn_t {
 
 typedef struct x_dsteg_circuit_t {
   circuit_t super;
+  int pending_eof;
 } x_dsteg_circuit_t;
 
 PROTO_DEFINE_MODULE(x_dsteg, STEG);
@@ -168,6 +169,18 @@ x_dsteg_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
   ckt->downstream = conn;
 }
 
+/* Drop a connection from this circuit.  If this happens in this
+   protocol (at present - this will change when the steg callbacks get
+   implemented) it is because of a network error, and the whole
+   circuit should be closed.  */
+static void
+x_dsteg_circuit_drop_downstream(circuit_t *ckt, conn_t *conn)
+{
+  obfs_assert(ckt->downstream == conn);
+  ckt->downstream = NULL;
+  circuit_close(ckt);
+}
+
 /*
   This is called everytime we get a connection for the x_dsteg
   protocol.
@@ -247,6 +260,7 @@ x_dsteg_circuit_send(circuit_t *c)
     if (!chunk) return -1;
 
     rv = evbuffer_remove_buffer(source, chunk, room);
+    room = evbuffer_get_length(chunk);
     if (rv >= 0)
       rv = steg_transmit(steg, chunk, d);
     evbuffer_free(chunk);
@@ -255,15 +269,43 @@ x_dsteg_circuit_send(circuit_t *c)
   if (rv < 0)
     return -1;
 
+  log_debug("x_dsteg: %ld bytes sent (%ld on wire), %ld still pending",
+            (unsigned long)room,
+            (unsigned long)evbuffer_get_length(conn_get_outbound(d)),
+            (unsigned long)evbuffer_get_length(source));
+
   /* If that was successful, but we still have data pending, receipt
      of a response will trigger another transmission.  But in case
      that doesn't happen set a timer to force more data out in a few
      hundred milliseconds. */
   if (evbuffer_get_length(source) > 0)
     circuit_arm_flush_timer(c, 200);
+  else if (downcast_circuit(c)->pending_eof)
+    conn_send_eof(c->downstream);
 
   return 0;
 }
+
+/** send EOF: flush out any queued data if possible */
+static int
+x_dsteg_circuit_send_eof(circuit_t *c)
+{
+  if (c->downstream) {
+    struct evbuffer *source = bufferevent_get_input(c->up_buffer);
+    if (evbuffer_get_length(source) > 0)
+      if (x_dsteg_circuit_send(c))
+        return -1;
+
+    /* That might not have transmitted everything.  If so, the flush
+       timer is active and we'll come back to circuit_send in due course. */
+    if (evbuffer_get_length(source) > 0)
+      downcast_circuit(c)->pending_eof = 1;
+    else
+      conn_send_eof(c->downstream);
+  }
+  return 0;
+}
+
 
 /* Receive data from S. */
 static enum recv_ret
@@ -297,19 +339,19 @@ x_dsteg_conn_recv(conn_t *s)
 }
 
 
-/** send EOF, recv EOF - no op */
-static int
-x_dsteg_conn_send_eof(conn_t *dest)
-{
-  return 0;
-}
-
+/** Receive EOF from connection SOURCE */
 static enum recv_ret
 x_dsteg_conn_recv_eof(conn_t *source)
 {
+  if (source->circuit) {
+    if (evbuffer_get_length(conn_get_inbound(source)) > 0)
+      if (x_dsteg_conn_recv(source) == RECV_BAD)
+        return RECV_BAD;
+
+    circuit_recv_eof(source->circuit);
+  }
   return RECV_GOOD;
 }
-
 
 /** XXX all steg callbacks are ignored */
 static void x_dsteg_conn_expect_close(conn_t *conn) {}
