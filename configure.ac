@@ -1,7 +1,7 @@
 AC_PREREQ([2.61])dnl Possibly earlier will do, but this is what I have
 AC_INIT([obfsproxy], [0.0])
 AC_CONFIG_SRCDIR([src/main.c])
-AM_INIT_AUTOMAKE([foreign nostdinc silent-rules])
+AM_INIT_AUTOMAKE([foreign nostdinc silent-rules subdir-objects])
 
 dnl The stock definition of AC_INCLUDES_DEFAULT performs a whole bunch
 dnl of completely unnecessary checks *even if* you override its
@@ -12,6 +12,7 @@ m4_pushdef([AC_INCLUDES_DEFAULT], [$1])
 ### Programs ###
 
 AC_PROG_CC
+AM_PROG_CC_C_O
 AC_PROG_RANLIB
 PKG_PROG_PKG_CONFIG
 
@@ -60,4 +61,5 @@ AC_CHECK_SIZEOF(int)
 
 AC_CONFIG_FILES([Makefile])
 AC_CONFIG_HEADERS([config.h])
+AC_CONFIG_COMMANDS_PRE([DEFS=])dnl Suppress pointless -DHAVE_CONFIG_H.
 AC_OUTPUT
