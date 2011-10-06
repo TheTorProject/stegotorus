@@ -75,6 +75,7 @@ typedef struct obfs2_conn_t {
 
 typedef struct obfs2_circuit_t {
   circuit_t super;
+  conn_t *downstream;
 } obfs2_circuit_t;
 
 #endif

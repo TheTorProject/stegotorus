@@ -184,11 +184,12 @@ obfs2_circuit_create(config_t *c)
 static void
 obfs2_circuit_free(circuit_t *c)
 {
-  if (c->downstream) {
+  obfs2_circuit_t *ckt = downcast_circuit(c);
+  if (ckt->downstream) {
     /* break the circular reference before deallocating the
        downstream connection */
-    c->downstream->circuit = NULL;
-    conn_close(c->downstream);
+    ckt->downstream->circuit = NULL;
+    conn_close(ckt->downstream);
   }
 
   free(downcast_circuit(c));
@@ -196,8 +197,9 @@ obfs2_circuit_free(circuit_t *c)
 
 /* Add a connection to this circuit. */
 static void
-obfs2_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
+obfs2_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
+  obfs2_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(!ckt->downstream);
   ckt->downstream = conn;
 }
@@ -206,11 +208,12 @@ obfs2_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
    protocol, it is because of a network error, and the whole circuit
    should be closed.  */
 static void
-obfs2_circuit_drop_downstream(circuit_t *ckt, conn_t *conn)
+obfs2_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
+  obfs2_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(ckt->downstream == conn);
   ckt->downstream = NULL;
-  circuit_close(ckt);
+  circuit_close(c);
 }
 
 /**
@@ -410,11 +413,12 @@ obfs2_send_pending(obfs2_conn_t *state, struct evbuffer *dest)
    using the state in 'state'.  Returns 0 on success, -1 on failure.
  */
 static int
-obfs2_circuit_send(circuit_t *s)
+obfs2_circuit_send(circuit_t *c)
 {
-  struct evbuffer *source = bufferevent_get_input(s->up_buffer);
-  struct evbuffer *dest = conn_get_outbound(s->downstream);
-  obfs2_conn_t *state = downcast_conn(s->downstream);
+  obfs2_circuit_t *ckt = downcast_circuit(c);
+  struct evbuffer *source = bufferevent_get_input(c->up_buffer);
+  struct evbuffer *dest = conn_get_outbound(ckt->downstream);
+  obfs2_conn_t *state = downcast_conn(ckt->downstream);
 
   if (state->send_crypto) {
     /* First of all, send any data that we've been waiting to send. */
@@ -616,9 +620,10 @@ obfs2_conn_recv(conn_t *s)
 static int
 obfs2_circuit_send_eof(circuit_t *c)
 {
-  if (c->downstream) {
-    obfs2_conn_t *state = downcast_conn(c->downstream);
-    struct evbuffer *dest = conn_get_outbound(c->downstream);
+  obfs2_circuit_t *ckt = downcast_circuit(c);
+  if (ckt->downstream) {
+    obfs2_conn_t *state = downcast_conn(ckt->downstream);
+    struct evbuffer *dest = conn_get_outbound(ckt->downstream);
 
     if (state->pending_data_to_send) {
       if (!state->send_crypto) {
@@ -630,7 +635,7 @@ obfs2_circuit_send_eof(circuit_t *c)
       obfs2_send_pending(state, dest);
     }
 
-    conn_send_eof(c->downstream);
+    conn_send_eof(ckt->downstream);
   }
   return 0;
 }

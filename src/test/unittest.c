@@ -152,16 +152,11 @@ cleanup_proto_test_state(const struct testcase_t *tcase, void *state)
 
   /* We don't want to trigger circuit_*_shutdown, so dissociate the circuits
      from their connections and close each separately. */
-  s->ckt_client->downstream = NULL;
-  s->ckt_server->downstream = NULL;
-  s->conn_client->circuit = NULL;
-  s->conn_server->circuit = NULL;
+  circuit_drop_downstream(s->ckt_client, s->conn_client);
+  circuit_drop_downstream(s->ckt_server, s->conn_server);
 
   conn_close(s->conn_client);
   conn_close(s->conn_server);
-
-  circuit_close(s->ckt_client);
-  circuit_close(s->ckt_server);
 
   config_free(s->cfg_client);
   config_free(s->cfg_server);

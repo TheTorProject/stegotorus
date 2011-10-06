@@ -96,26 +96,15 @@ void conn_close_after_transmit(conn_t *conn);
 void conn_transmit_soon(conn_t *conn, unsigned long timeout);
 
 /**
-   This struct defines a pair of established connections.
-
-   The "upstream" connection (which does not have a conn_t) is to the
-   higher-level client or server that we are proxying traffic for.
-   The "downstream" connection (which does have a conn_t) to the
-   remote peer.  Circuits always have an upstream connection, and
-   normally also have a downstream connection; however, a circuit
-   that's waiting for SOCKS directives from its upstream will have a
-   non-null socks_state field instead.
-
-   A circuit is "open" if both its upstream and downstream connections
-   have been established (not just if all the objects exist).  It is
-   "flushing" if one of the two connections has hit either EOF or an
-   error, and we are clearing out the other side's pending
-   transmissions before closing it.  Both of these flags are used
-   near-exclusively for assertion checks; the actual behavior is
-   controlled by changing bufferevent callbacks.
+   This struct holds all the state for an "upstream" connection to the
+   higher-level client or server that we are proxying traffic for. It
+   will normally have one or more "downstream" connections (conn_t's)
+   with the remote peer, but these are private to the protocol.  A
+   circuit that's waiting for SOCKS directives from its upstream will
+   have a non-null socks_state field and no downstream connections.
 
    Like conn_t, the protocol has an opportunity to add information to
-   this structure.
+   this structure, and will certainly add at least one conn_t pointer.
  */
 
 struct circuit_t {
@@ -124,7 +113,6 @@ struct circuit_t {
   struct bufferevent *up_buffer;
   const char         *up_peer;
 
-  conn_t             *downstream;
   socks_state_t      *socks_state;
 };
 

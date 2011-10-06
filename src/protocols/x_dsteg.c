@@ -23,6 +23,7 @@ typedef struct x_dsteg_conn_t {
 
 typedef struct x_dsteg_circuit_t {
   circuit_t super;
+  conn_t *downstream;
   int pending_eof;
 } x_dsteg_circuit_t;
 
@@ -151,20 +152,21 @@ x_dsteg_circuit_create(config_t *c)
 static void
 x_dsteg_circuit_free(circuit_t *c)
 {
-  if (c->downstream) {
+  x_dsteg_circuit_t *ckt = downcast_circuit(c);
+  if (ckt->downstream) {
     /* break the circular reference before deallocating the
        downstream connection */
-    c->downstream->circuit = NULL;
-    conn_close(c->downstream);
+    ckt->downstream->circuit = NULL;
+    conn_close(ckt->downstream);
   }
-
-  free(downcast_circuit(c));
+  free(ckt);
 }
 
 /* Add a connection to this circuit. */
 static void
-x_dsteg_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
+x_dsteg_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
+  x_dsteg_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(!ckt->downstream);
   ckt->downstream = conn;
 }
@@ -174,11 +176,12 @@ x_dsteg_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
    implemented) it is because of a network error, and the whole
    circuit should be closed.  */
 static void
-x_dsteg_circuit_drop_downstream(circuit_t *ckt, conn_t *conn)
+x_dsteg_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
+  x_dsteg_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(ckt->downstream == conn);
   ckt->downstream = NULL;
-  circuit_close(ckt);
+  circuit_close(c);
 }
 
 /*
@@ -238,7 +241,8 @@ x_dsteg_conn_handshake(conn_t *conn)
 static int
 x_dsteg_circuit_send(circuit_t *c)
 {
-  conn_t *d = c->downstream;
+  x_dsteg_circuit_t *ckt = downcast_circuit(c);
+  conn_t *d = ckt->downstream;
   struct evbuffer *source = bufferevent_get_input(c->up_buffer);
   struct evbuffer *chunk;
   x_dsteg_conn_t *dest = downcast_conn(d);
@@ -280,8 +284,8 @@ x_dsteg_circuit_send(circuit_t *c)
      hundred milliseconds. */
   if (evbuffer_get_length(source) > 0)
     circuit_arm_flush_timer(c, 200);
-  else if (downcast_circuit(c)->pending_eof)
-    conn_send_eof(c->downstream);
+  else if (ckt->pending_eof)
+    conn_send_eof(ckt->downstream);
 
   return 0;
 }
@@ -290,7 +294,8 @@ x_dsteg_circuit_send(circuit_t *c)
 static int
 x_dsteg_circuit_send_eof(circuit_t *c)
 {
-  if (c->downstream) {
+  x_dsteg_circuit_t *ckt = downcast_circuit(c);
+  if (ckt->downstream) {
     struct evbuffer *source = bufferevent_get_input(c->up_buffer);
     if (evbuffer_get_length(source) > 0)
       if (x_dsteg_circuit_send(c))
@@ -301,7 +306,7 @@ x_dsteg_circuit_send_eof(circuit_t *c)
     if (evbuffer_get_length(source) > 0)
       downcast_circuit(c)->pending_eof = 1;
     else
-      conn_send_eof(c->downstream);
+      conn_send_eof(ckt->downstream);
   }
   return 0;
 }

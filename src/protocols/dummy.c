@@ -20,6 +20,7 @@ typedef struct dummy_conn_t {
 
 typedef struct dummy_circuit_t {
   circuit_t super;
+  conn_t *downstream;
 } dummy_circuit_t;
 
 PROTO_DEFINE_MODULE(dummy, NOSTEG);
@@ -134,20 +135,22 @@ dummy_circuit_create(config_t *c)
 static void
 dummy_circuit_free(circuit_t *c)
 {
-  if (c->downstream) {
+  dummy_circuit_t *ckt = downcast_circuit(c);
+  if (ckt->downstream) {
     /* break the circular reference before deallocating the
        downstream connection */
-    c->downstream->circuit = NULL;
-    conn_close(c->downstream);
+    ckt->downstream->circuit = NULL;
+    conn_close(ckt->downstream);
   }
 
-  free(downcast_circuit(c));
+  free(ckt);
 }
 
 /* Add a connection to this circuit. */
 static void
-dummy_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
+dummy_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
+  dummy_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(!ckt->downstream);
   ckt->downstream = conn;
 }
@@ -156,18 +159,20 @@ dummy_circuit_add_downstream(circuit_t *ckt, conn_t *conn)
    protocol, it is because of a network error, and the whole circuit
    should be closed.  */
 static void
-dummy_circuit_drop_downstream(circuit_t *ckt, conn_t *conn)
+dummy_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
+  dummy_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(ckt->downstream == conn);
   ckt->downstream = NULL;
-  circuit_close(ckt);
+  circuit_close(c);
 }
 
 /* Send data from circuit C. */
 static int
 dummy_circuit_send(circuit_t *c)
 {
-  return evbuffer_add_buffer(conn_get_outbound(c->downstream),
+  dummy_circuit_t *ckt = downcast_circuit(c);
+  return evbuffer_add_buffer(conn_get_outbound(ckt->downstream),
                              bufferevent_get_input(c->up_buffer));
 }
 
@@ -175,8 +180,9 @@ dummy_circuit_send(circuit_t *c)
 static int
 dummy_circuit_send_eof(circuit_t *c)
 {
-  if (c->downstream)
-    conn_send_eof(c->downstream);
+  dummy_circuit_t *ckt = downcast_circuit(c);
+  if (ckt->downstream)
+    conn_send_eof(ckt->downstream);
   return 0;
 }
 
