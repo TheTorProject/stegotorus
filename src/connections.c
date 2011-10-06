@@ -192,6 +192,7 @@ flush_timer_cb(evutil_socket_t fd, short what, void *arg)
 {
   circuit_t *ckt = arg;
   log_debug("%s: flush timer expired, %ld bytes available", ckt->up_peer,
+            (unsigned long)
             evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
   circuit_send(ckt);
 }

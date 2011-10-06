@@ -13,6 +13,12 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#ifdef _WIN32
+# undef near
+# undef far
+# define ENOTCONN WSAENOTCONN
+#endif
+
 /* This program is used by the integration test harness.  It opens one
    listening socket (the "far" socket) and one outbound connection
    (the "near" socket).  Then it writes data to both of them as

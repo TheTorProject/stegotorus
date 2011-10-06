@@ -20,6 +20,7 @@
 
 #ifdef _WIN32
 #include <process.h>
+#include <io.h>
 #else
 #include <unistd.h>
 #endif
@@ -104,7 +105,7 @@ stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
     nread += r;
   }
 
-  log_debug("read %lu bytes from stdin", nread);
+  log_debug("read %lu bytes from stdin", (unsigned long)nread);
   if (nread == 0) {
     struct event *ev = arg;
     event_del(ev);
@@ -247,8 +248,10 @@ main(int argc, const char *const *argv)
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
 #ifdef _WIN32
-  WSADATA wsaData;
-  WSAStartup(0x101, &wsaData);
+  {
+    WSADATA wsaData;
+    WSAStartup(0x101, &wsaData);
+  }
 #endif
 
   /* Initialize crypto */
@@ -282,8 +285,11 @@ main(int argc, const char *const *argv)
 
   /* Handle EOF-on-stdin. */
   if (!fstat(STDIN_FILENO, &st) &&
-      ((S_ISCHR(st.st_mode) && isatty(STDIN_FILENO)) ||
-       S_ISFIFO(st.st_mode) || S_ISSOCK(st.st_mode))) {
+      (S_ISFIFO(st.st_mode) ||
+#ifndef _WIN32
+       S_ISSOCK(st.st_mode) ||
+#endif
+       (S_ISCHR(st.st_mode) && isatty(STDIN_FILENO)))) {
     /* We do this this way because we want to make the event itself the
        callback argument. */
     stdin_eof = xmalloc(event_get_struct_event_size());
