@@ -177,7 +177,6 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
       circuit_close(ckt);
       return;
     }
-    circuit_add_downstream(ckt, down);
     bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_event_cb, ckt);
   }
 }
@@ -256,10 +255,9 @@ socks_read_cb(struct bufferevent *bev, void *arg)
     if (status == ST_HAVE_ADDR) {
       /* try to open the outbound connection */
       conn_t *down = conn_create_outbound(ckt);
-      if (down)
-        circuit_add_downstream(ckt, down);
-      else
+      if (!down)
         circuit_close(ckt); /* XXXX send socks reply */
+      bufferevent_disable(bev, EV_READ|EV_WRITE); /* wait for connection */
       return;
     }
 
@@ -515,6 +513,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     int err = EVUTIL_SOCKET_ERROR();
     log_warn("Connection error: %s", evutil_socket_error_to_string(err));
     if (socks_state_get_status(socks) == ST_HAVE_ADDR) {
+      bufferevent_enable(ckt->up_buffer, EV_WRITE);
       socks_send_reply(socks, bufferevent_get_output(ckt->up_buffer), err);
     }
     conn_close(conn);
@@ -677,6 +676,7 @@ conn_create_outbound(circuit_t *ckt)
 
  success:
   conn = conn_create(cfg, buf, peername);
+  circuit_add_downstream(ckt, conn);
   bufferevent_setcb(buf, downstream_read_cb, NULL, connect_cb, conn);
   bufferevent_enable(buf, EV_READ|EV_WRITE);
   return conn;

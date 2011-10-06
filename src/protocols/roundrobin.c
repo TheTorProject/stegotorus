@@ -428,6 +428,7 @@ rr_find_or_make_circuit(roundrobin_conn_t *conn, uint64_t circuit_id)
       return -1;
     }
     out->circuit_id = circuit_id;
+    HT_INSERT(rr_circuit_table_impl, &cfg->circuits.head, out);
   }
 
   conn->circuit = out->circuit;

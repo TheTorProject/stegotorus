@@ -17,9 +17,7 @@ Cleanup:
 
 Testing:
 
-  - break up the integration tests sensibly
   - more thorough integration tests
-  - don't rely on timeouts so much in the integration tests
 
 Misc:
 
