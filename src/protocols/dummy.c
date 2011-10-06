@@ -134,6 +134,13 @@ dummy_circuit_create(config_t *c)
 static void
 dummy_circuit_free(circuit_t *c)
 {
+  if (c->downstream) {
+    /* break the circular reference before deallocating the
+       downstream connection */
+    c->downstream->circuit = NULL;
+    conn_close(c->downstream);
+  }
+
   free(downcast_circuit(c));
 }
 

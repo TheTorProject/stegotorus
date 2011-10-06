@@ -277,13 +277,6 @@ circuit_add_downstream(circuit_t *ckt, conn_t *down)
 void
 circuit_close(circuit_t *ckt)
 {
-  /* break the circular reference before deallocating the
-     downstream connection */
-  if (ckt->downstream) {
-    ckt->downstream->circuit = NULL;
-    conn_close(ckt->downstream);
-  }
-
   smartlist_remove(circuits, ckt);
   log_debug("Closing circuit with %s; %d remaining",
             ckt->up_peer, smartlist_len(circuits));
