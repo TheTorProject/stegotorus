@@ -7,7 +7,7 @@
 
 #define SOCKS_PRIVATE
 #include "socks.h"
-#include "crypt.h" // for uchar
+#include "crypt.h" /* for uchar */
 
 #include <event2/buffer.h>
 
@@ -66,11 +66,19 @@ static void
 test_socks_socks5_send_negotiation(void *data)
 {
   struct test_socks_state *s = (struct test_socks_state *)data;
+  uchar req1[2];
+  uchar rep1[2];
+  uchar req2[10];
+  uchar rep2[2];
+  uchar req3[100];
+  uchar rep3[2];
+  uchar req4[4];
+  uchar rep4[2];
+  uchar req5[5];
 
   /* First test:
      Only one method: NOAUTH.
      SOCKS proxy should like this. */
-  uchar req1[2];
   req1[0] = 1;
   req1[1] = 0;
 
@@ -79,14 +87,12 @@ test_socks_socks5_send_negotiation(void *data)
   tt_int_op(SOCKS_GOOD, ==, socks5_handle_negotiation(s->source,s->dest,s->state));
   tt_int_op(0, ==, evbuffer_get_length(s->source));
 
-  uchar rep1[2];
   tt_int_op(2, ==, evbuffer_remove(s->dest,rep1,2));
   tt_assert(rep1[0] == 5);
   tt_assert(rep1[1] == 0);
 
   /* Second test:
      Ten methods: One of them NOAUTH */
-  uchar req2[10];
   req2[0] = 9;
   memset(req2+1,0x42,8);
   req2[9] = 0;
@@ -96,14 +102,12 @@ test_socks_socks5_send_negotiation(void *data)
   tt_int_op(SOCKS_GOOD, ==, socks5_handle_negotiation(s->source,s->dest,s->state));
   tt_int_op(0, ==, evbuffer_get_length(s->source));
 
-  uchar rep2[2];
   tt_int_op(2, ==, evbuffer_remove(s->dest,rep2,2));
   tt_assert(rep2[0] == 5);
   tt_assert(rep2[1] == 0);
 
   /* Third test:
      100 methods: No NOAUTH */
-  uchar req3[100];
   req3[0] = 99;
   memset(req3+1,0x42,99);
 
@@ -112,7 +116,6 @@ test_socks_socks5_send_negotiation(void *data)
   tt_int_op(SOCKS_BROKEN, ==, socks5_handle_negotiation(s->source,s->dest,s->state));
   tt_int_op(0, ==, evbuffer_get_length(s->source)); /* all data removed */
 
-  uchar rep3[2];
   tt_int_op(2, ==, evbuffer_remove(s->dest,rep3,2));
   tt_assert(rep3[0] == 5);
   tt_assert(rep3[1] == 0xff);
@@ -122,7 +125,6 @@ test_socks_socks5_send_negotiation(void *data)
 
      should say "0" for "want more data!"
    */
-  uchar req4[4];
   req4[0] = 4;
   memset(req4+1,0x0,3);
 
@@ -135,7 +137,6 @@ test_socks_socks5_send_negotiation(void *data)
   /* Fifth test:
      nmethods field = 3 but 4 actual methods.
      Should be okay; the next byte is part of the request. */
-  uchar req5[5];
   req5[0] = 3;
   memset(req5+1,0x0,4);
 
@@ -145,7 +146,6 @@ test_socks_socks5_send_negotiation(void *data)
   tt_int_op(1, ==, evbuffer_get_length(s->source)); /* 4 bytes removed */
   evbuffer_drain(s->source, 1);
 
-  uchar rep4[2];
   tt_int_op(2, ==, evbuffer_remove(s->dest,rep4,2));
   tt_assert(rep4[0] == 5);
   tt_assert(rep4[1] == 0);
@@ -168,11 +168,20 @@ test_socks_socks5_request(void *data)
   const uint32_t addr_ipv4 = htonl(0x7f000001); /* 127.0.0.1 */
   const uint8_t addr_ipv6[16] = {0,13,0,1,0,5,0,14,0,10,0,5,0,14,0,0}; /* d:1:5:e:a:5:e:0 */
   const uint16_t port = htons(80);    /* 80 */
+  size_t buffer_len;
+  struct parsereq pr1;
+  uchar req1[7];
+  uchar req2[7];
+  uchar req3[9];
+  uchar req4[24];
+  static const char fqdn[17] = "www.test.example";
+  uchar req5[24];
+  uchar req6[3];
+  uchar req7[5];
+  uchar req8[9];
 
   /* First test:
      Broken IPV4 req packet with no destport */
-  struct parsereq pr1;
-  uchar req1[7];
   req1[0] = 1;
   req1[1] = 0;
   req1[2] = 1;
@@ -183,12 +192,11 @@ test_socks_socks5_request(void *data)
   tt_int_op(SOCKS_INCOMPLETE, ==, socks5_handle_request(s->source,&pr1)); /* 0: want more data*/
 
   /* emptying source buffer before next test  */
-  size_t buffer_len = evbuffer_get_length(s->source);
+  buffer_len = evbuffer_get_length(s->source);
   tt_int_op(0, ==, evbuffer_drain(s->source, buffer_len));
 
   /* Second test:
      Broken FQDN req packet with no destport */
-  uchar req2[7];
   req2[0] = 1;
   req2[1] = 0;
   req2[2] = 3;
@@ -205,7 +213,6 @@ test_socks_socks5_request(void *data)
 
   /* Third test:
      Correct IPv4 req packet. */
-  uchar req3[9];
   req3[0] = 1;
   req3[1] = 0;
   req3[2] = 1;
@@ -224,7 +231,6 @@ test_socks_socks5_request(void *data)
 
   /* Fourth test:
      Correct IPv6 req packet. */
-  uchar req4[24];
   req4[0] = 5;
   req4[1] = 1;
   req4[2] = 0;
@@ -243,8 +249,6 @@ test_socks_socks5_request(void *data)
 
   /* Fifth test:
      Correct FQDN req packet. */
-  const char fqdn[17] = "www.test.example";
-  uchar req5[24];
   req5[0] = 5;
   req5[1] = 1;
   req5[2] = 0;
@@ -260,7 +264,6 @@ test_socks_socks5_request(void *data)
 
   /* Sixth test:
      Small request packet */
-  uchar req6[3];
   req6[0] = 5;
   req6[1] = 1;
   req6[2] = 0;
@@ -274,7 +277,6 @@ test_socks_socks5_request(void *data)
 
   /* Seventh test:
      Wrong Reserved field */
-  uchar req7[5];
   req7[0] = 5;
   req7[1] = 1;
   req7[2] = 1;
@@ -290,7 +292,6 @@ test_socks_socks5_request(void *data)
 
   /* Eigth test:
      Everything is dreamy... if only the requested command was CONNECT... */
-  uchar req8[9];
   req8[0] = 2; /* BIND CMD */
   req8[1] = 0;
   req8[2] = 1;
@@ -316,6 +317,12 @@ static void
 test_socks_socks5_request_reply(void *data)
 {
   struct test_socks_state *s = (struct test_socks_state *)data;
+  size_t buffer_len;
+  static const char fqdn[] = "www.test.example";
+  uchar rep1[255];
+  uchar rep2[255];
+  uchar rep3[255];
+  uchar rep4[255];
 
   s->state->parsereq.af = AF_INET;
   strcpy(s->state->parsereq.addr, "127.0.0.1");
@@ -326,7 +333,6 @@ test_socks_socks5_request_reply(void *data)
      succesful status. */
   socks5_send_reply(s->dest,s->state, SOCKS5_SUCCESS);
 
-  uchar rep1[255];
   evbuffer_remove(s->dest,rep1,255); /* yes, this is dirty */
 
   tt_assert(rep1[3] == SOCKS5_ATYP_IPV4);
@@ -336,7 +342,7 @@ test_socks_socks5_request_reply(void *data)
   tt_mem_op(rep1+4+4, ==, "\x1c\xbd", 2);
 
   /* emptying s->dest buffer before next test  */
-  size_t buffer_len = evbuffer_get_length(s->dest);
+  buffer_len = evbuffer_get_length(s->dest);
   tt_int_op(0, ==, evbuffer_drain(s->dest, buffer_len));
 
   /* Second test:
@@ -347,7 +353,6 @@ test_socks_socks5_request_reply(void *data)
 
   socks5_send_reply(s->dest,s->state, SOCKS5_SUCCESS);
 
-  uchar rep2[255];
   evbuffer_remove(s->dest,rep2,255);
 
   tt_assert(rep2[3] = SOCKS5_ATYP_IPV6);
@@ -365,13 +370,11 @@ test_socks_socks5_request_reply(void *data)
   /* Third test :
      We ask the server to send us a reply on an FQDN request with
      failure status. */
-  const char *fqdn = "www.test.example";
   s->state->parsereq.af = AF_UNSPEC;
   strcpy(s->state->parsereq.addr, fqdn);
 
   socks5_send_reply(s->dest, s->state, SOCKS5_FAILED_GENERAL);
 
-  uchar rep3[255];
   evbuffer_remove(s->dest,rep3,255);
 
   tt_assert(rep3[3] == SOCKS5_ATYP_FQDN);
@@ -387,7 +390,6 @@ test_socks_socks5_request_reply(void *data)
   memset(&s->state->parsereq,'\x00',sizeof(struct parsereq));
 
   socks5_send_reply(s->dest,s->state, SOCKS5_FAILED_UNSUPPORTED);
-  uchar rep4[255];
   evbuffer_remove(s->dest,rep4,255);
 
   tt_assert(rep4[3] == SOCKS5_ATYP_IPV4);
@@ -408,16 +410,22 @@ static void
 test_socks_socks4_request(void *data)
 {
   struct test_socks_state *s = (struct test_socks_state *)data;
-
+  size_t buffer_len;
   const uint32_t addr = htonl(0x7f000001); /* 127.0.0.1 */
+  const uint32_t addr_4a = htonl(0x00000042); /* 127.0.0.1 */
   const uint16_t port = htons(80);    /* 80 */
+  struct parsereq pr1;
+  uchar req1[8];
+  char req2[10];
+  char req3[16];
+  char req4[33];
+  char req5[33];
+  char req6[283];
 
   /* First test:
      Correct SOCKS4 req packet with nothing in the optional field. */
-  struct parsereq pr1;
   memset(&pr1, 0, sizeof(struct parsereq));
   s->state->parsereq = pr1;
-  uchar req1[8];
   req1[0] = 1;
   memcpy(req1+1,&port,2);
   memcpy(req1+3,&addr,4);
@@ -430,12 +438,11 @@ test_socks_socks4_request(void *data)
   tt_int_op(s->state->parsereq.port, ==, 80);
 
   /* emptying source buffer before next test  */
-  size_t buffer_len = evbuffer_get_length(s->source);
+  buffer_len = evbuffer_get_length(s->source);
   tt_int_op(0, ==, evbuffer_drain(s->source, buffer_len));
 
   /* Second test:
      Broken SOCKS4 req packet with incomplete optional field */
-  char req2[10];
   req2[0] = 1;
   memcpy(req2+1,&port,2);
   memcpy(req2+3,&addr,4);
@@ -451,7 +458,6 @@ test_socks_socks4_request(void *data)
 
   /* Third test:
      Correct SOCKS4 req packet with optional field. */
-  char req3[16];
   req3[0] = 1;
   memcpy(req3+1,&port,2);
   memcpy(req3+3,&addr,4);
@@ -469,8 +475,6 @@ test_socks_socks4_request(void *data)
 
   /* Fourth test:
      Correct SOCKS4a req packet with optional field. */
-  const uint32_t addr_4a = htonl(0x00000042); /* 127.0.0.1 */
-  char req4[33];
   req4[0] = 1;
   memcpy(req4+1,&port,2);
   memcpy(req4+3,&addr_4a,4);
@@ -489,7 +493,6 @@ test_socks_socks4_request(void *data)
 
   /* Fifth test:
      Broken SOCKS4a req packet with incomplete optional field. */
-  char req5[33];
   req5[0] = 1;
   memcpy(req5+1,&port,2);
   memcpy(req5+3,&addr_4a,4);
@@ -509,7 +512,6 @@ test_socks_socks4_request(void *data)
      Broken SOCKS4a req packet with a HUGE domain name. */
   #define HUGE 256
 
-  char req6[283];
   req6[0] = 1;
   memcpy(req6+1,&port,2);
   memcpy(req6+3,&addr_4a,4);
@@ -536,6 +538,10 @@ static void
 test_socks_socks4_request_reply(void *data)
 {
   struct test_socks_state *s = (struct test_socks_state *)data;
+  static const char fqdn[] = "www.test.example";
+  size_t buffer_len;
+  uchar rep1[255];
+  uchar rep2[255];
 
   s->state->parsereq.af = AF_INET;
   strcpy(s->state->parsereq.addr, "127.0.0.1");
@@ -546,7 +552,6 @@ test_socks_socks4_request_reply(void *data)
      succesful status. */
   socks4_send_reply(s->dest,s->state, SOCKS4_SUCCESS);
 
-  uchar rep1[255];
   evbuffer_remove(s->dest,rep1,255); /* yes, this is dirty */
 
   tt_assert(rep1[0] == '\x00');
@@ -557,19 +562,17 @@ test_socks_socks4_request_reply(void *data)
   tt_mem_op(rep1+2+2, ==, "\x7f\x00\x00\x01", 4);
 
   /* emptying dest buffer before next test  */
-  size_t buffer_len = evbuffer_get_length(s->dest);
+  buffer_len = evbuffer_get_length(s->dest);
   tt_int_op(0, ==, evbuffer_drain(s->dest, buffer_len));
 
   /* Second test :
      We ask the server to send us a reply on an FQDN request with
      failure status. */
-  const char *fqdn = "www.test.example";
   s->state->parsereq.af = AF_UNSPEC;
   strcpy(s->state->parsereq.addr, fqdn);
 
   socks4_send_reply(s->dest,s->state, SOCKS4_FAILED);
 
-  uchar rep2[255];
   evbuffer_remove(s->dest,rep2,255);
 
   tt_assert(rep2[1] == SOCKS4_FAILED);

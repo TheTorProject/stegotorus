@@ -72,6 +72,15 @@ test_obfs2_split_handshake(void *state)
   uint32_t plength1, plength1_msg1, plength1_msg2, send_plength1;
   const uchar *seed1;
 
+  uchar msgclient_1[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
+  uchar msgclient_2[OBFUSCATE_MAX_PADDING];
+
+  uint32_t plength2, send_plength2;
+  const uchar *seed2;
+
+  uchar msgserver_1[OBFUSCATE_SEED_LENGTH + 8];
+  uchar msgserver_2[OBFUSCATE_MAX_PADDING];
+
   /* generate padlen */
   tt_int_op(0, <=, random_bytes((uchar*)&plength1, 4));
 
@@ -81,9 +90,6 @@ test_obfs2_split_handshake(void *state)
   plength1_msg2 = plength1 - plength1_msg1;
 
   send_plength1 = htonl(plength1);
-
-  uchar msgclient_1[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
-  uchar msgclient_2[OBFUSCATE_MAX_PADDING];
 
   seed1 = client_state->initiator_seed;
 
@@ -116,17 +122,12 @@ test_obfs2_split_handshake(void *state)
   tt_int_op(ST_OPEN, ==, server_state->state);
 
   /* Since everything went right, let's do a server to client handshake now! */
-  uint32_t plength2, send_plength2;
-  const uchar *seed2;
 
   /* generate padlen */
   tt_int_op(0, <=, random_bytes((uchar*)&plength2, 4));
 
   plength2 %= OBFUSCATE_MAX_PADDING;
   send_plength2 = htonl(plength2);
-
-  uchar msgserver_1[OBFUSCATE_SEED_LENGTH + 8];
-  uchar msgserver_2[OBFUSCATE_MAX_PADDING];
 
   seed2 = server_state->responder_seed;
 
@@ -260,7 +261,8 @@ static const char *const options_server[] =
 
 static const struct proto_test_args obfs2_args =
   { ALEN(options_client), ALEN(options_server),
-    options_client, options_server };
+    options_client, options_server,
+    0, 0, 0, 0 };
 
 #define T(name) \
   { #name, test_obfs2_##name, 0, &proto_test_fixture, (void *)&obfs2_args }

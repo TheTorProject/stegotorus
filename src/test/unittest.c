@@ -4,6 +4,7 @@
 
 #include "util.h"
 #include "unittest.h"
+#include "main.h"
 
 #include "crypt.h"
 #include "connections.h"
@@ -104,14 +105,14 @@ setup_proto_test_state(const struct testcase_t *tcase)
 {
   struct proto_test_state *s = xzalloc(sizeof(struct proto_test_state));
   const struct proto_test_args *args = tcase->setup_data;
+  struct bufferevent *pairs[3][2];
+  int i;
 
   s->args = args;
   s->base = event_base_new();
 
   ut_enable_predictable_rng();
 
-  struct bufferevent *pairs[3][2];
-  int i;
   for (i = 0; i < 3; i++) {
     bufferevent_pair_new(s->base, 0, pairs[i]);
     bufferevent_enable(pairs[i][0], EV_READ|EV_WRITE);

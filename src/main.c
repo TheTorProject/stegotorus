@@ -3,6 +3,7 @@
 */
 
 #include "util.h"
+#include "main.h"
 
 #include "connections.h"
 #include "container.h"

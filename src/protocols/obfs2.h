@@ -44,7 +44,7 @@ typedef struct obfs2_conn_t {
   enum {
     ST_WAIT_FOR_KEY,
     ST_WAIT_FOR_PADDING,
-    ST_OPEN,
+    ST_OPEN
   } state;
   /** Random seed we generated for this stream */
   uchar initiator_seed[OBFUSCATE_SEED_LENGTH];

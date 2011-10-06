@@ -134,7 +134,7 @@ flush_text(tstate *st, bool near)
 
   for (i = 0; i < nseg; i++) {
     const char *p = v[i].iov_base;
-    const char *limit = v[i].iov_base + v[i].iov_len;
+    const char *limit = p + v[i].iov_len;
     for (; p < limit; p++) {
       if (ll == 0)
         evbuffer_add(tobuf, tag, 2);

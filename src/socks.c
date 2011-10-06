@@ -116,7 +116,8 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   /* #define MAXFQDN */
   char destaddr[255+1]; /* Dest address */
   uint16_t destport;    /* Dest port */
-
+  uchar p[SIZEOF_SOCKS5_STATIC_REQ+1];
+  unsigned int addrlen,af,extralen=0,minsize;
   unsigned int buflength = evbuffer_get_length(source);
 
   if (buflength < SIZEOF_SOCKS5_STATIC_REQ+1) {
@@ -128,7 +129,6 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   /* We only need the socks5_req and an extra byte to get
      the addrlen in an FQDN request.
   */
-  uchar p[SIZEOF_SOCKS5_STATIC_REQ+1];
   if (evbuffer_copyout(source, p, SIZEOF_SOCKS5_STATIC_REQ+1) < 0)
     goto err;
 
@@ -143,7 +143,6 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   if (p[1] != SOCKS5_CMD_CONNECT)
     return SOCKS_CMD_NOT_CONNECT; /* We must send reply to the client. */
 
-  unsigned int addrlen,af,extralen=0;
   /* p[3] is Address type field */
   switch(p[3]) {
   case SOCKS5_ATYP_IPV4:
@@ -167,7 +166,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     goto err;
   }
 
-  int minsize = SIZEOF_SOCKS5_STATIC_REQ + addrlen + extralen + 2;
+  minsize = SIZEOF_SOCKS5_STATIC_REQ + addrlen + extralen + 2;
   if (buflength < minsize) {
     log_debug("socks: request packet too small %d:%d (2)", buflength, minsize);
     return SOCKS_INCOMPLETE;
@@ -182,7 +181,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     if (evbuffer_drain(source, 1) == -1)
       goto err;
 
-  if (evbuffer_remove(source, destaddr, addrlen) != addrlen)
+  if (evbuffer_remove(source, destaddr, addrlen) != (ev_ssize_t)addrlen)
     obfs_abort();
 
   if (evbuffer_remove(source, (char *)&destport, 2) != 2)
@@ -315,7 +314,7 @@ socks5_handle_negotiation(struct evbuffer *source,
 
   evbuffer_copyout(source, &nmethods, 1);
 
-  if (evbuffer_get_length(source) < nmethods + 1) {
+  if (evbuffer_get_length(source) < (size_t)(nmethods + 1)) {
     return SOCKS_INCOMPLETE; /* need more data */
   }
 
@@ -382,7 +381,7 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
   }
   user_len = end_of_user.pos - 7;
   if (is_v4a) {
-    if (end_of_user.pos == evbuffer_get_length(source)-1)
+    if ((size_t)end_of_user.pos == evbuffer_get_length(source)-1)
       return SOCKS_INCOMPLETE; /*more data needed */
     end_of_hostname = end_of_user;
     evbuffer_ptr_set(source, &end_of_hostname, 1, EVBUFFER_PTR_ADD);
@@ -576,11 +575,11 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
                          sizeof(state->parsereq.addr)) == NULL)
       return -1;
   } else if (sa->sa_family == AF_INET6) {
+    const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
     if (state->version == 4) {
       log_debug("Oops; socks4 doesn't allow ipv6 addresses");
       return -1;
     }
-    const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
     port = sin6->sin6_port;
     if (evutil_inet_ntop(AF_INET6, &sin6->sin6_addr, state->parsereq.addr,
                          sizeof(state->parsereq.addr)) == NULL)

@@ -728,24 +728,20 @@ static void
 test_container_order_functions(void *unused)
 {
   int lst[25], n = 0;
-  //  int a=12,b=24,c=25,d=60,e=77;
 
 #define median() median_int(lst, n)
 
   lst[n++] = 12;
   tt_int_op(median(), ==, 12); /* 12 */
   lst[n++] = 77;
-  //smartlist_shuffle(sl);
   tt_int_op(median(), ==, 12); /* 12, 77 */
   lst[n++] = 77;
-  //smartlist_shuffle(sl);
   tt_int_op(median(), ==, 77); /* 12, 77, 77 */
   lst[n++] = 24;
   tt_int_op(median(), ==, 24); /* 12,24,77,77 */
   lst[n++] = 60;
   lst[n++] = 12;
   lst[n++] = 25;
-  //smartlist_shuffle(sl);
   tt_int_op(median(), ==, 25); /* 12,12,24,25,60,77,77 */
 #undef median
 

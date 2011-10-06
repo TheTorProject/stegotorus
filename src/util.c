@@ -544,6 +544,11 @@ log_do_debug(void)
 static void
 logv(int severity, const char *format, va_list ap)
 {
+  size_t n=0;
+  int r=0;
+  char buf[MAX_LOG_ENTRY];
+  size_t buflen = MAX_LOG_ENTRY-2;
+
   if (!sev_is_valid(severity))
     abort();
 
@@ -553,12 +558,6 @@ logv(int severity, const char *format, va_list ap)
   /* See if the user is interested in this log message. */
   if (severity < logging_min_sev)
     return;
-
-  size_t n=0;
-  int r=0;
-  char buf[MAX_LOG_ENTRY];
-
-  size_t buflen = MAX_LOG_ENTRY-2;
 
   r = obfs_snprintf(buf, buflen, "[%s] ", sev_to_string(severity));
   if (r < 0)

@@ -685,9 +685,6 @@ smartlist_uniq_strings(smartlist_t *sl)
  *
  * For a 1-indexed array, we would use LEFT_CHILD[x] = 2*x and RIGHT_CHILD[x]
  *   = 2*x + 1.  But this is C, so we have to adjust a little. */
-//#define LEFT_CHILD(i)  ( ((i)+1)*2 - 1)
-//#define RIGHT_CHILD(i) ( ((i)+1)*2 )
-//#define PARENT(i)      ( ((i)+1)/2 - 1)
 #define LEFT_CHILD(i)  ( 2*(i) + 1 )
 #define RIGHT_CHILD(i) ( 2*(i) + 2 )
 #define PARENT(i)      ( ((i)-1) / 2 )

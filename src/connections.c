@@ -24,14 +24,14 @@ static smartlist_t *circuits;
 static int shutting_down;
 
 void
-conn_initialize()
+conn_initialize(void)
 {
   connections = smartlist_create();
   circuits = smartlist_create();
 }
 
 static void
-maybe_finish_shutdown()
+maybe_finish_shutdown(void)
 {
   if (!shutting_down)
     return;
