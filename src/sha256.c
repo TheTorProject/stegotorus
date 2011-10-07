@@ -7,7 +7,10 @@
 #include "util.h"
 
 #include "sha256.h"
-#include <arpa/inet.h> /* for htonl/ntohl */
+
+#ifndef _WIN32
+#include <arpa/inet.h> /* for inet_ntoa() */
+#endif
 
 #define STMT_BEGIN do {
 #define STMT_END } while (0)
