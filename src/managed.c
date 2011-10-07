@@ -15,7 +15,9 @@
 #include <event2/event.h>
 #include <event2/listener.h>
 
+#ifndef _WIN32
 #include <arpa/inet.h> /* for inet_ntoa() */
+#endif
 
 /** Holds all the parameters provided by tor through environment
     variables. */
