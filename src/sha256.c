@@ -9,7 +9,7 @@
 #include "sha256.h"
 
 #ifndef _WIN32
-#include <arpa/inet.h> /* for inet_ntoa() */
+#include <arpa/inet.h> /* for htonl/ntohl */
 #endif
 
 #define STMT_BEGIN do {
