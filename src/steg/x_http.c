@@ -111,7 +111,7 @@ x_http_transmit_room(steg_t *s, conn_t *conn)
 }
 
 int
-x_http_transmit(steg_t *s, struct evbuffer *source, size_t chaff, conn_t *conn)
+x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
 {
   struct evbuffer *dest = conn_get_outbound(conn);
 
@@ -163,22 +163,6 @@ x_http_transmit(steg_t *s, struct evbuffer *source, size_t chaff, conn_t *conn)
            evbuffer_get_length(scratch) % 4 != 0)
       evbuffer_add(scratch, "=", 1);
 
-    if (chaff > 0) {
-      unsigned int r = 0;
-      char hex[1];
-      if (evbuffer_expand(scratch, chaff+1)) {
-        evbuffer_free(scratch);
-        return -1;
-      }
-      evbuffer_add(scratch, "?", 1);
-      do {
-        while (!r) r = random_int(0x0FFFFFFFu);
-        hex[0] = "0123456789abcdef"[r & 0x0Fu];
-        r >>= 4;
-        evbuffer_add(scratch, hex, 1);
-      } while (--chaff > 0);
-    }
-
     if (evbuffer_add(dest, http_query_1, sizeof http_query_1-1) ||
         evbuffer_add_buffer(dest, scratch) ||
         evbuffer_add(dest, http_query_2, sizeof http_query_2-1) ||
@@ -195,10 +179,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, size_t chaff, conn_t *conn)
 
   } else {
     /* On the server side, we just fake up some HTTP response headers
-       and then splat the data we were given. Binary is OK.  We cannot
-       presently handle being asked to send chaff in this direction,
-       but x_dsteg doesn't ever do that, so that's okay.  */
-    obfs_assert(!chaff);
+       and then splat the data we were given. Binary is OK.  */
     if (evbuffer_add(dest, http_response_1, sizeof http_response_1-1))
         return -1;
     if (evbuffer_add_printf(dest, http_response_2,
@@ -220,6 +201,8 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
     /* This loop should not be necessary, but we are currently not
        enforcing the query-response pattern, so we can get more than
        one response per request. */
+    int shipped = 0;
+
     do {
       /* Linearize the buffer out past the longest possible
          Content-Length header and subsequent blank line.  2**64 fits in
@@ -235,7 +218,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
                 (unsigned long)hlen,
                 hlen >= sizeof http_response_1 - 1 ? "" : "not ");
       if (hlen < sizeof http_response_1 - 1)
-        return RECV_INCOMPLETE;
+        break;
 
       if (hlen > sizeof http_response_1 + 23)
         hlen = sizeof http_response_1 + 23;
@@ -256,7 +239,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
         p++;
       }
       if (p+4 > limit)
-        return RECV_INCOMPLETE;
+        break;
       if (p[0] != '\r' || p[1] != '\n' || p[2] != '\r' || p[3] != '\n')
         return RECV_BAD;
 
@@ -264,7 +247,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       hlen = p - data;
       /* Now we know how much data we're expecting after the blank line. */
       if (evbuffer_get_length(source) < hlen + clen)
-        return RECV_INCOMPLETE;
+        break;
 
       /* we are go */
       if (evbuffer_drain(source, hlen))
@@ -273,10 +256,14 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       if ((uint64_t)evbuffer_remove_buffer(source, dest, clen) != clen)
         return RECV_BAD;
 
+      log_debug("x_http: decoded %lu byte response", (unsigned long)clen);
+      shipped = 1;
     } while (evbuffer_get_length(source));
 
-    conn_expect_close(conn);
-    return RECV_GOOD;
+    if (shipped && evbuffer_get_length(source) == 0)
+      conn_expect_close(conn);
+    return shipped ? RECV_GOOD : RECV_INCOMPLETE;
+
   } else {
     /* We need a scratch buffer here because the contract is that if
        we hit a decode error we *don't* write anything to 'dest'. */
@@ -284,6 +271,8 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
     struct evbuffer_ptr s2, s3;
     unsigned char *data, *p, *limit;
     unsigned char c, h, secondhalf;
+    size_t slen;
+    int shipped = 0;
 
     /* This loop should not be necessary either, but is, for the same
        reason given above */
@@ -293,21 +282,21 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       s2 = evbuffer_search(source, http_query_2,
                            sizeof http_query_2 - 1, NULL);
       if (s2.pos == -1) {
-        log_debug("Did not find second piece of HTTP query");
-        return RECV_INCOMPLETE;
+        log_debug("x_http: did not find second piece of HTTP query");
+        break;
       }
       s3 = evbuffer_search(source, http_query_3,
                            sizeof http_query_3 - 1, &s2);
       if (s3.pos == -1) {
-        log_debug("Did not find third piece of HTTP query");
-        return RECV_INCOMPLETE;
+        log_debug("x_http: did not find third piece of HTTP query");
+        break;
       }
       obfs_assert(s3.pos + sizeof http_query_3 - 1
                   <= evbuffer_get_length(source));
 
       data = evbuffer_pullup(source, s2.pos);
       if (memcmp(data, "GET /", sizeof "GET /"-1)) {
-        log_debug("Unexpected HTTP verb: %.*s", 5, data);
+        log_debug("x_http: unexpected HTTP verb: %.*s", 5, data);
         return RECV_BAD;
       }
 
@@ -330,18 +319,9 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
         else if (*p == '=' && !secondhalf) {
           p++;
           continue;
-        } else if (*p == '?' && !secondhalf) {
-          /* everything after this point should be chaff */
-          p++;
-          while (p < limit &&
-                 (('0' <= *p && *p <= '9') ||
-                  ('a' <= *p && *p <= 'f') ||
-                  ('A' <= *p && *p <= 'F')))
-            p++;
-          continue;
         } else {
           evbuffer_free(scratch);
-          log_debug("Decode error: unexpected URI character %c", *p);
+          log_debug("x_http: decode error: unexpected URI character %c", *p);
           return RECV_BAD;
         }
 
@@ -352,17 +332,20 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
         p++;
       }
 
+      slen = evbuffer_get_length(scratch);
       if (evbuffer_add_buffer(dest, scratch)) {
         evbuffer_free(scratch);
-        log_debug("Failed to transfer buffer");
+        log_debug("x_http: failed to transfer buffer");
         return RECV_BAD;
       }
       evbuffer_drain(source, s3.pos + sizeof http_query_3 - 1);
       evbuffer_free(scratch);
-
+      log_debug("x_http: decoded %lu byte query", (unsigned long)slen);
+      shipped = 1;
     } while (evbuffer_get_length(source));
 
-    conn_transmit_soon(conn, 100);
-    return RECV_GOOD;
+    if (shipped && !evbuffer_get_length(source))
+      conn_transmit_soon(conn, 100);
+    return shipped ? RECV_GOOD : RECV_INCOMPLETE;
   }
 }
