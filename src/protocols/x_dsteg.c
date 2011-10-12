@@ -172,11 +172,6 @@ x_dsteg_circuit_add_downstream(circuit_t *c, conn_t *conn)
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(!ckt->downstream);
   ckt->downstream = conn;
-  /* On the client side, we must send _something_ shortly after
-     connection even if we have no data to pass along, to inform the
-     server what steg target it should use. */
-  if (c->cfg->mode != LSN_SIMPLE_SERVER)
-    circuit_arm_flush_timer(c, 10);
 }
 
 /* Drop a connection from this circuit.  If this happens in this
@@ -239,10 +234,17 @@ x_dsteg_conn_maybe_open_upstream(conn_t *conn)
   return 0;
 }
 
-/** Dsteg has no handshake */
+/** Dsteg has no handshake as such, but on the client side, we must
+    send _something_ shortly after connection even if we have no data
+    to pass along.  Otherwise, the server will never find out what
+    steg target to use, and if it has something to say but we don't,
+    it will never get a chance.  x_dsteg_transmit knows what to do
+    when the flush timer goes off with no data to send.  */
 static int
 x_dsteg_conn_handshake(conn_t *conn)
 {
+  if (conn->cfg->mode != LSN_SIMPLE_SERVER)
+    circuit_arm_flush_timer(conn->circuit, 10);
   return 0;
 }
 
