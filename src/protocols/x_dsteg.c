@@ -9,6 +9,7 @@
 #include "crypt.h"
 
 #include <event2/buffer.h>
+#include <arpa/inet.h>
 
 typedef struct x_dsteg_config_t {
   config_t super;
@@ -245,13 +246,88 @@ x_dsteg_conn_handshake(conn_t *conn)
   return 0;
 }
 
+/*
+  Dsteg packs a chunk of data and a chunk of chaff into a block with
+  a 32-bit header:
+  | DLen (uint16_t) | CLen (uint16_t) | DLen bytes data | CLen bytes chaff |
+*/
+struct ds_wire_header {
+  uint16_t dlen;
+  uint16_t clen;
+};
+
+static struct evbuffer *
+ds_pack(struct evbuffer *source, uint16_t dlen, uint16_t clen)
+{
+  struct ds_wire_header hdr;
+  struct evbuffer_iovec v;
+  struct evbuffer *block = evbuffer_new();
+
+  if (!block)
+    return NULL;
+
+  hdr.dlen = htons(dlen);
+  hdr.clen = htons(clen);
+  if (evbuffer_add(block, &hdr, sizeof hdr))
+    goto fail;
+
+  if (dlen > 0)
+    if (evbuffer_remove_buffer(source, block, dlen) != dlen)
+      goto fail;
+
+  if (evbuffer_reserve_space(block, clen, &v, 1) != 1)
+    goto fail;
+  v.iov_len = clen;
+
+  if (random_bytes(v.iov_base, v.iov_len))
+    goto fail;
+
+  if (evbuffer_commit_space(block, &v, 1))
+    goto fail;
+
+  log_debug("x_dsteg: packed block of %hu/%hu bytes", dlen, clen);
+  return block;
+
+ fail:
+  log_debug("x_dsteg: failed to pack block of %hu/%hu bytes", dlen, clen);
+  evbuffer_free(block);
+  return NULL;
+}
+
+static int
+ds_unpack(struct evbuffer *dest, struct evbuffer *source)
+{
+  struct ds_wire_header hdr = { 0, 0 };
+  if (evbuffer_remove(source, &hdr, sizeof hdr) != sizeof hdr)
+    goto fail;
+
+  hdr.dlen = ntohs(hdr.dlen);
+  hdr.clen = ntohs(hdr.clen);
+
+  if (hdr.dlen > 0)
+    if (evbuffer_remove_buffer(source, dest, hdr.dlen) != hdr.dlen)
+      goto fail;
+
+  if (hdr.clen > 0)
+    if (evbuffer_drain(source, hdr.clen))
+      goto fail;
+
+  log_debug("x_dsteg: unpacked block of %hu/%hu bytes", hdr.dlen, hdr.clen);
+  return 0;
+
+ fail:
+  log_debug("x_dsteg: failed to unpack block of %hu/%hu bytes",
+            hdr.dlen, hdr.clen);
+  return -1;
+}
+
 static int
 x_dsteg_circuit_send(circuit_t *c)
 {
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
   conn_t *d = ckt->downstream;
   struct evbuffer *source = bufferevent_get_input(c->up_buffer);
-  struct evbuffer *chunk;
+  struct evbuffer *block;
   x_dsteg_conn_t *dest = downcast_conn(d);
   steg_t *steg = dest->steg;
   size_t room;
@@ -263,8 +339,10 @@ x_dsteg_circuit_send(circuit_t *c)
      to transmit chaff so the server knows what steg target to use. */
   if (evbuffer_get_length(source) == 0) {
     obfs_assert(steg);
-    room = random_int(steg_transmit_room(steg, d));
-    rv = steg_transmit(steg, source, room, d);
+    room = random_int(steg_transmit_room(steg, d)) + 1;
+    block = ds_pack(source, 0, room);
+    rv = steg_transmit(steg, block, d);
+    evbuffer_free(block);
     if (rv < 0)
       return -1;
     log_debug("x_dsteg: %lu bytes chaff sent (%lu on wire)",
@@ -286,20 +364,20 @@ x_dsteg_circuit_send(circuit_t *c)
   room = steg_transmit_room(steg, d);
   log_debug("x_dsteg: can transmit %lu bytes", (unsigned long)room);
   if (room) {
-    chunk = evbuffer_new();
-    if (!chunk) return -1;
+    if (room > UINT16_MAX)
+      room = UINT16_MAX;
+    if (room > evbuffer_get_length(source))
+      room = evbuffer_get_length(source);
 
-    rv = evbuffer_remove_buffer(source, chunk, room);
-    room = evbuffer_get_length(chunk);
-    if (rv >= 0)
-      rv = steg_transmit(steg, chunk, 0, d);
-    evbuffer_free(chunk);
+    block = ds_pack(source, room, 0);
+    if (!block) return -1;
+    rv = steg_transmit(steg, block, d);
+    evbuffer_free(block);
+    if (rv < 0)
+      return -1;
+    ckt->ever_transmitted = 1;
   }
 
-  if (rv < 0)
-    return -1;
-
-  ckt->ever_transmitted = 1;
   log_debug("x_dsteg: %lu bytes sent (%lu on wire), %lu still pending",
             (unsigned long)room,
             (unsigned long)evbuffer_get_length(conn_get_outbound(d)),
@@ -353,6 +431,7 @@ static enum recv_ret
 x_dsteg_conn_recv(conn_t *s)
 {
   x_dsteg_conn_t *source = downcast_conn(s);
+  struct evbuffer *block, *dest;
   enum recv_ret ret;
   size_t in, out;
 
@@ -369,16 +448,28 @@ x_dsteg_conn_recv(conn_t *s)
     }
   }
   in = evbuffer_get_length(conn_get_inbound(s));
-  ret = steg_receive(source->steg, s,
-                     bufferevent_get_output(s->circuit->up_buffer));
-  if (ret != RECV_GOOD)
+  block = evbuffer_new();
+  if (!block)
+    return RECV_BAD;
+  ret = steg_receive(source->steg, s, block);
+  if (ret != RECV_GOOD) {
+    evbuffer_free(block);
     return ret;
+  }
+
+  dest = bufferevent_get_output(s->circuit->up_buffer);
+  do {
+    if (ds_unpack(dest, block)) {
+      evbuffer_free(block);
+      return RECV_BAD;
+    }
+  } while (evbuffer_get_length(block) > 0);
+  evbuffer_free(block);
 
   in -= evbuffer_get_length(conn_get_inbound(s));
-  out = evbuffer_get_length(bufferevent_get_output(s->circuit->up_buffer));
+  out = evbuffer_get_length(dest);
   log_debug("x_dsteg: received %lu bytes (%lu on wire)",
             (unsigned long)out, (unsigned long)in);
-
 
   /* check for pending transmissions */
   in = evbuffer_get_length(bufferevent_get_input(s->circuit->up_buffer));

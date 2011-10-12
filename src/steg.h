@@ -64,11 +64,9 @@ struct steg_vtable
       this connection.  */
   size_t (*transmit_room)(steg_t *state, conn_t *conn);
 
-  /** Consume all of the data in SOURCE, add CHAFF bytes of chaff,
-      disguise the lot, and write it to the outbound buffer for
-      CONN. Return 0 on success, -1 on failure. */
-  int (*transmit)(steg_t *state, struct evbuffer *source, size_t chaff,
-                  conn_t *conn);
+  /** Consume all of the data in SOURCE, disguise it, and write it to
+      the outbound buffer for CONN. Return 0 on success, -1 on failure. */
+  int (*transmit)(steg_t *state, struct evbuffer *source, conn_t *conn);
 
   /** The data in CONN's inbound buffer should have been disguised by
       the peer instance to STATE.  Unmask it and write it to DEST.
@@ -88,8 +86,7 @@ steg_t *steg_new(const char *name);
 steg_t *steg_detect(conn_t *conn);
 void steg_del(steg_t *state);
 size_t steg_transmit_room(steg_t *state, conn_t *conn);
-int steg_transmit(steg_t *state, struct evbuffer *source, size_t chaff,
-                  conn_t *conn);
+int steg_transmit(steg_t *state, struct evbuffer *source, conn_t *conn);
 enum recv_ret steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
 
 /* Macros for use in defining steg modules. */
@@ -108,7 +105,7 @@ enum recv_ret steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
   static steg_t *name##_new(rng_t *, unsigned int);                     \
   static void name##_del(steg_t *);                                     \
   static size_t name##_transmit_room(steg_t *, conn_t *);               \
-  static int name##_transmit(steg_t *, struct evbuffer *, size_t, conn_t *); \
+  static int name##_transmit(steg_t *, struct evbuffer *, conn_t *);    \
   static enum recv_ret name##_receive(steg_t *, conn_t *, struct evbuffer *); \
                                                                         \
   /* vtable */                                                          \
