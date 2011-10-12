@@ -309,7 +309,7 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   log_debug("%s: %s, %lu bytes available", down->peername, __func__,
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
-  if (conn_recv(down) == RECV_BAD) {
+  if (conn_recv(down)) {
     log_debug("%s: error during receive.", down->peername);
     conn_close(down);
   }

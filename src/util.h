@@ -77,15 +77,6 @@ typedef struct steg_t steg_t;
 typedef struct proto_vtable proto_vtable;
 typedef struct steg_vtable steg_vtable;
 
-enum recv_ret {
-  /* Everything went fine. */
-  RECV_GOOD=0,
-  /* Something went bad. */
-  RECV_BAD,
-  /* ...need...more...data... */
-  RECV_INCOMPLETE
-};
-
 enum listen_mode {
   LSN_SIMPLE_CLIENT = 1,
   LSN_SIMPLE_SERVER,

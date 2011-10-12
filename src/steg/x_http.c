@@ -48,7 +48,7 @@ static const char http_response_2[] =
   "\r\n";
 
 
-steg_t *
+static steg_t *
 x_http_new(rng_t *rng, unsigned int is_clientside)
 {
   STEG_NEW(x_http, state, rng, is_clientside);
@@ -56,7 +56,7 @@ x_http_new(rng_t *rng, unsigned int is_clientside)
   return upcast_steg(state);
 }
 
-void
+static void
 x_http_del(steg_t *s)
 {
   x_http_steg_t *state = downcast_steg(s);
@@ -65,7 +65,7 @@ x_http_del(steg_t *s)
   free(state);
 }
 
-unsigned int
+static unsigned int
 x_http_detect(conn_t *conn)
 {
   struct evbuffer *buf = conn_get_inbound(conn);
@@ -95,7 +95,7 @@ x_http_detect(conn_t *conn)
   return 0;
 }
 
-size_t
+static size_t
 x_http_transmit_room(steg_t *s, conn_t *conn)
 {
   if (s->is_clientside)
@@ -110,7 +110,7 @@ x_http_transmit_room(steg_t *s, conn_t *conn)
     return SIZE_MAX;
 }
 
-int
+static int
 x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
 {
   struct evbuffer *dest = conn_get_outbound(conn);
@@ -193,7 +193,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
   }
 }
 
-enum recv_ret
+static int
 x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
@@ -226,7 +226,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       data = evbuffer_pullup(source, hlen);
       /* Validate response headers. */
       if (memcmp(data, http_response_1, sizeof http_response_1 - 1))
-        return RECV_BAD;
+        return -1;
 
       /* There should be an unsigned number immediately after the text of
          http_response_1, followed by the four characters \r\n\r\n.
@@ -241,7 +241,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       if (p+4 > limit)
         break;
       if (p[0] != '\r' || p[1] != '\n' || p[2] != '\r' || p[3] != '\n')
-        return RECV_BAD;
+        return -1;
 
       p += 4;
       hlen = p - data;
@@ -251,10 +251,10 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
 
       /* we are go */
       if (evbuffer_drain(source, hlen))
-        return RECV_BAD;
+        return -1;
 
       if ((uint64_t)evbuffer_remove_buffer(source, dest, clen) != clen)
-        return RECV_BAD;
+        return -1;
 
       log_debug("x_http: decoded %lu byte response", (unsigned long)clen);
       shipped = 1;
@@ -262,7 +262,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
 
     if (shipped && evbuffer_get_length(source) == 0)
       conn_expect_close(conn);
-    return shipped ? RECV_GOOD : RECV_INCOMPLETE;
+    return 0;
 
   } else {
     /* We need a scratch buffer here because the contract is that if
@@ -297,17 +297,17 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       data = evbuffer_pullup(source, s2.pos);
       if (memcmp(data, "GET /", sizeof "GET /"-1)) {
         log_debug("x_http: unexpected HTTP verb: %.*s", 5, data);
-        return RECV_BAD;
+        return -1;
       }
 
       p = data + sizeof "GET /"-1;
       limit = data + s2.pos;
 
       scratch = evbuffer_new();
-      if (!scratch) return RECV_BAD;
+      if (!scratch) return -1;
       if (evbuffer_expand(scratch, (limit - p)/2)) {
         evbuffer_free(scratch);
-        return RECV_BAD;
+        return -1;
       }
 
       secondhalf = 0;
@@ -322,7 +322,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
         } else {
           evbuffer_free(scratch);
           log_debug("x_http: decode error: unexpected URI character %c", *p);
-          return RECV_BAD;
+          return -1;
         }
 
         c = (c << 4) + h;
@@ -336,7 +336,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       if (evbuffer_add_buffer(dest, scratch)) {
         evbuffer_free(scratch);
         log_debug("x_http: failed to transfer buffer");
-        return RECV_BAD;
+        return -1;
       }
       evbuffer_drain(source, s3.pos + sizeof http_query_3 - 1);
       evbuffer_free(scratch);
@@ -346,6 +346,6 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
 
     if (shipped && !evbuffer_get_length(source))
       conn_transmit_soon(conn, 100);
-    return shipped ? RECV_GOOD : RECV_INCOMPLETE;
+    return 0;
   }
 }

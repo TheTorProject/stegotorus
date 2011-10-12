@@ -101,13 +101,13 @@ struct proto_vtable
   int (*conn_handshake)(conn_t *conn);
 
   /** Receive data from 'source' and pass it upstream (to the circuit). */
-  enum recv_ret (*conn_recv)(conn_t *source);
+  int (*conn_recv)(conn_t *source);
 
   /** Take any actions necessary upon receipt of an end-of-transmission
       indication from the remote peer.  Note that this is _not_
       necessarily the same as "end of file" at the circuit level,
       depending on the protocol.  */
-  enum recv_ret (*conn_recv_eof)(conn_t *source);
+  int (*conn_recv_eof)(conn_t *source);
 
   /* The remaining methods are only required if your protocol makes
      use of steganography modules.  If you provide them, they must be
@@ -183,8 +183,8 @@ extern const proto_vtable *const supported_protos[];
   static void name##_conn_free(conn_t *);                               \
   static int name##_conn_maybe_open_upstream(conn_t *);                 \
   static int name##_conn_handshake(conn_t *);                           \
-  static enum recv_ret name##_conn_recv(conn_t *);                      \
-  static enum recv_ret name##_conn_recv_eof(conn_t *);
+  static int name##_conn_recv(conn_t *);                                \
+  static int name##_conn_recv_eof(conn_t *);
 
 #define PROTO_FWD_NOSTEG(name) /* nothing required */
 

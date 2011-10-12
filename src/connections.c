@@ -149,13 +149,13 @@ conn_handshake(conn_t *conn)
   return conn->cfg->vtable->conn_handshake(conn);
 }
 
-enum recv_ret
+int
 conn_recv(conn_t *source)
 {
   return source->cfg->vtable->conn_recv(source);
 }
 
-enum recv_ret
+int
 conn_recv_eof(conn_t *source)
 {
   return source->cfg->vtable->conn_recv_eof(source);

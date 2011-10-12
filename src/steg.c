@@ -60,7 +60,7 @@ steg_transmit(steg_t *state, struct evbuffer *source, conn_t *conn)
   return state->vtable->transmit(state, source, conn);
 }
 
-enum recv_ret
+int
 steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest)
 {
   return state->vtable->receive(state, conn, dest);

@@ -427,22 +427,21 @@ x_dsteg_circuit_send_eof(circuit_t *c)
 
 
 /* Receive data from S. */
-static enum recv_ret
+static int
 x_dsteg_conn_recv(conn_t *s)
 {
   x_dsteg_conn_t *source = downcast_conn(s);
   struct evbuffer *block, *dest;
-  enum recv_ret ret;
   size_t in, out;
 
   if (!source->steg) {
     obfs_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
     if (evbuffer_get_length(conn_get_inbound(s)) == 0)
-      return RECV_INCOMPLETE;
+      return 0; /* need more data */
     source->steg = steg_detect(s);
     if (!source->steg) {
       log_debug("No recognized steg pattern detected");
-      return RECV_BAD;
+      return -1;
     } else {
       log_debug("Detected steg pattern %s", source->steg->vtable->name);
     }
@@ -450,20 +449,19 @@ x_dsteg_conn_recv(conn_t *s)
   in = evbuffer_get_length(conn_get_inbound(s));
   block = evbuffer_new();
   if (!block)
-    return RECV_BAD;
-  ret = steg_receive(source->steg, s, block);
-  if (ret != RECV_GOOD) {
+    return -1;
+  if (steg_receive(source->steg, s, block)) {
     evbuffer_free(block);
-    return ret;
+    return -1;
   }
 
   dest = bufferevent_get_output(s->circuit->up_buffer);
-  do {
+  while (evbuffer_get_length(block) > 0) {
     if (ds_unpack(dest, block)) {
       evbuffer_free(block);
-      return RECV_BAD;
+      return -1;
     }
-  } while (evbuffer_get_length(block) > 0);
+  }
   evbuffer_free(block);
 
   in -= evbuffer_get_length(conn_get_inbound(s));
@@ -474,25 +472,25 @@ x_dsteg_conn_recv(conn_t *s)
   /* check for pending transmissions */
   in = evbuffer_get_length(bufferevent_get_input(s->circuit->up_buffer));
   if (in == 0)
-    return RECV_GOOD;
+    return 0;
 
   log_debug("x_dsteg: %lu bytes waiting to be sent", (unsigned long)in);
-  return x_dsteg_circuit_send(s->circuit) ? RECV_BAD : RECV_GOOD;
+  return x_dsteg_circuit_send(s->circuit);
 }
 
 
 /** Receive EOF from connection SOURCE */
-static enum recv_ret
+static int
 x_dsteg_conn_recv_eof(conn_t *source)
 {
   if (source->circuit) {
     if (evbuffer_get_length(conn_get_inbound(source)) > 0)
-      if (x_dsteg_conn_recv(source) == RECV_BAD)
-        return RECV_BAD;
+      if (x_dsteg_conn_recv(source))
+        return -1;
 
     circuit_recv_eof(source->circuit);
   }
-  return RECV_GOOD;
+  return 0;
 }
 
 /** XXX all steg callbacks are ignored */

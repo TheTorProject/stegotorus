@@ -523,12 +523,10 @@ init_crypto(void *s)
 /* Called when we receive data in an evbuffer 'source': deobfuscates that data
  * and writes it to 'dest', by using protocol state 's' to get crypto keys.
  *
- * It returns:
- * RECV_GOOD to say that everything went fine.
- * RECV_BAD to say that something went bad.
- * RECV_INCOMPLETE to say that we need more data to form an opinion.
+ * It returns 0 if everything went fine _or_ if we need to receive more
+ * data before we can do anything, -1 if something failed.
  */
-static enum recv_ret
+int
 obfs2_conn_recv(conn_t *s)
 {
   obfs2_conn_t *state = downcast_conn(s);
@@ -544,7 +542,7 @@ obfs2_conn_recv(conn_t *s)
                 __func__, (unsigned long)evbuffer_get_length(source),
                 OBFUSCATE_SEED_LENGTH+8);
       /* data not here yet */
-      return RECV_INCOMPLETE;
+      return 0;
     }
 
     evbuffer_remove(source, buf, OBFUSCATE_SEED_LENGTH+8);
@@ -567,9 +565,9 @@ obfs2_conn_recv(conn_t *s)
     magic = ntohl(magic);
     plength = ntohl(plength);
     if (magic != OBFUSCATE_MAGIC_VALUE)
-      return RECV_BAD;
+      return -1;
     if (plength > OBFUSCATE_MAX_PADDING)
-      return RECV_BAD;
+      return -1;
 
     /* Now we're waiting for plength bytes of padding */
     state->padding_left_to_read = plength;
@@ -588,7 +586,7 @@ obfs2_conn_recv(conn_t *s)
       int n = state->padding_left_to_read;
       size_t sourcelen = evbuffer_get_length(source);
       if (!sourcelen)
-        return RECV_INCOMPLETE;
+        return 0;
       if ((size_t) n > sourcelen)
         n = sourcelen;
       evbuffer_drain(source, n);
@@ -613,7 +611,7 @@ obfs2_conn_recv(conn_t *s)
       conn_send_eof(s);
   }
 
-  return RECV_GOOD;
+  return 0;
 }
 
 /** send EOF: flush out any queued data if possible */
@@ -641,15 +639,15 @@ obfs2_circuit_send_eof(circuit_t *c)
 }
 
 /** Receive EOF from connection SOURCE */
-static enum recv_ret
+static int
 obfs2_conn_recv_eof(conn_t *source)
 {
   if (source->circuit) {
     if (evbuffer_get_length(conn_get_inbound(source)) > 0)
-      if (obfs2_conn_recv(source) == RECV_BAD)
-        return RECV_BAD;
+      if (obfs2_conn_recv(source))
+        return -1;
 
     circuit_recv_eof(source->circuit);
   }
-  return RECV_GOOD;
+  return 0;
 }

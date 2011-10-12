@@ -227,27 +227,24 @@ dummy_conn_handshake(conn_t *c)
 }
 
 /** Receive data from connection SOURCE */
-static enum recv_ret
+static int
 dummy_conn_recv(conn_t *source)
 {
   obfs_assert(source->circuit);
-  if (evbuffer_add_buffer(bufferevent_get_output(source->circuit->up_buffer),
-                          conn_get_inbound(source)))
-    return RECV_BAD;
-  else
-    return RECV_GOOD;
+  return evbuffer_add_buffer(bufferevent_get_output(source->circuit->up_buffer),
+                             conn_get_inbound(source));
 }
 
 /** Receive EOF from connection SOURCE */
-static enum recv_ret
+static int
 dummy_conn_recv_eof(conn_t *source)
 {
   if (source->circuit) {
     if (evbuffer_get_length(conn_get_inbound(source)) > 0)
-      if (dummy_conn_recv(source) == RECV_BAD)
-        return RECV_BAD;
+      if (dummy_conn_recv(source))
+        return -1;
 
     circuit_recv_eof(source->circuit);
   }
-  return RECV_GOOD;
+  return 0;
 }

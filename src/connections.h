@@ -68,11 +68,11 @@ int conn_maybe_open_upstream(conn_t *conn);
 int conn_handshake(conn_t *conn);
 
 /** Receive data from SOURCE, decode it, and write it to upstream. */
-enum recv_ret conn_recv(conn_t *source);
+int conn_recv(conn_t *source);
 
 /** No more data will be received from the peer; flush any internally
     buffered data to your upstream. */
-enum recv_ret conn_recv_eof(conn_t *source);
+int conn_recv_eof(conn_t *source);
 
 void conn_send_eof(conn_t *conn);
 void conn_do_flush(conn_t *conn);

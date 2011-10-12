@@ -484,7 +484,7 @@ roundrobin_circuit_send(roundrobin_circuit_t *ckt)
   }
 }
 
-static enum recv_ret
+static int
 rr_circuit_recv(roundrobin_circuit_t *ckt, roundrobin_conn_t *conn)
 {
   rr_header hdr;
@@ -500,32 +500,32 @@ rr_circuit_recv(roundrobin_circuit_t *ckt, roundrobin_conn_t *conn)
       break;
 
     if (rr_peek_header(input, &hdr))
-      return RECV_BAD;
+      return -1;
 
     if (avail < RR_MIN_BLOCK + hdr.length)
       break;
 
     if (ckt->circuit_id != hdr->ckt_id)
-      return RECV_BAD;
+      return -1;
 
     block = evbuffer_new();
     if (!block)
-      return RECV_BAD;
+      return -1;
 
     if (evbuffer_drain(input, RR_WIRE_HDR_LEN))
-      return RECV_BAD;
+      return -1;
 
     if (evbuffer_remove_buffer(input, block, hdr.length))
-      return RECV_BAD;
+      return -1;
 
     if (rr_reassemble_block(ckt, block, &hdr))
-      return RECV_BAD;
+      return -1;
   }
 
   if (rr_push_to_upstream(ckt))
-    return RECV_BAD;
+    return -1;
 
-  return avail ? RECV_INCOMPLETE : RECV_GOOD;
+  return 0;
 }
 
 int
@@ -534,18 +534,18 @@ roundrobin_conn_send(conn_t *dest, struct evbuffer *source)
   return evbuffer_add_buffer(conn_get_outbound(dest), source);
 }
 
-enum recv_ret
+int
 roundrobin_conn_recv(conn_t *source)
 {
   if (!source->circuit) {
     rr_header hdr;
     struct evbuffer *input = conn_get_inbound(source);
     if (evbuffer_get_length(input) < RR_MIN_BLOCK)
-      return RECV_INCOMPLETE;
+      return 0;
     if (rr_peek_header(input, &hdr))
-      return RECV_BAD;
+      return -1;
     if (rr_find_or_make_circuit(source, hdr->circuit_id))
-      return RECV_BAD;
+      return -1;
   }
 
   return rr_circuit_recv(source->circuit, source);

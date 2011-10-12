@@ -70,12 +70,13 @@ struct steg_vtable
 
   /** The data in CONN's inbound buffer should have been disguised by
       the peer instance to STATE.  Unmask it and write it to DEST.
-
-      If this returns anything other than RECV_GOOD, it must not write
-      anything to DEST.  Furthermore, if it returns RECV_INCOMPLETE,
-      it must either not consume any data, or be prepared to resume
-      where it left off. */
-  enum recv_ret (*receive)(steg_t *state, conn_t *conn, struct evbuffer *dest);
+      Return 0 on success, -1 on failure.  If more data needs to come
+      over the wire before anything can be unmasked, that is *not* a
+      failure condition; return 0, but do not consume any data or
+      write anything to DEST.  It is *preferable*, but not currently
+      *required*, for this method to not consume any data or write
+      anything to DEST in a failure situation. */
+  int (*receive)(steg_t *state, conn_t *conn, struct evbuffer *dest);
 };
 
 extern const steg_vtable *const supported_stegs[];
@@ -87,7 +88,7 @@ steg_t *steg_detect(conn_t *conn);
 void steg_del(steg_t *state);
 size_t steg_transmit_room(steg_t *state, conn_t *conn);
 int steg_transmit(steg_t *state, struct evbuffer *source, conn_t *conn);
-enum recv_ret steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
+int steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
 
 /* Macros for use in defining steg modules. */
 
@@ -106,7 +107,7 @@ enum recv_ret steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
   static void name##_del(steg_t *);                                     \
   static size_t name##_transmit_room(steg_t *, conn_t *);               \
   static int name##_transmit(steg_t *, struct evbuffer *, conn_t *);    \
-  static enum recv_ret name##_receive(steg_t *, conn_t *, struct evbuffer *); \
+  static int name##_receive(steg_t *, conn_t *, struct evbuffer *);     \
                                                                         \
   /* vtable */                                                          \
   const steg_vtable s_##name##_vtable = {                               \

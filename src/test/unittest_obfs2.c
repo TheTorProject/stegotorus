@@ -202,11 +202,7 @@ test_obfs2_wrong_handshake_magic(void *state)
   evbuffer_add(conn_get_outbound(s->conn_client), msg,
                OBFUSCATE_SEED_LENGTH+8+plength);
 
-  /* If we call conn_recv here, and everything's working correctly,
-     it will blow away the connection before we can check for failure,
-     so use the vtable method directly. */
-  tt_int_op(RECV_BAD, ==,
-            s->conn_server->cfg->vtable->conn_recv(s->conn_server));
+  tt_int_op(-1, ==, conn_recv(s->conn_server));
   tt_int_op(ST_WAIT_FOR_KEY, ==, server_state->state);
 
  end:;
@@ -242,11 +238,7 @@ test_obfs2_wrong_handshake_plength(void *state)
   evbuffer_add(conn_get_outbound(s->conn_client), msg,
                OBFUSCATE_SEED_LENGTH+8+plength);
 
-  /* If we call conn_recv here, and everything's working correctly,
-     it will blow away the connection before we can check for failure,
-     so use the vtable method directly. */
-  tt_int_op(RECV_BAD, ==,
-            s->conn_server->cfg->vtable->conn_recv(s->conn_server));
+  tt_int_op(-1, ==, conn_recv(s->conn_server));
   tt_int_op(ST_WAIT_FOR_KEY, ==, server_state->state);
 
  end:;
