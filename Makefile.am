@@ -3,7 +3,7 @@
 # See LICENSE for other credits and copying information
 
 ACLOCAL_AMFLAGS = -I m4
-WARNINGS = -Wall -Wextra -pedantic -Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes -Wdeclaration-after-statement -Wno-unused-parameter -Wno-overlength-strings -Werror
+WARNINGS = -Wall -Wextra -pedantic -Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes -Wdeclaration-after-statement -Wno-unused-parameter -Wno-overlength-strings -Wno-long-long -Werror
 AM_CPPFLAGS = -I. -I$(srcdir)/src
 AM_CFLAGS = $(WARNINGS) @libevent_CFLAGS@ @libcrypto_CFLAGS@
 LDADD = libobfsproxy.a @libevent_LIBS@ @libcrypto_LIBS@ @ws32_LIBS@
