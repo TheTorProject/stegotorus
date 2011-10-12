@@ -82,8 +82,8 @@ dist_noinst_SCRIPTS = \
 EXTRA_DIST = doc \
 	src/protocols/roundrobin.c \
 	src/test/obfstestlib.py \
-	src/test/test_endtoend.py \
-	src/test/test_socks.py
+	src/test/test_socks.py \
+	src/test/test_tl.py
 
 # Generated source files
 CLEANFILES = protolist.c steglist.c unitgrplist.c \

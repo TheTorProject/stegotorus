@@ -5,6 +5,7 @@
 #include "util.h"
 #include "connections.h"
 #include "steg.h"
+#include "crypt.h"
 
 #include <event2/buffer.h>
 
@@ -110,7 +111,7 @@ x_http_transmit_room(steg_t *s, conn_t *conn)
 }
 
 int
-x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
+x_http_transmit(steg_t *s, struct evbuffer *source, size_t chaff, conn_t *conn)
 {
   struct evbuffer *dest = conn_get_outbound(conn);
 
@@ -162,6 +163,22 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
            evbuffer_get_length(scratch) % 4 != 0)
       evbuffer_add(scratch, "=", 1);
 
+    if (chaff > 0) {
+      unsigned int r = 0;
+      char hex[1];
+      if (evbuffer_expand(scratch, chaff+1)) {
+        evbuffer_free(scratch);
+        return -1;
+      }
+      evbuffer_add(scratch, "?", 1);
+      do {
+        while (!r) r = random_int(0x0FFFFFFFu);
+        hex[0] = "0123456789abcdef"[r & 0x0Fu];
+        r >>= 4;
+        evbuffer_add(scratch, hex, 1);
+      } while (--chaff > 0);
+    }
+
     if (evbuffer_add(dest, http_query_1, sizeof http_query_1-1) ||
         evbuffer_add_buffer(dest, scratch) ||
         evbuffer_add(dest, http_query_2, sizeof http_query_2-1) ||
@@ -177,9 +194,11 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     return 0;
 
   } else {
-    /* On the server side, we just fake up some HTTP response headers and
-       then splat the data we were given. Binary is OK. */
-
+    /* On the server side, we just fake up some HTTP response headers
+       and then splat the data we were given. Binary is OK.  We cannot
+       presently handle being asked to send chaff in this direction,
+       but x_dsteg doesn't ever do that, so that's okay.  */
+    obfs_assert(!chaff);
     if (evbuffer_add(dest, http_response_1, sizeof http_response_1-1))
         return -1;
     if (evbuffer_add_printf(dest, http_response_2,
@@ -208,18 +227,21 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
          NUL in sizeof http_response_1. Note that this does _not_
          guarantee that that much data is available. */
 
-      unsigned char *data = evbuffer_pullup(source,
-                                            sizeof http_response_1 + 23);
       size_t hlen = evbuffer_get_length(source);
-      unsigned char *p, *limit;
+      unsigned char *data, *p, *limit;
       uint64_t clen;
+
+      log_debug("x_http_receive: %lu bytes available (%senough)",
+                (unsigned long)hlen,
+                hlen >= sizeof http_response_1 - 1 ? "" : "not ");
+      if (hlen < sizeof http_response_1 - 1)
+        return RECV_INCOMPLETE;
 
       if (hlen > sizeof http_response_1 + 23)
         hlen = sizeof http_response_1 + 23;
 
+      data = evbuffer_pullup(source, hlen);
       /* Validate response headers. */
-      if (hlen < sizeof http_response_1 - 1)
-        return RECV_INCOMPLETE;
       if (memcmp(data, http_response_1, sizeof http_response_1 - 1))
         return RECV_BAD;
 
@@ -307,6 +329,15 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
         else if ('A' <= *p && *p <= 'F') h = *p - 'A' + 10;
         else if (*p == '=' && !secondhalf) {
           p++;
+          continue;
+        } else if (*p == '?' && !secondhalf) {
+          /* everything after this point should be chaff */
+          p++;
+          while (p < limit &&
+                 (('0' <= *p && *p <= '9') ||
+                  ('a' <= *p && *p <= 'f') ||
+                  ('A' <= *p && *p <= 'F')))
+            p++;
           continue;
         } else {
           evbuffer_free(scratch);

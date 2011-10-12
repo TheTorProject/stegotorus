@@ -23,6 +23,9 @@
 #include <io.h>
 #else
 #include <unistd.h>
+#ifdef HAVE_EXECINFO_H
+#include <execinfo.h>
+#endif
 #endif
 
 static struct event_base *the_event_base;
@@ -61,7 +64,7 @@ finish_shutdown(void)
 }
 
 /**
-   This is called when we receive a signal.
+   This is called when we receive an asynchronous signal.
    It figures out the signal type and acts accordingly.
 
    Current behavior:
@@ -86,6 +89,42 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
     start_shutdown(1, signum == SIGINT ? "SIGINT" : "SIGTERM");
   }
 }
+
+/**
+   This is called when we receive a synchronous signal that indicates
+   a fatal programming error (SIGSEGV and friends). Unlike the above,
+   this is a regular old signal handler, *not* mediated through
+   libevent; that wouldn't work.
+*/
+#ifndef _WIN32
+static void
+lethal_signal(int signum, siginfo_t *si, void *uc)
+{
+  char faultmsg[80];
+  int n;
+#ifdef HAVE_EXECINFO_H
+  void *backtracebuf[256];
+#endif
+
+  /* Print a basic diagnostic first. */
+  obfs_snprintf(faultmsg, sizeof faultmsg,
+                sizeof(unsigned long) == 4
+                ? "\n[error] %s at %08lx\n"
+                : "\n[error] %s at %016lx\n",
+                strsignal(signum), (unsigned long)si->si_addr);
+  write(2, faultmsg, strlen(faultmsg));
+
+#ifdef HAVE_EXECINFO_H
+  /* Now do a backtrace if we can. */
+  n = backtrace(backtracebuf, sizeof backtracebuf / sizeof(void*));
+  backtrace_symbols_fd(backtracebuf, n, 2);
+#endif
+
+  /* Falling off the end of this function will cause the kernel to
+     reassert the original signal, which (because we use SA_RESETHAND
+     below) will now take the default action and kill the process. */
+}
+#endif
 
 /**
    Largely because Windows and signals don't mix for beans, there is
@@ -282,6 +321,26 @@ main(int argc, const char *const *argv)
     log_error("Failed to initialize signal handling.");
     return 1;
   }
+
+#ifndef _WIN32
+  /* trap and diagnose fatal signals */
+  {
+    struct sigaction sa;
+    sigemptyset(&sa.sa_mask);
+    /* yes, we really do want a one-shot signal handler that doesn't block
+       the signal while it executes, in this case */
+    sa.sa_flags = SA_NODEFER|SA_RESETHAND|SA_SIGINFO;
+    sa.sa_sigaction = lethal_signal;
+
+    /* it doesn't matter if any of these fail */
+    sigaction(SIGILL, &sa, 0);
+    /* sigaction(SIGTRAP, &sa, 0);  would interfere with debuggers */
+    sigaction(SIGABRT, &sa, 0);
+    sigaction(SIGBUS,  &sa, 0);
+    sigaction(SIGFPE,  &sa, 0);
+    sigaction(SIGSEGV, &sa, 0);
+  }
+#endif
 
   /* Handle EOF-on-stdin. */
   if (!fstat(STDIN_FILENO, &st) &&

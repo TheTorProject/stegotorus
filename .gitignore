@@ -7,6 +7,13 @@
 *.gcda
 *.gcno
 
+/.deps/
+/.dirstamp
+*/.deps/
+*/.dirstamp
+*/*/.deps/
+*/*/.dirstamp
+
 /aclocal.m4
 /autom4te.cache
 /compile
@@ -18,7 +25,6 @@
 /config.sub
 /configure
 /depcomp
-/.deps
 /install-sh
 /Makefile
 /Makefile.in

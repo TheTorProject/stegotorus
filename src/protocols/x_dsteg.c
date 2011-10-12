@@ -6,6 +6,7 @@
 #include "connections.h"
 #include "protocol.h"
 #include "steg.h"
+#include "crypt.h"
 
 #include <event2/buffer.h>
 
@@ -25,6 +26,7 @@ typedef struct x_dsteg_circuit_t {
   circuit_t super;
   conn_t *downstream;
   int pending_eof;
+  int ever_transmitted;
 } x_dsteg_circuit_t;
 
 PROTO_DEFINE_MODULE(x_dsteg, STEG);
@@ -169,6 +171,11 @@ x_dsteg_circuit_add_downstream(circuit_t *c, conn_t *conn)
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(!ckt->downstream);
   ckt->downstream = conn;
+  /* On the client side, we must send _something_ shortly after
+     connection even if we have no data to pass along, to inform the
+     server what steg target it should use. */
+  if (c->cfg->mode != LSN_SIMPLE_SERVER)
+    circuit_arm_flush_timer(c, 10);
 }
 
 /* Drop a connection from this circuit.  If this happens in this
@@ -252,13 +259,32 @@ x_dsteg_circuit_send(circuit_t *c)
 
   circuit_disarm_flush_timer(c);
 
+  /* If we are here with nothing to transmit, it is because we need
+     to transmit chaff so the server knows what steg target to use. */
+  if (evbuffer_get_length(source) == 0) {
+    obfs_assert(steg);
+    room = random_int(steg_transmit_room(steg, d));
+    rv = steg_transmit(steg, source, room, d);
+    if (rv < 0)
+      return -1;
+    log_debug("x_dsteg: %lu bytes chaff sent (%lu on wire)",
+              (unsigned long) room,
+              (unsigned long) evbuffer_get_length(conn_get_outbound(d)));
+    ckt->ever_transmitted = 1;
+    return 0;
+  }
+
   /* If we haven't detected a steg target yet, we can't transmit.
      This is not an error condition, we just have to wait for the
      client to say something. */
-  if (!steg) return 0;
+  if (!steg) {
+    log_debug("x_dsteg: waiting for target detection");
+    return 0;
+  }
 
   /* Only transmit if we have room. */
   room = steg_transmit_room(steg, d);
+  log_debug("x_dsteg: can transmit %lu bytes", (unsigned long)room);
   if (room) {
     chunk = evbuffer_new();
     if (!chunk) return -1;
@@ -266,24 +292,24 @@ x_dsteg_circuit_send(circuit_t *c)
     rv = evbuffer_remove_buffer(source, chunk, room);
     room = evbuffer_get_length(chunk);
     if (rv >= 0)
-      rv = steg_transmit(steg, chunk, d);
+      rv = steg_transmit(steg, chunk, 0, d);
     evbuffer_free(chunk);
   }
 
   if (rv < 0)
     return -1;
 
-  log_debug("x_dsteg: %ld bytes sent (%ld on wire), %ld still pending",
+  ckt->ever_transmitted = 1;
+  log_debug("x_dsteg: %lu bytes sent (%lu on wire), %lu still pending",
             (unsigned long)room,
             (unsigned long)evbuffer_get_length(conn_get_outbound(d)),
             (unsigned long)evbuffer_get_length(source));
 
   /* If that was successful, but we still have data pending, receipt
      of a response will trigger another transmission.  But in case
-     that doesn't happen set a timer to force more data out in a few
-     hundred milliseconds. */
+     that doesn't happen set a timer to force more data out shortly. */
   if (evbuffer_get_length(source) > 0)
-    circuit_arm_flush_timer(c, 200);
+    circuit_arm_flush_timer(c, 10);
   else if (ckt->pending_eof)
     conn_send_eof(ckt->downstream);
 
@@ -297,16 +323,26 @@ x_dsteg_circuit_send_eof(circuit_t *c)
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
   if (ckt->downstream) {
     struct evbuffer *source = bufferevent_get_input(c->up_buffer);
-    if (evbuffer_get_length(source) > 0)
+    size_t avail = evbuffer_get_length(source);
+    log_debug("x_dsteg: %lu bytes to send at EOF", (unsigned long)avail);
+
+    /* If we have never transmitted anything and we're the client,
+       we should transmit chaff now; otherwise the server might never
+       find out what steg target it should be using to send to us. */
+    if (avail > 0 ||
+        (!ckt->ever_transmitted && c->cfg->mode != LSN_SIMPLE_SERVER))
       if (x_dsteg_circuit_send(c))
         return -1;
 
     /* That might not have transmitted everything.  If so, the flush
        timer is active and we'll come back to circuit_send in due course. */
-    if (evbuffer_get_length(source) > 0)
-      downcast_circuit(c)->pending_eof = 1;
-    else
+    avail = evbuffer_get_length(source);
+    if (avail > 0) {
+      log_debug("x_dsteg: %lu bytes still pending", (unsigned long)avail);
+      ckt->pending_eof = 1;
+    } else {
       conn_send_eof(ckt->downstream);
+    }
   }
   return 0;
 }
@@ -318,6 +354,7 @@ x_dsteg_conn_recv(conn_t *s)
 {
   x_dsteg_conn_t *source = downcast_conn(s);
   enum recv_ret ret;
+  size_t in, out;
 
   if (!source->steg) {
     obfs_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
@@ -331,15 +368,24 @@ x_dsteg_conn_recv(conn_t *s)
       log_debug("Detected steg pattern %s", source->steg->vtable->name);
     }
   }
+  in = evbuffer_get_length(conn_get_inbound(s));
   ret = steg_receive(source->steg, s,
                      bufferevent_get_output(s->circuit->up_buffer));
   if (ret != RECV_GOOD)
     return ret;
 
+  in -= evbuffer_get_length(conn_get_inbound(s));
+  out = evbuffer_get_length(bufferevent_get_output(s->circuit->up_buffer));
+  log_debug("x_dsteg: received %lu bytes (%lu on wire)",
+            (unsigned long)out, (unsigned long)in);
+
+
   /* check for pending transmissions */
-  if (evbuffer_get_length(bufferevent_get_input(s->circuit->up_buffer)) == 0)
+  in = evbuffer_get_length(bufferevent_get_input(s->circuit->up_buffer));
+  if (in == 0)
     return RECV_GOOD;
 
+  log_debug("x_dsteg: %lu bytes waiting to be sent", (unsigned long)in);
   return x_dsteg_circuit_send(s->circuit) ? RECV_BAD : RECV_GOOD;
 }
 

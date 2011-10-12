@@ -9,7 +9,7 @@
 import os
 import os.path
 
-from unittest import TestCase, TestSuite, expectedFailure
+from unittest import TestCase, TestSuite
 from obfstestlib import Obfsproxy, Tltester, diff
 
 class TimelineTest(object):
@@ -51,7 +51,6 @@ class TimelineTest(object):
            ("obfs2", "--dest=127.0.0.1:5001", "server", "127.0.0.1:5000",
             "obfs2", "--dest=127.0.0.1:5000", "client", "127.0.0.1:4999"))
 
-    @expectedFailure
     def test_xhttp(self):
         self.doTest("xhttp",
            ("x_dsteg", "server", "127.0.0.1:5000", "127.0.0.1:5001",

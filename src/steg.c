@@ -55,9 +55,10 @@ steg_transmit_room(steg_t *state, conn_t *conn)
 }
 
 int
-steg_transmit(steg_t *state, struct evbuffer *source, conn_t *conn)
+steg_transmit(steg_t *state, struct evbuffer *source,
+              size_t chaff, conn_t *conn)
 {
-  return state->vtable->transmit(state, source, conn);
+  return state->vtable->transmit(state, source, chaff, conn);
 }
 
 enum recv_ret
