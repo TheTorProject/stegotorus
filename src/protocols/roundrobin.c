@@ -34,9 +34,11 @@
    if it carries flags such as SYN or FIN.  */
 
 #include "util.h"
-#include "protocol.h"
+#include "connections.h"
 #include "container.h"
+#include "crypt.h"
 #include "ht.h"
+#include "protocol.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -74,8 +76,8 @@ typedef struct rr_circuit_table
   HT_HEAD(rr_circuit_table_impl, rr_circuit_entry_t) head;
 } rr_circuit_table;
 
-// this is "hash6432shift" from
-// http://www.concentric.net/~Ttwang/tech/inthash.htm
+/* This is "hash6432shift" from
+   http://www.concentric.net/~Ttwang/tech/inthash.htm . */
 static inline unsigned int
 rr_circuit_id_hash(const rr_circuit_entry_t *a)
 {
@@ -90,7 +92,7 @@ rr_circuit_id_hash(const rr_circuit_entry_t *a)
 }
 
 static inline int
-rr_circuit_id_eq(const rr_circuit_id_t *a, const rr_circuit_id_t *b)
+rr_circuit_id_eq(const rr_circuit_entry_t *a, const rr_circuit_entry_t *b)
 {
   return a->circuit_id == b->circuit_id;
 }
@@ -124,12 +126,12 @@ typedef struct rr_reassembly_elt
 
 /* Connections and circuits */
 
-struct roundrobin_conn_t
+typedef struct roundrobin_conn_t
 {
   conn_t super;
-};
+} roundrobin_conn_t;
 
-struct roundrobin_circuit_t
+typedef struct roundrobin_circuit_t
 {
   circuit_t super;
   rr_reassembly_elt reassembly_queue;
@@ -146,15 +148,17 @@ struct roundrobin_circuit_t
   bool received_fin : 1;
   bool sent_syn : 1;
   bool sent_fin : 1;
-};
+} roundrobin_circuit_t;
 
-struct roundrobin_config_t
+typedef struct roundrobin_config_t
 {
   config_t super;
   struct evutil_addrinfo *up_address;
   smartlist_t *down_addresses;
   rr_circuit_table circuits;
-};
+} roundrobin_config_t;
+
+PROTO_DEFINE_MODULE(roundrobin, NOSTEG);
 
 /* Header serialization and deserialization */
 
@@ -229,17 +233,17 @@ static inline bool
 mod32_le(uint32_t s, uint32_t t)
 {
   uint32_t d = t - s;
-  return 0 <= d && d < 0x80000000u;
+  return d < 0x80000000u;
 }
 
 /** Add BLOCK to the reassembly queue at the appropriate location
     and merge adjacent blocks to the extent possible. */
 static int
-rr_reassemble_block(roundrobin_circuit_t *ckt, struct evbuffer *block,
-                    rr_header *hdr)
+rr_reassemble_block(circuit_t *c, struct evbuffer *block, rr_header *hdr)
 {
-  rr_reassembly_element *queue = &ckt->reassembly_queue;
-  rr_reassembly_element *p, *q;
+  roundrobin_circuit_t *ckt = downcast_circuit(c);
+  rr_reassembly_elt *queue = &ckt->reassembly_queue;
+  rr_reassembly_elt *p, *q;
 
   if (hdr->flags & RR_F_CHAFF) {
     /* Chaff goes on the reassembly queue if it carries any flags that
@@ -275,10 +279,10 @@ rr_reassemble_block(roundrobin_circuit_t *ckt, struct evbuffer *block,
   /* Non-SYN/FIN must come after any SYN block presently in the queue
      and before any FIN block presently in the queue. */
   if (!(hdr->flags & (RR_F_SYN|RR_F_FIN)) && queue->next != queue &&
-      ((queue->next->flags && RR_F_SYN) &&
+      (((queue->next->flags & RR_F_SYN) &&
        !mod32_le(queue->next->offset + queue->next->length, hdr->offset)) ||
-      ((queue->prev->flags && RR_F_FIN) &&
-       !mod32_le(hdr->offset + hdr->length, queue->prev->offset)))
+       ((queue->prev->flags & RR_F_FIN) &&
+        !mod32_le(hdr->offset + hdr->length, queue->prev->offset))))
     return -1;
 
   for (p = queue->next; p != queue; p = p->next) {
@@ -372,12 +376,13 @@ rr_reassemble_block(roundrobin_circuit_t *ckt, struct evbuffer *block,
 
 /* Flush as much data toward upstream as we can. */
 static int
-rr_push_to_upstream(roundrobin_circuit_t *ckt)
+rr_push_to_upstream(circuit_t *c)
 {
+  roundrobin_circuit_t *ckt = downcast_circuit(c);
   /* Only the first reassembly queue entry, if any, can possibly be
      ready to flush (because rr_reassemble_block ensures that there
      are gaps between all queue elements).  */
-  rr_reassembly_element *ready = ckt->reassembly_queue.next;
+  rr_reassembly_elt *ready = ckt->reassembly_queue.next;
   if (!ready->data || ckt->recv_offset != ready->offset)
     return 0;
 
@@ -387,7 +392,7 @@ rr_push_to_upstream(roundrobin_circuit_t *ckt)
     ckt->received_syn = true;
   }
 
-  if (evbuffer_add_buffer(circuit_up_out(ckt), ready->data))
+  if (evbuffer_add_buffer(bufferevent_get_output(c->up_buffer), ready->data))
     return -1;
 
   ckt->recv_offset += ready->length;
@@ -396,6 +401,7 @@ rr_push_to_upstream(roundrobin_circuit_t *ckt)
     obfs_assert(!ckt->received_fin);
     obfs_assert(ready->next == &ckt->reassembly_queue);
     ckt->received_fin = true;
+    circuit_recv_eof(c);
   }
 
   obfs_assert(ready->next == &ckt->reassembly_queue ||
@@ -411,9 +417,10 @@ rr_push_to_upstream(roundrobin_circuit_t *ckt)
 /* Circuit handling */
 
 static int
-rr_find_or_make_circuit(roundrobin_conn_t *conn, uint64_t circuit_id)
+rr_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
 {
-  roundrobin_config_t *cfg = conn->cfg;
+  config_t *c = conn->cfg;
+  roundrobin_config_t *cfg = downcast_config(c);
   rr_circuit_entry_t *out, in;
 
   in.circuit_id = circuit_id;
@@ -422,8 +429,13 @@ rr_find_or_make_circuit(roundrobin_conn_t *conn, uint64_t circuit_id)
     obfs_assert(out->circuit);
   } else {
     out = xzalloc(sizeof(rr_circuit_entry_t));
-    out->circuit = circuit_create_from_downstream(conn->cfg, conn);
+    out->circuit = circuit_create(c);
     if (!out->circuit) {
+      free(out);
+      return -1;
+    }
+    if (!circuit_open_upstream(out->circuit)) {
+      circuit_close(out->circuit);
       free(out);
       return -1;
     }
@@ -431,20 +443,158 @@ rr_find_or_make_circuit(roundrobin_conn_t *conn, uint64_t circuit_id)
     HT_INSERT(rr_circuit_table_impl, &cfg->circuits.head, out);
   }
 
-  conn->circuit = out->circuit;
-  smartlist_add(out->circuit->downstreams, conn);
+  circuit_add_downstream(out->circuit, conn);
   return 0;
 }
 
 /* Protocol methods */
-
-int
-roundrobin_circuit_send(roundrobin_circuit_t *ckt)
+#if 0
+/**
+   Helper: Parses 'options' and fills 'cfg'.
+*/
+static int
+parse_and_set_options(int n_options, const char *const *options,
+                      config_t *c)
 {
+  const char* defport;
+  int req_options;
+  roundrobin_config_t *cfg = downcast_config(c);
+}
+#endif
+
+static void
+roundrobin_config_free(config_t *c)
+{
+}
+
+static config_t *
+roundrobin_config_create(int n_options, const char *const *options)
+{
+  return 0;
+}
+
+static struct evutil_addrinfo *
+roundrobin_config_get_listen_addrs(config_t *cfg, size_t n)
+{
+  return 0;
+}
+
+static struct evutil_addrinfo *
+roundrobin_config_get_target_addr(config_t *cfg)
+{
+  return 0;
+}
+
+static circuit_t *
+roundrobin_circuit_create(config_t *cfg)
+{
+  roundrobin_circuit_t *ckt = xzalloc(sizeof(roundrobin_circuit_t));
+  circuit_t *c = upcast_circuit(ckt);
+  c->cfg = cfg;
+  ckt->reassembly_queue.next = &ckt->reassembly_queue;
+  ckt->reassembly_queue.prev = &ckt->reassembly_queue;
+  ckt->xmit_pending = evbuffer_new();
+  ckt->xmit_block = evbuffer_new();
+  ckt->downstreams = smartlist_create();
+  return c;
+}
+
+static void
+roundrobin_circuit_free(circuit_t *c)
+{
+  roundrobin_circuit_t *ckt = downcast_circuit(c);
+  rr_reassembly_elt *p, *q, *queue;
+  rr_circuit_entry_t in;
+
+  evbuffer_free(ckt->xmit_pending);
+  evbuffer_free(ckt->xmit_block);
+
+  SMARTLIST_FOREACH(ckt->downstreams, conn_t *, conn, {
+    conn->circuit = NULL;
+    conn_close(conn);
+  });
+  smartlist_free(ckt->downstreams);
+
+  queue = &ckt->reassembly_queue;
+  for (q = p = queue->next; p != queue; p = q) {
+    q = p->next;
+    if (p->data)
+      evbuffer_free(p->data);
+    free(p);
+  }
+
+  if (ckt->circuit_id) {
+    roundrobin_config_t *cfg = downcast_config(c->cfg);
+    in.circuit_id = ckt->circuit_id;
+    free(HT_REMOVE(rr_circuit_table_impl, &cfg->circuits.head, &in));
+  }
+  free(ckt);
+}
+
+static void
+roundrobin_circuit_add_downstream(circuit_t *c, conn_t *conn)
+{
+  roundrobin_circuit_t *ckt = downcast_circuit(c);
+  smartlist_add(ckt->downstreams, conn);
+  circuit_disarm_axe_timer(c);
+}
+
+static void
+roundrobin_circuit_drop_downstream(circuit_t *c, conn_t *conn)
+{
+  roundrobin_circuit_t *ckt = downcast_circuit(c);
+  smartlist_remove(ckt->downstreams, conn);
+  /* If that was the last connection on this circuit AND we've both
+     received and sent a FIN, close the circuit.  Otherwise, arm a
+     timer that will kill off this circuit in a little while if no
+     new connections happen (we might've lost all our connections to
+     protocol errors).  */
+  if (smartlist_len(ckt->downstreams) == 0) {
+    if (ckt->sent_fin && ckt->received_fin)
+      circuit_close(c);
+    else
+      circuit_arm_axe_timer(c, 100);
+  }
+}
+
+static conn_t *
+roundrobin_conn_create(config_t *c)
+{
+  /* we don't keep any private state in conn_t */
+  conn_t *cn = xzalloc(sizeof(roundrobin_conn_t));
+  cn->cfg = c;
+  return cn;
+}
+
+static void
+roundrobin_conn_free(conn_t *c)
+{
+  free(downcast_conn(c));
+}
+
+static int
+roundrobin_conn_maybe_open_upstream(conn_t *conn)
+{
+  /* We can't open the upstream until we have a circuit ID. */
+  return 0;
+}
+
+static int
+roundrobin_conn_handshake(conn_t *conn)
+{
+  /* Roundrobin has no handshake. */
+  return 0;
+}
+
+static int
+roundrobin_circuit_send(circuit_t *c)
+{
+  roundrobin_circuit_t *ckt = downcast_circuit(c);
   rr_header hdr;
   size_t avail;
 
-  if (evbuffer_add_buffer(ckt->xmit_pending, ckt->up_buffer))
+  if (evbuffer_add_buffer(ckt->xmit_pending,
+                          bufferevent_get_input(c->up_buffer)))
     return -1;
 
   for (;;) {
@@ -470,8 +620,9 @@ roundrobin_circuit_send(roundrobin_circuit_t *ckt)
                                ckt->next_block_size) != ckt->next_block_size)
       return -1;
 
-    if (conn_send(smartlist_get(ckt->downstreams, ckt->next_down),
-                  ckt->xmit_block))
+    if (evbuffer_add_buffer(conn_get_outbound(smartlist_get(ckt->downstreams,
+                                                            ckt->next_down)),
+                            ckt->xmit_block))
       return -1;
 
     ckt->next_down++;
@@ -479,20 +630,39 @@ roundrobin_circuit_send(roundrobin_circuit_t *ckt)
       ckt->next_down = 0;
 
     ckt->send_offset += ckt->next_block_size;
-    ckt->next_block_size = rng_range(RR_MIN_BLOCK, RR_MAX_BLOCK);
+    ckt->next_block_size = random_range(RR_MIN_BLOCK, RR_MAX_BLOCK);
     ckt->sent_syn = true;
   }
 }
 
 static int
-rr_circuit_recv(roundrobin_circuit_t *ckt, roundrobin_conn_t *conn)
+roundrobin_circuit_send_eof(circuit_t *c)
+{
+  return -1;
+}
+
+static int
+roundrobin_conn_recv(conn_t *conn)
 {
   rr_header hdr;
   struct evbuffer *block;
   struct evbuffer *input = conn_get_inbound(conn);
   size_t avail;
+  circuit_t *c;
+  roundrobin_circuit_t *ckt;
 
-  obfs_assert(conn->circuit == ckt);
+  if (!conn->circuit) {
+    if (evbuffer_get_length(input) < RR_MIN_BLOCK)
+      return 0;
+    if (rr_peek_header(input, &hdr))
+      return -1;
+    if (rr_find_or_make_circuit(conn, hdr.ckt_id))
+      return -1;
+    obfs_assert(conn->circuit);
+  }
+
+  c = conn->circuit;
+  ckt = downcast_circuit(c);
 
   for (;;) {
     avail = evbuffer_get_length(input);
@@ -505,7 +675,7 @@ rr_circuit_recv(roundrobin_circuit_t *ckt, roundrobin_conn_t *conn)
     if (avail < RR_MIN_BLOCK + hdr.length)
       break;
 
-    if (ckt->circuit_id != hdr->ckt_id)
+    if (ckt->circuit_id != hdr.ckt_id)
       return -1;
 
     block = evbuffer_new();
@@ -518,35 +688,30 @@ rr_circuit_recv(roundrobin_circuit_t *ckt, roundrobin_conn_t *conn)
     if (evbuffer_remove_buffer(input, block, hdr.length))
       return -1;
 
-    if (rr_reassemble_block(ckt, block, &hdr))
+    if (rr_reassemble_block(c, block, &hdr))
       return -1;
   }
 
-  if (rr_push_to_upstream(ckt))
+  if (rr_push_to_upstream(c))
     return -1;
 
   return 0;
 }
 
-int
-roundrobin_conn_send(conn_t *dest, struct evbuffer *source)
+static int
+roundrobin_conn_recv_eof(conn_t *c)
 {
-  return evbuffer_add_buffer(conn_get_outbound(dest), source);
-}
+  /* EOF on a _connection_ does not mean EOF on a _circuit_.
+     EOF on a _circuit_ occurs when rr_push_to_upstream processes a FIN.
+     And we should only drop the connection from the circuit if we're
+     no longer sending in the opposite direction. */
+  if (c->circuit) {
+    if (evbuffer_get_length(conn_get_inbound(c)) > 0)
+      if (roundrobin_conn_recv(c))
+        return -1;
 
-int
-roundrobin_conn_recv(conn_t *source)
-{
-  if (!source->circuit) {
-    rr_header hdr;
-    struct evbuffer *input = conn_get_inbound(source);
-    if (evbuffer_get_length(input) < RR_MIN_BLOCK)
-      return 0;
-    if (rr_peek_header(input, &hdr))
-      return -1;
-    if (rr_find_or_make_circuit(source, hdr->circuit_id))
-      return -1;
+    if (downcast_circuit(c->circuit)->sent_fin)
+      circuit_drop_downstream(c->circuit, c);
   }
-
-  return rr_circuit_recv(source->circuit, source);
+  return 0;
 }

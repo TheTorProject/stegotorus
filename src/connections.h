@@ -12,8 +12,8 @@
    connection.  Each protocol may extend this structure with
    additional private data by embedding it as the first member of a
    larger structure.  The protocol's conn_create() method is
-   responsible only for filling in the |cfg| and |mode| fields of this
-   structure, plus any private data of course.
+   responsible only for filling in the |cfg| field of this structure,
+   plus any private data of course.
 
    Connections are associated with circuits (and thus with upstream
    socket-level connections) as quickly as possible.
@@ -110,6 +110,7 @@ void conn_transmit_soon(conn_t *conn, unsigned long timeout);
 struct circuit_t {
   config_t           *cfg;
   struct event       *flush_timer;
+  struct event       *axe_timer;
   struct bufferevent *up_buffer;
   const char         *up_peer;
 
@@ -133,6 +134,9 @@ void circuit_send_eof(circuit_t *ckt);
 
 void circuit_arm_flush_timer(circuit_t *ckt, unsigned int milliseconds);
 void circuit_disarm_flush_timer(circuit_t *ckt);
+
+void circuit_arm_axe_timer(circuit_t *ckt, unsigned int milliseconds);
+void circuit_disarm_axe_timer(circuit_t *ckt);
 
 void circuit_do_flush(circuit_t *ckt);
 

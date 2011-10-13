@@ -48,6 +48,14 @@ int random_bytes(uchar *b, size_t n);
  */
 int random_int(unsigned int max);
 
+/** Return a random integer in the range [min, max).
+ */
+static inline int
+random_range(unsigned int min, unsigned int max)
+{
+  return random_int(max-min) + min;
+}
+
 #ifdef CRYPT_PRIVATE
 
 #include <openssl/aes.h>

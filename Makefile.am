@@ -15,6 +15,7 @@ noinst_PROGRAMS = unittests tltester
 PROTOCOLS = \
 	src/protocols/dummy.c \
 	src/protocols/obfs2.c \
+	src/protocols/roundrobin.c \
 	src/protocols/x_dsteg.c
 
 STEGANOGRAPHERS = \
@@ -80,7 +81,6 @@ dist_noinst_SCRIPTS = \
 	src/test/genunitgrps.sh
 
 EXTRA_DIST = doc \
-	src/protocols/roundrobin.c \
 	src/test/obfstestlib.py \
 	src/test/test_socks.py \
 	src/test/test_tl.py

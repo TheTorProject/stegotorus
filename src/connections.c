@@ -187,6 +187,9 @@ conn_transmit_soon(conn_t *conn, unsigned long timeout)
 
 /* Circuits. */
 
+/* The flush timer is used to ensure forward progress for protocols
+   that can only send data in small chunks. */
+
 static void
 flush_timer_cb(evutil_socket_t fd, short what, void *arg)
 {
@@ -195,6 +198,18 @@ flush_timer_cb(evutil_socket_t fd, short what, void *arg)
             (unsigned long)
             evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
   circuit_send(ckt);
+}
+
+/* The axe timer is used to clean up dead circuits for protocols where
+   a circuit can legitimately exist for a little while with no
+   connections. */
+
+static void
+axe_timer_cb(evutil_socket_t fd, short what, void *arg)
+{
+  circuit_t *ckt = arg;
+  log_warn("%s: timeout, closing circuit", ckt->up_peer);
+  circuit_close(ckt);
 }
 
 circuit_t *
@@ -208,8 +223,6 @@ circuit_create(config_t *cfg)
 
   if (cfg->mode == LSN_SOCKS_CLIENT)
     ckt->socks_state = socks_state_new();
-
-  ckt->flush_timer = evtimer_new(cfg->base, flush_timer_cb, ckt);
 
   smartlist_add(circuits, ckt);
   return ckt;
@@ -320,11 +333,36 @@ circuit_arm_flush_timer(circuit_t *ckt, unsigned int milliseconds)
   struct timeval tv;
   tv.tv_sec = 0;
   tv.tv_usec = milliseconds * 1000;
+
+  if (!ckt->flush_timer)
+    ckt->flush_timer = evtimer_new(ckt->cfg->base, flush_timer_cb, ckt);
+
   evtimer_add(ckt->flush_timer, &tv);
 }
 
 void
 circuit_disarm_flush_timer(circuit_t *ckt)
 {
-  evtimer_del(ckt->flush_timer);
+  if (ckt->flush_timer)
+    evtimer_del(ckt->flush_timer);
+}
+
+void
+circuit_arm_axe_timer(circuit_t *ckt, unsigned int milliseconds)
+{
+  struct timeval tv;
+  tv.tv_sec = 0;
+  tv.tv_usec = milliseconds * 1000;
+
+  if (!ckt->axe_timer)
+    ckt->axe_timer = evtimer_new(ckt->cfg->base, axe_timer_cb, ckt);
+
+  evtimer_add(ckt->axe_timer, &tv);
+}
+
+void
+circuit_disarm_axe_timer(circuit_t *ckt)
+{
+  if (ckt->axe_timer)
+    evtimer_del(ckt->axe_timer);
 }
