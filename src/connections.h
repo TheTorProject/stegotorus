@@ -41,9 +41,6 @@ void conn_start_shutdown(int barbaric);
 conn_t *conn_create(config_t *cfg, struct bufferevent *buf,
                     const char *peername);
 
-/** Create a new outbound connection for a circuit. */
-conn_t *conn_create_outbound(circuit_t *ckt);
-
 /** Close and deallocate a connection.  If the connection is part of a
     circuit, close the other side of that circuit as well. */
 void conn_close(conn_t *conn);

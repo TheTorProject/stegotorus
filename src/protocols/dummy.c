@@ -117,8 +117,10 @@ dummy_config_get_listen_addrs(config_t *cfg, size_t n)
 
 /* Retrieve the target address for this configuration. */
 static struct evutil_addrinfo *
-dummy_config_get_target_addr(config_t *cfg)
+dummy_config_get_target_addrs(config_t *cfg, size_t n)
 {
+  if (n > 0)
+    return 0;
   return downcast_config(cfg)->target_addr;
 }
 

@@ -24,7 +24,7 @@ config_t *config_create(int n_options, const char *const *options);
 void config_free(config_t *cfg);
 
 struct evutil_addrinfo *config_get_listen_addrs(config_t *cfg, size_t n);
-struct evutil_addrinfo *config_get_target_addr(config_t *cfg);
+struct evutil_addrinfo *config_get_target_addrs(config_t *cfg, size_t n);
 
 /**
    This struct defines a protocol and its methods; note that not all
@@ -55,9 +55,12 @@ struct proto_vtable
   struct evutil_addrinfo *(*config_get_listen_addrs)(config_t *cfg, size_t n);
 
   /** Return a set of addresses to attempt an outbound connection to,
-      in the form of an 'evutil_addrinfo' linked list.  There is only
-      one such list. */
-  struct evutil_addrinfo *(*config_get_target_addr)(config_t *cfg);
+      in the form of an 'evutil_addrinfo' linked list.  As with
+      get_listen_addrs, there may be more than one such list; users
+      should in general attempt simultaneous connection to at least
+      one address from every list.  The maximum N is indicated in the
+      same way as for config_get_listen_addrs.  */
+  struct evutil_addrinfo *(*config_get_target_addrs)(config_t *cfg, size_t n);
 
   /** Return an extended 'circuit_t' object based on the configuration 'cfg'.
       Must fill in the 'cfg' field of the generic structure. */
@@ -143,7 +146,7 @@ extern const proto_vtable *const supported_protos[];
     name##_config_create,                       \
     name##_config_free,                         \
     name##_config_get_listen_addrs,             \
-    name##_config_get_target_addr,              \
+    name##_config_get_target_addrs,             \
     name##_circuit_create,                      \
     name##_circuit_free,                        \
     name##_circuit_add_downstream,              \
@@ -172,7 +175,7 @@ extern const proto_vtable *const supported_protos[];
   static struct evutil_addrinfo *                                       \
     name##_config_get_listen_addrs(config_t *, size_t);                 \
   static struct evutil_addrinfo *                                       \
-    name##_config_get_target_addr(config_t *);                          \
+    name##_config_get_target_addrs(config_t *, size_t);                 \
   static circuit_t *name##_circuit_create(config_t *);                  \
   static void name##_circuit_free(circuit_t *);                         \
   static void name##_circuit_add_downstream(circuit_t *, conn_t *);     \

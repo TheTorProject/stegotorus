@@ -52,7 +52,7 @@ config_get_listen_addrs(config_t *cfg, size_t n)
 }
 
 struct evutil_addrinfo *
-config_get_target_addr(config_t *cfg)
+config_get_target_addrs(config_t *cfg, size_t n)
 {
-  return cfg->vtable->config_get_target_addr(cfg);
+  return cfg->vtable->config_get_target_addrs(cfg, n);
 }

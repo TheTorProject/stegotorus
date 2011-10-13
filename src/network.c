@@ -46,6 +46,9 @@ static void upstream_event_cb(struct bufferevent *bev, short what, void *arg);
 static void downstream_event_cb(struct bufferevent *bev, short what, void *arg);
 
 
+static void create_outbound_connections(circuit_t *ckt);
+static void create_outbound_connections_socks(circuit_t *ckt);
+
 /**
    This function opens listening sockets configured according to the
    provided 'config_t'.  Returns 1 on success, 0 on failure.
@@ -168,16 +171,13 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   circuit_add_upstream(ckt, buf, peername);
   if (is_socks) {
     /* We can't do anything more till we know where to connect to. */
-    bufferevent_enable(buf, EV_READ|EV_WRITE);
     bufferevent_setcb(buf, socks_read_cb, NULL, upstream_event_cb, ckt);
+    bufferevent_enable(buf, EV_READ|EV_WRITE);
   } else {
-    conn_t *down = conn_create_outbound(ckt);
-    if (!down) {
-      log_warn("%s: outbound connection failed", peername);
-      circuit_close(ckt);
-      return;
-    }
     bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_event_cb, ckt);
+    create_outbound_connections(ckt);
+    /* Don't enable reading or writing till the outbound connection(s) are
+       established. */
   }
 }
 
@@ -253,11 +253,8 @@ socks_read_cb(struct bufferevent *bev, void *arg)
     obfs_assert(status != ST_SENT_REPLY); /* we shouldn't be here then */
 
     if (status == ST_HAVE_ADDR) {
-      /* try to open the outbound connection */
-      conn_t *down = conn_create_outbound(ckt);
-      if (!down)
-        circuit_close(ckt); /* XXXX send socks reply */
       bufferevent_disable(bev, EV_READ|EV_WRITE); /* wait for connection */
+      create_outbound_connections_socks(ckt);
       return;
     }
 
@@ -587,7 +584,7 @@ circuit_open_upstream(circuit_t *ckt)
   struct bufferevent *buf;
   char *peername;
 
-  addr = config_get_target_addr(ckt->cfg);
+  addr = config_get_target_addrs(ckt->cfg, 0);
 
   if (!addr) {
     log_warn("no target addresses available");
@@ -624,74 +621,110 @@ circuit_open_upstream(circuit_t *ckt)
   return 0;
 }
 
-conn_t *
-conn_create_outbound(circuit_t *ckt)
+static int
+create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr)
 {
   config_t *cfg = ckt->cfg;
   char *peername;
   struct bufferevent *buf;
-  bufferevent_event_cb connect_cb;
   conn_t *conn;
 
   buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
-    log_warn("unable to create outbound socket buffer");
-    return NULL;
+    log_warn("%s: unable to create outbound socket buffer", ckt->up_peer);
+    return 0;
   }
 
-  if (cfg->mode == LSN_SIMPLE_CLIENT) {
-    struct evutil_addrinfo *addr = config_get_target_addr(cfg);
-    if (!addr) {
-      log_warn("no target addresses available");
-      goto failure;
-    }
-
-    connect_cb = downstream_connect_cb;
-    do {
-      peername = printable_address(addr->ai_addr, addr->ai_addrlen);
-      log_info("Trying to connect to %s", peername);
-      if (bufferevent_socket_connect(buf,
-                                     addr->ai_addr,
-                                     addr->ai_addrlen) >= 0)
-        goto success;
-
-      log_info("Connection to %s failed: %s", peername,
-               evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-      free(peername);
-      addr = addr->ai_next;
-    } while (addr);
-
-  } else {
-    const char *host;
-    int af, port;
-    struct evdns_base *dns = get_evdns_base();
-
-    obfs_assert(cfg->mode == LSN_SOCKS_CLIENT);
-    if (socks_state_get_address(ckt->socks_state, &af, &host, &port)) {
-      log_warn("no SOCKS target available");
-      goto failure;
-    }
-
-    connect_cb = downstream_socks_connect_cb;
-    peername = NULL;
-    log_info("Trying to connect to %s:%u", host, port);
-    if (bufferevent_socket_connect_hostname(buf, dns, af, host, port) >= 0)
+  do {
+    peername = printable_address(addr->ai_addr, addr->ai_addrlen);
+    log_info("%s: trying to connect to %s", ckt->up_peer, peername);
+    if (bufferevent_socket_connect(buf,
+                                   addr->ai_addr,
+                                   addr->ai_addrlen) >= 0)
       goto success;
 
-    log_info("Connection to %s:%d failed: %s", host, port,
+    log_info("%s: connection to %s failed: %s", ckt->up_peer, peername,
              evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-  }
+    free(peername);
+    addr = addr->ai_next;
+  } while (addr);
 
- failure:
   bufferevent_free(buf);
-  return NULL;
+  return 0;
 
  success:
   conn = conn_create(cfg, buf, peername);
   circuit_add_downstream(ckt, conn);
-  bufferevent_setcb(buf, downstream_read_cb, NULL, connect_cb, conn);
+  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_connect_cb, conn);
   bufferevent_enable(buf, EV_READ|EV_WRITE);
-  return conn;
+  return 1;
+}
+
+static void
+create_outbound_connections(circuit_t *ckt)
+{
+  struct evutil_addrinfo *addr;
+  size_t n = 0;
+  int any_successes = 0;
+
+  while ((addr = config_get_target_addrs(ckt->cfg, n))) {
+    any_successes |= create_one_outbound_connection(ckt, addr);
+    n++;
+  }
+
+  if (n == 0) {
+    log_warn("%s: no target addresses available", ckt->up_peer);
+    circuit_close(ckt);
+  }
+  if (any_successes == 0) {
+    log_warn("%s: no outbound connections were successful", ckt->up_peer);
+    circuit_close(ckt);
+  }
+}
+
+static void
+create_outbound_connections_socks(circuit_t *ckt)
+{
+  config_t *cfg = ckt->cfg;
+  struct bufferevent *buf = NULL;
+  conn_t *conn;
+  const char *host;
+  int af, port;
+  struct evdns_base *dns = get_evdns_base();
+
+  obfs_assert(cfg->mode == LSN_SOCKS_CLIENT);
+  if (socks_state_get_address(ckt->socks_state, &af, &host, &port)) {
+    log_warn("no SOCKS target available");
+    goto failure;
+  }
+  /* XXXX Feed socks state through the protocol and get a connection set. */
+
+  buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!buf) {
+    log_warn("unable to create outbound socket buffer");
+    goto failure;
+  }
+
+  log_info("Trying to connect to %s:%u", host, port);
+  if (bufferevent_socket_connect_hostname(buf, dns, af, host, port) < 0) {
+    log_info("Connection to %s:%d failed: %s", host, port,
+             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    goto failure;
+  }
+
+  /* we don't know the peername yet */
+  conn = conn_create(cfg, buf, NULL);
+  circuit_add_downstream(ckt, conn);
+  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_socks_connect_cb,
+                    conn);
+  bufferevent_enable(buf, EV_READ|EV_WRITE);
+  return;
+
+ failure:
+  /* XXXX send socks reply */
+  circuit_close(ckt);
+  if (buf)
+    bufferevent_free(buf);
 }
 
 void

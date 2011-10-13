@@ -588,7 +588,7 @@ roundrobin_config_get_listen_addrs(config_t *cfg, size_t n)
 }
 
 static struct evutil_addrinfo *
-roundrobin_config_get_target_addr(config_t *cfg)
+roundrobin_config_get_target_addrs(config_t *cfg, size_t n)
 {
   return 0;
 }
