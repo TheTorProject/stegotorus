@@ -27,11 +27,12 @@
    at zero, but we have an explicit SYN bit anyway for great
    defensiveness (and offset wraparound).
 
-   Blocks may be 'chaff'; no such blocks are presently generated, but
-   the receiver handles them.  The data segment of a chaff block is
-   discarded, and for sequencing purposes, it is treated as if
-   it had had length zero.  The offset of a chaff block matters
-   if it carries flags such as SYN or FIN.  */
+   Blocks may be 'chaff'; currently chaff blocks are only generated
+   when we need to send a FIN and have no data to piggyback it on, but
+   the receiver handles them at any point.  The data segment of a
+   chaff block is discarded, and for sequencing purposes, it is
+   treated as if it had had length zero.  The offset of a chaff block
+   matters if it carries flags such as SYN or FIN.  */
 
 #include "util.h"
 #include "connections.h"
@@ -136,7 +137,6 @@ typedef struct roundrobin_circuit_t
   circuit_t super;
   rr_reassembly_elt reassembly_queue;
   struct evbuffer *xmit_pending;
-  struct evbuffer *xmit_block;
   smartlist_t *downstreams;
 
   uint64_t circuit_id;
@@ -162,12 +162,10 @@ PROTO_DEFINE_MODULE(roundrobin, NOSTEG);
 
 /* Header serialization and deserialization */
 
-static int
-rr_send_header(struct evbuffer *buf, const struct rr_header *hdr)
+static void
+rr_write_header(uint8_t *wire_header, const struct rr_header *hdr)
 {
   /* bits on the wire are in network byte order */
-  uint8_t wire_header[RR_WIRE_HDR_LEN];
-
   wire_header[ 0] = (hdr->ckt_id & 0xFF00000000000000ull) >> 56;
   wire_header[ 1] = (hdr->ckt_id & 0x00FF000000000000ull) >> 48;
   wire_header[ 2] = (hdr->ckt_id & 0x0000FF0000000000ull) >> 40;
@@ -186,8 +184,6 @@ rr_send_header(struct evbuffer *buf, const struct rr_header *hdr)
   wire_header[13] = (hdr->length & 0x00FFu) >> 0;
   wire_header[14] = (hdr->flags  & 0xFF00u) >> 8;
   wire_header[15] = (hdr->flags  & 0x00FFu) >> 0;
-
-  return evbuffer_add(buf, wire_header, RR_WIRE_HDR_LEN);
 }
 
 static int
@@ -219,6 +215,118 @@ rr_peek_header(struct evbuffer *buf, struct rr_header *hdr)
                  (((uint16_t)wire_header[15]) <<  0));
   return 0;
 }
+
+/* Transmit subroutines. */
+
+static int
+rr_send_block(struct evbuffer *dest,
+              struct evbuffer *source,
+              struct evbuffer *block,
+              uint64_t circuit_id,
+              uint32_t offset,
+              uint16_t length,
+              uint16_t flags)
+{
+  rr_header hdr;
+  struct evbuffer_iovec v;
+
+  obfs_assert(evbuffer_get_length(block) == 0);
+  obfs_assert(evbuffer_get_length(dest) >= length);
+
+  /* We take special care not to modify 'source' if any step fails. */
+  if (evbuffer_reserve_space(block, length + RR_WIRE_HDR_LEN, &v, 1) != 1)
+    return -1;
+  if (v.iov_len < length + RR_WIRE_HDR_LEN)
+    goto fail;
+
+  v.iov_len = length + RR_WIRE_HDR_LEN;
+
+  hdr.ckt_id = circuit_id;
+  hdr.offset = offset;
+  hdr.length = length;
+  hdr.flags = flags;
+  rr_write_header(v.iov_base, &hdr);
+
+  if (evbuffer_copyout(source, (uint8_t *)v.iov_base + RR_WIRE_HDR_LEN,
+                       length) != length)
+    goto fail;
+
+  if (evbuffer_commit_space(block, &v, 1))
+    goto fail;
+
+  if (evbuffer_add_buffer(dest, block))
+    goto fail_committed;
+
+  if (evbuffer_drain(source, length))
+    /* this really should never happen, and we can't recover from it */
+    log_error("rr_send_block: evbuffer_drain failed"); /* does not return */
+
+  return 0;
+
+ fail:
+  v.iov_len = 0;
+  evbuffer_commit_space(block, &v, 1);
+ fail_committed:
+  evbuffer_drain(block, evbuffer_get_length(block));
+  return -1;
+}
+
+static int
+rr_send_blocks(circuit_t *c, int at_eof)
+{
+  roundrobin_circuit_t *ckt = downcast_circuit(c);
+  struct evbuffer *xmit_block;
+  conn_t *target;
+  size_t avail;
+  uint16_t flags;
+
+  if (!(xmit_block = evbuffer_new()))
+    return -1;
+
+  for (;;) {
+    avail = evbuffer_get_length(ckt->xmit_pending);
+    flags = ckt->sent_syn ? 0 : RR_F_SYN;
+
+    log_debug("rr_send_blocks: next block %u bytes data, %lu available",
+              ckt->next_block_size, (unsigned long)avail);
+
+    if (at_eof && avail > 0 && avail <= ckt->next_block_size) {
+      ckt->next_block_size = avail;
+      flags |= RR_F_FIN;
+    } else if (avail < ckt->next_block_size)
+      break;
+
+    target = smartlist_get(ckt->downstreams, ckt->next_down);
+    if (rr_send_block(conn_get_outbound(target),
+                      ckt->xmit_pending,
+                      xmit_block,
+                      ckt->circuit_id,
+                      ckt->send_offset,
+                      ckt->next_block_size,
+                      flags))
+      goto fail;
+
+    log_debug("rr_send_blocks: sent %lu+%u byte block [flags %04hx] to %s",
+              RR_WIRE_HDR_LEN, ckt->next_block_size, flags, target->peername);
+
+    ckt->next_down++;
+    if (ckt->next_down == smartlist_len(ckt->downstreams))
+      ckt->next_down = 0;
+
+    ckt->send_offset += ckt->next_block_size;
+    ckt->next_block_size = random_range(RR_MIN_BLOCK, RR_MAX_BLOCK);
+    ckt->sent_syn = true;
+  }
+
+  evbuffer_free(xmit_block);
+  return 0;
+
+ fail:
+  evbuffer_free(xmit_block);
+  return -1;
+}
+
+/* Receive subroutines. */
 
 /* True if s < t (mod 2**32). */
 static inline bool
@@ -494,7 +602,6 @@ roundrobin_circuit_create(config_t *cfg)
   ckt->reassembly_queue.next = &ckt->reassembly_queue;
   ckt->reassembly_queue.prev = &ckt->reassembly_queue;
   ckt->xmit_pending = evbuffer_new();
-  ckt->xmit_block = evbuffer_new();
   ckt->downstreams = smartlist_create();
   return c;
 }
@@ -507,7 +614,6 @@ roundrobin_circuit_free(circuit_t *c)
   rr_circuit_entry_t in;
 
   evbuffer_free(ckt->xmit_pending);
-  evbuffer_free(ckt->xmit_block);
 
   SMARTLIST_FOREACH(ckt->downstreams, conn_t *, conn, {
     conn->circuit = NULL;
@@ -590,54 +696,85 @@ static int
 roundrobin_circuit_send(circuit_t *c)
 {
   roundrobin_circuit_t *ckt = downcast_circuit(c);
-  rr_header hdr;
-  size_t avail;
 
   if (evbuffer_add_buffer(ckt->xmit_pending,
                           bufferevent_get_input(c->up_buffer)))
     return -1;
 
-  for (;;) {
-    avail = evbuffer_get_length(ckt->xmit_pending);
-    if (avail < ckt->next_block_size)
-      return 0;
+  return rr_send_blocks(c, 0);
+}
 
-    if (evbuffer_get_length(ckt->xmit_block) > 0)
-      return 0; /* cannot send yet */
+static int
+roundrobin_circuit_send_eof(circuit_t *c)
+{
+  roundrobin_circuit_t *ckt = downcast_circuit(c);
+  struct evbuffer *chaff, *block;
 
-    if (evbuffer_expand(ckt->xmit_block,
-                        ckt->next_block_size + RR_WIRE_HDR_LEN))
-      return -1; /* allocation failure */
+  if (smartlist_len(ckt->downstreams) == 0) {
+    ckt->sent_fin = 1;
+    return 0;
+  }
 
-    hdr.ckt_id = ckt->circuit_id;
-    hdr.offset = ckt->send_offset;
-    hdr.length = ckt->next_block_size;
-    hdr.flags = ckt->sent_syn ? 0 : RR_F_SYN;
-    if (rr_send_header(ckt->xmit_block, &hdr))
+  /* force out any remaining data */
+  if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)))
+    if (evbuffer_add_buffer(ckt->xmit_pending,
+                            bufferevent_get_input(c->up_buffer)))
       return -1;
 
-    if (evbuffer_remove_buffer(ckt->xmit_pending, ckt->xmit_block,
-                               ckt->next_block_size) != ckt->next_block_size)
+  if (evbuffer_get_length(ckt->xmit_pending) > 0) {
+    if (rr_send_blocks(c, 1))
       return -1;
+  } else {
+    struct evbuffer_iovec v;
+    conn_t *d;
+    /* send one chaff block to carry the FIN */
+    chaff = evbuffer_new();
+    block = evbuffer_new();
+    if (!chaff || !block)
+      goto fail;
 
-    if (evbuffer_add_buffer(conn_get_outbound(smartlist_get(ckt->downstreams,
-                                                            ckt->next_down)),
-                            ckt->xmit_block))
-      return -1;
+    if (evbuffer_reserve_space(chaff, ckt->next_block_size, &v, 1) != 1 ||
+        v.iov_len < ckt->next_block_size)
+      goto fail;
 
+    v.iov_len = ckt->next_block_size;
+    if (random_bytes(v.iov_base, v.iov_len) ||
+        evbuffer_commit_space(chaff, &v, 1))
+      goto fail;
+
+    d = smartlist_get(ckt->downstreams, ckt->next_down);
+    if (rr_send_block(conn_get_outbound(d), chaff, block,
+                      ckt->circuit_id, ckt->send_offset,
+                      ckt->next_block_size, RR_F_FIN|RR_F_CHAFF))
+      goto fail;
+
+    log_debug("rr_send_blocks: sent %lu+%u byte block [flags %04hx] to %s",
+              RR_WIRE_HDR_LEN, ckt->next_block_size,
+              RR_F_FIN|RR_F_CHAFF, d->peername);
+
+    evbuffer_free(chaff);
+    evbuffer_free(block);
+
+    /* this is not strictly necessary but we do it anyway, to match
+       the behavior in the still-have-data case */
     ckt->next_down++;
     if (ckt->next_down == smartlist_len(ckt->downstreams))
       ckt->next_down = 0;
 
     ckt->send_offset += ckt->next_block_size;
     ckt->next_block_size = random_range(RR_MIN_BLOCK, RR_MAX_BLOCK);
-    ckt->sent_syn = true;
   }
-}
 
-static int
-roundrobin_circuit_send_eof(circuit_t *c)
-{
+  /* flush and close all downstream connections */
+  ckt->sent_fin = 1;
+  SMARTLIST_FOREACH(ckt->downstreams, conn_t *, conn,
+                    conn_send_eof(conn));
+
+  return 0;
+
+  fail:
+  evbuffer_free(chaff);
+  evbuffer_free(block);
   return -1;
 }
 
