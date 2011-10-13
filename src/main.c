@@ -112,7 +112,8 @@ lethal_signal(int signum, siginfo_t *si, void *uc)
                 ? "\n[error] %s at %08lx\n"
                 : "\n[error] %s at %016lx\n",
                 strsignal(signum), (unsigned long)si->si_addr);
-  write(2, faultmsg, strlen(faultmsg));
+  /* we really, truly don't care about a short write here */
+  if(write(2, faultmsg, strlen(faultmsg))) {}
 
 #ifdef HAVE_EXECINFO_H
   /* Now do a backtrace if we can. */

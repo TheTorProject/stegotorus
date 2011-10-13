@@ -214,9 +214,9 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       unsigned char *data, *p, *limit;
       uint64_t clen;
 
-      log_debug("x_http_receive: %lu bytes available (%senough)",
+      log_debug("x_http: %lu byte response stream available%s",
                 (unsigned long)hlen,
-                hlen >= sizeof http_response_1 - 1 ? "" : "not ");
+                hlen >= sizeof http_response_1 - 1 ? "" : " (incomplete)");
       if (hlen < sizeof http_response_1 - 1)
         break;
 
@@ -256,7 +256,8 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       if ((uint64_t)evbuffer_remove_buffer(source, dest, clen) != clen)
         return -1;
 
-      log_debug("x_http: decoded %lu byte response", (unsigned long)clen);
+      log_debug("x_http: decoded %lu byte response",
+                (unsigned long)(hlen + clen));
       shipped = 1;
     } while (evbuffer_get_length(source));
 
@@ -277,6 +278,8 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
     /* This loop should not be necessary either, but is, for the same
        reason given above */
     do {
+      log_debug("x_http: %ld byte query stream available",
+                evbuffer_get_length(source));
       /* Search for the second and third invariant bits of the query headers
          we expect.  We completely ignore the contents of the Host header. */
       s2 = evbuffer_search(source, http_query_2,
@@ -340,7 +343,8 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       }
       evbuffer_drain(source, s3.pos + sizeof http_query_3 - 1);
       evbuffer_free(scratch);
-      log_debug("x_http: decoded %lu byte query", (unsigned long)slen);
+      log_debug("x_http: decoded %lu byte query",
+                (unsigned long)(s3.pos + sizeof http_query_3 - 1));
       shipped = 1;
     } while (evbuffer_get_length(source));
 
