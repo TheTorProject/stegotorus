@@ -56,8 +56,8 @@ typedef struct rr_header
 } rr_header;
 
 #define RR_WIRE_HDR_LEN (sizeof(struct rr_header))
-#define RR_MIN_BLOCK (RR_WIRE_HDR_LEN*2)
-#define RR_MAX_BLOCK INT16_MAX
+#define RR_MIN_BLOCK (RR_WIRE_HDR_LEN * 2)
+#define RR_MAX_BLOCK (RR_WIRE_HDR_LEN + 2048)
 
 #define RR_F_SYN   0x0001
 #define RR_F_FIN   0x0002
@@ -231,7 +231,7 @@ rr_send_block(struct evbuffer *dest,
   struct evbuffer_iovec v;
 
   obfs_assert(evbuffer_get_length(block) == 0);
-  obfs_assert(evbuffer_get_length(dest) >= length);
+  obfs_assert(evbuffer_get_length(source) >= length);
 
   /* We take special care not to modify 'source' if any step fails. */
   if (evbuffer_reserve_space(block, length + RR_WIRE_HDR_LEN, &v, 1) != 1)
@@ -531,6 +531,7 @@ rr_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
   roundrobin_config_t *cfg = downcast_config(c);
   rr_circuit_entry_t *out, in;
 
+  obfs_assert(c->mode == LSN_SIMPLE_SERVER);
   in.circuit_id = circuit_id;
   out = HT_FIND(rr_circuit_table_impl, &cfg->circuits.head, &in);
   if (out) {
@@ -542,7 +543,7 @@ rr_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
       free(out);
       return -1;
     }
-    if (!circuit_open_upstream(out->circuit)) {
+    if (circuit_open_upstream(out->circuit)) {
       circuit_close(out->circuit);
       free(out);
       return -1;
@@ -556,7 +557,6 @@ rr_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
 }
 
 /* Protocol methods */
-#if 0
 /**
    Helper: Parses 'options' and fills 'cfg'.
 */
@@ -565,32 +565,116 @@ parse_and_set_options(int n_options, const char *const *options,
                       config_t *c)
 {
   const char* defport;
-  int req_options;
   roundrobin_config_t *cfg = downcast_config(c);
+  int listen_up;
+  int i;
+
+  if (n_options < 3)
+    return -1;
+
+  /* XXXX roundrobin currently does not support socks. */
+  if (!strcmp(options[0], "client")) {
+    defport = "48988"; /* bf5c */
+    c->mode = LSN_SIMPLE_CLIENT;
+    listen_up = 1;
+  } else if (!strcmp(options[0], "server")) {
+    defport = "11253"; /* 2bf5 */
+    c->mode = LSN_SIMPLE_SERVER;
+    listen_up = 0;
+  } else
+    return -1;
+
+  cfg->up_address = resolve_address_port(options[1], 1, listen_up, defport);
+  if (!cfg->up_address)
+    return -1;
+
+  for (i = 2; i < n_options; i++) {
+    void *addr = resolve_address_port(options[i], 1, !listen_up, NULL);
+    if (!addr)
+      return -1;
+    smartlist_add(cfg->down_addresses, addr);
+  }
+  return 0;
 }
-#endif
 
 static void
 roundrobin_config_free(config_t *c)
 {
+  roundrobin_config_t *cfg = downcast_config(c);
+  rr_circuit_entry_t **ent, **next, *this;
+
+  if (cfg->up_address)
+    evutil_freeaddrinfo(cfg->up_address);
+  if (cfg->down_addresses) {
+    SMARTLIST_FOREACH(cfg->down_addresses, struct evutil_addrinfo *, addr,
+                      evutil_freeaddrinfo(addr));
+    smartlist_free(cfg->down_addresses);
+  }
+
+  for (ent = HT_START(rr_circuit_table_impl, &cfg->circuits.head);
+       ent; ent = next) {
+    this = *ent;
+    next = HT_NEXT_RMV(rr_circuit_table_impl, &cfg->circuits.head, ent);
+    if (this->circuit)
+      circuit_close(this->circuit);
+    free(this);
+  }
+  HT_CLEAR(rr_circuit_table_impl, &cfg->circuits.head);
+
+  free(cfg);
 }
 
 static config_t *
 roundrobin_config_create(int n_options, const char *const *options)
 {
-  return 0;
+  roundrobin_config_t *cfg = xzalloc(sizeof(roundrobin_config_t));
+  config_t *c = upcast_config(cfg);
+  c->vtable = &p_roundrobin_vtable;
+  HT_INIT(rr_circuit_table_impl, &cfg->circuits.head);
+  cfg->down_addresses = smartlist_create();
+
+  if (parse_and_set_options(n_options, options, c) == 0)
+    return c;
+
+  roundrobin_config_free(c);
+  log_warn("roundrobin syntax:\n"
+           "\tdummy <mode> <up_address> <down_address> <down_address>...\n"
+           "\t\tmode ~ server|client\n"
+           "\t\tup_address, down_address ~ host:port\n"
+           "Examples:\n"
+           "\tobfsproxy roundrobin client 127.0.0.1:5000 "
+               "192.168.1.99:11253 192.168.1.99:11254 192.168.1.99:11255\n"
+           "\tobfsproxy roundrobin server 127.0.0.1:9005 "
+               "192.168.1.99:11253 192.168.1.99:11254 192.168.1.99:11255");
+  return NULL;
 }
 
 static struct evutil_addrinfo *
-roundrobin_config_get_listen_addrs(config_t *cfg, size_t n)
+roundrobin_config_get_listen_addrs(config_t *c, size_t n)
 {
-  return 0;
+  roundrobin_config_t *cfg = downcast_config(c);
+  if (c->mode == LSN_SIMPLE_SERVER) {
+    if (n < (size_t)smartlist_len(cfg->down_addresses))
+      return smartlist_get(cfg->down_addresses, n);
+  } else {
+    if (n == 0)
+      return cfg->up_address;
+  }
+  return NULL;
 }
 
 static struct evutil_addrinfo *
-roundrobin_config_get_target_addrs(config_t *cfg, size_t n)
+roundrobin_config_get_target_addrs(config_t *c, size_t n)
 {
-  return 0;
+  roundrobin_config_t *cfg = downcast_config(c);
+  if (c->mode == LSN_SIMPLE_SERVER) {
+    if (n == 0)
+      return cfg->up_address;
+  } else {
+    if (n < (size_t)smartlist_len(cfg->down_addresses))
+      return smartlist_get(cfg->down_addresses, n);
+  }
+  return NULL;
 }
 
 static circuit_t *
@@ -601,8 +685,13 @@ roundrobin_circuit_create(config_t *cfg)
   c->cfg = cfg;
   ckt->reassembly_queue.next = &ckt->reassembly_queue;
   ckt->reassembly_queue.prev = &ckt->reassembly_queue;
+  ckt->next_block_size = random_range(RR_MIN_BLOCK, RR_MAX_BLOCK);
   ckt->xmit_pending = evbuffer_new();
   ckt->downstreams = smartlist_create();
+  if (cfg->mode != LSN_SIMPLE_SERVER) {
+    while (!ckt->circuit_id)
+      random_bytes((unsigned char *)&ckt->circuit_id, sizeof(uint64_t));
+  }
   return c;
 }
 
@@ -629,7 +718,7 @@ roundrobin_circuit_free(circuit_t *c)
     free(p);
   }
 
-  if (ckt->circuit_id) {
+  if (c->cfg->mode == LSN_SIMPLE_SERVER) {
     roundrobin_config_t *cfg = downcast_config(c->cfg);
     in.circuit_id = ckt->circuit_id;
     free(HT_REMOVE(rr_circuit_table_impl, &cfg->circuits.head, &in));

@@ -147,7 +147,7 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   int is_socks = lsn->cfg->mode == LSN_SOCKS_CLIENT;
 
   obfs_assert(lsn->cfg->mode != LSN_SIMPLE_SERVER);
-  log_info("%s: new connection to %sclient from %s\n",
+  log_info("%s: new connection to %sclient from %s",
            lsn->address, is_socks ? "socks " : "", peername);
 
   buf = bufferevent_socket_new(lsn->cfg->base, fd, BEV_OPT_CLOSE_ON_FREE);
@@ -195,7 +195,7 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   conn_t *conn;
 
   obfs_assert(lsn->cfg->mode == LSN_SIMPLE_SERVER);
-  log_info("%s: new connection to server from %s\n", lsn->address, peername);
+  log_info("%s: new connection to server from %s", lsn->address, peername);
 
   buf = bufferevent_socket_new(lsn->cfg->base, fd, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
