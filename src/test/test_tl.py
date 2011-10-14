@@ -56,6 +56,14 @@ class TimelineTest(object):
            ("x_dsteg", "server", "127.0.0.1:5000", "127.0.0.1:5001",
             "x_dsteg", "client", "127.0.0.1:4999", "127.0.0.1:5000", "x_http"))
 
+    def test_rr(self):
+        self.doTest("roundrobin",
+           ("roundrobin", "server", "127.0.0.1:5001",
+            "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013",
+            "roundrobin", "client", "127.0.0.1:4999",
+            "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013"
+            ))
+
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
 # the test directory.
 def load_tests(loader, standard_tests, pattern):

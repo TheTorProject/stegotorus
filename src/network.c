@@ -449,6 +449,11 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
     bufferevent_setcb(ckt->up_buffer,
                       upstream_read_cb, NULL, upstream_event_cb, ckt);
     bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
+    ckt->connected = 1;
+    if (ckt->pending_eof) {
+      /* Try again to process the EOF. */
+      circuit_recv_eof(ckt);
+    }
     return;
   }
 
@@ -476,6 +481,13 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 
     log_debug("%s: Successful connection", conn->peername);
 
+    bufferevent_setcb(conn->buffer,
+                      downstream_read_cb, NULL, downstream_event_cb, conn);
+
+    bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
+    bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
+    ckt->connected = 1;
+
     /* Queue handshake, if any. */
     if (conn_handshake(conn) < 0) {
       log_debug("%s: Error during handshake", conn->peername);
@@ -483,11 +495,10 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
       return;
     }
 
-    bufferevent_setcb(conn->buffer,
-                      downstream_read_cb, NULL, downstream_event_cb, conn);
-
-    bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
-    bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
+    if (ckt->pending_eof) {
+      /* Try again to process the EOF. */
+      circuit_recv_eof(ckt);
+    }
     return;
   }
 
@@ -558,6 +569,8 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
     bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
 
+    ckt->connected = 1;
+
     /* Queue handshake, if any. */
     if (conn_handshake(conn)) {
       log_debug("%s: Error during handshake", conn->peername);
@@ -566,7 +579,14 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     }
 
     if (evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)) > 0)
+      /* Process any data stacked up while we were waiting for the
+         connection. */
       upstream_read_cb(ckt->up_buffer, ckt);
+
+    if (ckt->pending_eof) {
+      /* Try again to process the EOF. */
+      circuit_recv_eof(ckt);
+    }
 
     return;
   }

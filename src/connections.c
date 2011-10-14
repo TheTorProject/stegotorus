@@ -209,7 +209,11 @@ axe_timer_cb(evutil_socket_t fd, short what, void *arg)
 {
   circuit_t *ckt = arg;
   log_warn("%s: timeout, closing circuit", ckt->up_peer);
-  circuit_close(ckt);
+
+  if (evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)) > 0)
+    circuit_do_flush(ckt);
+  else
+    circuit_close(ckt);
 }
 
 circuit_t *
@@ -271,6 +275,8 @@ circuit_close(circuit_t *ckt)
     socks_state_free(ckt->socks_state);
   if (ckt->flush_timer)
     event_free(ckt->flush_timer);
+  if (ckt->axe_timer)
+    event_free(ckt->axe_timer);
 
   ckt->cfg->vtable->circuit_free(ckt);
 
@@ -319,11 +325,17 @@ circuit_recv_eof(circuit_t *ckt)
       log_debug("%s: flushing %ld bytes to upstream",
                 ckt->up_peer, (unsigned long)outlen);
       circuit_do_flush(ckt);
-    } else {
+    } else if (ckt->connected) {
       log_debug("%s: sending EOF to upstream", ckt->up_peer);
       bufferevent_disable(ckt->up_buffer, EV_WRITE);
       shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
+    } else {
+      log_debug("%s: holding EOF till connection", ckt->up_peer);
+      ckt->pending_eof = 1;
     }
+  } else {
+    log_debug("%s: no buffer, holding EOF till connection", ckt->up_peer);
+    ckt->pending_eof = 1;
   }
 }
 

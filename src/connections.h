@@ -112,6 +112,8 @@ struct circuit_t {
   const char         *up_peer;
 
   socks_state_t      *socks_state;
+  unsigned int        connected : 1;
+  unsigned int        pending_eof : 1;
 };
 
 circuit_t *circuit_create(config_t *cfg);

@@ -27,12 +27,12 @@
    at zero, but we have an explicit SYN bit anyway for great
    defensiveness (and offset wraparound).
 
-   Blocks may be 'chaff'; currently chaff blocks are only generated
-   when we need to send a FIN and have no data to piggyback it on, but
-   the receiver handles them at any point.  The data segment of a
-   chaff block is discarded, and for sequencing purposes, it is
-   treated as if it had had length zero.  The offset of a chaff block
-   matters if it carries flags such as SYN or FIN.  */
+   Blocks may be 'chaff'; currently these are only generated to force
+   a SYN or a FIN to happen, but the receiver handles them at any
+   point.  The data segment of a chaff block is discarded, and for
+   sequencing purposes, it is treated as if it had had length zero.
+   The offset of a chaff block matters if it carries flags such as SYN
+   or FIN.  */
 
 #include "util.h"
 #include "connections.h"
@@ -191,8 +191,10 @@ rr_peek_header(struct evbuffer *buf, struct rr_header *hdr)
 {
   uint8_t wire_header[RR_WIRE_HDR_LEN];
   if (evbuffer_get_length(buf) < RR_WIRE_HDR_LEN ||
-      evbuffer_copyout(buf, wire_header, RR_WIRE_HDR_LEN) != RR_WIRE_HDR_LEN)
+      evbuffer_copyout(buf, wire_header, RR_WIRE_HDR_LEN) != RR_WIRE_HDR_LEN) {
+    log_warn("rr_peek_header: not enough data copied out");
     return -1;
+  }
 
   hdr->ckt_id = ((((uint64_t)wire_header[ 0]) << 56) +
                  (((uint64_t)wire_header[ 1]) << 48) +
@@ -268,6 +270,7 @@ rr_send_block(struct evbuffer *dest,
   evbuffer_commit_space(block, &v, 1);
  fail_committed:
   evbuffer_drain(block, evbuffer_get_length(block));
+  log_warn("rr_send_block: allocation or buffer copy failed");
   return -1;
 }
 
@@ -280,8 +283,10 @@ rr_send_blocks(circuit_t *c, int at_eof)
   size_t avail;
   uint16_t flags;
 
-  if (!(xmit_block = evbuffer_new()))
+  if (!(xmit_block = evbuffer_new())) {
+    log_warn("rr_send_blocks: allocation failure");
     return -1;
+  }
 
   for (;;) {
     avail = evbuffer_get_length(ckt->xmit_pending);
@@ -319,10 +324,71 @@ rr_send_blocks(circuit_t *c, int at_eof)
   }
 
   evbuffer_free(xmit_block);
+  log_debug("%s: %lu bytes still waiting to be sent",
+            c->up_peer, (unsigned long)evbuffer_get_length(ckt->xmit_pending));
   return 0;
 
  fail:
   evbuffer_free(xmit_block);
+  return -1;
+}
+
+static int
+rr_send_chaff(circuit_t *c, int at_eof)
+{
+  roundrobin_circuit_t *ckt = downcast_circuit(c);
+  struct evbuffer *chaff, *block;
+  struct evbuffer_iovec v;
+  conn_t *d;
+  uint16_t flags;
+
+  chaff = evbuffer_new();
+  block = evbuffer_new();
+  if (!chaff || !block)
+    goto fail;
+
+  if (evbuffer_reserve_space(chaff, ckt->next_block_size, &v, 1) != 1 ||
+      v.iov_len < ckt->next_block_size)
+    goto fail;
+
+  v.iov_len = ckt->next_block_size;
+  if (random_bytes(v.iov_base, v.iov_len) ||
+      evbuffer_commit_space(chaff, &v, 1))
+    goto fail;
+
+  flags = RR_F_CHAFF;
+  if (!ckt->sent_syn)
+    flags |= RR_F_SYN;
+  if (at_eof)
+    flags |= RR_F_FIN;
+
+  d = smartlist_get(ckt->downstreams, ckt->next_down);
+  if (rr_send_block(conn_get_outbound(d), chaff, block,
+                    ckt->circuit_id, ckt->send_offset,
+                    ckt->next_block_size, flags))
+    goto fail;
+
+  log_debug("rr_send_chaff: sent %lu+%u byte block [flags %04hx] to %s",
+            RR_WIRE_HDR_LEN, ckt->next_block_size,
+            flags, d->peername);
+
+  evbuffer_free(chaff);
+  evbuffer_free(block);
+
+  ckt->next_down++;
+  if (ckt->next_down == smartlist_len(ckt->downstreams))
+    ckt->next_down = 0;
+
+  /* note: because this is a chaff block we just sent, it does NOT
+     change the offset. */
+  ckt->next_block_size = random_range(RR_MIN_BLOCK, RR_MAX_BLOCK);
+  ckt->sent_syn = true;
+  return 0;
+
+ fail:
+  log_warn("rr_send_chaff: failed to construct chaff block");
+  if (chaff) evbuffer_free(chaff);
+  if (block) evbuffer_free(block);
   return -1;
 }
 
@@ -359,12 +425,14 @@ rr_reassemble_block(circuit_t *c, struct evbuffer *block, rr_header *hdr)
        contents.  Doing all chaff-handling here simplifies the caller
        at the expense of slightly more buffer-management overhead. */
     if (!(hdr->flags & (RR_F_SYN|RR_F_FIN))) {
+      log_debug("rr_reassemble_block: discarding chaff with no flags");
       evbuffer_free(block);
       return 0;
     }
 
     hdr->length = 0;
     evbuffer_drain(block, evbuffer_get_length(block));
+    log_debug("rr_reassemble_block: chaff with flags, treating length as 0");
   }
 
   /* SYN must occur at offset zero, may not be duplicated, and if we
@@ -374,15 +442,19 @@ rr_reassemble_block(circuit_t *c, struct evbuffer *block, rr_header *hdr)
       (hdr->offset > 0 ||
        (queue->next != queue &&
         ((queue->next->flags & RR_F_SYN) ||
-         !mod32_le(hdr->offset + hdr->length, queue->next->offset)))))
+         !mod32_le(hdr->offset + hdr->length, queue->next->offset))))) {
+    log_warn("rr: protocol error: inappropriate SYN block");
     return -1;
+  }
 
   /* FIN may not be duplicated and must occur logically after everything
      we've already received. */
   if ((hdr->flags & RR_F_FIN) && queue->prev != queue &&
       ((queue->prev->flags & RR_F_FIN) ||
-       !mod32_le(queue->prev->offset + queue->prev->length, hdr->offset)))
+       !mod32_le(queue->prev->offset + queue->prev->length, hdr->offset))) {
+    log_warn("rr: protocol error: inappropriate FIN block");
     return -1;
+  }
 
   /* Non-SYN/FIN must come after any SYN block presently in the queue
      and before any FIN block presently in the queue. */
@@ -390,8 +462,10 @@ rr_reassemble_block(circuit_t *c, struct evbuffer *block, rr_header *hdr)
       (((queue->next->flags & RR_F_SYN) &&
        !mod32_le(queue->next->offset + queue->next->length, hdr->offset)) ||
        ((queue->prev->flags & RR_F_FIN) &&
-        !mod32_le(hdr->offset + hdr->length, queue->prev->offset))))
+        !mod32_le(hdr->offset + hdr->length, queue->prev->offset)))) {
+    log_warn("rr: protocol error: inappropriate normal block");
     return -1;
+  }
 
   for (p = queue->next; p != queue; p = p->next) {
     /* Try first to merge the new block into an existing one. */
@@ -411,6 +485,8 @@ rr_reassemble_block(circuit_t *c, struct evbuffer *block, rr_header *hdr)
 
       /* protocol error: this block goes before 'p' but does not fit
          after 'p->prev' */
+      log_warn("rr: protocol error: %u byte block does not fit at offset %u",
+               hdr->length, hdr->offset);
       return -1;
     }
   }
@@ -435,8 +511,10 @@ rr_reassemble_block(circuit_t *c, struct evbuffer *block, rr_header *hdr)
   return 0;
 
  grow_back:
-  if (evbuffer_add_buffer(p->data, block))
+  if (evbuffer_add_buffer(p->data, block)) {
+    log_warn("rr_reassemble_block: failed to append to existing buffer");
     return -1;
+  }
   evbuffer_free(block);
   p->length += hdr->length;
   p->flags |= hdr->flags;
@@ -444,8 +522,10 @@ rr_reassemble_block(circuit_t *c, struct evbuffer *block, rr_header *hdr)
   /* Can we now combine 'p' with its successor? */
   while (p->next->data && p->offset + p->length == p->next->offset) {
     q = p->next;
-    if (evbuffer_add_buffer(p->data, q->data))
+    if (evbuffer_add_buffer(p->data, q->data)) {
+      log_warn("rr_reassemble_block: failed to merge buffers");
       return -1;
+    }
     p->length += q->length;
     p->flags |= q->flags;
 
@@ -457,8 +537,10 @@ rr_reassemble_block(circuit_t *c, struct evbuffer *block, rr_header *hdr)
   return 0;
 
  grow_front:
-  if (evbuffer_prepend_buffer(p->data, block))
+  if (evbuffer_prepend_buffer(p->data, block)) {
+    log_warn("rr_reassemble_block: failed to prepend to existing buffer");
     return -1;
+  }
   evbuffer_free(block);
   p->length += hdr->length;
   p->offset -= hdr->length;
@@ -467,8 +549,10 @@ rr_reassemble_block(circuit_t *c, struct evbuffer *block, rr_header *hdr)
   /* Can we now combine 'p' with its predecessor? */
   while (p->prev->data && p->offset == p->prev->offset + p->prev->length) {
     q = p->prev;
-    if (evbuffer_prepend_buffer(p->data, q->data))
+    if (evbuffer_prepend_buffer(p->data, q->data)) {
+      log_warn("rr_reassemble_block: failed to merge buffers");
       return -1;
+    }
     p->length += q->length;
     p->offset -= q->length;
     p->flags |= q->flags;
@@ -491,17 +575,23 @@ rr_push_to_upstream(circuit_t *c)
      ready to flush (because rr_reassemble_block ensures that there
      are gaps between all queue elements).  */
   rr_reassembly_elt *ready = ckt->reassembly_queue.next;
-  if (!ready->data || ckt->recv_offset != ready->offset)
+  if (!ready->data || ckt->recv_offset != ready->offset) {
+    log_debug("rr_recv: no data pushable to upstream yet");
     return 0;
+  }
 
   if (!ckt->received_syn) {
-    if (!(ready->flags & RR_F_SYN))
+    if (!(ready->flags & RR_F_SYN)) {
+      log_debug("rr_recv: waiting for SYN");
       return 0;
+    }
     ckt->received_syn = true;
   }
 
-  if (evbuffer_add_buffer(bufferevent_get_output(c->up_buffer), ready->data))
+  if (evbuffer_add_buffer(bufferevent_get_output(c->up_buffer), ready->data)) {
+    log_warn("rr_recv: failure pushing data to upstream");
     return -1;
+  }
 
   ckt->recv_offset += ready->length;
 
@@ -536,19 +626,27 @@ rr_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
   out = HT_FIND(rr_circuit_table_impl, &cfg->circuits.head, &in);
   if (out) {
     obfs_assert(out->circuit);
+    log_debug("rr_recv: found circuit to %s for connection from %s",
+              out->circuit->up_peer, conn->peername);
   } else {
     out = xzalloc(sizeof(rr_circuit_entry_t));
     out->circuit = circuit_create(c);
     if (!out->circuit) {
       free(out);
+      log_warn("rr_recv: failed to create new circuit for %s", conn->peername);
       return -1;
     }
     if (circuit_open_upstream(out->circuit)) {
+      log_warn("rr_recv: failed to begin upstream connection for %s",
+               conn->peername);
       circuit_close(out->circuit);
       free(out);
       return -1;
     }
+    log_debug("rr_recv: new circuit to %s for connection from %s",
+              out->circuit->up_peer, conn->peername);
     out->circuit_id = circuit_id;
+    downcast_circuit(out->circuit)->circuit_id = circuit_id;
     HT_INSERT(rr_circuit_table_impl, &cfg->circuits.head, out);
   }
 
@@ -731,6 +829,9 @@ roundrobin_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   roundrobin_circuit_t *ckt = downcast_circuit(c);
   smartlist_add(ckt->downstreams, conn);
+  log_debug("%s: added connection to %s, now %d",
+            c->up_peer, conn->peername, smartlist_len(ckt->downstreams));
+
   circuit_disarm_axe_timer(c);
 }
 
@@ -739,15 +840,23 @@ roundrobin_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   roundrobin_circuit_t *ckt = downcast_circuit(c);
   smartlist_remove(ckt->downstreams, conn);
+  log_debug("%s: removed connection to %s, now %d",
+            c->up_peer, conn->peername, smartlist_len(ckt->downstreams));
+
   /* If that was the last connection on this circuit AND we've both
      received and sent a FIN, close the circuit.  Otherwise, arm a
      timer that will kill off this circuit in a little while if no
      new connections happen (we might've lost all our connections to
      protocol errors).  */
   if (smartlist_len(ckt->downstreams) == 0) {
-    if (ckt->sent_fin && ckt->received_fin)
-      circuit_close(c);
-    else
+    if (ckt->sent_fin && ckt->received_fin) {
+      if (evbuffer_get_length(bufferevent_get_output(c->up_buffer)) > 0)
+        /* this may already have happened, but there's no harm in
+           doing it again */
+        circuit_do_flush(c);
+      else
+        circuit_close(c);
+    } else
       circuit_arm_axe_timer(c, 100);
   }
 }
@@ -777,7 +886,15 @@ roundrobin_conn_maybe_open_upstream(conn_t *conn)
 static int
 roundrobin_conn_handshake(conn_t *conn)
 {
-  /* Roundrobin has no handshake. */
+  /* Roundrobin has no handshake, but like dsteg, we need to send
+     _something_ from the client on at least one of the channels
+     shortly after connection, because the server doesn't know which
+     connections go with which circuits till it hears from us.  We use
+     a 1ms timeout instead of a 10ms timeout as in dsteg, because
+     unlike there, the server can't even _connect to its upstream_
+     till it gets the first packet from the client. */
+  if (conn->cfg->mode != LSN_SIMPLE_SERVER)
+    circuit_arm_flush_timer(conn->circuit, 1);
   return 0;
 }
 
@@ -786,10 +903,16 @@ roundrobin_circuit_send(circuit_t *c)
 {
   roundrobin_circuit_t *ckt = downcast_circuit(c);
 
-  if (evbuffer_add_buffer(ckt->xmit_pending,
-                          bufferevent_get_input(c->up_buffer)))
-    return -1;
+  if (evbuffer_get_length(ckt->xmit_pending) == 0 &&
+      evbuffer_get_length(bufferevent_get_input(c->up_buffer)) == 0)
+    /* must-send timer expired and we still have nothing to say; send chaff */
+    return rr_send_chaff(c, 0);
 
+  if (evbuffer_add_buffer(ckt->xmit_pending,
+                          bufferevent_get_input(c->up_buffer))) {
+    log_warn("%s: rr_send: failed to queue data", c->up_peer);
+    return -1;
+  }
   return rr_send_blocks(c, 0);
 }
 
@@ -797,74 +920,50 @@ static int
 roundrobin_circuit_send_eof(circuit_t *c)
 {
   roundrobin_circuit_t *ckt = downcast_circuit(c);
-  struct evbuffer *chaff, *block;
 
   if (smartlist_len(ckt->downstreams) == 0) {
-    ckt->sent_fin = 1;
+    log_debug("%s: rr_send_eof: no downstreams", c->up_peer);
+    ckt->sent_fin = true;
+    /* see circuit_drop_downstream */
+    if (ckt->received_fin)
+      circuit_close(c);
+    else
+      circuit_arm_axe_timer(c, 100);
     return 0;
   }
 
-  /* force out any remaining data */
-  if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)))
+  /* consume any remaining data */
+  if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)) > 0) {
     if (evbuffer_add_buffer(ckt->xmit_pending,
-                            bufferevent_get_input(c->up_buffer)))
+                            bufferevent_get_input(c->up_buffer))) {
+      log_warn("%s: rr_send_eof: failed to queue remaining data", c->up_peer);
       return -1;
+    }
+  }
 
+  /* force out any remaining data plus a FIN */
   if (evbuffer_get_length(ckt->xmit_pending) > 0) {
-    if (rr_send_blocks(c, 1))
+    log_debug("%s: %lu bytes to send before EOF", c->up_peer,
+              (unsigned long)evbuffer_get_length(ckt->xmit_pending));
+    if (rr_send_blocks(c, 1)) {
+      log_warn("%s: rr_send_eof: failed to transmit data and FIN",
+               c->up_peer);
       return -1;
+    }
   } else {
-    struct evbuffer_iovec v;
-    conn_t *d;
-    /* send one chaff block to carry the FIN */
-    chaff = evbuffer_new();
-    block = evbuffer_new();
-    if (!chaff || !block)
-      goto fail;
-
-    if (evbuffer_reserve_space(chaff, ckt->next_block_size, &v, 1) != 1 ||
-        v.iov_len < ckt->next_block_size)
-      goto fail;
-
-    v.iov_len = ckt->next_block_size;
-    if (random_bytes(v.iov_base, v.iov_len) ||
-        evbuffer_commit_space(chaff, &v, 1))
-      goto fail;
-
-    d = smartlist_get(ckt->downstreams, ckt->next_down);
-    if (rr_send_block(conn_get_outbound(d), chaff, block,
-                      ckt->circuit_id, ckt->send_offset,
-                      ckt->next_block_size, RR_F_FIN|RR_F_CHAFF))
-      goto fail;
-
-    log_debug("rr_send_blocks: sent %lu+%u byte block [flags %04hx] to %s",
-              RR_WIRE_HDR_LEN, ckt->next_block_size,
-              RR_F_FIN|RR_F_CHAFF, d->peername);
-
-    evbuffer_free(chaff);
-    evbuffer_free(block);
-
-    /* this is not strictly necessary but we do it anyway, to match
-       the behavior in the still-have-data case */
-    ckt->next_down++;
-    if (ckt->next_down == smartlist_len(ckt->downstreams))
-      ckt->next_down = 0;
-
-    ckt->send_offset += ckt->next_block_size;
-    ckt->next_block_size = random_range(RR_MIN_BLOCK, RR_MAX_BLOCK);
+    log_debug("%s: 0 bytes to send before EOF", c->up_peer);
+    if (rr_send_chaff(c, 1)) {
+      log_warn("%s: rr_send_eof: failed to transmit FIN", c->up_peer);
+      return -1;
+    }
   }
 
   /* flush and close all downstream connections */
-  ckt->sent_fin = 1;
+  ckt->sent_fin = true;
   SMARTLIST_FOREACH(ckt->downstreams, conn_t *, conn,
                     conn_send_eof(conn));
 
   return 0;
-
-  fail:
-  evbuffer_free(chaff);
-  evbuffer_free(block);
-  return -1;
 }
 
 static int
@@ -878,8 +977,12 @@ roundrobin_conn_recv(conn_t *conn)
   roundrobin_circuit_t *ckt;
 
   if (!conn->circuit) {
-    if (evbuffer_get_length(input) < RR_MIN_BLOCK)
+    log_debug("rr_recv: finding circuit for connection with %s",
+              conn->peername);
+    if (evbuffer_get_length(input) < RR_MIN_BLOCK) {
+      log_debug("rr_recv: not enough data to find circuit yet");
       return 0;
+    }
     if (rr_peek_header(input, &hdr))
       return -1;
     if (rr_find_or_make_circuit(conn, hdr.ckt_id))
@@ -889,30 +992,53 @@ roundrobin_conn_recv(conn_t *conn)
 
   c = conn->circuit;
   ckt = downcast_circuit(c);
+  log_debug("rr_recv: connection to %s, circuit to %s",
+            conn->peername, c->up_peer);
 
   for (;;) {
     avail = evbuffer_get_length(input);
-    if (avail < RR_MIN_BLOCK)
+    if (avail == 0)
       break;
+
+    log_debug("rr_recv: %ld bytes available", (unsigned long)avail);
+    if (avail < RR_MIN_BLOCK) {
+      log_debug("rr_recv: incomplete block");
+      break;
+    }
 
     if (rr_peek_header(input, &hdr))
       return -1;
 
-    if (avail < RR_MIN_BLOCK + hdr.length)
+    if (avail < RR_WIRE_HDR_LEN + hdr.length) {
+      log_debug("rr_recv: incomplete block (need %ld bytes)",
+                RR_WIRE_HDR_LEN + hdr.length);
       break;
+    }
 
-    if (ckt->circuit_id != hdr.ckt_id)
+    if (ckt->circuit_id != hdr.ckt_id) {
+      log_warn("rr: protocol error: circuit id mismatch");
       return -1;
+    }
+
+    log_debug("rr_recv: receiving block of %lu+%u bytes "
+              "[offset %u flags %04hx]",
+              RR_WIRE_HDR_LEN, hdr.length, hdr.offset, hdr.flags);
 
     block = evbuffer_new();
-    if (!block)
+    if (!block) {
+      log_warn("rr_recv: allocation failure");
       return -1;
+    }
 
-    if (evbuffer_drain(input, RR_WIRE_HDR_LEN))
+    if (evbuffer_drain(input, RR_WIRE_HDR_LEN)) {
+      log_warn("rr_recv: failed to drain header");
       return -1;
+    }
 
-    if (evbuffer_remove_buffer(input, block, hdr.length))
+    if (evbuffer_remove_buffer(input, block, hdr.length) != hdr.length) {
+      log_warn("rr_recv: failed to transfer block to reassembly queue");
       return -1;
+    }
 
     if (rr_reassemble_block(c, block, &hdr))
       return -1;
