@@ -15,8 +15,8 @@ noinst_PROGRAMS = unittests tltester
 PROTOCOLS = \
 	src/protocols/dummy.c \
 	src/protocols/obfs2.c \
-	src/protocols/roundrobin.c \
-	src/protocols/x_dsteg.c
+	src/protocols/x_dsteg.c \
+	src/protocols/x_rr.c
 
 STEGANOGRAPHERS = \
 	src/steg/x_http.c
