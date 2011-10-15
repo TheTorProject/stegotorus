@@ -64,6 +64,15 @@ class TimelineTest(object):
             "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013"
             ))
 
+    def test_chop(self):
+        self.doTest("chop",
+           ("chop", "server", "127.0.0.1:5001",
+            "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013",
+            "chop", "client", "127.0.0.1:4999",
+            "127.0.0.1:5010","x_http","127.0.0.1:5011",
+            "x_http","127.0.0.1:5012","x_http","127.0.0.1:5013","x_http"
+            ))
+
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
 # the test directory.
 def load_tests(loader, standard_tests, pattern):

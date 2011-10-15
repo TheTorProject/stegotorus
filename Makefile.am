@@ -14,6 +14,7 @@ noinst_PROGRAMS = unittests tltester
 
 PROTOCOLS = \
 	src/protocols/dummy.c \
+	src/protocols/chop.c \
 	src/protocols/obfs2.c \
 	src/protocols/x_dsteg.c \
 	src/protocols/x_rr.c
