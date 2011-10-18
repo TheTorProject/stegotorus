@@ -675,6 +675,10 @@ parse_and_set_options(int n_options, const char *const *options,
     defport = "48988"; /* bf5c */
     c->mode = LSN_SIMPLE_CLIENT;
     listen_up = 1;
+  } else if (!strcmp(options[0], "socks")) {
+    defport = "23548"; /* 5bf5 */
+    c->mode = LSN_SOCKS_CLIENT;
+    listen_up = 1;
   } else if (!strcmp(options[0], "server")) {
     defport = "11253"; /* 2bf5 */
     c->mode = LSN_SIMPLE_SERVER;
@@ -728,6 +732,7 @@ x_rr_config_create(int n_options, const char *const *options)
   x_rr_config_t *cfg = xzalloc(sizeof(x_rr_config_t));
   config_t *c = upcast_config(cfg);
   c->vtable = &p_x_rr_vtable;
+  c->ignore_socks_destination = 1;
   HT_INIT(rr_circuit_table_impl, &cfg->circuits.head);
   cfg->down_addresses = smartlist_create();
 
@@ -737,8 +742,9 @@ x_rr_config_create(int n_options, const char *const *options)
   x_rr_config_free(c);
   log_warn("roundrobin syntax:\n"
            "\tdummy <mode> <up_address> <down_address> <down_address>...\n"
-           "\t\tmode ~ server|client\n"
+           "\t\tmode ~ server|client|socks\n"
            "\t\tup_address, down_address ~ host:port\n"
+           "\t\tThe down_address list is still required in socks mode.\n"
            "Examples:\n"
            "\tobfsproxy roundrobin client 127.0.0.1:5000 "
                "192.168.1.99:11253 192.168.1.99:11254 192.168.1.99:11255\n"

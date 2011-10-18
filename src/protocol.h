@@ -17,6 +17,8 @@ struct config_t
   const struct proto_vtable *vtable;
   struct event_base         *base;
   enum listen_mode           mode;
+  /* stopgap, see create_outbound_connections_socks */
+  int                        ignore_socks_destination;
 };
 
 int config_is_supported(const char *name);

@@ -46,7 +46,7 @@ static void upstream_event_cb(struct bufferevent *bev, short what, void *arg);
 static void downstream_event_cb(struct bufferevent *bev, short what, void *arg);
 
 
-static void create_outbound_connections(circuit_t *ckt);
+static void create_outbound_connections(circuit_t *ckt, int really_socks);
 static void create_outbound_connections_socks(circuit_t *ckt);
 
 /**
@@ -175,7 +175,7 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
     bufferevent_enable(buf, EV_READ|EV_WRITE);
   } else {
     bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_event_cb, ckt);
-    create_outbound_connections(ckt);
+    create_outbound_connections(ckt, 0);
     /* Don't enable reading or writing till the outbound connection(s) are
        established. */
   }
@@ -517,7 +517,15 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
 
   obfs_assert(ckt);
   obfs_assert(ckt->up_buffer);
-  obfs_assert(ckt->socks_state);
+
+  if (!ckt->socks_state) {
+    /* This can happen if we made more than one downstream connection
+       for a circuit; the second and subsequent connections do not
+       need the special socks handling, as it's already been done by
+       the first one. */
+    downstream_connect_cb(bev, what, arg);
+    return;
+  }
 
   socks = ckt->socks_state;
 
@@ -642,7 +650,8 @@ circuit_open_upstream(circuit_t *ckt)
 }
 
 static int
-create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr)
+create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
+                               int is_socks)
 {
   config_t *cfg = ckt->cfg;
   char *peername;
@@ -675,20 +684,22 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr)
  success:
   conn = conn_create(cfg, buf, peername);
   circuit_add_downstream(ckt, conn);
-  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_connect_cb, conn);
+  bufferevent_setcb(buf, downstream_read_cb, NULL,
+                    is_socks ? downstream_socks_connect_cb
+                    : downstream_connect_cb, conn);
   bufferevent_enable(buf, EV_READ|EV_WRITE);
   return 1;
 }
 
 static void
-create_outbound_connections(circuit_t *ckt)
+create_outbound_connections(circuit_t *ckt, int really_socks)
 {
   struct evutil_addrinfo *addr;
   size_t n = 0;
   int any_successes = 0;
 
   while ((addr = config_get_target_addrs(ckt->cfg, n))) {
-    any_successes |= create_one_outbound_connection(ckt, addr);
+    any_successes |= create_one_outbound_connection(ckt, addr, really_socks);
     n++;
   }
 
@@ -717,7 +728,13 @@ create_outbound_connections_socks(circuit_t *ckt)
     log_warn("no SOCKS target available");
     goto failure;
   }
-  /* XXXX Feed socks state through the protocol and get a connection set. */
+
+  /* XXXX Feed socks state through the protocol and get a connection set.
+     This is a stopgap. */
+  if (ckt->cfg->ignore_socks_destination) {
+    create_outbound_connections(ckt, 1);
+    return;
+  }
 
   buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {

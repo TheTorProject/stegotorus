@@ -700,10 +700,14 @@ parse_and_set_options(int n_options, const char *const *options,
   if (n_options < 4)
     return -1;
 
-  /* XXXX chopper currently does not support socks. */
   if (!strcmp(options[0], "client")) {
     defport = "48988"; /* bf5c */
     c->mode = LSN_SIMPLE_CLIENT;
+    cfg->steg_targets = smartlist_create();
+    listen_up = 1;
+  } else if (!strcmp(options[0], "socks")) {
+    defport = "23548"; /* 5bf5 */
+    c->mode = LSN_SOCKS_CLIENT;
     cfg->steg_targets = smartlist_create();
     listen_up = 1;
   } else if (!strcmp(options[0], "server")) {
@@ -775,8 +779,10 @@ chop_config_create(int n_options, const char *const *options)
   chop_config_t *cfg = xzalloc(sizeof(chop_config_t));
   config_t *c = upcast_config(cfg);
   c->vtable = &p_chop_vtable;
+  c->ignore_socks_destination = 1;
   HT_INIT(chop_circuit_table_impl, &cfg->circuits.head);
   cfg->down_addresses = smartlist_create();
+
 
   if (parse_and_set_options(n_options, options, c) == 0)
     return c;
@@ -784,10 +790,11 @@ chop_config_create(int n_options, const char *const *options)
   chop_config_free(c);
   log_warn("chop syntax:\n"
            "\tchop <mode> <up_address> (<down_address> [<steg>])...\n"
-           "\t\tmode ~ server|client\n"
+           "\t\tmode ~ server|client|socks\n"
            "\t\tup_address, down_address ~ host:port\n"
            "\t\ta steg target is required for each down_address,\n"
-           "\t\tin client mode only, and forbidden otherwise."
+           "\t\tin client and socks mode, and forbidden otherwise.\n"
+           "\t\tThe down_address list is still required in socks mode.\n"
            "Examples:\n"
            "\tobfsproxy chop client 127.0.0.1:5000 "
            "192.168.1.99:11253 http 192.168.1.99:11254 skype\n"
