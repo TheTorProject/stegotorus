@@ -272,7 +272,6 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
     struct evbuffer_ptr s2, s3;
     unsigned char *data, *p, *limit;
     unsigned char c, h, secondhalf;
-    size_t slen;
     int shipped = 0;
 
     /* This loop should not be necessary either, but is, for the same
@@ -335,7 +334,6 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
         p++;
       }
 
-      slen = evbuffer_get_length(scratch);
       if (evbuffer_add_buffer(dest, scratch)) {
         evbuffer_free(scratch);
         log_debug("x_http: failed to transfer buffer");
