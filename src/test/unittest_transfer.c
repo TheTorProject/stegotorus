@@ -84,7 +84,7 @@ static const char enc2_obfs2[] =
 
 static const char enc1_s_x_http[] =
     "GET /003600007468697320697320612035342d62797465206d6573736167652070617"
-    "37365642066726f6d20636c69656e7420746f20736572766572 HTTP/1.1\r\n"
+    "37365642066726f6d20636c69656e7420746f2073657276657200== HTTP/1.1\r\n"
     "Host: to-server\r\n"
     "Connection: close\r\n\r\n";
 static const char enc2_s_x_http[] =
@@ -93,8 +93,9 @@ static const char enc2_s_x_http[] =
     "Cache-Control: no-store\r\n"
     "Connection: close\r\n"
     "Content-Type: application/octet-stream\r\n"
-    "Content-Length: 59\r\n\r\n"
-    "\x00\x37\x00\x00this is a 55-byte message passed from server to client!";
+    "Content-Length: 60\r\n\r\n"
+    "\x00\x37\x00\x00"
+    "this is a 55-byte message passed from server to client!\x00";
 
 static const char *const o_client_dummy[] =
   {"dummy", "socks", "127.0.0.1:1800"};

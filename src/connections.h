@@ -125,6 +125,8 @@ int circuit_open_upstream(circuit_t *ckt);
 void circuit_add_downstream(circuit_t *ckt, conn_t *down);
 void circuit_drop_downstream(circuit_t *ckt, conn_t *down);
 
+void circuit_reopen_downstreams(circuit_t *ckt);
+
 void circuit_close(circuit_t *ckt);
 void circuit_recv_eof(circuit_t *ckt);
 

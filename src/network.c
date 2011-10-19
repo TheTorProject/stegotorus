@@ -45,7 +45,6 @@ static void socks_read_cb(struct bufferevent *bev, void *arg);
 static void upstream_event_cb(struct bufferevent *bev, short what, void *arg);
 static void downstream_event_cb(struct bufferevent *bev, short what, void *arg);
 
-
 static void create_outbound_connections(circuit_t *ckt, int really_socks);
 static void create_outbound_connections_socks(circuit_t *ckt);
 
@@ -349,13 +348,22 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Upstream is done sending us data. */
       circuit_send_eof(ckt);
+      bufferevent_disable(bev, EV_READ);
+      if (bufferevent_get_enabled(bev)) {
+        log_debug("%s: acknowledging EOF upstream", ckt->up_peer);
+        shutdown(bufferevent_getfd(bev), SHUT_RD);
+      } else {
+        log_info("%s: closing circuit", ckt->up_peer);
+        circuit_close(ckt);
+      }
     } else {
       circuit_close(ckt);
     }
   } else {
     /* We should never get BEV_EVENT_CONNECTED here.
        Ignore any events we don't understand. */
-    obfs_assert(!(what & BEV_EVENT_CONNECTED));
+    if (what & BEV_EVENT_CONNECTED)
+      log_error("double connection event for %s", ckt->up_peer);
   }
 }
 
@@ -373,13 +381,22 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Peer is done sending us data. */
       conn_recv_eof(conn);
+      bufferevent_disable(bev, EV_READ);
+      if (bufferevent_get_enabled(bev)) {
+        log_debug("%s: acknowledging EOF downstream", conn->peername);
+        shutdown(bufferevent_getfd(bev), SHUT_RD);
+      } else {
+        log_info("%s: closing connection", conn->peername);
+        conn_close(conn);
+      }
     } else {
       conn_close(conn);
     }
   } else {
     /* We should never get BEV_EVENT_CONNECTED here.
        Ignore any events we don't understand. */
-    obfs_assert(!(what & BEV_EVENT_CONNECTED));
+    if (what & BEV_EVENT_CONNECTED)
+      log_error("double connection event for %s", conn->peername);
   }
 }
 
@@ -397,7 +414,7 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
   if (remain == 0) {
     bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev)) {
-      log_debug("%s: sending EOF", ckt->up_peer);
+      log_debug("%s: sending EOF upstream", ckt->up_peer);
       shutdown(bufferevent_getfd(bev), SHUT_WR);
     } else {
       log_info("%s: closing circuit", ckt->up_peer);
@@ -420,7 +437,7 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
   if (remain == 0) {
     bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev)) {
-      log_debug("%s: sending EOF", conn->peername);
+      log_debug("%s: sending EOF downstream", conn->peername);
       shutdown(bufferevent_getfd(bev), SHUT_WR);
     } else {
       log_info("%s: closing downstream connection", conn->peername);
@@ -711,6 +728,12 @@ create_outbound_connections(circuit_t *ckt, int really_socks)
     log_warn("%s: no outbound connections were successful", ckt->up_peer);
     circuit_close(ckt);
   }
+}
+
+void
+circuit_reopen_downstreams(circuit_t *ckt)
+{
+  create_outbound_connections(ckt, 0);
 }
 
 static void

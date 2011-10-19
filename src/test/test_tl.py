@@ -41,36 +41,35 @@ class TimelineTest(object):
         if errors != "":
             self.fail("\n" + errors)
 
-    def test_dummy(self):
-        self.doTest("dummy",
-           ("dummy", "server", "127.0.0.1:5000", "127.0.0.1:5001",
-            "dummy", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
+    # def test_dummy(self):
+    #     self.doTest("dummy",
+    #        ("dummy", "server", "127.0.0.1:5000", "127.0.0.1:5001",
+    #         "dummy", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
-    def test_obfs(self):
-        self.doTest("obfs2",
-           ("obfs2", "--dest=127.0.0.1:5001", "server", "127.0.0.1:5000",
-            "obfs2", "--dest=127.0.0.1:5000", "client", "127.0.0.1:4999"))
+    # def test_obfs(self):
+    #     self.doTest("obfs2",
+    #        ("obfs2", "--dest=127.0.0.1:5001", "server", "127.0.0.1:5000",
+    #         "obfs2", "--dest=127.0.0.1:5000", "client", "127.0.0.1:4999"))
 
-    def test_xhttp(self):
-        self.doTest("xhttp",
-           ("x_dsteg", "server", "127.0.0.1:5000", "127.0.0.1:5001",
-            "x_dsteg", "client", "127.0.0.1:4999", "127.0.0.1:5000", "x_http"))
+    #def test_xhttp(self):
+    #    self.doTest("xhttp",
+    #       ("x_dsteg", "server", "127.0.0.1:5000", "127.0.0.1:5001",
+    #        "x_dsteg", "client", "127.0.0.1:4999", "127.0.0.1:5000", "x_http"))
 
-    def test_rr(self):
-        self.doTest("rr",
-           ("x_rr", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013",
-            "x_rr", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013"
-            ))
+    # def test_rr(self):
+    #     self.doTest("rr",
+    #        ("x_rr", "server", "127.0.0.1:5001",
+    #         "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013",
+    #         "x_rr", "client", "127.0.0.1:4999",
+    #         "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013"
+    #         ))
 
     def test_chop(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013",
+            "127.0.0.1:5010","127.0.0.1:5011",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","x_http","127.0.0.1:5011",
-            "x_http","127.0.0.1:5012","x_http","127.0.0.1:5013","x_http"
+            "127.0.0.1:5010","x_http","127.0.0.1:5011","x_http",
             ))
 
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in

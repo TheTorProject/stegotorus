@@ -17,7 +17,8 @@
 struct x_http_steg_t
 {
   steg_t super;
-  /* no extra stuff is presently necessary */
+  int have_transmitted;
+  int have_received;
 };
 
 STEG_DEFINE_MODULE(x_http,
@@ -98,6 +99,10 @@ x_http_detect(conn_t *conn)
 static size_t
 x_http_transmit_room(steg_t *s, conn_t *conn)
 {
+  if (downcast_steg(s)->have_transmitted)
+    /* can't send any more on this connection */
+    return 0;
+
   if (s->is_clientside)
     /* per http://www.boutell.com/newfaq/misc/urllength.html,
        IE<9 can handle no more than 2048 characters in the path
@@ -105,9 +110,12 @@ x_http_transmit_room(steg_t *s, conn_t *conn)
        means longer paths look fishy; we hex-encode the path, so
        we have to cut the number in half. */
     return 1024;
-  else
+  else {
+    if (!downcast_steg(s)->have_received)
+      return 0;
     /* no practical limit applies */
     return SIZE_MAX;
+  }
 }
 
 static int
@@ -175,6 +183,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     evbuffer_free(scratch);
     evbuffer_drain(source, slen);
     conn_cease_transmission(conn);
+    downcast_steg(s)->have_transmitted = 1;
     return 0;
 
   } else {
@@ -189,6 +198,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
       return -1;
 
     conn_close_after_transmit(conn);
+    downcast_steg(s)->have_transmitted = 1;
     return 0;
   }
 }
@@ -198,73 +208,75 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
   if (s->is_clientside) {
-    /* This loop should not be necessary, but we are currently not
-       enforcing the query-response pattern, so we can get more than
-       one response per request. */
-    int shipped = 0;
+    /* Linearize the buffer out past the longest possible
+       Content-Length header and subsequent blank line.  2**64 fits in
+       20 characters, and then we have two CRLFs; minus one for the
+       NUL in sizeof http_response_1. Note that this does _not_
+       guarantee that that much data is available. */
 
-    do {
-      /* Linearize the buffer out past the longest possible
-         Content-Length header and subsequent blank line.  2**64 fits in
-         20 characters, and then we have two CRLFs; minus one for the
-         NUL in sizeof http_response_1. Note that this does _not_
-         guarantee that that much data is available. */
+    size_t hlen = evbuffer_get_length(source);
+    unsigned char *data, *p, *limit;
+    uint64_t clen;
 
-      size_t hlen = evbuffer_get_length(source);
-      unsigned char *data, *p, *limit;
-      uint64_t clen;
+    log_debug("x_http: %lu byte response stream available%s",
+              (unsigned long)hlen,
+              hlen >= sizeof http_response_1 - 1 ? "" : " (incomplete)");
 
-      log_debug("x_http: %lu byte response stream available%s",
-                (unsigned long)hlen,
-                hlen >= sizeof http_response_1 - 1 ? "" : " (incomplete)");
-      if (hlen < sizeof http_response_1 - 1)
-        break;
+    if (downcast_steg(s)->have_received) {
+      log_warn("x_http: protocol error: multiple responses");
+      return -1;
+    }
 
-      if (hlen > sizeof http_response_1 + 23)
-        hlen = sizeof http_response_1 + 23;
+    if (hlen < sizeof http_response_1 - 1)
+      return 0; /* incomplete */
 
-      data = evbuffer_pullup(source, hlen);
-      /* Validate response headers. */
-      if (memcmp(data, http_response_1, sizeof http_response_1 - 1))
-        return -1;
+    if (hlen > sizeof http_response_1 + 23)
+      hlen = sizeof http_response_1 + 23;
 
-      /* There should be an unsigned number immediately after the text of
-         http_response_1, followed by the four characters \r\n\r\n.
-         We may not have the complete number yet. */
-      p = data + sizeof http_response_1 - 1;
-      limit = data + hlen;
-      clen = 0;
-      while (p < limit && '0' <= *p && *p <= '9') {
-        clen = clen*10 + *p - '0';
-        p++;
-      }
-      if (p+4 > limit)
-        break;
-      if (p[0] != '\r' || p[1] != '\n' || p[2] != '\r' || p[3] != '\n')
-        return -1;
+    data = evbuffer_pullup(source, hlen);
+    /* Validate response headers. */
+    if (memcmp(data, http_response_1, sizeof http_response_1 - 1))
+      return -1;
 
-      p += 4;
-      hlen = p - data;
-      /* Now we know how much data we're expecting after the blank line. */
-      if (evbuffer_get_length(source) < hlen + clen)
-        break;
+    /* There should be an unsigned number immediately after the text of
+       http_response_1, followed by the four characters \r\n\r\n.
+       We may not have the complete number yet. */
+    p = data + sizeof http_response_1 - 1;
+    limit = data + hlen;
+    clen = 0;
+    while (p < limit && '0' <= *p && *p <= '9') {
+      clen = clen*10 + *p - '0';
+      p++;
+    }
+    if (p+4 > limit)
+      return 0; /* incomplete */
+    if (p[0] != '\r' || p[1] != '\n' || p[2] != '\r' || p[3] != '\n')
+      return -1;
 
-      /* we are go */
-      if (evbuffer_drain(source, hlen))
-        return -1;
+    p += 4;
+    hlen = p - data;
+    /* Now we know how much data we're expecting after the blank line. */
+    if (evbuffer_get_length(source) < hlen + clen)
+      return 0; /* incomplete */
 
-      if ((uint64_t)evbuffer_remove_buffer(source, dest, clen) != clen)
-        return -1;
+    /* we are go */
+    if (evbuffer_drain(source, hlen))
+      return -1;
 
-      log_debug("x_http: decoded %lu byte response",
-                (unsigned long)(hlen + clen));
-      shipped = 1;
-    } while (evbuffer_get_length(source));
+    if ((uint64_t)evbuffer_remove_buffer(source, dest, clen) != clen)
+      return -1;
 
-    if (shipped && evbuffer_get_length(source) == 0)
-      conn_expect_close(conn);
+    log_debug("x_http: decoded %lu byte response",
+              (unsigned long)(hlen + clen));
+
+    if (evbuffer_get_length(source) > 0) {
+      log_warn("x_http: protocol error: extra response data");
+      return -1;
+    }
+
+    downcast_steg(s)->have_received = 1;
+    conn_expect_close(conn);
     return 0;
-
   } else {
     /* We need a scratch buffer here because the contract is that if
        we hit a decode error we *don't* write anything to 'dest'. */
@@ -272,82 +284,87 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
     struct evbuffer_ptr s2, s3;
     unsigned char *data, *p, *limit;
     unsigned char c, h, secondhalf;
-    int shipped = 0;
 
-    /* This loop should not be necessary either, but is, for the same
-       reason given above */
-    do {
-      log_debug("x_http: %ld byte query stream available",
-                evbuffer_get_length(source));
-      /* Search for the second and third invariant bits of the query headers
-         we expect.  We completely ignore the contents of the Host header. */
-      s2 = evbuffer_search(source, http_query_2,
-                           sizeof http_query_2 - 1, NULL);
-      if (s2.pos == -1) {
-        log_debug("x_http: did not find second piece of HTTP query");
-        break;
-      }
-      s3 = evbuffer_search(source, http_query_3,
-                           sizeof http_query_3 - 1, &s2);
-      if (s3.pos == -1) {
-        log_debug("x_http: did not find third piece of HTTP query");
-        break;
-      }
-      obfs_assert(s3.pos + sizeof http_query_3 - 1
-                  <= evbuffer_get_length(source));
+    log_debug("x_http: %ld byte query stream available",
+              evbuffer_get_length(source));
 
-      data = evbuffer_pullup(source, s2.pos);
-      if (memcmp(data, "GET /", sizeof "GET /"-1)) {
-        log_debug("x_http: unexpected HTTP verb: %.*s", 5, data);
-        return -1;
-      }
+    if (downcast_steg(s)->have_received) {
+      log_warn("x_http: protocol error: multiple queries");
+      return -1;
+    }
 
-      p = data + sizeof "GET /"-1;
-      limit = data + s2.pos;
+    /* Search for the second and third invariant bits of the query headers
+       we expect.  We completely ignore the contents of the Host header. */
+    s2 = evbuffer_search(source, http_query_2,
+                         sizeof http_query_2 - 1, NULL);
+    if (s2.pos == -1) {
+      log_debug("x_http: did not find second piece of HTTP query");
+      return 0;
+    }
+    s3 = evbuffer_search(source, http_query_3,
+                         sizeof http_query_3 - 1, &s2);
+    if (s3.pos == -1) {
+      log_debug("x_http: did not find third piece of HTTP query");
+      return 0;
+    }
+    obfs_assert(s3.pos + sizeof http_query_3 - 1
+                <= evbuffer_get_length(source));
 
-      scratch = evbuffer_new();
-      if (!scratch) return -1;
-      if (evbuffer_expand(scratch, (limit - p)/2)) {
-        evbuffer_free(scratch);
-        return -1;
-      }
+    data = evbuffer_pullup(source, s2.pos);
+    if (memcmp(data, "GET /", sizeof "GET /"-1)) {
+      log_debug("x_http: unexpected HTTP verb: %.*s", 5, data);
+      return -1;
+    }
 
-      secondhalf = 0;
-      while (p < limit) {
-        if (!secondhalf) c = 0;
-        if ('0' <= *p && *p <= '9') h = *p - '0';
-        else if ('a' <= *p && *p <= 'f') h = *p - 'a' + 10;
-        else if ('A' <= *p && *p <= 'F') h = *p - 'A' + 10;
-        else if (*p == '=' && !secondhalf) {
-          p++;
-          continue;
-        } else {
-          evbuffer_free(scratch);
-          log_debug("x_http: decode error: unexpected URI character %c", *p);
-          return -1;
-        }
+    p = data + sizeof "GET /"-1;
+    limit = data + s2.pos;
 
-        c = (c << 4) + h;
-        if (secondhalf)
-          evbuffer_add(scratch, &c, 1);
-        secondhalf = !secondhalf;
-        p++;
-      }
-
-      if (evbuffer_add_buffer(dest, scratch)) {
-        evbuffer_free(scratch);
-        log_debug("x_http: failed to transfer buffer");
-        return -1;
-      }
-      evbuffer_drain(source, s3.pos + sizeof http_query_3 - 1);
+    scratch = evbuffer_new();
+    if (!scratch) return -1;
+    if (evbuffer_expand(scratch, (limit - p)/2)) {
       evbuffer_free(scratch);
-      log_debug("x_http: decoded %lu byte query",
-                (unsigned long)(s3.pos + sizeof http_query_3 - 1));
-      shipped = 1;
-    } while (evbuffer_get_length(source));
+      return -1;
+    }
 
-    if (shipped && !evbuffer_get_length(source))
-      conn_transmit_soon(conn, 100);
+    secondhalf = 0;
+    while (p < limit) {
+      if (!secondhalf) c = 0;
+      if ('0' <= *p && *p <= '9') h = *p - '0';
+      else if ('a' <= *p && *p <= 'f') h = *p - 'a' + 10;
+      else if ('A' <= *p && *p <= 'F') h = *p - 'A' + 10;
+      else if (*p == '=' && !secondhalf) {
+        p++;
+        continue;
+      } else {
+        evbuffer_free(scratch);
+        log_debug("x_http: decode error: unexpected URI character %c", *p);
+        return -1;
+      }
+
+      c = (c << 4) + h;
+      if (secondhalf)
+        evbuffer_add(scratch, &c, 1);
+      secondhalf = !secondhalf;
+      p++;
+    }
+
+    if (evbuffer_add_buffer(dest, scratch)) {
+      evbuffer_free(scratch);
+      log_debug("x_http: failed to transfer buffer");
+      return -1;
+    }
+    evbuffer_drain(source, s3.pos + sizeof http_query_3 - 1);
+    evbuffer_free(scratch);
+    log_debug("x_http: decoded %lu byte query",
+              (unsigned long)(s3.pos + sizeof http_query_3 - 1));
+
+    if (evbuffer_get_length(source) > 0) {
+      log_warn("x_http: protocol error: extra query data");
+      return -1;
+    }
+
+    downcast_steg(s)->have_received = 1;
+    conn_transmit_soon(conn, 2);
     return 0;
   }
 }

@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <event2/event.h>
 #include <event2/buffer.h>
 
 /* Header serialization and deserialization */
@@ -104,6 +105,8 @@ typedef struct chop_conn_t
   conn_t super;
   steg_t *steg;
   struct evbuffer *recv_pending;
+  struct event *must_transmit_timer;
+  bool no_more_transmissions : 1;
 } chop_conn_t;
 
 typedef struct chop_circuit_t
@@ -120,6 +123,7 @@ typedef struct chop_circuit_t
   bool received_fin : 1;
   bool sent_syn : 1;
   bool sent_fin : 1;
+  bool upstream_eof : 1;
 } chop_circuit_t;
 
 typedef struct chop_config_t
@@ -302,6 +306,8 @@ chop_send_block(conn_t *d,
     ckt->sent_fin = true;
   log_debug("chop_send_block: sent %lu+%u byte block [flags %04hx] to %s",
             CHOP_WIRE_HDR_LEN, length, flags, d->peername);
+  if (dest->must_transmit_timer)
+    evtimer_del(dest->must_transmit_timer);
   return 0;
 
  fail:
@@ -367,23 +373,18 @@ chop_send_blocks(circuit_t *c, int at_eof)
 }
 
 static int
-chop_send_chaff(circuit_t *c, int at_eof)
+chop_send_targeted_chaff(chop_circuit_t *ckt, conn_t *target,
+                         size_t blocksize, bool at_eof)
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
+  uint16_t flags;
   struct evbuffer *chaff, *block;
   struct evbuffer_iovec v;
-  conn_t *target;
-  uint16_t flags;
-  size_t blocksize;
 
-  target = chop_pick_connection(ckt, 1, &blocksize);
-  if (!target) {
-    /* we only send pure chaff when we _must_ send, so this is a
-       fatal condition */
-    log_warn("chop_send_chaff: no target connection available");
-    return -1;
-  }
+  if (blocksize > CHOP_MAX_BLOCK)
+    blocksize = CHOP_MAX_BLOCK;
 
+  log_debug("chop_send_chaff: generating up to %lu bytes chaff",
+            (unsigned long)blocksize);
   blocksize = random_range(1, blocksize);
 
   chaff = evbuffer_new();
@@ -418,6 +419,42 @@ chop_send_chaff(circuit_t *c, int at_eof)
   if (chaff) evbuffer_free(chaff);
   if (block) evbuffer_free(block);
   return -1;
+}
+
+static int
+chop_send_chaff(circuit_t *c, bool at_eof)
+{
+  chop_circuit_t *ckt = downcast_circuit(c);
+  size_t room;
+
+  conn_t *target = chop_pick_connection(ckt, 1, &room);
+  if (!target) {
+    /* we only send pure chaff when we _must_ send, so this is a
+       fatal condition */
+    log_warn("chop_send_chaff: no target connection available");
+    return -1;
+  }
+  return chop_send_targeted_chaff(ckt, target, room, at_eof);
+}
+
+static void
+must_transmit_timer_cb(evutil_socket_t fd, short what, void *arg)
+{
+  conn_t *cn = arg;
+  chop_conn_t *conn = downcast_conn(cn);
+  size_t room;
+  if (!conn->steg) {
+    log_warn("%s: must transmit, but no steg module detected", cn->peername);
+    return;
+  }
+  room = steg_transmit_room(conn->steg, cn);
+  if (!room) {
+    log_warn("%s: must transmit, but no transmit room", cn->peername);
+    return;
+  }
+
+  log_debug("%s: must transmit", cn->peername);
+  chop_send_targeted_chaff(downcast_circuit(cn->circuit), cn, room, false);
 }
 
 /* Receive subroutines. */
@@ -899,10 +936,12 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
             c->up_peer, conn->peername, smartlist_len(ckt->downstreams));
 
   /* If that was the last connection on this circuit AND we've both
-     received and sent a FIN, close the circuit.  Otherwise, arm a
-     timer that will kill off this circuit in a little while if no
-     new connections happen (we might've lost all our connections to
-     protocol errors).  */
+     received and sent a FIN, close the circuit.  Otherwise, if we're
+     the server, arm a timer that will kill off this circuit in a
+     little while if no new connections happen (we might've lost all
+     our connections to protocol errors, or because the steg modules
+     wanted them closed); if we're the client, send chaff in a bit,
+     to enable further transmissions from the server. */
   if (smartlist_len(ckt->downstreams) == 0) {
     if (ckt->sent_fin && ckt->received_fin) {
       if (evbuffer_get_length(bufferevent_get_output(c->up_buffer)) > 0)
@@ -911,8 +950,11 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
         circuit_do_flush(c);
       else
         circuit_close(c);
-    } else
+    } else if (c->cfg->mode == LSN_SIMPLE_SERVER) {
       circuit_arm_axe_timer(c, 100);
+    } else {
+      circuit_arm_flush_timer(c, 1);
+    }
   }
 }
 
@@ -942,6 +984,8 @@ chop_conn_free(conn_t *c)
   chop_conn_t *conn = downcast_conn(c);
   if (conn->steg)
     steg_del(conn->steg);
+  if (conn->must_transmit_timer)
+    event_free(conn->must_transmit_timer);
   evbuffer_free(conn->recv_pending);
   free(conn);
 }
@@ -976,64 +1020,51 @@ chop_circuit_send(circuit_t *c)
 
   circuit_disarm_flush_timer(c);
 
+  if (smartlist_len(ckt->downstreams) == 0) {
+    /* We have no connections, but we must send.  If we're the client,
+       reopen our outbound connections; the on-connection event will
+       bring us back here.  If we're the server, we have to just
+       twiddle our thumbs and hope the client reconnects. */
+    log_debug("%s: chop_send: no downstreams", c->up_peer);
+    if (c->cfg->mode != LSN_SIMPLE_SERVER)
+      circuit_reopen_downstreams(c);
+    else
+      circuit_arm_axe_timer(c, 100);
+    return 0;
+  }
+
   if (evbuffer_get_length(ckt->xmit_pending) == 0 &&
       evbuffer_get_length(bufferevent_get_input(c->up_buffer)) == 0)
     /* must-send timer expired and we still have nothing to say; send chaff */
-    return chop_send_chaff(c, 0);
+    return chop_send_chaff(c, ckt->upstream_eof);
 
   if (evbuffer_add_buffer(ckt->xmit_pending,
                           bufferevent_get_input(c->up_buffer))) {
     log_warn("%s: chop_send: failed to queue data", c->up_peer);
     return -1;
   }
-  return chop_send_blocks(c, 0);
+  if (chop_send_blocks(c, ckt->upstream_eof))
+    return -1;
+
+  /* If we're at EOF, close all connections.  If we're the client we
+     have to keep trying to talk, or we might deadlock. */
+  if (ckt->upstream_eof) {
+    SMARTLIST_FOREACH(ckt->downstreams, conn_t *, conn,
+                      conn_send_eof(conn));
+    if (c->cfg->mode != LSN_SIMPLE_SERVER)
+      circuit_reopen_downstreams(c);
+  } else {
+    if (c->cfg->mode != LSN_SIMPLE_SERVER)
+      circuit_arm_flush_timer(c, 5);
+  }
+  return 0;
 }
 
 static int
 chop_circuit_send_eof(circuit_t *c)
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
-
-  if (smartlist_len(ckt->downstreams) == 0) {
-    log_debug("%s: chop_send_eof: no downstreams", c->up_peer);
-    ckt->sent_fin = true;
-    /* see circuit_drop_downstream */
-    if (ckt->received_fin)
-      circuit_close(c);
-    else
-      circuit_arm_axe_timer(c, 100);
-    return 0;
-  }
-
-  /* consume any remaining data */
-  if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)) > 0) {
-    if (evbuffer_add_buffer(ckt->xmit_pending,
-                            bufferevent_get_input(c->up_buffer))) {
-      log_warn("%s: chop_send_eof: failed to queue remaining data", c->up_peer);
-      return -1;
-    }
-  }
-
-  /* force out any remaining data plus a FIN */
-  if (evbuffer_get_length(ckt->xmit_pending) > 0) {
-    log_debug("%s: %lu bytes to send before EOF", c->up_peer,
-              (unsigned long)evbuffer_get_length(ckt->xmit_pending));
-    if (chop_send_blocks(c, 1)) {
-      log_warn("%s: chop_send_eof: failed to transmit data and FIN",
-               c->up_peer);
-      return -1;
-    }
-  } else {
-    log_debug("%s: 0 bytes to send before EOF", c->up_peer);
-    if (chop_send_chaff(c, 1)) {
-      log_warn("%s: chop_send_eof: failed to transmit FIN", c->up_peer);
-      return -1;
-    }
-  }
-
-  SMARTLIST_FOREACH(ckt->downstreams, conn_t *, conn,
-                    conn_send_eof(conn));
-  return 0;
+  downcast_circuit(c)->upstream_eof = true;
+  return chop_circuit_send(c);
 }
 
 static int
@@ -1139,25 +1170,57 @@ chop_conn_recv(conn_t *s)
 }
 
 static int
-chop_conn_recv_eof(conn_t *c)
+chop_conn_recv_eof(conn_t *cn)
 {
+  circuit_t *c = cn->circuit;
+
   /* EOF on a _connection_ does not mean EOF on a _circuit_.
      EOF on a _circuit_ occurs when chop_push_to_upstream processes a FIN.
-     And we should only drop the connection from the circuit if we're
-     no longer sending in the opposite direction. */
-  if (c->circuit) {
-    if (evbuffer_get_length(conn_get_inbound(c)) > 0)
-      if (chop_conn_recv(c))
+     We should only drop the connection from the circuit if we're no
+     longer sending in the opposite direction.  Also, we should not
+     drop the connection if its must-transmit timer is still pending.  */
+  if (c) {
+    chop_conn_t *conn = downcast_conn(cn);
+    chop_circuit_t *ckt = downcast_circuit(c);
+
+    if (evbuffer_get_length(conn_get_inbound(cn)) > 0)
+      if (chop_conn_recv(cn))
         return -1;
 
-    if (downcast_circuit(c->circuit)->sent_fin)
-      circuit_drop_downstream(c->circuit, c);
+    if ((ckt->sent_fin || conn->no_more_transmissions) &&
+        (!conn->must_transmit_timer ||
+         !evtimer_pending(conn->must_transmit_timer, NULL)))
+      circuit_drop_downstream(c, cn);
   }
   return 0;
 }
 
-/** XXX all steg callbacks are ignored */
-static void chop_conn_expect_close(conn_t *conn) {}
-static void chop_conn_cease_transmission(conn_t *conn) {}
-static void chop_conn_close_after_transmit(conn_t *conn) {}
-static void chop_conn_transmit_soon(conn_t *conn, unsigned long timeout) {}
+static void chop_conn_expect_close(conn_t *cn)
+{
+  /* do we need to do something here? */
+}
+
+static void chop_conn_cease_transmission(conn_t *cn)
+{
+  downcast_conn(cn)->no_more_transmissions = true;
+  conn_do_flush(cn);
+}
+
+static void chop_conn_close_after_transmit(conn_t *cn)
+{
+  downcast_conn(cn)->no_more_transmissions = true;
+  conn_do_flush(cn);
+}
+
+static void chop_conn_transmit_soon(conn_t *cn, unsigned long milliseconds)
+{
+  chop_conn_t *conn = downcast_conn(cn);
+  struct timeval tv;
+  tv.tv_sec = 0;
+  tv.tv_usec = milliseconds * 1000;
+
+  if (!conn->must_transmit_timer)
+    conn->must_transmit_timer = evtimer_new(cn->cfg->base,
+                                            must_transmit_timer_cb, cn);
+  evtimer_add(conn->must_transmit_timer, &tv);
+}

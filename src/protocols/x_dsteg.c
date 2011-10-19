@@ -26,8 +26,10 @@ typedef struct x_dsteg_conn_t {
 typedef struct x_dsteg_circuit_t {
   circuit_t super;
   conn_t *downstream;
-  int pending_eof;
+  int received_fin;
+  int sent_fin;
   int ever_transmitted;
+  int ever_received;
 } x_dsteg_circuit_t;
 
 PROTO_DEFINE_MODULE(x_dsteg, STEG);
@@ -174,19 +176,28 @@ x_dsteg_circuit_add_downstream(circuit_t *c, conn_t *conn)
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(!ckt->downstream);
   ckt->downstream = conn;
+  log_debug("%s: added connection to %s", c->up_peer, conn->peername);
+  circuit_disarm_axe_timer(c);
 }
 
-/* Drop a connection from this circuit.  If this happens in this
-   protocol (at present - this will change when the steg callbacks get
-   implemented) it is because of a network error, and the whole
-   circuit should be closed.  */
+/* Drop a connection from this circuit.  This may happen because of a
+   network error or because the steg module wanted it to happen. */
 static void
 x_dsteg_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
   obfs_assert(ckt->downstream == conn);
   ckt->downstream = NULL;
-  circuit_close(c);
+  log_debug("%s: dropped connection to %s", c->up_peer, conn->peername);
+  if (ckt->sent_fin && ckt->received_fin) {
+    if (evbuffer_get_length(bufferevent_get_output(c->up_buffer)) > 0)
+      /* this may already have happened, but there's no harm in
+         doing it again */
+      circuit_do_flush(c);
+    else
+      circuit_close(c);
+  } else
+    circuit_arm_axe_timer(c, 100);
 }
 
 /*
@@ -246,14 +257,18 @@ static int
 x_dsteg_conn_handshake(conn_t *conn)
 {
   if (conn->cfg->mode != LSN_SIMPLE_SERVER)
-    circuit_arm_flush_timer(conn->circuit, 10);
+    circuit_arm_flush_timer(conn->circuit, 1);
   return 0;
 }
 
 /*
   Dsteg packs a chunk of data and a chunk of chaff into a block with
-  a 32-bit header:
-  | DLen (uint16_t) | CLen (uint16_t) | DLen bytes data | CLen bytes chaff |
+  a 32-bit header and an 8-bit trailer:
+  | DLen (uint16_t) | CLen (uint16_t) | DLen bytes data | CLen bytes chaff | F
+  The F field is flags, of which only one is presently defined:
+  0x01 - this is the last transmission in this direction for this circuit.
+  (This disambiguates whether a connection close happens because the circuit
+  is going away, or because the cover protocol requires it.)
 */
 struct ds_wire_header {
   uint16_t dlen;
@@ -261,7 +276,7 @@ struct ds_wire_header {
 };
 
 static struct evbuffer *
-ds_pack(struct evbuffer *source, uint16_t dlen, uint16_t clen)
+ds_pack(struct evbuffer *source, uint16_t dlen, uint16_t clen, int fin)
 {
   struct ds_wire_header hdr;
   struct evbuffer_iovec v;
@@ -279,12 +294,14 @@ ds_pack(struct evbuffer *source, uint16_t dlen, uint16_t clen)
     if (evbuffer_remove_buffer(source, block, dlen) != dlen)
       goto fail;
 
-  if (evbuffer_reserve_space(block, clen, &v, 1) != 1)
+  if (evbuffer_reserve_space(block, clen + 1, &v, 1) != 1)
     goto fail;
-  v.iov_len = clen;
+  v.iov_len = clen + 1;
 
-  if (random_bytes(v.iov_base, v.iov_len))
+  if (random_bytes(v.iov_base, clen))
     goto fail;
+
+  ((char *)v.iov_base)[clen] = fin ? 0x01 : 0x00;
 
   if (evbuffer_commit_space(block, &v, 1))
     goto fail;
@@ -299,9 +316,11 @@ ds_pack(struct evbuffer *source, uint16_t dlen, uint16_t clen)
 }
 
 static int
-ds_unpack(struct evbuffer *dest, struct evbuffer *source)
+ds_unpack(struct evbuffer *dest, struct evbuffer *source, int *fin)
 {
   struct ds_wire_header hdr = { 0, 0 };
+  uint8_t flags;
+
   if (evbuffer_remove(source, &hdr, sizeof hdr) != sizeof hdr)
     goto fail;
 
@@ -312,9 +331,14 @@ ds_unpack(struct evbuffer *dest, struct evbuffer *source)
     if (evbuffer_remove_buffer(source, dest, hdr.dlen) != hdr.dlen)
       goto fail;
 
-  if (hdr.clen > 0)
-    if (evbuffer_drain(source, hdr.clen))
-      goto fail;
+  if (evbuffer_drain(source, hdr.clen))
+    goto fail;
+
+  if (evbuffer_remove(source, &flags, 1) != 1)
+    goto fail;
+
+  /* ignore unrecognized flag bits */
+  *fin = !!(flags & 0x01);
 
   log_debug("x_dsteg: unpacked block of %hu/%hu bytes", hdr.dlen, hdr.clen);
   return 0;
@@ -332,29 +356,24 @@ x_dsteg_circuit_send(circuit_t *c)
   conn_t *d = ckt->downstream;
   struct evbuffer *source = bufferevent_get_input(c->up_buffer);
   struct evbuffer *block;
-  x_dsteg_conn_t *dest = downcast_conn(d);
-  steg_t *steg = dest->steg;
+  x_dsteg_conn_t *dest;
+  steg_t *steg = NULL;
   size_t room;
+  size_t avail = evbuffer_get_length(source);
   int rv = 0;
+  int fin = ckt->sent_fin;
 
   circuit_disarm_flush_timer(c);
 
-  /* If we are here with nothing to transmit, it is because we need
-     to transmit chaff so the server knows what steg target to use. */
-  if (evbuffer_get_length(source) == 0) {
-    obfs_assert(steg);
-    room = random_int(steg_transmit_room(steg, d)) + 1;
-    block = ds_pack(source, 0, room);
-    rv = steg_transmit(steg, block, d);
-    evbuffer_free(block);
-    if (rv < 0)
-      return -1;
-    log_debug("x_dsteg: %lu bytes chaff sent (%lu on wire)",
-              (unsigned long) room,
-              (unsigned long) evbuffer_get_length(conn_get_outbound(d)));
-    ckt->ever_transmitted = 1;
+  if (!d) {
+    log_debug("x_dsteg: no downstream connection");
+    if (c->cfg->mode != LSN_SIMPLE_SERVER)
+      circuit_reopen_downstreams(c);
     return 0;
   }
+
+  dest = downcast_conn(d);
+  steg = dest->steg;
 
   /* If we haven't detected a steg target yet, we can't transmit.
      This is not an error condition, we just have to wait for the
@@ -366,33 +385,55 @@ x_dsteg_circuit_send(circuit_t *c)
 
   /* Only transmit if we have room. */
   room = steg_transmit_room(steg, d);
+  if (room > UINT16_MAX)
+    room = UINT16_MAX;
   log_debug("x_dsteg: can transmit %lu bytes", (unsigned long)room);
   if (room) {
-    if (room > UINT16_MAX)
-      room = UINT16_MAX;
-    if (room > evbuffer_get_length(source))
-      room = evbuffer_get_length(source);
+    /* If we are here with nothing to transmit, send chaff. */
+    if (avail == 0) {
+      room = random_int(room) + 1;
+      block = ds_pack(source, 0, room, fin);
+      if (!block)
+        return -1;
+      rv = steg_transmit(steg, block, d);
+      evbuffer_free(block);
+      if (rv < 0)
+        return -1;
+      log_debug("x_dsteg: %lu bytes chaff sent (%lu on wire)",
+                (unsigned long) room,
+                (unsigned long) evbuffer_get_length(conn_get_outbound(d)));
+    } else {
+      /* Don't send any more than we have. */
+      if (room > avail)
+        room = avail;
+      /* If we can't send all of it, don't send a FIN. */
+      if (room < avail)
+        fin = 0;
 
-    block = ds_pack(source, room, 0);
-    if (!block) return -1;
-    rv = steg_transmit(steg, block, d);
-    evbuffer_free(block);
-    if (rv < 0)
-      return -1;
+      block = ds_pack(source, room, 0, fin);
+      if (!block)
+        return -1;
+      rv = steg_transmit(steg, block, d);
+      evbuffer_free(block);
+      if (rv < 0)
+        return -1;
+
+      avail -= room;
+      log_debug("x_dsteg: %lu bytes sent (%lu on wire)%s, %lu still pending",
+                (unsigned long)room,
+                (unsigned long)evbuffer_get_length(conn_get_outbound(d)),
+                fin ? " [FIN]" : "",
+                (unsigned long)avail);
+    }
     ckt->ever_transmitted = 1;
   }
-
-  log_debug("x_dsteg: %lu bytes sent (%lu on wire), %lu still pending",
-            (unsigned long)room,
-            (unsigned long)evbuffer_get_length(conn_get_outbound(d)),
-            (unsigned long)evbuffer_get_length(source));
 
   /* If that was successful, but we still have data pending, receipt
      of a response will trigger another transmission.  But in case
      that doesn't happen set a timer to force more data out shortly. */
-  if (evbuffer_get_length(source) > 0)
+  if (avail)
     circuit_arm_flush_timer(c, 10);
-  else if (ckt->pending_eof)
+  else if (fin)
     conn_send_eof(ckt->downstream);
 
   return 0;
@@ -403,6 +444,7 @@ static int
 x_dsteg_circuit_send_eof(circuit_t *c)
 {
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
+  ckt->sent_fin = 1;
   if (ckt->downstream) {
     struct evbuffer *source = bufferevent_get_input(c->up_buffer);
     size_t avail = evbuffer_get_length(source);
@@ -421,7 +463,6 @@ x_dsteg_circuit_send_eof(circuit_t *c)
     avail = evbuffer_get_length(source);
     if (avail > 0) {
       log_debug("x_dsteg: %lu bytes still pending", (unsigned long)avail);
-      ckt->pending_eof = 1;
     } else {
       conn_send_eof(ckt->downstream);
     }
@@ -437,6 +478,7 @@ x_dsteg_conn_recv(conn_t *s)
   x_dsteg_conn_t *source = downcast_conn(s);
   struct evbuffer *block, *dest;
   size_t in, out;
+  int fin = 0;
 
   if (!source->steg) {
     obfs_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
@@ -461,17 +503,22 @@ x_dsteg_conn_recv(conn_t *s)
 
   dest = bufferevent_get_output(s->circuit->up_buffer);
   while (evbuffer_get_length(block) > 0) {
-    if (ds_unpack(dest, block)) {
+    if (ds_unpack(dest, block, &fin)) {
       evbuffer_free(block);
       return -1;
     }
+    obfs_assert(!fin || evbuffer_get_length(block) == 0);
   }
   evbuffer_free(block);
 
+  downcast_circuit(s->circuit)->ever_received = 1;
+  if (fin)
+    downcast_circuit(s->circuit)->received_fin = 1;
+
   in -= evbuffer_get_length(conn_get_inbound(s));
   out = evbuffer_get_length(dest);
-  log_debug("x_dsteg: received %lu bytes (%lu on wire)",
-            (unsigned long)out, (unsigned long)in);
+  log_debug("x_dsteg: received %lu bytes (%lu on wire)%s",
+            (unsigned long)out, (unsigned long)in, fin ? " [FIN]" : "");
 
   /* check for pending transmissions */
   in = evbuffer_get_length(bufferevent_get_input(s->circuit->up_buffer));
@@ -492,13 +539,28 @@ x_dsteg_conn_recv_eof(conn_t *source)
       if (x_dsteg_conn_recv(source))
         return -1;
 
-    circuit_recv_eof(source->circuit);
+    if (downcast_circuit(source->circuit)->received_fin)
+      circuit_recv_eof(source->circuit);
   }
   return 0;
 }
 
-/** XXX all steg callbacks are ignored */
-static void x_dsteg_conn_expect_close(conn_t *conn) {}
-static void x_dsteg_conn_cease_transmission(conn_t *conn) {}
-static void x_dsteg_conn_close_after_transmit(conn_t *conn) {}
-static void x_dsteg_conn_transmit_soon(conn_t *conn, unsigned long timeout) {}
+static void x_dsteg_conn_expect_close(conn_t *conn)
+{
+  /* do we need to do something here? */
+}
+
+static void x_dsteg_conn_cease_transmission(conn_t *conn)
+{
+  conn_do_flush(conn);  /*???*/
+}
+
+static void x_dsteg_conn_close_after_transmit(conn_t *conn)
+{
+  conn_do_flush(conn);
+}
+
+static void x_dsteg_conn_transmit_soon(conn_t *conn, unsigned long timeout)
+{
+  circuit_arm_flush_timer(conn->circuit, timeout);
+}
