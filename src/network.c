@@ -145,7 +145,7 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   circuit_t *ckt = NULL;
   int is_socks = lsn->cfg->mode == LSN_SOCKS_CLIENT;
 
-  obfs_assert(lsn->cfg->mode != LSN_SIMPLE_SERVER);
+  log_assert(lsn->cfg->mode != LSN_SIMPLE_SERVER);
   log_info("%s: new connection to %sclient from %s",
            lsn->address, is_socks ? "socks " : "", peername);
 
@@ -193,7 +193,7 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   struct bufferevent *buf;
   conn_t *conn;
 
-  obfs_assert(lsn->cfg->mode == LSN_SIMPLE_SERVER);
+  log_assert(lsn->cfg->mode == LSN_SIMPLE_SERVER);
   log_info("%s: new connection to server from %s", lsn->address, peername);
 
   buf = bufferevent_socket_new(lsn->cfg->base, fd, BEV_OPT_CLOSE_ON_FREE);
@@ -243,13 +243,13 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   enum socks_ret socks_ret;
 
   log_debug("%s: %s", ckt->up_peer, __func__);
-  obfs_assert(ckt->cfg->mode == LSN_SOCKS_CLIENT);
-  obfs_assert(ckt->socks_state);
+  log_assert(ckt->cfg->mode == LSN_SOCKS_CLIENT);
+  log_assert(ckt->socks_state);
   socks = ckt->socks_state;
 
   do {
     enum socks_status_t status = socks_state_get_status(socks);
-    obfs_assert(status != ST_SENT_REPLY); /* we shouldn't be here then */
+    log_assert(status != ST_SENT_REPLY); /* we shouldn't be here then */
 
     if (status == ST_HAVE_ADDR) {
       bufferevent_disable(bev, EV_READ|EV_WRITE); /* wait for connection */
@@ -288,7 +288,7 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
   log_debug("%s: %s, %lu bytes available", ckt->up_peer, __func__,
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
-  obfs_assert(ckt->up_buffer == bev);
+  log_assert(ckt->up_buffer == bev);
   circuit_send(ckt);
 }
 
@@ -363,7 +363,7 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
     /* We should never get BEV_EVENT_CONNECTED here.
        Ignore any events we don't understand. */
     if (what & BEV_EVENT_CONNECTED)
-      log_error("double connection event for %s", ckt->up_peer);
+      log_abort("double connection event for %s", ckt->up_peer);
   }
 }
 
@@ -396,7 +396,7 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
     /* We should never get BEV_EVENT_CONNECTED here.
        Ignore any events we don't understand. */
     if (what & BEV_EVENT_CONNECTED)
-      log_error("double connection event for %s", conn->peername);
+      log_abort("double connection event for %s", conn->peername);
   }
 }
 
@@ -459,7 +459,7 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
   /* Upon successful connection, enable traffic on both sides of the
      connection, and replace this callback with the regular event_cb */
   if (what & BEV_EVENT_CONNECTED) {
-    obfs_assert(ckt->up_buffer == bev);
+    log_assert(ckt->up_buffer == bev);
 
     log_debug("%s: Successful connection", ckt->up_peer);
 
@@ -492,9 +492,9 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
      connection, and replace this callback with the regular event_cb */
   if (what & BEV_EVENT_CONNECTED) {
     circuit_t *ckt = conn->circuit;
-    obfs_assert(ckt);
-    obfs_assert(ckt->up_peer);
-    obfs_assert(conn->buffer == bev);
+    log_assert(ckt);
+    log_assert(ckt->up_peer);
+    log_assert(conn->buffer == bev);
 
     log_debug("%s: Successful connection", conn->peername);
 
@@ -532,8 +532,8 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
 
   log_debug("%s for %s", __func__, conn->peername);
 
-  obfs_assert(ckt);
-  obfs_assert(ckt->up_buffer);
+  log_assert(ckt);
+  log_assert(ckt->up_buffer);
 
   if (!ckt->socks_state) {
     /* This can happen if we made more than one downstream connection
@@ -746,7 +746,7 @@ create_outbound_connections_socks(circuit_t *ckt)
   int af, port;
   struct evdns_base *dns = get_evdns_base();
 
-  obfs_assert(cfg->mode == LSN_SOCKS_CLIENT);
+  log_assert(cfg->mode == LSN_SOCKS_CLIENT);
   if (socks_state_get_address(ckt->socks_state, &af, &host, &port)) {
     log_warn("no SOCKS target available");
     goto failure;

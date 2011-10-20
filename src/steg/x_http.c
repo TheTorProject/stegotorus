@@ -307,7 +307,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       log_debug("x_http: did not find third piece of HTTP query");
       return 0;
     }
-    obfs_assert(s3.pos + sizeof http_query_3 - 1
+    log_assert(s3.pos + sizeof http_query_3 - 1
                 <= evbuffer_get_length(source));
 
     data = evbuffer_pullup(source, s2.pos);

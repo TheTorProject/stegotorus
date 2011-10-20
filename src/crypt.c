@@ -136,7 +136,7 @@ crypt_new(const uchar *key, size_t keylen)
 {
   crypt_t *k;
 
-  obfs_assert(keylen == AES_BLOCK_SIZE);
+  log_assert(keylen == AES_BLOCK_SIZE);
   k = xzalloc(sizeof(crypt_t));
   AES_set_encrypt_key(key, AES_BLOCK_SIZE * CHAR_BIT, &k->key);
 
@@ -149,7 +149,7 @@ crypt_new(const uchar *key, size_t keylen)
 void
 crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
 {
-  obfs_assert(ivlen == sizeof(key->ivec));
+  log_assert(ivlen == sizeof(key->ivec));
   memcpy(key->ivec, iv, ivlen);
 }
 
@@ -197,8 +197,8 @@ random_int(unsigned int max)
 {
   unsigned int val;
   unsigned int cutoff;
-  obfs_assert(max <= ((unsigned int)INT_MAX)+1);
-  obfs_assert(max > 0); /* don't div by 0 */
+  log_assert(max <= ((unsigned int)INT_MAX)+1);
+  log_assert(max > 0); /* don't div by 0 */
 
   /* We ignore any values that are >= 'cutoff,' to avoid biasing the
    * distribution with clipping at the upper end of unsigned int's

@@ -232,8 +232,8 @@ rr_send_block(struct evbuffer *dest,
   rr_header hdr;
   struct evbuffer_iovec v;
 
-  obfs_assert(evbuffer_get_length(block) == 0);
-  obfs_assert(evbuffer_get_length(source) >= length);
+  log_assert(evbuffer_get_length(block) == 0);
+  log_assert(evbuffer_get_length(source) >= length);
 
   /* We take special care not to modify 'source' if any step fails. */
   if (evbuffer_reserve_space(block, length + RR_WIRE_HDR_LEN, &v, 1) != 1)
@@ -261,7 +261,7 @@ rr_send_block(struct evbuffer *dest,
 
   if (evbuffer_drain(source, length))
     /* this really should never happen, and we can't recover from it */
-    log_error("rr_send_block: evbuffer_drain failed"); /* does not return */
+    log_abort("rr_send_block: evbuffer_drain failed"); /* does not return */
 
   return 0;
 
@@ -596,13 +596,13 @@ rr_push_to_upstream(circuit_t *c)
   ckt->recv_offset += ready->length;
 
   if (ready->flags & RR_F_FIN) {
-    obfs_assert(!ckt->received_fin);
-    obfs_assert(ready->next == &ckt->reassembly_queue);
+    log_assert(!ckt->received_fin);
+    log_assert(ready->next == &ckt->reassembly_queue);
     ckt->received_fin = true;
     circuit_recv_eof(c);
   }
 
-  obfs_assert(ready->next == &ckt->reassembly_queue ||
+  log_assert(ready->next == &ckt->reassembly_queue ||
               ready->next->offset != ckt->recv_offset);
   ready->next->prev = ready->prev;
   ready->prev->next = ready->next;
@@ -621,11 +621,11 @@ rr_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
   x_rr_config_t *cfg = downcast_config(c);
   rr_circuit_entry_t *out, in;
 
-  obfs_assert(c->mode == LSN_SIMPLE_SERVER);
+  log_assert(c->mode == LSN_SIMPLE_SERVER);
   in.circuit_id = circuit_id;
   out = HT_FIND(rr_circuit_table_impl, &cfg->circuits.head, &in);
   if (out) {
-    obfs_assert(out->circuit);
+    log_assert(out->circuit);
     log_debug("rr_recv: found circuit to %s for connection from %s",
               out->circuit->up_peer, conn->peername);
   } else {
@@ -993,7 +993,7 @@ x_rr_conn_recv(conn_t *conn)
       return -1;
     if (rr_find_or_make_circuit(conn, hdr.ckt_id))
       return -1;
-    obfs_assert(conn->circuit);
+    log_assert(conn->circuit);
   }
 
   c = conn->circuit;

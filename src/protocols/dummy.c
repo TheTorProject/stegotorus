@@ -153,7 +153,7 @@ static void
 dummy_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   dummy_circuit_t *ckt = downcast_circuit(c);
-  obfs_assert(!ckt->downstream);
+  log_assert(!ckt->downstream);
   ckt->downstream = conn;
 }
 
@@ -164,7 +164,7 @@ static void
 dummy_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   dummy_circuit_t *ckt = downcast_circuit(c);
-  obfs_assert(ckt->downstream == conn);
+  log_assert(ckt->downstream == conn);
   ckt->downstream = NULL;
   circuit_close(c);
 }
@@ -232,7 +232,7 @@ dummy_conn_handshake(conn_t *c)
 static int
 dummy_conn_recv(conn_t *source)
 {
-  obfs_assert(source->circuit);
+  log_assert(source->circuit);
   return evbuffer_add_buffer(bufferevent_get_output(source->circuit->up_buffer),
                              conn_get_inbound(source));
 }

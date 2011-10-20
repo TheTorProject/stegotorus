@@ -266,9 +266,9 @@ chop_send_block(conn_t *d,
   chop_header hdr;
   struct evbuffer_iovec v;
 
-  obfs_assert(evbuffer_get_length(block) == 0);
-  obfs_assert(evbuffer_get_length(source) >= length);
-  obfs_assert(dest->steg);
+  log_assert(evbuffer_get_length(block) == 0);
+  log_assert(evbuffer_get_length(source) >= length);
+  log_assert(dest->steg);
 
   /* We take special care not to modify 'source' if any step fails. */
   if (evbuffer_reserve_space(block, length + CHOP_WIRE_HDR_LEN, &v, 1) != 1)
@@ -296,7 +296,7 @@ chop_send_block(conn_t *d,
 
   if (evbuffer_drain(source, length))
     /* this really should never happen, and we can't recover from it */
-    log_error("chop_send_block: evbuffer_drain failed"); /* does not return */
+    log_abort("chop_send_block: evbuffer_drain failed"); /* does not return */
 
   if (!(flags & CHOP_F_CHAFF))
     ckt->send_offset += length;
@@ -661,13 +661,13 @@ chop_push_to_upstream(circuit_t *c)
   ckt->recv_offset += ready->length;
 
   if (ready->flags & CHOP_F_FIN) {
-    obfs_assert(!ckt->received_fin);
-    obfs_assert(ready->next == &ckt->reassembly_queue);
+    log_assert(!ckt->received_fin);
+    log_assert(ready->next == &ckt->reassembly_queue);
     ckt->received_fin = true;
     circuit_recv_eof(c);
   }
 
-  obfs_assert(ready->next == &ckt->reassembly_queue ||
+  log_assert(ready->next == &ckt->reassembly_queue ||
               ready->next->offset != ckt->recv_offset);
   ready->next->prev = ready->prev;
   ready->prev->next = ready->next;
@@ -686,11 +686,11 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
   chop_config_t *cfg = downcast_config(c);
   chop_circuit_entry_t *out, in;
 
-  obfs_assert(c->mode == LSN_SIMPLE_SERVER);
+  log_assert(c->mode == LSN_SIMPLE_SERVER);
   in.circuit_id = circuit_id;
   out = HT_FIND(chop_circuit_table_impl, &cfg->circuits.head, &in);
   if (out) {
-    obfs_assert(out->circuit);
+    log_assert(out->circuit);
     log_debug("chop_recv: found circuit to %s for connection from %s",
               out->circuit->up_peer, conn->peername);
   } else {
@@ -1078,7 +1078,7 @@ chop_conn_recv(conn_t *s)
   size_t avail;
 
   if (!source->steg) {
-    obfs_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
+    log_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
     if (evbuffer_get_length(conn_get_inbound(s)) == 0)
       return 0; /* need more data */
     source->steg = steg_detect(s);
@@ -1105,7 +1105,7 @@ chop_conn_recv(conn_t *s)
       return -1;
     if (chop_find_or_make_circuit(s, hdr.ckt_id))
       return -1;
-    obfs_assert(s->circuit);
+    log_assert(s->circuit);
   }
 
   c = s->circuit;

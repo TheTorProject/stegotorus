@@ -80,7 +80,7 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
   static int got_sigint = 0;
   int signum = (int) fd;
 
-  obfs_assert(signum == SIGINT || signum == SIGTERM);
+  log_assert(signum == SIGINT || signum == SIGTERM);
 
   if (signum == SIGINT && !got_sigint) {
     got_sigint++;
@@ -280,7 +280,7 @@ main(int argc, const char *const *argv)
     }
     begin = end;
   } while (*begin);
-  obfs_assert(smartlist_len(configs) > 0);
+  log_assert(smartlist_len(configs) > 0);
 
   /* Configurations have been established; proceed with initialization. */
   conn_initialize();
@@ -295,20 +295,17 @@ main(int argc, const char *const *argv)
 #endif
 
   /* Initialize crypto */
-  if (initialize_crypto() < 0) {
-    log_error("Failed to initialize cryptography.");
-  }
+  if (initialize_crypto() < 0)
+    log_abort("Failed to initialize cryptography.");
 
   /* Initialize libevent */
   the_event_base = event_base_new();
-  if (!the_event_base) {
-    log_error("Failed to initialize networking.");
-  }
+  if (!the_event_base)
+    log_abort("Failed to initialize networking.");
 
   /* ASN should this happen only when SOCKS is enabled? */
-  if (init_evdns_base(the_event_base)) {
-    log_error("Failed to initialize DNS resolver.");
-  }
+  if (init_evdns_base(the_event_base))
+    log_abort("Failed to initialize DNS resolver.");
 
   /* Handle signals. */
 #ifdef SIGPIPE
@@ -318,10 +315,8 @@ main(int argc, const char *const *argv)
                          handle_signal_cb, NULL);
   sig_term = evsignal_new(the_event_base, SIGTERM,
                           handle_signal_cb, NULL);
-  if (event_add(sig_int,NULL) || event_add(sig_term,NULL)) {
-    log_error("Failed to initialize signal handling.");
-    return 1;
-  }
+  if (event_add(sig_int,NULL) || event_add(sig_term,NULL))
+    log_abort("Failed to initialize signal handling.");
 
 #ifndef _WIN32
   /* trap and diagnose fatal signals */
@@ -357,20 +352,16 @@ main(int argc, const char *const *argv)
     event_assign(stdin_eof, the_event_base,
                  STDIN_FILENO, EV_READ|EV_PERSIST,
                  stdin_detect_eof_cb, stdin_eof);
-    if (event_add(stdin_eof, 0)) {
-      log_error("Failed to initialize stdin monitor.");
-      return 1;
-    }
+    if (event_add(stdin_eof, 0))
+      log_abort("Failed to initialize stdin monitor.");
   } else {
     stdin_eof = NULL;
   }
 
   /* Open listeners for each configuration. */
   SMARTLIST_FOREACH(configs, config_t *, cfg, {
-    if (!listener_open(the_event_base, cfg)) {
-      log_error("Failed to open listeners for configuration %d", cfg_sl_idx+1);
-      return 1;
-    }
+    if (!listener_open(the_event_base, cfg))
+      log_abort("Failed to open listeners for configuration %d", cfg_sl_idx+1);
   });
 
   /* We are go for launch. As a signal to any monitoring process that may

@@ -59,7 +59,7 @@ smartlist_ensure_capacity(smartlist_t *sl, int size)
     int higher = sl->capacity * 2;
     while (size > higher)
       higher *= 2;
-    obfs_assert(higher > 0); /* detect overflow */
+    log_assert(higher > 0); /* detect overflow */
     sl->capacity = higher;
     sl->list = xrealloc(sl->list, sizeof(void*)*sl->capacity);
   }
@@ -78,7 +78,7 @@ void
 smartlist_add_all(smartlist_t *s1, const smartlist_t *s2)
 {
   int new_size = s1->num_used + s2->num_used;
-  obfs_assert(new_size >= s1->num_used); /* check for overflow. */
+  log_assert(new_size >= s1->num_used); /* check for overflow. */
   smartlist_ensure_capacity(s1, new_size);
   memcpy(s1->list + s1->num_used, s2->list, s2->num_used*sizeof(void*));
   s1->num_used = new_size;
@@ -106,7 +106,7 @@ smartlist_remove(smartlist_t *sl, const void *element)
 void *
 smartlist_pop_last(smartlist_t *sl)
 {
-  obfs_assert(sl);
+  log_assert(sl);
   if (sl->num_used)
     return sl->list[--sl->num_used];
   else
@@ -119,7 +119,7 @@ smartlist_reverse(smartlist_t *sl)
 {
   int i, j;
   void *tmp;
-  obfs_assert(sl);
+  log_assert(sl);
   for (i = 0, j = sl->num_used-1; i < j; ++i, --j) {
     tmp = sl->list[i];
     sl->list[i] = sl->list[j];
@@ -133,8 +133,8 @@ void
 smartlist_string_remove(smartlist_t *sl, const char *element)
 {
   int i;
-  obfs_assert(sl);
-  obfs_assert(element);
+  log_assert(sl);
+  log_assert(element);
   for (i = 0; i < sl->num_used; ++i) {
     if (!strcmp(element, sl->list[i])) {
       free(sl->list[i]);
@@ -284,9 +284,9 @@ smartlist_subtract(smartlist_t *sl1, const smartlist_t *sl2)
 void
 smartlist_del(smartlist_t *sl, int idx)
 {
-  obfs_assert(sl);
-  obfs_assert(idx>=0);
-  obfs_assert(idx < sl->num_used);
+  log_assert(sl);
+  log_assert(idx>=0);
+  log_assert(idx < sl->num_used);
   sl->list[idx] = sl->list[--sl->num_used];
 }
 
@@ -297,9 +297,9 @@ smartlist_del(smartlist_t *sl, int idx)
 void
 smartlist_del_keeporder(smartlist_t *sl, int idx)
 {
-  obfs_assert(sl);
-  obfs_assert(idx>=0);
-  obfs_assert(idx < sl->num_used);
+  log_assert(sl);
+  log_assert(idx>=0);
+  log_assert(idx < sl->num_used);
   --sl->num_used;
   if (idx < sl->num_used)
     memmove(sl->list+idx, sl->list+idx+1, sizeof(void*)*(sl->num_used-idx));
@@ -312,9 +312,9 @@ smartlist_del_keeporder(smartlist_t *sl, int idx)
 void
 smartlist_insert(smartlist_t *sl, int idx, void *val)
 {
-  obfs_assert(sl);
-  obfs_assert(idx>=0);
-  obfs_assert(idx <= sl->num_used);
+  log_assert(sl);
+  log_assert(idx>=0);
+  log_assert(idx <= sl->num_used);
   if (idx == sl->num_used) {
     smartlist_add(sl, val);
   } else {
@@ -350,8 +350,8 @@ smartlist_split_string(smartlist_t *sl, const char *str, const char *sep,
   const char *cp, *end, *next;
   int n = 0;
 
-  obfs_assert(sl);
-  obfs_assert(str);
+  log_assert(sl);
+  log_assert(str);
 
   cp = str;
   while (1) {
@@ -370,7 +370,7 @@ smartlist_split_string(smartlist_t *sl, const char *str, const char *sep,
         ;
     }
 
-    obfs_assert(end);
+    log_assert(end);
 
     if (!*end) {
       next = NULL;
@@ -428,8 +428,8 @@ smartlist_join_strings2(smartlist_t *sl, const char *join,
   size_t n = 0;
   char *r = NULL, *dst, *src;
 
-  obfs_assert(sl);
-  obfs_assert(join);
+  log_assert(sl);
+  log_assert(join);
 
   if (terminate)
     n = join_len;
@@ -600,13 +600,13 @@ smartlist_bsearch_idx(const smartlist_t *sl, const void *key,
   }
   /* lo > hi. */
   {
-    obfs_assert(lo >= 0);
+    log_assert(lo >= 0);
     if (lo < smartlist_len(sl)) {
       cmp = compare(key, (const void**) &(sl->list[lo]));
-      obfs_assert(cmp < 0);
+      log_assert(cmp < 0);
     } else if (smartlist_len(sl)) {
       cmp = compare(key, (const void**) &(sl->list[smartlist_len(sl)-1]));
-      obfs_assert(cmp > 0);
+      log_assert(cmp > 0);
     }
   }
   *found_out = 0;
@@ -785,7 +785,7 @@ smartlist_pqueue_pop(smartlist_t *sl,
                      int idx_field_offset)
 {
   void *top;
-  obfs_assert(sl->num_used);
+  log_assert(sl->num_used);
 
   top = sl->list[0];
   *IDXP(top)=-1;
@@ -808,8 +808,8 @@ smartlist_pqueue_remove(smartlist_t *sl,
                         void *item)
 {
   int idx = IDX_OF_ITEM(item);
-  obfs_assert(idx >= 0);
-  obfs_assert(sl->list[idx] == item);
+  log_assert(idx >= 0);
+  log_assert(sl->list[idx] == item);
   --sl->num_used;
   *IDXP(item) = -1;
   if (idx == sl->num_used) {
@@ -831,8 +831,8 @@ smartlist_pqueue_assert_ok(smartlist_t *sl,
   int i;
   for (i = sl->num_used - 1; i >= 0; --i) {
     if (i>0)
-      obfs_assert(compare(sl->list[PARENT(i)], sl->list[i]) <= 0);
-    obfs_assert(IDX_OF_ITEM(sl->list[i]) == i);
+      log_assert(compare(sl->list[PARENT(i)], sl->list[i]) <= 0);
+    log_assert(IDX_OF_ITEM(sl->list[i]) == i);
   }
 }
 
@@ -953,9 +953,9 @@ strmap_set(strmap_t *map, const char *key, void *val)
   strmap_entry_t *resolve;
   strmap_entry_t search;
   void *oldval;
-  obfs_assert(map);
-  obfs_assert(key);
-  obfs_assert(val);
+  log_assert(map);
+  log_assert(key);
+  log_assert(val);
   search.key = (char*)key;
   resolve = HT_FIND(strmap_impl, &map->head, &search);
   if (resolve) {
@@ -966,7 +966,7 @@ strmap_set(strmap_t *map, const char *key, void *val)
     resolve = xzalloc(sizeof(strmap_entry_t));
     resolve->key = xstrdup(key);
     resolve->val = val;
-    obfs_assert(!HT_FIND(strmap_impl, &map->head, resolve));
+    log_assert(!HT_FIND(strmap_impl, &map->head, resolve));
     HT_INSERT(strmap_impl, &map->head, resolve);
     return NULL;
   }
@@ -983,9 +983,9 @@ digestmap_set(digestmap_t *map, const char *key, void *val)
 #endif
   digestmap_entry_t search;
   void *oldval;
-  obfs_assert(map);
-  obfs_assert(key);
-  obfs_assert(val);
+  log_assert(map);
+  log_assert(key);
+  log_assert(val);
   memcpy(&search.key, key, SHA256_LENGTH);
 #ifndef OPTIMIZED_DIGESTMAP_SET
   resolve = HT_FIND(digestmap_impl, &map->head, &search);
@@ -1034,8 +1034,8 @@ strmap_get(const strmap_t *map, const char *key)
 {
   strmap_entry_t *resolve;
   strmap_entry_t search;
-  obfs_assert(map);
-  obfs_assert(key);
+  log_assert(map);
+  log_assert(key);
   search.key = (char*)key;
   resolve = HT_FIND(strmap_impl, &map->head, &search);
   if (resolve) {
@@ -1051,8 +1051,8 @@ digestmap_get(const digestmap_t *map, const char *key)
 {
   digestmap_entry_t *resolve;
   digestmap_entry_t search;
-  obfs_assert(map);
-  obfs_assert(key);
+  log_assert(map);
+  log_assert(key);
   memcpy(&search.key, key, SHA256_LENGTH);
   resolve = HT_FIND(digestmap_impl, &map->head, &search);
   if (resolve) {
@@ -1074,8 +1074,8 @@ strmap_remove(strmap_t *map, const char *key)
   strmap_entry_t *resolve;
   strmap_entry_t search;
   void *oldval;
-  obfs_assert(map);
-  obfs_assert(key);
+  log_assert(map);
+  log_assert(key);
   search.key = (char*)key;
   resolve = HT_REMOVE(strmap_impl, &map->head, &search);
   if (resolve) {
@@ -1095,8 +1095,8 @@ digestmap_remove(digestmap_t *map, const char *key)
   digestmap_entry_t *resolve;
   digestmap_entry_t search;
   void *oldval;
-  obfs_assert(map);
-  obfs_assert(key);
+  log_assert(map);
+  log_assert(key);
   memcpy(&search.key, key, SHA256_LENGTH);
   resolve = HT_REMOVE(digestmap_impl, &map->head, &search);
   if (resolve) {
@@ -1175,7 +1175,7 @@ strmap_remove_lc(strmap_t *map, const char *key)
 strmap_iter_t *
 strmap_iter_init(strmap_t *map)
 {
-  obfs_assert(map);
+  log_assert(map);
   return HT_START(strmap_impl, &map->head);
 }
 
@@ -1183,7 +1183,7 @@ strmap_iter_init(strmap_t *map)
 digestmap_iter_t *
 digestmap_iter_init(digestmap_t *map)
 {
-  obfs_assert(map);
+  log_assert(map);
   return HT_START(digestmap_impl, &map->head);
 }
 
@@ -1192,8 +1192,8 @@ digestmap_iter_init(digestmap_t *map)
 strmap_iter_t *
 strmap_iter_next(strmap_t *map, strmap_iter_t *iter)
 {
-  obfs_assert(map);
-  obfs_assert(iter);
+  log_assert(map);
+  log_assert(iter);
   return HT_NEXT(strmap_impl, &map->head, iter);
 }
 
@@ -1202,8 +1202,8 @@ strmap_iter_next(strmap_t *map, strmap_iter_t *iter)
 digestmap_iter_t *
 digestmap_iter_next(digestmap_t *map, digestmap_iter_t *iter)
 {
-  obfs_assert(map);
-  obfs_assert(iter);
+  log_assert(map);
+  log_assert(iter);
   return HT_NEXT(digestmap_impl, &map->head, iter);
 }
 
@@ -1214,9 +1214,9 @@ strmap_iter_t *
 strmap_iter_next_rmv(strmap_t *map, strmap_iter_t *iter)
 {
   strmap_entry_t *rmv;
-  obfs_assert(map);
-  obfs_assert(iter);
-  obfs_assert(*iter);
+  log_assert(map);
+  log_assert(iter);
+  log_assert(*iter);
   rmv = *iter;
   iter = HT_NEXT_RMV(strmap_impl, &map->head, iter);
   free(rmv->key);
@@ -1231,9 +1231,9 @@ digestmap_iter_t *
 digestmap_iter_next_rmv(digestmap_t *map, digestmap_iter_t *iter)
 {
   digestmap_entry_t *rmv;
-  obfs_assert(map);
-  obfs_assert(iter);
-  obfs_assert(*iter);
+  log_assert(map);
+  log_assert(iter);
+  log_assert(*iter);
   rmv = *iter;
   iter = HT_NEXT_RMV(digestmap_impl, &map->head, iter);
   free(rmv);
@@ -1245,10 +1245,10 @@ digestmap_iter_next_rmv(digestmap_t *map, digestmap_iter_t *iter)
 void
 strmap_iter_get(strmap_iter_t *iter, const char **keyp, void **valp)
 {
-  obfs_assert(iter);
-  obfs_assert(*iter);
-  obfs_assert(keyp);
-  obfs_assert(valp);
+  log_assert(iter);
+  log_assert(*iter);
+  log_assert(keyp);
+  log_assert(valp);
   *keyp = (*iter)->key;
   *valp = (*iter)->val;
 }
@@ -1258,10 +1258,10 @@ strmap_iter_get(strmap_iter_t *iter, const char **keyp, void **valp)
 void
 digestmap_iter_get(digestmap_iter_t *iter, const char **keyp, void **valp)
 {
-  obfs_assert(iter);
-  obfs_assert(*iter);
-  obfs_assert(keyp);
-  obfs_assert(valp);
+  log_assert(iter);
+  log_assert(*iter);
+  log_assert(keyp);
+  log_assert(valp);
   *keyp = (*iter)->key;
   *valp = (*iter)->val;
 }
@@ -1301,7 +1301,7 @@ strmap_free(strmap_t *map, void (*free_val)(void*))
       free_val(this->val);
     free(this);
   }
-  obfs_assert(HT_EMPTY(&map->head));
+  log_assert(HT_EMPTY(&map->head));
   HT_CLEAR(strmap_impl, &map->head);
   free(map);
 }
@@ -1323,7 +1323,7 @@ digestmap_free(digestmap_t *map, void (*free_val)(void*))
       free_val(this->val);
     free(this);
   }
-  obfs_assert(HT_EMPTY(&map->head));
+  log_assert(HT_EMPTY(&map->head));
   HT_CLEAR(digestmap_impl, &map->head);
   free(map);
 }
@@ -1333,14 +1333,14 @@ digestmap_free(digestmap_t *map, void (*free_val)(void*))
 void
 strmap_assert_ok(const strmap_t *map)
 {
-  obfs_assert(!_strmap_impl_HT_REP_IS_BAD(&map->head));
+  log_assert(!_strmap_impl_HT_REP_IS_BAD(&map->head));
 }
 /** Fail with an assertion error if anything has gone wrong with the internal
  * representation of <b>map</b>. */
 void
 digestmap_assert_ok(const digestmap_t *map)
 {
-  obfs_assert(!_digestmap_impl_HT_REP_IS_BAD(&map->head));
+  log_assert(!_digestmap_impl_HT_REP_IS_BAD(&map->head));
 }
 
 /** Return true iff <b>map</b> has no entries. */
@@ -1392,8 +1392,8 @@ digestmap_size(const digestmap_t *map)
   elt_t                                                         \
   funcname(elt_t *array, int n_elements, int nth)               \
   {                                                             \
-    obfs_assert(nth >= 0);                                       \
-    obfs_assert(nth < n_elements);                               \
+    log_assert(nth >= 0);                                       \
+    log_assert(nth < n_elements);                               \
     qsort(array, n_elements, sizeof(elt_t), _cmp_ ##elt_t);     \
     return array[nth];                                          \
   }

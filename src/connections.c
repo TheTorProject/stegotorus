@@ -86,7 +86,7 @@ conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
 {
   conn_t *conn;
 
-  obfs_assert(!shutting_down);
+  log_assert(!shutting_down);
 
   conn = cfg->vtable->conn_create(cfg);
   conn->buffer = buf;
@@ -221,7 +221,7 @@ circuit_create(config_t *cfg)
 {
   circuit_t *ckt;
 
-  obfs_assert(!shutting_down);
+  log_assert(!shutting_down);
 
   ckt = cfg->vtable->circuit_create(cfg);
 
@@ -235,8 +235,8 @@ circuit_create(config_t *cfg)
 void
 circuit_add_upstream(circuit_t *ckt, struct bufferevent *buf, const char *peer)
 {
-  obfs_assert(!ckt->up_buffer);
-  obfs_assert(!ckt->up_peer);
+  log_assert(!ckt->up_buffer);
+  log_assert(!ckt->up_peer);
 
   ckt->up_buffer = buf;
   ckt->up_peer = peer;
@@ -247,7 +247,7 @@ circuit_add_upstream(circuit_t *ckt, struct bufferevent *buf, const char *peer)
 void
 circuit_add_downstream(circuit_t *ckt, conn_t *down)
 {
-  obfs_assert(!down->circuit);
+  log_assert(!down->circuit);
   down->circuit = ckt;
   ckt->cfg->vtable->circuit_add_downstream(ckt, down);
 }
@@ -255,7 +255,7 @@ circuit_add_downstream(circuit_t *ckt, conn_t *down)
 void
 circuit_drop_downstream(circuit_t *ckt, conn_t *down)
 {
-  obfs_assert(down->circuit == ckt);
+  log_assert(down->circuit == ckt);
   down->circuit = NULL;
   ckt->cfg->vtable->circuit_drop_downstream(ckt, down);
 }

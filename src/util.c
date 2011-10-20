@@ -24,7 +24,7 @@
 static void ATTR_NORETURN
 die_oom(void)
 {
-  log_error("Memory allocation failed: %s",strerror(errno));
+  log_abort("Memory allocation failed: %s",strerror(errno));
 }
 
 void *
@@ -32,7 +32,7 @@ xmalloc(size_t size)
 {
   void *result;
 
-  obfs_assert(size < SIZE_T_CEILING);
+  log_assert(size < SIZE_T_CEILING);
 
   /* Some malloc() implementations return NULL when the input argument
      is zero. We don't bother detecting whether the implementation we're
@@ -52,7 +52,7 @@ void *
 xrealloc(void *ptr, size_t size)
 {
   void *result;
-  obfs_assert (size < SIZE_T_CEILING);
+  log_assert (size < SIZE_T_CEILING);
   if (size == 0)
     size = 1;
 
@@ -379,7 +379,7 @@ ascii_strlower(char *s)
     off tor. It's basicaly a stripped down version of tor's logging
     system. Thank you tor. */
 
-/* Note: obfs_assert and obfs_abort cannot be used anywhere in the
+/* Note: log_assert and log_abort cannot be used anywhere in the
    logging system, as they will recurse into the logging system and
    cause an infinite loop.  We use plain old abort(3) instead. */
 
@@ -595,7 +595,7 @@ logv(int severity, const char *format, va_list ap)
 /**** Public logging API. ****/
 
 void
-log_error(const char *format, ...)
+log_abort(const char *format, ...)
 {
   va_list ap;
   va_start(ap,format);

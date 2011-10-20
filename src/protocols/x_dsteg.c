@@ -174,7 +174,7 @@ static void
 x_dsteg_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
-  obfs_assert(!ckt->downstream);
+  log_assert(!ckt->downstream);
   ckt->downstream = conn;
   log_debug("%s: added connection to %s", c->up_peer, conn->peername);
   circuit_disarm_axe_timer(c);
@@ -186,7 +186,7 @@ static void
 x_dsteg_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
-  obfs_assert(ckt->downstream == conn);
+  log_assert(ckt->downstream == conn);
   ckt->downstream = NULL;
   log_debug("%s: dropped connection to %s", c->up_peer, conn->peername);
   if (ckt->sent_fin && ckt->received_fin) {
@@ -481,7 +481,7 @@ x_dsteg_conn_recv(conn_t *s)
   int fin = 0;
 
   if (!source->steg) {
-    obfs_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
+    log_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
     if (evbuffer_get_length(conn_get_inbound(s)) == 0)
       return 0; /* need more data */
     source->steg = steg_detect(s);
@@ -507,7 +507,7 @@ x_dsteg_conn_recv(conn_t *s)
       evbuffer_free(block);
       return -1;
     }
-    obfs_assert(!fin || evbuffer_get_length(block) == 0);
+    log_assert(!fin || evbuffer_get_length(block) == 0);
   }
   evbuffer_free(block);
 

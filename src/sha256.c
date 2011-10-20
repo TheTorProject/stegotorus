@@ -23,7 +23,7 @@ get_uint32(const void *ptr)
   memcpy(&val, ptr, 4);
   return val;
 }
-#define LTC_ARGCHK(x) obfs_assert(x)
+#define LTC_ARGCHK(x) log_assert(x)
 
 #define CRYPT_OK 0
 #define CRYPT_NOP -1

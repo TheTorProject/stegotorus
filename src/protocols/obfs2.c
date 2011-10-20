@@ -202,7 +202,7 @@ static void
 obfs2_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   obfs2_circuit_t *ckt = downcast_circuit(c);
-  obfs_assert(!ckt->downstream);
+  log_assert(!ckt->downstream);
   ckt->downstream = conn;
 }
 
@@ -213,7 +213,7 @@ static void
 obfs2_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   obfs2_circuit_t *ckt = downcast_circuit(c);
-  obfs_assert(ckt->downstream == conn);
+  log_assert(ckt->downstream == conn);
   ckt->downstream = NULL;
   circuit_close(c);
 }
@@ -346,7 +346,7 @@ obfs2_conn_handshake(conn_t *s)
       SEED | E_PAD_KEY( UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN) )
   */
 
-  obfs_assert(sizeof(magic) == 4);
+  log_assert(sizeof(magic) == 4);
 
   /* generate padlen */
   if (random_bytes((uchar*)&plength, 4) < 0)
