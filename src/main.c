@@ -59,7 +59,7 @@ start_shutdown(int barbaric, const char *label)
 void
 finish_shutdown(void)
 {
-  log_debug("Finishing shutdown.");
+  log_debug("finishing shutdown");
   event_base_loopexit(the_event_base, NULL);
 }
 
@@ -149,7 +149,7 @@ stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
   if (nread == 0) {
     struct event *ev = arg;
     event_del(ev);
-    start_shutdown(0, "EOF on stdin");
+    start_shutdown(0, "stdin closing");
   }
 }
 
@@ -161,7 +161,7 @@ usage(void)
 {
   const proto_vtable *const *p;
 
-  fputs("Usage: obfsproxy protocol_name [protocol_args] protocol_options "
+  fputs("usage: obfsproxy protocol_name [protocol_args] protocol_options "
         "protocol_name ...\n"
         "* Available protocols:\n", stderr);
   /* this is awful. */
@@ -194,37 +194,37 @@ handle_obfsproxy_args(const char *const *argv)
          !strncmp(argv[i],"--",2)) {
     if (!strncmp(argv[i], "--log-file=", 11)) {
       if (logmethod_set) {
-        log_warn("You've already set a log file!");
+        log_warn("you've already set a log file!");
         exit(1);
       }
       if (log_set_method(LOG_METHOD_FILE,
                          (char *)argv[i]+11) < 0) {
-        log_warn("Failed creating logfile.");
+        log_warn("failed creating logfile");
         exit(1);
       }
       logmethod_set=1;
     } else if (!strncmp(argv[i], "--log-min-severity=", 19)) {
       if (logsev_set) {
-        log_warn("You've already set a min. log severity!");
+        log_warn("you've already set a min. log severity!");
         exit(1);
       }
       if (log_set_min_severity((char *)argv[i]+19) < 0) {
-        log_warn("Error at setting logging severity");
+        log_warn("error at setting logging severity");
         exit(1);
       }
       logsev_set=1;
     } else if (!strncmp(argv[i], "--no-log", 9)) {
         if (logsev_set) {
-          printf("You've already set a min. log severity!\n");
+          fprintf(stderr, "you've already set a min. log severity!\n");
           exit(1);
         }
         if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
-          printf("Error at setting logging severity.\n");
+          fprintf(stderr, "error at setting logging severity.\n");
           exit(1);
         }
         logsev_set=1;
     } else {
-      log_warn("Unrecognizable obfsproxy argument '%s'", argv[i]);
+      log_warn("unrecognizable obfsproxy argument '%s'", argv[i]);
       exit(1);
     }
     i++;
@@ -270,12 +270,12 @@ main(int argc, const char *const *argv)
       for (p = begin; p < end; p++)
         smartlist_add(s, (void *)*p);
       joined = smartlist_join_strings(s, " ", 0, NULL);
-      log_debug("Configuration %d: %s", smartlist_len(configs)+1, joined);
+      log_debug("configuration %d: %s", smartlist_len(configs)+1, joined);
       free(joined);
       smartlist_free(s);
     }
     if (end == begin+1) {
-      log_warn("No arguments for configuration %d", smartlist_len(configs)+1);
+      log_warn("no arguments for configuration %d", smartlist_len(configs)+1);
       usage();
     } else {
       config_t *cfg = config_create(end - begin, begin);
@@ -301,16 +301,16 @@ main(int argc, const char *const *argv)
 
   /* Initialize crypto */
   if (initialize_crypto() < 0)
-    log_abort("Failed to initialize cryptography.");
+    log_abort("failed to initialize cryptography");
 
   /* Initialize libevent */
   the_event_base = event_base_new();
   if (!the_event_base)
-    log_abort("Failed to initialize networking.");
+    log_abort("failed to initialize networking");
 
   /* ASN should this happen only when SOCKS is enabled? */
   if (init_evdns_base(the_event_base))
-    log_abort("Failed to initialize DNS resolver.");
+    log_abort("failed to initialize DNS resolver");
 
   /* Handle signals. */
 #ifdef SIGPIPE
@@ -321,7 +321,7 @@ main(int argc, const char *const *argv)
   sig_term = evsignal_new(the_event_base, SIGTERM,
                           handle_signal_cb, NULL);
   if (event_add(sig_int,NULL) || event_add(sig_term,NULL))
-    log_abort("Failed to initialize signal handling.");
+    log_abort("failed to initialize signal handling");
 
 #ifndef _WIN32
   /* trap and diagnose fatal signals */
@@ -358,7 +358,7 @@ main(int argc, const char *const *argv)
                  STDIN_FILENO, EV_READ|EV_PERSIST,
                  stdin_detect_eof_cb, stdin_eof);
     if (event_add(stdin_eof, 0))
-      log_abort("Failed to initialize stdin monitor.");
+      log_abort("failed to initialize stdin monitor");
   } else {
     stdin_eof = NULL;
   }
@@ -366,19 +366,19 @@ main(int argc, const char *const *argv)
   /* Open listeners for each configuration. */
   SMARTLIST_FOREACH(configs, config_t *, cfg, {
     if (!listener_open(the_event_base, cfg))
-      log_abort("Failed to open listeners for configuration %d", cfg_sl_idx+1);
+      log_abort("failed to open listeners for configuration %d", cfg_sl_idx+1);
   });
 
   /* We are go for launch. As a signal to any monitoring process that may
      be running, close stdout now. */
-  log_info("Obfsproxy process %lu now initialized",
+  log_info("obfsproxy process %lu now initialized",
            (unsigned long)getpid());
   fclose(stdout);
 
   event_base_dispatch(the_event_base);
 
   /* We have landed. */
-  log_info("Exiting.");
+  log_info("exiting");
 
   /* By the time we get to this point, all listeners and connections
      have already been freed. */

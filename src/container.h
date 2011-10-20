@@ -537,7 +537,7 @@ void* strmap_remove_lc(strmap_t *map, const char *key);
 #elif SIZEOF_INT == 8
 #define BITARRAY_SHIFT 6
 #else
-#error "int is neither 4 nor 8 bytes. I can't deal with that."
+#error "need definition of BITARRAY_SHIFT for this size of 'int'"
 #endif
 #define BITARRAY_MASK ((1u<<BITARRAY_SHIFT)-1)
 

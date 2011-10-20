@@ -25,7 +25,7 @@
 static void ATTR_NORETURN
 die_oom(void)
 {
-  log_abort("Memory allocation failed: %s",strerror(errno));
+  log_abort("memory allocation failed: %s", strerror(errno));
 }
 
 void *
@@ -164,7 +164,7 @@ resolve_address_port(const char *address, int nodns, int passive,
   } else if (default_port) {
     portstr = default_port;
   } else {
-    log_debug("Error in address %s: port required.", address);
+    log_debug("error in address %s: port required", address);
     free(a);
     return NULL;
   }
@@ -185,17 +185,17 @@ resolve_address_port(const char *address, int nodns, int passive,
 
   if (ai_res) {
     if (ai_res == EVUTIL_EAI_SYSTEM)
-      log_warn("Error resolving %s: %s [%s]",
+      log_warn("error resolving %s: %s [%s]",
                address, evutil_gai_strerror(ai_res), strerror(ai_errno));
     else
-      log_warn("Error resolving %s: %s", address, evutil_gai_strerror(ai_res));
+      log_warn("error resolving %s: %s", address, evutil_gai_strerror(ai_res));
 
     if (ai) {
       evutil_freeaddrinfo(ai);
       ai = NULL;
     }
   } else if (ai == NULL) {
-    log_warn("No result for address %s", address);
+    log_warn("address resolution failed for %s", address);
   }
 
   return ai;
@@ -517,7 +517,7 @@ log_set_min_severity(const char* sev_string)
 {
   int severity = string_to_sev(sev_string);
   if (!sev_is_valid(severity)) {
-    log_warn("Severity '%s' makes no sense.", sev_string);
+    log_warn("unknown logging severity '%s'", sev_string);
     return -1;
   }
   log_min_sev = severity;

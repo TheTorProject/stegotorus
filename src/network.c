@@ -84,7 +84,7 @@ listener_open(struct event_base *base, config_t *cfg)
                                 addrs->ai_addr, addrs->ai_addrlen);
 
       if (!lsn->listener) {
-        log_warn("Failed to open listening socket on %s: %s",
+        log_warn("failed to open listening socket on %s: %s",
                  lsn->address,
                  evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
         listener_close(lsn);
@@ -92,7 +92,7 @@ listener_open(struct event_base *base, config_t *cfg)
       }
 
       smartlist_add(listeners, lsn);
-      log_debug("Now listening on %s for protocol %s.",
+      log_debug("now listening on %s for protocol %s",
                 lsn->address, cfg->vtable->name);
 
       addrs = addrs->ai_next;
@@ -123,7 +123,7 @@ listener_close_all(void)
 {
   if (!listeners)
     return;
-  log_info("Closing all listeners.");
+  log_info("closing all listeners");
 
   SMARTLIST_FOREACH(listeners, listener_t *, lsn, listener_close(lsn));
   smartlist_free(listeners);
@@ -549,7 +549,8 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
      errno isn't meaningful in that case...  */
   if ((what & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT))) {
     int err = EVUTIL_SOCKET_ERROR();
-    log_warn("Connection error: %s", evutil_socket_error_to_string(err));
+    log_warn_ckt(ckt, "downstream connection error: %s",
+                 evutil_socket_error_to_string(err));
     if (socks_state_get_status(socks) == ST_HAVE_ADDR) {
       bufferevent_enable(ckt->up_buffer, EV_WRITE);
       socks_send_reply(socks, bufferevent_get_output(ckt->up_buffer), err);
@@ -627,13 +628,13 @@ circuit_open_upstream(circuit_t *ckt)
   addr = config_get_target_addrs(ckt->cfg, 0);
 
   if (!addr) {
-    log_warn("no target addresses available");
+    log_warn_ckt(ckt, "no target addresses available");
     return -1;
   }
 
   buf = bufferevent_socket_new(ckt->cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
-    log_warn("unable to create outbound socket buffer");
+    log_warn_ckt(ckt, "unable to create outbound socket buffer");
     return -1;
   }
 
@@ -641,12 +642,12 @@ circuit_open_upstream(circuit_t *ckt)
 
   do {
     peername = printable_address(addr->ai_addr, addr->ai_addrlen);
-    log_info("Trying to connect to %s", peername);
+    log_info_ckt(ckt, "trying to connect to %s", peername);
     if (bufferevent_socket_connect(buf, addr->ai_addr, addr->ai_addrlen) >= 0)
       goto success;
 
-    log_info("Connection to %s failed: %s", peername,
-             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    log_info_ckt(ckt, "connection to %s failed: %s", peername,
+                 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     free(peername);
     addr = addr->ai_next;
 
@@ -743,7 +744,7 @@ create_outbound_connections_socks(circuit_t *ckt)
 
   log_assert(cfg->mode == LSN_SOCKS_CLIENT);
   if (socks_state_get_address(ckt->socks_state, &af, &host, &port)) {
-    log_warn("no SOCKS target available");
+    log_warn_ckt(ckt, "no destination address available from SOCKS");
     goto failure;
   }
 
@@ -756,14 +757,14 @@ create_outbound_connections_socks(circuit_t *ckt)
 
   buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
-    log_warn("unable to create outbound socket buffer");
+    log_warn_ckt(ckt, "unable to create outbound socket buffer");
     goto failure;
   }
 
-  log_info("Trying to connect to %s:%u", host, port);
+  log_info_ckt(ckt, "trying to connect to %s:%u", host, port);
   if (bufferevent_socket_connect_hostname(buf, dns, af, host, port) < 0) {
-    log_info("Connection to %s:%d failed: %s", host, port,
-             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    log_info_ckt(ckt, "connection to %s:%d failed: %s", host, port,
+                 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     goto failure;
   }
 

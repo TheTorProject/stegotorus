@@ -121,7 +121,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   unsigned int buflength = evbuffer_get_length(source);
 
   if (buflength < SIZEOF_SOCKS5_STATIC_REQ+1) {
-    log_debug("socks: request packet is too small %d:%d (1)",
+    log_debug("request packet is too small %d:%d (1)",
               buflength, SIZEOF_SOCKS5_STATIC_REQ+1);
     return SOCKS_INCOMPLETE;
   }
@@ -136,7 +136,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
      p[1] = Command field
      p[2] = Reserved field */
   if (p[0] != SOCKS5_VERSION || p[2] != 0x00) {
-    log_debug("socks: Corrupted packet. Discarding.");
+    log_debug("discarding invalid packet");
     goto err;
   }
 
@@ -162,13 +162,13 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     /* as above, but we also have the addrlen field byte */
     break;
   default:
-    log_debug("socks: Address type not supported. Go away.");
+    log_debug("address type not supported");
     goto err;
   }
 
   minsize = SIZEOF_SOCKS5_STATIC_REQ + addrlen + extralen + 2;
   if (buflength < minsize) {
-    log_debug("socks: request packet too small %d:%d (2)", buflength, minsize);
+    log_debug("request packet too small %d:%d (2)", buflength, minsize);
     return SOCKS_INCOMPLETE;
   }
 
@@ -286,7 +286,7 @@ socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
 
   reply[1] = neg_was_success ? SOCKS5_METHOD_NOAUTH : SOCKS5_METHOD_FAIL;
 
-  log_debug("socks5: method negotiation %s",
+  log_debug("method negotiation %s",
             neg_was_success ? "success" : "failure");
 
   if (evbuffer_add(dest, reply, 2) == -1 || !neg_was_success)
@@ -363,7 +363,7 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
     return SOCKS_INCOMPLETE; /* more bytes needed */
   evbuffer_copyout(source, (char*)header, 7);
   if (header[0] != 1) {
-    log_debug("socks: Only CONNECT supported.");
+    log_debug("only CONNECT supported");
     return SOCKS_BROKEN;
   }
   memcpy(&portnum, header+1, 2);
@@ -393,7 +393,7 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
     }
     hostname_len = end_of_hostname.pos - end_of_user.pos - 1;
     if (hostname_len >= sizeof(state->parsereq.addr)) {
-      log_debug("socks4a: Hostname too long");
+      log_debug("hostname too long");
       return SOCKS_BROKEN;
     }
   }
@@ -462,7 +462,7 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
     return SOCKS_BROKEN;
 
   if (evbuffer_get_length(source) < MIN_SOCKS_PACKET) {
-    log_debug("socks: Packet is too small.");
+    log_debug("packet is too small");
     return SOCKS_INCOMPLETE;
   }
 
@@ -475,10 +475,10 @@ handle_socks(struct evbuffer *source, struct evbuffer *dest,
     evbuffer_remove(source, &socks_state->version, 1);
     if (socks_state->version != SOCKS5_VERSION &&
         socks_state->version != SOCKS4_VERSION) {
-      log_debug("socks: unexpected version %d", (int)socks_state->version);
+      log_debug("unexpected socks version %d", (int)socks_state->version);
       goto broken;
     }
-    log_debug("Got version %d",(int)socks_state->version);
+    log_debug("got socks version %d",(int)socks_state->version);
   }
 
   switch(socks_state->version) {
@@ -577,7 +577,7 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
   } else if (sa->sa_family == AF_INET6) {
     const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
     if (state->version == 4) {
-      log_debug("Oops; socks4 doesn't allow ipv6 addresses");
+      log_debug("socks4 doesn't allow ipv6 addresses");
       return -1;
     }
     port = sin6->sin6_port;
@@ -585,7 +585,7 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
                          sizeof(state->parsereq.addr)) == NULL)
       return -1;
   } else {
-    log_debug("Unknown address family %d", sa->sa_family);
+    log_debug("unknown address family %d", sa->sa_family);
     return -1;
   }
 
