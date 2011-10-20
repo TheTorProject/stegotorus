@@ -311,8 +311,8 @@ rr_send_blocks(circuit_t *c, int at_eof)
                       flags))
       goto fail;
 
-    log_debug("rr_send_blocks: sent %lu+%u byte block [flags %04hx] to %s",
-              RR_WIRE_HDR_LEN, ckt->next_block_size, flags, target->peername);
+    log_debug_cn(target, "sent %lu+%u byte block [flags %04hx]",
+                 RR_WIRE_HDR_LEN, ckt->next_block_size, flags);
 
     ckt->next_down++;
     if (ckt->next_down == smartlist_len(ckt->downstreams))
@@ -368,9 +368,8 @@ rr_send_chaff(circuit_t *c, int at_eof)
                     ckt->next_block_size, flags))
     goto fail;
 
-  log_debug("rr_send_chaff: sent %lu+%u byte block [flags %04hx] to %s",
-            RR_WIRE_HDR_LEN, ckt->next_block_size,
-            flags, d->peername);
+  log_debug_cn(d, "sent %lu+%u byte block [flags %04hx]",
+               RR_WIRE_HDR_LEN, ckt->next_block_size, flags);
 
   evbuffer_free(chaff);
   evbuffer_free(block);
@@ -980,10 +979,9 @@ x_rr_conn_recv(conn_t *conn)
   x_rr_circuit_t *ckt;
 
   if (!conn->circuit) {
-    log_debug("rr_recv: finding circuit for connection with %s",
-              conn->peername);
+    log_debug_cn(conn, "finding circuit");
     if (evbuffer_get_length(input) < RR_MIN_BLOCK) {
-      log_debug("rr_recv: not enough data to find circuit yet");
+      log_debug_cn(conn, "not enough data to find circuit yet");
       return 0;
     }
     if (rr_peek_header(input, &hdr))

@@ -101,13 +101,13 @@ conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
 void
 conn_close(conn_t *conn)
 {
+  log_info_cn(conn, "closing connection");
+  smartlist_remove(connections, conn);
+  log_debug("%d connections remaining", smartlist_len(connections));
+
   if (conn->circuit) {
     circuit_drop_downstream(conn->circuit, conn);
   }
-
-  smartlist_remove(connections, conn);
-  log_debug("Closing connection with %s; %d remaining",
-            conn->peername, smartlist_len(connections));
 
   if (conn->peername)
     free((void *)conn->peername);
@@ -125,11 +125,11 @@ conn_send_eof(conn_t *dest)
 {
   struct evbuffer *outbuf = conn_get_outbound(dest);
   if (evbuffer_get_length(outbuf)) {
-    log_debug("%s: flushing out %ld bytes", dest->peername,
-              (unsigned long) evbuffer_get_length(outbuf));
+    log_debug_cn(dest, "flushing out %ld bytes",
+                 (unsigned long) evbuffer_get_length(outbuf));
     conn_do_flush(dest);
   } else {
-    log_debug("%s: sending EOF", dest->peername);
+    log_debug_cn(dest, "sending EOF downstream");
     bufferevent_disable(dest->buffer, EV_WRITE);
     shutdown(bufferevent_getfd(dest->buffer), SHUT_WR);
   }

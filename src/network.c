@@ -216,14 +216,14 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
 
   /* If appropriate at this point, connect to upstream. */
   if (conn_maybe_open_upstream(conn) < 0) {
-    log_debug("%s: Error opening upstream connection", conn->peername);
+    log_debug_cn(conn, "error opening upstream circuit");
     conn_close(conn);
     return;
   }
 
   /* Queue handshake, if any. */
   if (conn_handshake(conn) < 0) {
-    log_debug("%s: Error during handshake", conn->peername);
+    log_debug_cn(conn, "error during handshake");
     conn_close(conn);
     return;
   }
@@ -303,35 +303,13 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *down = arg;
 
-  log_debug("%s: %s, %lu bytes available", down->peername, __func__,
-            (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
+  log_debug_cn(down, "%lu bytes available",
+               (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
   if (conn_recv(down)) {
-    log_debug("%s: error during receive.", down->peername);
+    log_debug_cn(down, "error during receive");
     conn_close(down);
   }
-}
-
-/** Diagnostic-printing subroutine of upstream_event_cb and
-    downstream_event_cb. */
-static void
-report_event(short what, const char *peer, int errcode)
-{
-  if (what & BEV_EVENT_ERROR)
-    log_warn("%s: network error in %s: %s",
-             peer,
-             (what & BEV_EVENT_READING) ? "read" : "write",
-             evutil_socket_error_to_string(errcode));
-  else if (what & BEV_EVENT_EOF)
-    log_info("%s: %s",
-             peer,
-             (what & BEV_EVENT_READING)
-             ? "received EOF"
-             : "further transmissions squelched");
-  else if (what & BEV_EVENT_TIMEOUT)
-    log_warn("%s: %s timed out",
-             peer,
-             (what & BEV_EVENT_READING) ? "read" : "write");
 }
 
 /**
@@ -389,16 +367,27 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
   conn_t *conn = arg;
 
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
-    report_event(what, conn->peername, EVUTIL_SOCKET_ERROR());
+    if (what & BEV_EVENT_ERROR)
+      log_warn_cn(conn, "network error in %s: %s",
+                  (what & BEV_EVENT_READING) ? "read" : "write",
+                  evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    else if (what & BEV_EVENT_EOF)
+      log_info_cn(conn, "%s",
+                  (what & BEV_EVENT_READING)
+                  ? "EOF from upstream"
+                  : "further transmissions to upstream squelched");
+    else if (what & BEV_EVENT_TIMEOUT)
+      log_warn_cn(conn, "%s timed out",
+                  (what & BEV_EVENT_READING) ? "read" : "write");
+
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Peer is done sending us data. */
       conn_recv_eof(conn);
       bufferevent_disable(bev, EV_READ);
       if (bufferevent_get_enabled(bev)) {
-        log_debug("%s: acknowledging EOF downstream", conn->peername);
+        log_debug_cn(conn, "acknowledging EOF downstream");
         shutdown(bufferevent_getfd(bev), SHUT_RD);
       } else {
-        log_info("%s: closing connection", conn->peername);
         conn_close(conn);
       }
     } else {
@@ -408,7 +397,7 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
     /* We should never get BEV_EVENT_CONNECTED here.
        Ignore any events we don't understand. */
     if (what & BEV_EVENT_CONNECTED)
-      log_abort("double connection event for %s", conn->peername);
+      log_abort_cn(conn, "double connection event");
   }
 }
 
@@ -442,16 +431,14 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
-  log_debug("%s: %s, %ld bytes still to transmit",
-            conn->peername, __func__, (unsigned long)remain);
+  log_debug_cn(conn, "%ld bytes still to transmit", (unsigned long)remain);
 
   if (remain == 0) {
     bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev)) {
-      log_debug("%s: sending EOF downstream", conn->peername);
+      log_debug_cn(conn, "sending EOF downstream");
       shutdown(bufferevent_getfd(bev), SHUT_WR);
     } else {
-      log_info("%s: closing downstream connection", conn->peername);
       conn_close(conn);
     }
   }
@@ -495,7 +482,7 @@ static void
 downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = arg;
-  log_debug("%s for %s", __func__, conn->peername);
+  log_debug_cn(conn, "what=%04hx", what);
 
   /* Upon successful connection, enable traffic on both sides of the
      connection, and replace this callback with the regular event_cb */
@@ -505,7 +492,7 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
     log_assert(ckt->up_peer);
     log_assert(conn->buffer == bev);
 
-    log_debug("%s: Successful connection", conn->peername);
+    log_debug_cn(conn, "successful connection");
 
     bufferevent_setcb(conn->buffer,
                       downstream_read_cb, NULL, downstream_event_cb, conn);
@@ -516,7 +503,7 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 
     /* Queue handshake, if any. */
     if (conn_handshake(conn) < 0) {
-      log_debug("%s: Error during handshake", conn->peername);
+      log_debug_cn(conn, "error during handshake");
       conn_close(conn);
       return;
     }
@@ -539,8 +526,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
   circuit_t *ckt = conn->circuit;
   socks_state_t *socks;
 
-  log_debug("%s for %s", __func__, conn->peername);
-
+  log_debug_cn(conn, "what=%04hx", what);
   log_assert(ckt);
   log_assert(ckt->up_buffer);
 
@@ -607,7 +593,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
 
     /* Queue handshake, if any. */
     if (conn_handshake(conn)) {
-      log_debug("%s: Error during handshake", conn->peername);
+      log_debug_cn(conn, "error during handshake");
       conn_close(conn);
       return;
     }

@@ -217,8 +217,9 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
       /* Find the connections whose transmit rooms are closest to the
          desired transmission length from both directions. */
       size_t room = steg_transmit_room(conn->steg, c);
-      log_debug("chop_pick_connection: %s (%s) offers %lu bytes",
-                c->peername, conn->steg->vtable->name, (unsigned long)room);
+      log_debug_cn(c, "offers %lu bytes (%s)", (unsigned long)room,
+                   conn->steg->vtable->name);
+
       if (room > CHOP_MAX_BLOCK)
         room = CHOP_MAX_BLOCK;
 
@@ -234,8 +235,7 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
         }
       }
     } else {
-      log_debug("chop_pick_connection: %s (no steg) offers 0 bytes",
-                c->peername);
+      log_debug_cn(c, "offers 0 bytes (no steg)");
     }
   });
 
@@ -304,8 +304,8 @@ chop_send_block(conn_t *d,
     ckt->sent_syn = true;
   if (flags & CHOP_F_FIN)
     ckt->sent_fin = true;
-  log_debug("chop_send_block: sent %lu+%u byte block [flags %04hx] to %s",
-            CHOP_WIRE_HDR_LEN, length, flags, d->peername);
+  log_debug_cn(d, "sent %lu+%u byte block [flags %04hx]",
+               CHOP_WIRE_HDR_LEN, length, flags);
   if (dest->must_transmit_timer)
     evtimer_del(dest->must_transmit_timer);
   return 0;
@@ -444,16 +444,16 @@ must_transmit_timer_cb(evutil_socket_t fd, short what, void *arg)
   chop_conn_t *conn = downcast_conn(cn);
   size_t room;
   if (!conn->steg) {
-    log_warn("%s: must transmit, but no steg module detected", cn->peername);
+    log_warn_cn(cn, "must transmit, but no steg module available");
     return;
   }
   room = steg_transmit_room(conn->steg, cn);
   if (!room) {
-    log_warn("%s: must transmit, but no transmit room", cn->peername);
+    log_warn_cn(cn, "must transmit, but no transmit room");
     return;
   }
 
-  log_debug("%s: must transmit", cn->peername);
+  log_debug_cn(cn, "must transmit");
   chop_send_targeted_chaff(downcast_circuit(cn->circuit), cn, room, false);
 }
 
@@ -1080,11 +1080,10 @@ chop_conn_recv(conn_t *s)
       return 0; /* need more data */
     source->steg = steg_detect(s);
     if (!source->steg) {
-      log_debug("%s: no recognized steg pattern detected", s->peername);
+      log_debug_cn(s, "no recognized steg pattern detected");
       return -1;
     } else {
-      log_debug("%s: detected steg pattern %s",
-                s->peername, source->steg->vtable->name);
+      log_debug_cn(s, "detected steg pattern %s", source->steg->vtable->name);
     }
   }
 
@@ -1092,10 +1091,9 @@ chop_conn_recv(conn_t *s)
     return -1;
 
   if (!s->circuit) {
-    log_debug("chop_recv: finding circuit for connection with %s",
-              s->peername);
+    log_debug_cn(s, "finding circuit");
     if (evbuffer_get_length(source->recv_pending) < CHOP_WIRE_HDR_LEN) {
-      log_debug("chop_recv: not enough data to find circuit yet");
+      log_debug_cn(s, "not enough data to find circuit yet");
       return 0;
     }
     if (chop_peek_header(source->recv_pending, &hdr))
