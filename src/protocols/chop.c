@@ -367,8 +367,8 @@ chop_send_blocks(circuit_t *c, int at_eof)
   evbuffer_free(xmit_block);
   avail = evbuffer_get_length(ckt->xmit_pending);
   if (avail)
-    log_debug("%s: %lu bytes still waiting to be sent",
-              c->up_peer, (unsigned long)avail);
+    log_debug_ckt(c, "%lu bytes still waiting to be sent",
+                  (unsigned long)avail);
   return 0;
 }
 
@@ -691,26 +691,23 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
   out = HT_FIND(chop_circuit_table_impl, &cfg->circuits.head, &in);
   if (out) {
     log_assert(out->circuit);
-    log_debug("chop_recv: found circuit to %s for connection from %s",
-              out->circuit->up_peer, conn->peername);
+    log_debug_cn(conn, "found circuit to %s", out->circuit->up_peer);
   } else {
     out = xzalloc(sizeof(chop_circuit_entry_t));
     out->circuit = circuit_create(c);
     if (!out->circuit) {
       free(out);
-      log_warn("chop_recv: failed to create new circuit for %s",
-               conn->peername);
+      log_warn_cn(conn, "failed to create new circuit");
       return -1;
     }
     if (circuit_open_upstream(out->circuit)) {
-      log_warn("chop_recv: failed to begin upstream connection for %s",
-               conn->peername);
+      log_warn_cn(conn, "failed to begin upstream connection");
       circuit_close(out->circuit);
       free(out);
       return -1;
     }
-    log_debug("chop_recv: new circuit to %s for connection from %s",
-              out->circuit->up_peer, conn->peername);
+    log_debug_cn(conn, "created new circuit to %s",
+                   out->circuit->up_peer);
     out->circuit_id = circuit_id;
     downcast_circuit(out->circuit)->circuit_id = circuit_id;
     HT_INSERT(chop_circuit_table_impl, &cfg->circuits.head, out);
@@ -921,8 +918,8 @@ chop_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   smartlist_add(ckt->downstreams, conn);
-  log_debug("%s: added connection to %s, now %d",
-            c->up_peer, conn->peername, smartlist_len(ckt->downstreams));
+  log_debug_ckt(c, "added connection to %s, now %d",
+                conn->peername, smartlist_len(ckt->downstreams));
 
   circuit_disarm_axe_timer(c);
 }
@@ -932,8 +929,8 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   smartlist_remove(ckt->downstreams, conn);
-  log_debug("%s: removed connection to %s, now %d",
-            c->up_peer, conn->peername, smartlist_len(ckt->downstreams));
+  log_debug_ckt(c, "removed connection to %s, now %d",
+                conn->peername, smartlist_len(ckt->downstreams));
 
   /* If that was the last connection on this circuit AND we've both
      received and sent a FIN, close the circuit.  Otherwise, if we're
@@ -1025,7 +1022,7 @@ chop_circuit_send(circuit_t *c)
        reopen our outbound connections; the on-connection event will
        bring us back here.  If we're the server, we have to just
        twiddle our thumbs and hope the client reconnects. */
-    log_debug("%s: chop_send: no downstreams", c->up_peer);
+    log_debug_ckt(c, "no downstream connections");
     if (c->cfg->mode != LSN_SIMPLE_SERVER)
       circuit_reopen_downstreams(c);
     else
@@ -1040,7 +1037,7 @@ chop_circuit_send(circuit_t *c)
 
   if (evbuffer_add_buffer(ckt->xmit_pending,
                           bufferevent_get_input(c->up_buffer))) {
-    log_warn("%s: chop_send: failed to queue data", c->up_peer);
+    log_warn_ckt(c, "failed to queue data");
     return -1;
   }
   if (chop_send_blocks(c, ckt->upstream_eof))
@@ -1110,8 +1107,7 @@ chop_conn_recv(conn_t *s)
 
   c = s->circuit;
   ckt = downcast_circuit(c);
-  log_debug("chop_recv: connection to %s, circuit to %s",
-            s->peername, c->up_peer);
+  log_debug_cn(s, "circuit to %s", c->up_peer);
 
   for (;;) {
     avail = evbuffer_get_length(source->recv_pending);

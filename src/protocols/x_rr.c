@@ -324,8 +324,8 @@ rr_send_blocks(circuit_t *c, int at_eof)
   }
 
   evbuffer_free(xmit_block);
-  log_debug("%s: %lu bytes still waiting to be sent",
-            c->up_peer, (unsigned long)evbuffer_get_length(ckt->xmit_pending));
+  log_debug_ckt(c, "%lu bytes still waiting to be sent",
+                (unsigned long)evbuffer_get_length(ckt->xmit_pending));
   return 0;
 
  fail:
@@ -626,25 +626,23 @@ rr_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
   out = HT_FIND(rr_circuit_table_impl, &cfg->circuits.head, &in);
   if (out) {
     log_assert(out->circuit);
-    log_debug("rr_recv: found circuit to %s for connection from %s",
-              out->circuit->up_peer, conn->peername);
+    log_debug_cn(conn, "found circuit to %s", out->circuit->up_peer);
   } else {
     out = xzalloc(sizeof(rr_circuit_entry_t));
     out->circuit = circuit_create(c);
     if (!out->circuit) {
       free(out);
-      log_warn("rr_recv: failed to create new circuit for %s", conn->peername);
+      log_warn_cn(conn, "failed to create new circuit");
       return -1;
     }
     if (circuit_open_upstream(out->circuit)) {
-      log_warn("rr_recv: failed to begin upstream connection for %s",
-               conn->peername);
+      log_warn_cn(conn, "failed to begin upstream connection");
       circuit_close(out->circuit);
       free(out);
       return -1;
     }
-    log_debug("rr_recv: new circuit to %s for connection from %s",
-              out->circuit->up_peer, conn->peername);
+    log_debug_cn(conn, "created new circuit to %s",
+                   out->circuit->up_peer);
     out->circuit_id = circuit_id;
     downcast_circuit(out->circuit)->circuit_id = circuit_id;
     HT_INSERT(rr_circuit_table_impl, &cfg->circuits.head, out);
@@ -835,8 +833,8 @@ x_rr_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   x_rr_circuit_t *ckt = downcast_circuit(c);
   smartlist_add(ckt->downstreams, conn);
-  log_debug("%s: added connection to %s, now %d",
-            c->up_peer, conn->peername, smartlist_len(ckt->downstreams));
+  log_debug_ckt(c, "added connection to %s, now %d",
+                conn->peername, smartlist_len(ckt->downstreams));
 
   circuit_disarm_axe_timer(c);
 }
@@ -846,8 +844,8 @@ x_rr_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   x_rr_circuit_t *ckt = downcast_circuit(c);
   smartlist_remove(ckt->downstreams, conn);
-  log_debug("%s: removed connection to %s, now %d",
-            c->up_peer, conn->peername, smartlist_len(ckt->downstreams));
+  log_debug_ckt(c, "removed connection to %s, now %d",
+                conn->peername, smartlist_len(ckt->downstreams));
 
   /* If that was the last connection on this circuit AND we've both
      received and sent a FIN, close the circuit.  Otherwise, arm a
@@ -916,7 +914,7 @@ x_rr_circuit_send(circuit_t *c)
 
   if (evbuffer_add_buffer(ckt->xmit_pending,
                           bufferevent_get_input(c->up_buffer))) {
-    log_warn("%s: rr_send: failed to queue data", c->up_peer);
+    log_warn_ckt(c, "failed to queue data");
     return -1;
   }
   return rr_send_blocks(c, 0);
@@ -926,9 +924,10 @@ static int
 x_rr_circuit_send_eof(circuit_t *c)
 {
   x_rr_circuit_t *ckt = downcast_circuit(c);
+  size_t pending;
 
   if (smartlist_len(ckt->downstreams) == 0) {
-    log_debug("%s: rr_send_eof: no downstreams", c->up_peer);
+    log_debug_ckt(c, "no downstream connections");
     ckt->sent_fin = true;
     /* see circuit_drop_downstream */
     if (ckt->received_fin)
@@ -942,24 +941,22 @@ x_rr_circuit_send_eof(circuit_t *c)
   if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)) > 0) {
     if (evbuffer_add_buffer(ckt->xmit_pending,
                             bufferevent_get_input(c->up_buffer))) {
-      log_warn("%s: rr_send_eof: failed to queue remaining data", c->up_peer);
+      log_warn_ckt(c, "failed to queue remaining data");
       return -1;
     }
   }
 
   /* force out any remaining data plus a FIN */
-  if (evbuffer_get_length(ckt->xmit_pending) > 0) {
-    log_debug("%s: %lu bytes to send before EOF", c->up_peer,
-              (unsigned long)evbuffer_get_length(ckt->xmit_pending));
+  pending = evbuffer_get_length(ckt->xmit_pending);
+  log_debug_ckt(c, "%lu bytes to send before EOF", (unsigned long)pending);
+  if (pending > 0) {
     if (rr_send_blocks(c, 1)) {
-      log_warn("%s: rr_send_eof: failed to transmit data and FIN",
-               c->up_peer);
+      log_warn_ckt(c, "failed to transmit data and FIN");
       return -1;
     }
   } else {
-    log_debug("%s: 0 bytes to send before EOF", c->up_peer);
     if (rr_send_chaff(c, 1)) {
-      log_warn("%s: rr_send_eof: failed to transmit FIN", c->up_peer);
+      log_warn_ckt(c, "failed to transmit FIN");
       return -1;
     }
   }
@@ -998,8 +995,7 @@ x_rr_conn_recv(conn_t *conn)
 
   c = conn->circuit;
   ckt = downcast_circuit(c);
-  log_debug("rr_recv: connection to %s, circuit to %s",
-            conn->peername, c->up_peer);
+  log_debug_cn(conn, "circuit to %s", c->up_peer);
 
   for (;;) {
     avail = evbuffer_get_length(input);

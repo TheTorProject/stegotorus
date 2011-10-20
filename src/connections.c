@@ -194,9 +194,9 @@ static void
 flush_timer_cb(evutil_socket_t fd, short what, void *arg)
 {
   circuit_t *ckt = arg;
-  log_debug("%s: flush timer expired, %ld bytes available", ckt->up_peer,
-            (unsigned long)
-            evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
+  log_debug_ckt(ckt, "flush timer expired, %ld bytes available",
+                (unsigned long)
+                evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
   circuit_send(ckt);
 }
 
@@ -208,7 +208,7 @@ static void
 axe_timer_cb(evutil_socket_t fd, short what, void *arg)
 {
   circuit_t *ckt = arg;
-  log_warn("%s: timeout, closing circuit", ckt->up_peer);
+  log_warn_ckt(ckt, "timeout waiting for new connections");
 
   if (ckt->connected &&
       evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)) > 0)
@@ -264,9 +264,9 @@ circuit_drop_downstream(circuit_t *ckt, conn_t *down)
 void
 circuit_close(circuit_t *ckt)
 {
+  log_info_ckt(ckt, "closing circuit");
   smartlist_remove(circuits, ckt);
-  log_debug("Closing circuit with %s; %d remaining",
-            ckt->up_peer, smartlist_len(circuits));
+  log_debug("%d circuits remaining", smartlist_len(circuits));
 
   if (ckt->up_buffer)
     bufferevent_free(ckt->up_buffer);
@@ -294,7 +294,7 @@ void
 circuit_send(circuit_t *ckt)
 {
   if (circuit_send_raw(ckt)) {
-    log_info("%s: error during transmit", ckt->up_peer);
+    log_info_ckt(ckt, "error during transmit");
     circuit_close(ckt);
   }
 }
@@ -311,7 +311,7 @@ circuit_send_eof(circuit_t *ckt)
   if (ckt->socks_state) {
     circuit_close(ckt);
   } else if (circuit_send_eof_raw(ckt)) {
-    log_info("%s: error during transmit", ckt->up_peer);
+    log_info_ckt(ckt, "error during transmit");
     circuit_close(ckt);
   }
 }
@@ -323,19 +323,19 @@ circuit_recv_eof(circuit_t *ckt)
     struct evbuffer *outbuf = bufferevent_get_output(ckt->up_buffer);
     size_t outlen = evbuffer_get_length(outbuf);
     if (outlen) {
-      log_debug("%s: flushing %ld bytes to upstream",
-                ckt->up_peer, (unsigned long)outlen);
+      log_debug_ckt(ckt, "flushing %ld bytes to upstream",
+                    (unsigned long)outlen);
       circuit_do_flush(ckt);
     } else if (ckt->connected) {
-      log_debug("%s: sending EOF to upstream", ckt->up_peer);
+      log_debug_ckt(ckt, "sending EOF to upstream");
       bufferevent_disable(ckt->up_buffer, EV_WRITE);
       shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
     } else {
-      log_debug("%s: holding EOF till connection", ckt->up_peer);
+      log_debug_ckt(ckt, "holding EOF till connection");
       ckt->pending_eof = 1;
     }
   } else {
-    log_debug("%s: no buffer, holding EOF till connection", ckt->up_peer);
+    log_debug_ckt(ckt, "no buffer, holding EOF till connection");
     ckt->pending_eof = 1;
   }
 }

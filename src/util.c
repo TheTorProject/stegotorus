@@ -612,7 +612,7 @@ logpfx_cn(int severity, const char *fn, conn_t *conn)
   } while (0)
 
 #if __STDC_VERSION__ >= 199901L
-#define FNARG const char fn,
+#define FNARG const char *fn,
 #define FN fn
 #else
 #define FNARG /**/
