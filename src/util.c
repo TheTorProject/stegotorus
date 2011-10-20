@@ -579,10 +579,10 @@ logpfx_ckt(int severity, const char *fn, circuit_t *ckt)
     return;
 
   fprintf(log_dest, "[%s] ", sev_to_string(severity));
-  if (ckt && ckt->up_peer)
-    fprintf(log_dest, "%s: ", ckt->up_peer);
   if (log_min_sev == LOG_SEV_DEBUG && fn)
     fprintf(log_dest, "%s: ", fn);
+  if (ckt)
+    fprintf(log_dest, "<%u> ", ckt->serial);
 }
 
 static void
@@ -596,10 +596,12 @@ logpfx_cn(int severity, const char *fn, conn_t *conn)
     return;
 
   fprintf(log_dest, "[%s] ", sev_to_string(severity));
-  if (conn && conn->peername)
-    fprintf(log_dest, "%s: ", conn->peername);
   if (log_min_sev == LOG_SEV_DEBUG && fn)
     fprintf(log_dest, "%s: ", fn);
+  if (conn)
+    fprintf(log_dest, "<%u.%u> ",
+            conn->circuit ? conn->circuit->serial : 0,
+            conn->serial);
 }
 
 /**** Public logging API. ****/

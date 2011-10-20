@@ -832,8 +832,9 @@ x_rr_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   x_rr_circuit_t *ckt = downcast_circuit(c);
   smartlist_add(ckt->downstreams, conn);
-  log_debug_ckt(c, "added connection to %s, now %d",
-                conn->peername, smartlist_len(ckt->downstreams));
+  log_debug_ckt(c, "added connection <%d.%d> to %s, now %d",
+                c->serial, conn->serial, conn->peername,
+                smartlist_len(ckt->downstreams));
 
   circuit_disarm_axe_timer(c);
 }
@@ -843,8 +844,9 @@ x_rr_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   x_rr_circuit_t *ckt = downcast_circuit(c);
   smartlist_remove(ckt->downstreams, conn);
-  log_debug_ckt(c, "removed connection to %s, now %d",
-                conn->peername, smartlist_len(ckt->downstreams));
+  log_debug_ckt(c, "dropped connection <%d.%d> to %s, now %d",
+                c->serial, conn->serial, conn->peername,
+                smartlist_len(ckt->downstreams));
 
   /* If that was the last connection on this circuit AND we've both
      received and sent a FIN, close the circuit.  Otherwise, arm a

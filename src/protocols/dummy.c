@@ -155,6 +155,8 @@ dummy_circuit_add_downstream(circuit_t *c, conn_t *conn)
   dummy_circuit_t *ckt = downcast_circuit(c);
   log_assert(!ckt->downstream);
   ckt->downstream = conn;
+  log_debug_ckt(c, "added connection <%d.%d> to %s",
+                c->serial, conn->serial, conn->peername);
 }
 
 /* Drop a connection from this circuit.  If this happens in this
@@ -165,6 +167,8 @@ dummy_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   dummy_circuit_t *ckt = downcast_circuit(c);
   log_assert(ckt->downstream == conn);
+  log_debug_ckt(c, "dropped connection <%d.%d> to %s",
+                c->serial, conn->serial, conn->peername);
   ckt->downstream = NULL;
   circuit_close(c);
 }

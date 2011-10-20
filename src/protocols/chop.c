@@ -707,7 +707,7 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
       return -1;
     }
     log_debug_cn(conn, "created new circuit to %s",
-                   out->circuit->up_peer);
+                 out->circuit->up_peer);
     out->circuit_id = circuit_id;
     downcast_circuit(out->circuit)->circuit_id = circuit_id;
     HT_INSERT(chop_circuit_table_impl, &cfg->circuits.head, out);
@@ -918,8 +918,9 @@ chop_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   smartlist_add(ckt->downstreams, conn);
-  log_debug_ckt(c, "added connection to %s, now %d",
-                conn->peername, smartlist_len(ckt->downstreams));
+  log_debug_ckt(c, "added connection <%d.%d> to %s, now %d",
+                c->serial, conn->serial, conn->peername,
+                smartlist_len(ckt->downstreams));
 
   circuit_disarm_axe_timer(c);
 }
@@ -929,8 +930,9 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   smartlist_remove(ckt->downstreams, conn);
-  log_debug_ckt(c, "removed connection to %s, now %d",
-                conn->peername, smartlist_len(ckt->downstreams));
+  log_debug_ckt(c, "dropped connection <%d.%d> to %s, now %d",
+                c->serial, conn->serial, conn->peername,
+                smartlist_len(ckt->downstreams));
 
   /* If that was the last connection on this circuit AND we've both
      received and sent a FIN, close the circuit.  Otherwise, if we're

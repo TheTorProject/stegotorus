@@ -18,6 +18,12 @@ static smartlist_t *connections;
 /** All active circuits.  */
 static smartlist_t *circuits;
 
+/** Most recently assigned serial numbers for connections and circuits.
+    Note that serial number 0 is never used. These are only used for
+    debugging messages, so we don't worry about them wrapping around. */
+static unsigned int last_conn_serial = 0;
+static unsigned int last_ckt_serial = 0;
+
 /** True when obfsproxy is shutting down: no further connections or
     circuits may be created, and we break out of the event loop when
     the last one (of either) is closed. */
@@ -91,7 +97,9 @@ conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
   conn = cfg->vtable->conn_create(cfg);
   conn->buffer = buf;
   conn->peername = peername;
+  conn->serial = ++last_conn_serial;
   smartlist_add(connections, conn);
+  log_info_cn(conn, "new connection");
   return conn;
 }
 
@@ -225,11 +233,13 @@ circuit_create(config_t *cfg)
   log_assert(!shutting_down);
 
   ckt = cfg->vtable->circuit_create(cfg);
+  ckt->serial = ++last_ckt_serial;
 
   if (cfg->mode == LSN_SOCKS_CLIENT)
     ckt->socks_state = socks_state_new();
 
   smartlist_add(circuits, ckt);
+  log_debug_ckt(ckt, "new circuit");
   return ckt;
 }
 

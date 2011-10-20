@@ -23,6 +23,7 @@ struct conn_t {
   circuit_t          *circuit;
   const char         *peername;
   struct bufferevent *buffer;
+  unsigned int        serial;
 };
 
 /** Initialize connection and circuit tracking.  Must be called before
@@ -110,8 +111,9 @@ struct circuit_t {
   struct event       *axe_timer;
   struct bufferevent *up_buffer;
   const char         *up_peer;
-
   socks_state_t      *socks_state;
+  unsigned int        serial;
+
   unsigned int        connected : 1;
   unsigned int        pending_eof : 1;
 };

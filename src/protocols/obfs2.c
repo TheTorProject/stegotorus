@@ -204,6 +204,8 @@ obfs2_circuit_add_downstream(circuit_t *c, conn_t *conn)
   obfs2_circuit_t *ckt = downcast_circuit(c);
   log_assert(!ckt->downstream);
   ckt->downstream = conn;
+  log_debug_ckt(c, "added connection <%d.%d> to %s",
+                c->serial, conn->serial, conn->peername);
 }
 
 /* Drop a connection from this circuit.  If this happens in this
@@ -215,6 +217,8 @@ obfs2_circuit_drop_downstream(circuit_t *c, conn_t *conn)
   obfs2_circuit_t *ckt = downcast_circuit(c);
   log_assert(ckt->downstream == conn);
   ckt->downstream = NULL;
+  log_debug_ckt(c, "dropped connection <%d.%d> to %s",
+                c->serial, conn->serial, conn->peername);
   circuit_close(c);
 }
 

@@ -176,7 +176,8 @@ x_dsteg_circuit_add_downstream(circuit_t *c, conn_t *conn)
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
   log_assert(!ckt->downstream);
   ckt->downstream = conn;
-  log_debug_ckt(c, "added connection to %s", conn->peername);
+  log_debug_ckt(c, "added connection <%d.%d> to %s",
+                c->serial, conn->serial, conn->peername);
   circuit_disarm_axe_timer(c);
 }
 
@@ -188,7 +189,8 @@ x_dsteg_circuit_drop_downstream(circuit_t *c, conn_t *conn)
   x_dsteg_circuit_t *ckt = downcast_circuit(c);
   log_assert(ckt->downstream == conn);
   ckt->downstream = NULL;
-  log_debug_ckt(c, "dropped connection to %s", conn->peername);
+  log_debug_ckt(c, "dropped connection <%d.%d> to %s",
+                c->serial, conn->serial, conn->peername);
   if (ckt->sent_fin && ckt->received_fin) {
     if (evbuffer_get_length(bufferevent_get_output(c->up_buffer)) > 0)
       /* this may already have happened, but there's no harm in
