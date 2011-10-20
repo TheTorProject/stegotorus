@@ -39,6 +39,7 @@ struct event_base;
 #define ATTR_MALLOC   __attribute__((malloc))
 #define ATTR_NORETURN __attribute__((noreturn))
 #define ATTR_PRINTF_1 __attribute__((format(printf, 1, 2)))
+#define ATTR_PRINTF_2 __attribute__((format(printf, 2, 3)))
 #define ATTR_PRINTF_3 __attribute__((format(printf, 3, 4)))
 #define ATTR_PURE     __attribute__((pure))
 
@@ -148,26 +149,87 @@ int log_do_debug(void);
 /** Close the logfile if it's open.  Ignores errors. */
 void close_obfsproxy_logfile(void);
 
-/** The actual log-emitting functions */
+/** The actual log-emitting functions.  There are three families of
+    these functions: generic, circuit-related, and
+    connection-related. */
+
+#if __STDC_VERSION__ >= 199901L
 
 /** Fatal errors: the program cannot continue and will exit. */
-void log_abort(const char *format, ...)
-  ATTR_PRINTF_1 ATTR_NORETURN;
+void log_abort(const char *fn, const char *format, ...)
+  ATTR_PRINTF_2 ATTR_NORETURN;
+void log_abort_ckt(const char *fn, circuit_t *ckt, const char *format, ...)
+  ATTR_PRINTF_3 ATTR_NORETURN;
+void log_abort_cn(const char *fn, conn_t *conn, const char *format, ...)
+  ATTR_PRINTF_3 ATTR_NORETURN;
 
 /** Warn-level severity: for messages that only appear when something
     has gone wrong. */
-void log_warn(const char *format, ...)
-  ATTR_PRINTF_1;
+void log_warn(const char *fn, const char *format, ...) ATTR_PRINTF_2;
+void log_warn_ckt(const char *fn, circuit_t *ckt, const char *format, ...)
+  ATTR_PRINTF_3;
+void log_warn_cn(const char *fn, conn_t *conn,const char *format, ...)
+  ATTR_PRINTF_3;
 
 /** Info-level severity: for messages that should be sent to the user
     during normal operation. */
-void log_info(const char *format, ...)
-  ATTR_PRINTF_1;
+void log_info(const char *fn, const char *format, ...) ATTR_PRINTF_2;
+void log_info_ckt(const char *fn, circuit_t *ckt, const char *format, ...)
+  ATTR_PRINTF_3;
+void log_info_cn(const char *fn, conn_t *conn,const char *format, ...)
+  ATTR_PRINTF_3;
 
 /** Debug-level severity: for hyper-verbose messages of no interest to
     anybody but developers. */
-void log_debug(const char *format, ...)
-  ATTR_PRINTF_1;
+void log_debug(const char *fn, const char *format, ...) ATTR_PRINTF_2;
+void log_debug_ckt(const char *fn, circuit_t *ckt, const char *format, ...)
+  ATTR_PRINTF_3;
+void log_debug_cn(const char *fn, conn_t *conn, const char *format, ...)
+  ATTR_PRINTF_3;
+
+#define log_abort(...)     log_abort(__func__, __VA_ARGS__)
+#define log_abort_ckt(...) log_abort_ckt(__func__, __VA_ARGS__)
+#define log_abort_cn(...)  log_abort_cn(__func__, __VA_ARGS__)
+
+#define log_warn(...)      log_warn(__func__, __VA_ARGS__)
+#define log_warn_ckt(...)  log_warn_ckt(__func__, __VA_ARGS__)
+#define log_warn_cn(...)   log_warn_cn(__func__, __VA_ARGS__)
+
+#define log_info(...)      log_info(__func__, __VA_ARGS__)
+#define log_info_ckt(...)  log_info_ckt(__func__, __VA_ARGS__)
+#define log_info_cn(...)   log_info_cn(__func__, __VA_ARGS__)
+
+#define log_debug(...)     log_debug(__func__, __VA_ARGS__)
+#define log_debug_ckt(...) log_debug_ckt(__func__, __VA_ARGS__)
+#define log_debug_cn(...)  log_debug_cn(__func__, __VA_ARGS__)
+
+#else
+/** Fatal errors: the program cannot continue and will exit. */
+void log_abort(const char *format, ...) ATTR_PRINTF_1 ATTR_NORETURN;
+void log_abort_ckt(circuit_t *ckt,
+                   const char *format, ...) ATTR_PRINTF_2 ATTR_NORETURN;
+void log_abort_cn(conn_t *conn,
+                  const char *format, ...) ATTR_PRINTF_2 ATTR_NORETURN;
+
+/** Warn-level severity: for messages that only appear when something
+    has gone wrong. */
+void log_warn(const char *format, ...) ATTR_PRINTF_1;
+void log_warn_ckt(circuit_t *ckt, const char *format, ...) ATTR_PRINTF_2;
+void log_warn_cn(conn_t *conn,const char *format, ...) ATTR_PRINTF_2;
+
+/** Info-level severity: for messages that should be sent to the user
+    during normal operation. */
+void log_info(const char *format, ...) ATTR_PRINTF_1;
+void log_info_ckt(circuit_t *ckt, const char *format, ...) ATTR_PRINTF_2;
+void log_info_cn(conn_t *conn,const char *format, ...) ATTR_PRINTF_2;
+
+/** Debug-level severity: for hyper-verbose messages of no interest to
+    anybody but developers. */
+void log_debug(const char *format, ...) ATTR_PRINTF_1;
+void log_debug_ckt(circuit_t *ckt, const char *format, ...) ATTR_PRINTF_2;
+void log_debug_cn(conn_t *conn,const char *format, ...) ATTR_PRINTF_2;
+#endif
+
 
 /** Assertion checking.  We don't ever compile assertions out, and we
     want precise control over the error messages, so we use our own

@@ -244,6 +244,11 @@ main(int argc, const char *const *argv)
   const char *const *end;
   struct stat st;
 
+  /* Set the logging defaults before doing anything else.  It wouldn't
+     be necessary, but some systems don't let you initialize a global
+     variable to stderr. */
+  log_set_method(LOG_METHOD_STDERR, NULL);
+
   /* Handle optional obfsproxy arguments. */
   begin = argv + handle_obfsproxy_args(argv);
 

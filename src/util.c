@@ -3,6 +3,7 @@
 */
 
 #include "util.h"
+#include "connections.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -397,12 +398,10 @@ ascii_strlower(char *s)
 #define LOG_SEV_INFO    2
 #define LOG_SEV_DEBUG   1
 
-/* logging method */
-static int logging_method=LOG_METHOD_STDERR;
+/* logging destination; NULL for no logging. */
+static FILE *log_dest;
 /* minimum logging severity */
-static int logging_min_sev=LOG_SEV_INFO;
-/* logfile fd */
-static int logging_logfile=-1;
+static int log_min_sev = LOG_SEV_INFO;
 
 /** Helper: map a log severity to descriptive string. */
 static const char *
@@ -453,15 +452,19 @@ sev_is_valid(int severity)
    On success it returns 0, on fail it returns -1.
 */
 static int
-open_and_set_obfsproxy_logfile(const char *filename)
+open_obfsproxy_logfile(const char *filename)
 {
   if (!filename)
     return -1;
-  logging_logfile = open(filename,
-                         O_WRONLY|O_CREAT|O_APPEND,
-                         0644);
-  if (logging_logfile < 0)
+
+  log_dest = fopen(filename, "a");
+  if (!log_dest)
     return -1;
+
+  fputs("\nBrand new obfsproxy log:\n", log_dest);
+  fflush(log_dest);
+  setvbuf(log_dest, NULL, _IOLBF, 0);
+
   return 0;
 }
 
@@ -472,23 +475,8 @@ open_and_set_obfsproxy_logfile(const char *filename)
 void
 close_obfsproxy_logfile(void)
 {
-  if (logging_logfile >= 0)
-    close(logging_logfile);
-}
-
-/**
-   Writes a small prologue in the logfile 'fd' that mentions the
-   obfsproxy version and helps separate log instances.
-
-   Returns 0 on success, -1 on failure.
-*/
-static int
-write_logfile_prologue(int logfile)
-{
-  static const char prologue[] = "\nBrand new obfsproxy log:\n";
-  if (write(logfile, prologue, strlen(prologue)) != strlen(prologue))
-    return -1;
-  return 0;
+  if (log_dest && log_dest != stderr)
+    fclose(log_dest);
 }
 
 /**
@@ -499,14 +487,24 @@ write_logfile_prologue(int logfile)
 int
 log_set_method(int method, const char *filename)
 {
-  logging_method = method;
-  if (method == LOG_METHOD_FILE) {
-    if (open_and_set_obfsproxy_logfile(filename) < 0)
-      return -1;
-    if (write_logfile_prologue(logging_logfile) < 0)
-      return -1;
+  close_obfsproxy_logfile();
+
+  switch (method) {
+  case LOG_METHOD_NULL:
+    log_dest = NULL;
+    return 0;
+
+  case LOG_METHOD_STDERR:
+    log_dest = stderr;
+    setvbuf(log_dest, NULL, _IOLBF, 0);
+    return 0;
+
+  case LOG_METHOD_FILE:
+    return open_obfsproxy_logfile(filename);
+
+  default:
+    abort();
   }
-  return 0;
 }
 
 /**
@@ -522,7 +520,7 @@ log_set_min_severity(const char* sev_string)
     log_warn("Severity '%s' makes no sense.", sev_string);
     return -1;
   }
-  logging_min_sev = severity;
+  log_min_sev = severity;
   return 0;
 }
 
@@ -532,7 +530,7 @@ log_set_min_severity(const char* sev_string)
 int
 log_do_debug(void)
 {
-  return logging_min_sev == LOG_SEV_DEBUG;
+  return log_min_sev == LOG_SEV_DEBUG;
 }
 
 /**
@@ -544,97 +542,166 @@ log_do_debug(void)
 static void
 logv(int severity, const char *format, va_list ap)
 {
-  size_t n=0;
-  int r=0;
-  char buf[MAX_LOG_ENTRY];
-  size_t buflen = MAX_LOG_ENTRY-2;
-
   if (!sev_is_valid(severity))
     abort();
 
-  if (logging_method == LOG_METHOD_NULL)
+  /* See if the user is interested in this log message. */
+  if (!log_dest || severity < log_min_sev)
     return;
+
+  vfprintf(log_dest, format, ap);
+  putc('\n', log_dest);
+}
+
+static void
+logpfx(int severity, const char *fn)
+{
+  if (!sev_is_valid(severity))
+    abort();
 
   /* See if the user is interested in this log message. */
-  if (severity < logging_min_sev)
+  if (!log_dest || severity < log_min_sev)
     return;
 
-  r = obfs_snprintf(buf, buflen, "[%s] ", sev_to_string(severity));
-  if (r < 0)
-    n = strlen(buf);
-  else
-    n=r;
+  fprintf(log_dest, "[%s] ", sev_to_string(severity));
+  if (log_min_sev == LOG_SEV_DEBUG && fn)
+    fprintf(log_dest, "%s: ", fn);
+}
 
-  r = obfs_vsnprintf(buf+n, buflen-n, format, ap);
-  if (r < 0) {
-    if (buflen >= TRUNCATED_STR_LEN) {
-      size_t offset = buflen-TRUNCATED_STR_LEN;
-      r = obfs_snprintf(buf+offset, TRUNCATED_STR_LEN+1,
-                        "%s", TRUNCATED_STR);
-      if (r < 0)
-        abort();
-    }
-    n = buflen;
-  } else
-    n+=r;
-
-  buf[n]='\n';
-  buf[n+1]='\0';
-
-  if (logging_method == LOG_METHOD_STDERR)
-    fprintf(stderr, "%s", buf);
-  else if (logging_method == LOG_METHOD_FILE) {
-    if (!logging_logfile)
-      abort();
-    if (write(logging_logfile, buf, strlen(buf)) < 0)
-      abort();
-  } else
+static void
+logpfx_ckt(int severity, const char *fn, circuit_t *ckt)
+{
+  if (!sev_is_valid(severity))
     abort();
+
+  /* See if the user is interested in this log message. */
+  if (!log_dest || severity < log_min_sev)
+    return;
+
+  fprintf(log_dest, "[%s] ", sev_to_string(severity));
+  if (ckt && ckt->up_peer)
+    fprintf(log_dest, "%s: ", ckt->up_peer);
+  if (log_min_sev == LOG_SEV_DEBUG && fn)
+    fprintf(log_dest, "%s: ", fn);
+}
+
+static void
+logpfx_cn(int severity, const char *fn, conn_t *conn)
+{
+  if (!sev_is_valid(severity))
+    abort();
+
+  /* See if the user is interested in this log message. */
+  if (!log_dest || severity < log_min_sev)
+    return;
+
+  fprintf(log_dest, "[%s] ", sev_to_string(severity));
+  if (conn && conn->peername)
+    fprintf(log_dest, "%s: ", conn->peername);
+  if (log_min_sev == LOG_SEV_DEBUG && fn)
+    fprintf(log_dest, "%s: ", fn);
 }
 
 /**** Public logging API. ****/
 
+#define logfmt(sev_, fmt_) do {                 \
+    va_list ap_;                                \
+    va_start(ap_, fmt_);                        \
+    logv(sev_, fmt_, ap_);                      \
+    va_end(ap_);                                \
+  } while (0)
+
+#if __STDC_VERSION__ >= 199901L
+#define FNARG const char fn,
+#define FN fn
+#else
+#define FNARG /**/
+#define FN 0
+#endif
+
 void
-log_abort(const char *format, ...)
+(log_abort)(FNARG const char *format, ...)
 {
-  va_list ap;
-  va_start(ap,format);
-
-  logv(LOG_SEV_ERR, format, ap);
-
-  va_end(ap);
+  logpfx(LOG_SEV_ERR, FN);
+  logfmt(LOG_SEV_ERR, format);
   exit(1);
 }
 
 void
-log_warn(const char *format, ...)
+(log_abort_ckt)(FNARG circuit_t *ckt, const char *format, ...)
 {
-  va_list ap;
-  va_start(ap,format);
-
-  logv(LOG_SEV_WARN, format, ap);
-
-  va_end(ap);
+  logpfx_ckt(LOG_SEV_ERR, FN, ckt);
+  logfmt(LOG_SEV_ERR, format);
+  exit(1);
 }
 
 void
-log_info(const char *format, ...)
+(log_abort_cn)(FNARG conn_t *conn, const char *format, ...)
 {
-  va_list ap;
-  va_start(ap,format);
-
-  logv(LOG_SEV_INFO, format, ap);
-
-  va_end(ap);
+  logpfx_cn(LOG_SEV_ERR, FN, conn);
+  logfmt(LOG_SEV_ERR, format);
+  exit(1);
 }
 
 void
-log_debug(const char *format, ...)
+(log_warn)(FNARG const char *format, ...)
 {
-  va_list ap;
-  va_start(ap,format);
+  logpfx(LOG_SEV_WARN, FN);
+  logfmt(LOG_SEV_WARN, format);
+}
 
-  logv(LOG_SEV_DEBUG, format, ap);
+void
+(log_warn_ckt)(FNARG circuit_t *ckt, const char *format, ...)
+{
+  logpfx_ckt(LOG_SEV_WARN, FN, ckt);
+  logfmt(LOG_SEV_WARN, format);
+}
 
-  va_end(ap);
+void
+(log_warn_cn)(FNARG conn_t *cn, const char *format, ...)
+{
+  logpfx_cn(LOG_SEV_WARN, FN, cn);
+  logfmt(LOG_SEV_WARN, format);
+}
+
+void
+(log_info)(FNARG const char *format, ...)
+{
+  logpfx(LOG_SEV_INFO, FN);
+  logfmt(LOG_SEV_INFO, format);
+}
+
+void
+(log_info_ckt)(FNARG circuit_t *ckt, const char *format, ...)
+{
+  logpfx_ckt(LOG_SEV_INFO, FN, ckt);
+  logfmt(LOG_SEV_INFO, format);
+}
+
+void
+(log_info_cn)(FNARG conn_t *cn, const char *format, ...)
+{
+  logpfx_cn(LOG_SEV_INFO, FN, cn);
+  logfmt(LOG_SEV_INFO, format);
+}
+
+void
+(log_debug)(FNARG const char *format, ...)
+{
+  logpfx(LOG_SEV_DEBUG, FN);
+  logfmt(LOG_SEV_DEBUG, format);
+}
+
+void
+(log_debug_ckt)(FNARG circuit_t *ckt, const char *format, ...)
+{
+  logpfx_ckt(LOG_SEV_DEBUG, FN, ckt);
+  logfmt(LOG_SEV_DEBUG, format);
+}
+
+void
+(log_debug_cn)(FNARG conn_t *cn, const char *format, ...)
+{
+  logpfx_cn(LOG_SEV_DEBUG, FN, cn);
+  logfmt(LOG_SEV_DEBUG, format);
 }
