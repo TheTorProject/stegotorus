@@ -136,11 +136,11 @@ conn_send_eof(conn_t *dest)
     log_debug_cn(dest, "flushing out %ld bytes",
                  (unsigned long) evbuffer_get_length(outbuf));
     conn_do_flush(dest);
-  } else {
+  } else if (bufferevent_get_enabled(dest->buffer) & EV_WRITE) {
     log_debug_cn(dest, "sending EOF downstream");
     bufferevent_disable(dest->buffer, EV_WRITE);
     shutdown(bufferevent_getfd(dest->buffer), SHUT_WR);
-  }
+  } /* otherwise, it's already been done */
 }
 
 /* Protocol methods of connections. */
@@ -319,6 +319,7 @@ void
 circuit_send_eof(circuit_t *ckt)
 {
   if (ckt->socks_state) {
+    log_debug_ckt(ckt, "EOF during SOCKS phase");
     circuit_close(ckt);
   } else if (circuit_send_eof_raw(ckt)) {
     log_info_ckt(ckt, "error during transmit");

@@ -24,6 +24,8 @@ struct conn_t {
   const char         *peername;
   struct bufferevent *buffer;
   unsigned int        serial;
+  unsigned int        connected : 1;
+  unsigned int        flushing : 1;
 };
 
 /** Initialize connection and circuit tracking.  Must be called before
@@ -115,6 +117,7 @@ struct circuit_t {
   unsigned int        serial;
 
   unsigned int        connected : 1;
+  unsigned int        flushing : 1;
   unsigned int        pending_eof : 1;
 };
 

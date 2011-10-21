@@ -1,5 +1,6 @@
 # Integration tests for obfsproxy - socks mode.
 
+import re
 import socket
 from errno import ECONNRESET
 from obfstestlib import Obfsproxy
@@ -23,9 +24,7 @@ class SocksTest(TestCase):
                 or "stdout:" in dmsg):
                 raise AssertionError(dmsg)
 
-            pruned = dmsg.replace("| [warn] downstream_socks_connect_cb: "
-                                  "Connection error: "
-                                  "Connection refused\n", "")
+            pruned = re.sub("^.*Connection refused.*$", "", dmsg)
             if Obfsproxy.severe_error_re.search(pruned):
                 raise AssertionError(dmsg)
 

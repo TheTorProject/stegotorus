@@ -42,6 +42,9 @@ static void upstream_read_cb(struct bufferevent *bev, void *arg);
 static void downstream_read_cb(struct bufferevent *bev, void *arg);
 static void socks_read_cb(struct bufferevent *bev, void *arg);
 
+static void upstream_flush_cb(struct bufferevent *bev, void *arg);
+static void downstream_flush_cb(struct bufferevent *bev, void *arg);
+
 static void upstream_event_cb(struct bufferevent *bev, short what, void *arg);
 static void downstream_event_cb(struct bufferevent *bev, short what, void *arg);
 
@@ -167,13 +170,16 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
     return;
   }
 
+  ckt->connected = 1;
   circuit_add_upstream(ckt, buf, peername);
   if (is_socks) {
     /* We can't do anything more till we know where to connect to. */
-    bufferevent_setcb(buf, socks_read_cb, NULL, upstream_event_cb, ckt);
+    bufferevent_setcb(buf, socks_read_cb, upstream_flush_cb,
+                      upstream_event_cb, ckt);
     bufferevent_enable(buf, EV_READ|EV_WRITE);
   } else {
-    bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_event_cb, ckt);
+    bufferevent_setcb(buf, upstream_read_cb, upstream_flush_cb,
+                      upstream_event_cb, ckt);
     create_outbound_connections(ckt, 0);
     /* Don't enable reading or writing till the outbound connection(s) are
        established. */
@@ -206,6 +212,7 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
   }
 
   conn = conn_create(lsn->cfg, buf, peername);
+  conn->connected = 1;
   if (!conn) {
     log_warn("%s: failed to create connection structure for %s",
              lsn->address, peername);
@@ -228,7 +235,8 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
     return;
   }
 
-  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_event_cb, conn);
+  bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
+                    downstream_event_cb, conn);
   bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
 }
 
@@ -374,8 +382,8 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
     else if (what & BEV_EVENT_EOF)
       log_info_cn(conn, "%s",
                   (what & BEV_EVENT_READING)
-                  ? "EOF from upstream"
-                  : "further transmissions to upstream squelched");
+                  ? "EOF from peer"
+                  : "further transmissions to peer squelched");
     else if (what & BEV_EVENT_TIMEOUT)
       log_warn_cn(conn, "%s timed out",
                   (what & BEV_EVENT_READING) ? "read" : "write");
@@ -409,10 +417,12 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   circuit_t *ckt = arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
-  log_debug_ckt(ckt, "%ld bytes still to transmit",
-                (unsigned long)remain);
+  log_debug_ckt(ckt, "%ld bytes still to transmit%s%s",
+                (unsigned long)remain,
+                ckt->connected ? "" : " (not connected)",
+                ckt->flushing ? "" : " (not flushing)");
 
-  if (remain == 0) {
+  if (remain == 0 && ckt->flushing && ckt->connected) {
     bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev)) {
       log_debug_ckt(ckt, "sending EOF upstream");
@@ -431,9 +441,12 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
-  log_debug_cn(conn, "%ld bytes still to transmit", (unsigned long)remain);
+  log_debug_cn(conn, "%ld bytes still to transmit%s%s",
+               (unsigned long)remain,
+               conn->connected ? "" : " (not connected)",
+               conn->flushing ? "" : " (not flushing)");
 
-  if (remain == 0) {
+  if (remain == 0 && conn->flushing && conn->connected) {
     bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev)) {
       log_debug_cn(conn, "sending EOF downstream");
@@ -459,8 +472,8 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
   if (what & BEV_EVENT_CONNECTED) {
     log_info_ckt(ckt, "successful connection");
 
-    bufferevent_setcb(ckt->up_buffer,
-                      upstream_read_cb, NULL, upstream_event_cb, ckt);
+    bufferevent_setcb(ckt->up_buffer, upstream_read_cb, upstream_flush_cb,
+                      upstream_event_cb, ckt);
     bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
     ckt->connected = 1;
     if (ckt->pending_eof) {
@@ -494,12 +507,12 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 
     log_debug_cn(conn, "successful connection");
 
-    bufferevent_setcb(conn->buffer,
-                      downstream_read_cb, NULL, downstream_event_cb, conn);
+    bufferevent_setcb(conn->buffer, downstream_read_cb,
+                      downstream_flush_cb, downstream_event_cb, conn);
 
     bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
     bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
-    ckt->connected = 1;
+    conn->connected = 1;
 
     /* Queue handshake, if any. */
     if (conn_handshake(conn) < 0) {
@@ -583,14 +596,13 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     log_debug_ckt(ckt, "successful outbound connection to %s",
                   conn->peername);
 
-    bufferevent_setcb(ckt->up_buffer, upstream_read_cb, NULL,
+    bufferevent_setcb(ckt->up_buffer, upstream_read_cb, upstream_flush_cb,
                       upstream_event_cb, ckt);
-    bufferevent_setcb(conn->buffer, downstream_read_cb, NULL,
+    bufferevent_setcb(conn->buffer, downstream_read_cb, downstream_flush_cb,
                       downstream_event_cb, conn);
     bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
     bufferevent_enable(conn->buffer, EV_READ|EV_WRITE);
-
-    ckt->connected = 1;
+    conn->connected = 1;
 
     /* Queue handshake, if any. */
     if (conn_handshake(conn)) {
@@ -638,7 +650,8 @@ circuit_open_upstream(circuit_t *ckt)
     return -1;
   }
 
-  bufferevent_setcb(buf, upstream_read_cb, NULL, upstream_connect_cb, ckt);
+  bufferevent_setcb(buf, upstream_read_cb, upstream_flush_cb,
+                    upstream_connect_cb, ckt);
 
   do {
     peername = printable_address(addr->ai_addr, addr->ai_addrlen);
@@ -697,7 +710,7 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
  success:
   conn = conn_create(cfg, buf, peername);
   circuit_add_downstream(ckt, conn);
-  bufferevent_setcb(buf, downstream_read_cb, NULL,
+  bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
                     is_socks ? downstream_socks_connect_cb
                     : downstream_connect_cb, conn);
   bufferevent_enable(buf, EV_READ|EV_WRITE);
@@ -771,8 +784,8 @@ create_outbound_connections_socks(circuit_t *ckt)
   /* we don't know the peername yet */
   conn = conn_create(cfg, buf, NULL);
   circuit_add_downstream(ckt, conn);
-  bufferevent_setcb(buf, downstream_read_cb, NULL, downstream_socks_connect_cb,
-                    conn);
+  bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
+                    downstream_socks_connect_cb, conn);
   bufferevent_enable(buf, EV_READ|EV_WRITE);
   return;
 
@@ -786,17 +799,15 @@ create_outbound_connections_socks(circuit_t *ckt)
 void
 circuit_do_flush(circuit_t *ckt)
 {
-  bufferevent_setcb(ckt->up_buffer,
-                    upstream_read_cb,
-                    upstream_flush_cb,
-                    upstream_event_cb, ckt);
+  log_debug_ckt(ckt, "flushing %ld bytes to upstream",
+                evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)));
+  ckt->flushing = 1;
 }
 
 void
 conn_do_flush(conn_t *conn)
 {
-  bufferevent_setcb(conn->buffer,
-                    downstream_read_cb,
-                    downstream_flush_cb,
-                    downstream_event_cb, conn);
+  log_debug_cn(conn, "flushing %ld bytes to peer",
+               evbuffer_get_length(conn_get_outbound(conn)));
+  conn->flushing = 1;
 }
