@@ -99,7 +99,7 @@ conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
   conn->peername = peername;
   conn->serial = ++last_conn_serial;
   smartlist_add(connections, conn);
-  log_info_cn(conn, "new connection");
+  log_debug_cn(conn, "new connection");
   return conn;
 }
 
@@ -109,7 +109,7 @@ conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
 void
 conn_close(conn_t *conn)
 {
-  log_info_cn(conn, "closing connection");
+  log_debug_cn(conn, "closing connection");
   smartlist_remove(connections, conn);
   log_debug("%d connections remaining", smartlist_len(connections));
 
@@ -274,7 +274,7 @@ circuit_drop_downstream(circuit_t *ckt, conn_t *down)
 void
 circuit_close(circuit_t *ckt)
 {
-  log_info_ckt(ckt, "closing circuit");
+  log_debug_ckt(ckt, "closing circuit");
   smartlist_remove(circuits, ckt);
   log_debug("%d circuits remaining", smartlist_len(circuits));
 

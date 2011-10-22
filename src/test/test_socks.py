@@ -24,7 +24,7 @@ class SocksTest(TestCase):
                 or "stdout:" in dmsg):
                 raise AssertionError(dmsg)
 
-            pruned = re.sub("^.*Connection refused.*$", "", dmsg)
+            pruned = re.sub(r"\n[^\n]+Connection refused\n", "\n", dmsg)
             if Obfsproxy.severe_error_re.search(pruned):
                 raise AssertionError(dmsg)
 
