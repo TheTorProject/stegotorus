@@ -113,7 +113,6 @@ typedef struct chop_circuit_t
 {
   circuit_t super;
   chop_reassembly_elt reassembly_queue;
-  struct evbuffer *xmit_pending;
   smartlist_t *downstreams;
 
   uint64_t circuit_id;
@@ -323,19 +322,20 @@ static int
 chop_send_blocks(circuit_t *c, int at_eof)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
-  struct evbuffer *xmit_block;
+  struct evbuffer *xmit_pending = bufferevent_get_input(c->up_buffer);
+  struct evbuffer *block;
   conn_t *target;
   size_t avail;
   size_t blocksize;
   uint16_t flags;
 
-  if (!(xmit_block = evbuffer_new())) {
+  if (!(block = evbuffer_new())) {
     log_warn_ckt(c, "allocation failure");
     return -1;
   }
 
   for (;;) {
-    avail = evbuffer_get_length(ckt->xmit_pending);
+    avail = evbuffer_get_length(xmit_pending);
     flags = ckt->sent_syn ? 0 : CHOP_F_SYN;
 
     log_debug_ckt(c, "%lu bytes to send", (unsigned long)avail);
@@ -357,15 +357,14 @@ chop_send_blocks(circuit_t *c, int at_eof)
         flags |= CHOP_F_FIN;
     }
 
-    if (chop_send_block(target, ckt, ckt->xmit_pending, xmit_block,
-                        blocksize, flags)) {
-      evbuffer_free(xmit_block);
+    if (chop_send_block(target, ckt, xmit_pending, block, blocksize, flags)) {
+      evbuffer_free(block);
       return -1;
     }
   }
 
-  evbuffer_free(xmit_block);
-  avail = evbuffer_get_length(ckt->xmit_pending);
+  evbuffer_free(block);
+  avail = evbuffer_get_length(xmit_pending);
   if (avail)
     log_debug_ckt(c, "%lu bytes still waiting to be sent",
                   (unsigned long)avail);
@@ -431,10 +430,9 @@ chop_send_chaff(circuit_t *c, bool at_eof)
 
   conn_t *target = chop_pick_connection(ckt, 1, &room);
   if (!target) {
-    /* we only send pure chaff when we _must_ send, so this is a
-       fatal condition */
-    log_warn_ckt(c, "no target connection available");
-    return -1;
+    /* If we have connections and we can't send, that means we're waiting
+       for the server to respond.  Just wait. */
+    return 0;
   }
   return chop_send_targeted_chaff(ckt, target, room, at_eof);
 }
@@ -659,7 +657,8 @@ chop_push_to_upstream(circuit_t *c)
     ckt->received_syn = true;
   }
 
-  log_debug_ckt(c, "can push %lu bytes to upstream", evbuffer_get_length(ready->data));
+  log_debug_ckt(c, "can push %lu bytes to upstream",
+                evbuffer_get_length(ready->data));
   if (evbuffer_add_buffer(bufferevent_get_output(c->up_buffer), ready->data)) {
     log_warn_ckt(c, "failure pushing data to upstream");
     return -1;
@@ -881,7 +880,6 @@ chop_circuit_create(config_t *cfg)
   c->cfg = cfg;
   ckt->reassembly_queue.next = &ckt->reassembly_queue;
   ckt->reassembly_queue.prev = &ckt->reassembly_queue;
-  ckt->xmit_pending = evbuffer_new();
   ckt->downstreams = smartlist_create();
   if (cfg->mode != LSN_SIMPLE_SERVER) {
     while (!ckt->circuit_id)
@@ -897,11 +895,12 @@ chop_circuit_free(circuit_t *c)
   chop_reassembly_elt *p, *q, *queue;
   chop_circuit_entry_t in;
 
-  evbuffer_free(ckt->xmit_pending);
-
   SMARTLIST_FOREACH(ckt->downstreams, conn_t *, conn, {
     conn->circuit = NULL;
-    conn_close(conn);
+    if (evbuffer_get_length(conn_get_outbound(conn)) > 0)
+      conn_do_flush(conn);
+    else
+      conn_close(conn);
   });
   smartlist_free(ckt->downstreams);
 
@@ -958,7 +957,7 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
       else
         circuit_close(c);
     } else if (c->cfg->mode == LSN_SIMPLE_SERVER) {
-      circuit_arm_axe_timer(c, 100);
+      circuit_arm_axe_timer(c, 5000);
     } else {
       circuit_arm_flush_timer(c, 1);
     }
@@ -1036,28 +1035,24 @@ chop_circuit_send(circuit_t *c)
     if (c->cfg->mode != LSN_SIMPLE_SERVER)
       circuit_reopen_downstreams(c);
     else
-      circuit_arm_axe_timer(c, 100);
+      circuit_arm_axe_timer(c, 5000);
     return 0;
   }
 
-  if (evbuffer_get_length(ckt->xmit_pending) == 0 &&
-      evbuffer_get_length(bufferevent_get_input(c->up_buffer)) == 0)
+  if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)) == 0) {
     /* must-send timer expired and we still have nothing to say; send chaff */
-    return chop_send_chaff(c, ckt->upstream_eof);
-
-  if (evbuffer_add_buffer(ckt->xmit_pending,
-                          bufferevent_get_input(c->up_buffer))) {
-    log_warn_ckt(c, "failed to queue data");
-    return -1;
+    if (chop_send_chaff(c, ckt->upstream_eof && !ckt->sent_fin))
+      return -1;
+  } else {
+    if (chop_send_blocks(c, ckt->upstream_eof && !ckt->sent_fin))
+      return -1;
   }
-  if (chop_send_blocks(c, ckt->upstream_eof))
-    return -1;
 
   /* If we're at EOF, close all connections (sending first if
      necessary).  If we're the client we have to keep trying to talk
      as long as we haven't both sent and received a FIN, or we might
      deadlock. */
-  if (ckt->upstream_eof) {
+  if (ckt->sent_fin && ckt->received_fin) {
     SMARTLIST_FOREACH(ckt->downstreams, conn_t *, cn, {
       chop_conn_t *conn = downcast_conn(cn);
       if (conn->must_transmit_timer &&
@@ -1065,9 +1060,6 @@ chop_circuit_send(circuit_t *c)
         must_transmit_timer_cb(-1, 0, cn);
       conn_send_eof(cn);
     });
-    if (c->cfg->mode != LSN_SIMPLE_SERVER &&
-        (!ckt->sent_fin || !ckt->received_fin))
-      circuit_reopen_downstreams(c);
   } else {
     if (c->cfg->mode != LSN_SIMPLE_SERVER)
       circuit_arm_flush_timer(c, 5);
@@ -1177,6 +1169,10 @@ chop_conn_recv(conn_t *s)
 
   if (chop_push_to_upstream(c))
     return -1;
+
+  /* It may have now become possible to send queued data. */
+  if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)))
+    chop_circuit_send(c);
 
   return 0;
 }

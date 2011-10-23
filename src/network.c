@@ -347,8 +347,8 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Upstream is done sending us data. */
       circuit_send_eof(ckt);
-      bufferevent_disable(bev, EV_READ);
-      if (bufferevent_get_enabled(bev)) {
+      if (bufferevent_get_enabled(bev) ||
+          evbuffer_get_length(bufferevent_get_input(bev)) > 0) {
         log_debug_ckt(ckt, "acknowledging EOF upstream");
         shutdown(bufferevent_getfd(bev), SHUT_RD);
       } else {
@@ -391,8 +391,8 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Peer is done sending us data. */
       conn_recv_eof(conn);
-      bufferevent_disable(bev, EV_READ);
-      if (bufferevent_get_enabled(bev)) {
+      if (bufferevent_get_enabled(bev) ||
+          evbuffer_get_length(bufferevent_get_input(bev)) > 0) {
         log_debug_cn(conn, "acknowledging EOF downstream");
         shutdown(bufferevent_getfd(bev), SHUT_RD);
       } else {
@@ -424,7 +424,8 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
 
   if (remain == 0 && ckt->flushing && ckt->connected) {
     bufferevent_disable(bev, EV_WRITE);
-    if (bufferevent_get_enabled(bev)) {
+    if (bufferevent_get_enabled(bev) ||
+        evbuffer_get_length(bufferevent_get_input(bev)) > 0) {
       log_debug_ckt(ckt, "sending EOF upstream");
       shutdown(bufferevent_getfd(bev), SHUT_WR);
     } else {
