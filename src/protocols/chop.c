@@ -738,7 +738,7 @@ parse_and_set_options(int n_options, const char *const *options,
   int listen_up;
   int i;
 
-  if (n_options < 4)
+  if (n_options < 3)
     return -1;
 
   if (!strcmp(options[0], "client")) {
@@ -839,7 +839,7 @@ chop_config_create(int n_options, const char *const *options)
            "Examples:\n"
            "\tobfsproxy chop client 127.0.0.1:5000 "
            "192.168.1.99:11253 http 192.168.1.99:11254 skype\n"
-           "\tobfsproxy roundrobin server 127.0.0.1:9005 "
+           "\tobfsproxy chop server 127.0.0.1:9005 "
            "192.168.1.99:11253 192.168.1.99:11254");
   return NULL;
 }
