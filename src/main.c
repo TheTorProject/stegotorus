@@ -44,7 +44,7 @@ static void
 start_shutdown(int barbaric, const char *label)
 {
   log_info("%s shutdown triggered by %s "
-           "(%ld connection%s, %ld circuit%s %s)",
+           "(%lu connection%s, %lu circuit%s %s)",
            barbaric ? "barbaric" : "normal", label,
            conn_count(), conn_count() == 1 ? "" : "s",
            circuit_count(), circuit_count() == 1 ? "" : "s",

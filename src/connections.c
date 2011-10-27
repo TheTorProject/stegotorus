@@ -133,7 +133,7 @@ conn_send_eof(conn_t *dest)
 {
   struct evbuffer *outbuf = conn_get_outbound(dest);
   if (evbuffer_get_length(outbuf)) {
-    log_debug_cn(dest, "flushing out %ld bytes",
+    log_debug_cn(dest, "flushing out %lu bytes",
                  (unsigned long) evbuffer_get_length(outbuf));
     conn_do_flush(dest);
   } else if (bufferevent_get_enabled(dest->buffer) & EV_WRITE) {
@@ -202,7 +202,7 @@ static void
 flush_timer_cb(evutil_socket_t fd, short what, void *arg)
 {
   circuit_t *ckt = arg;
-  log_debug_ckt(ckt, "flush timer expired, %ld bytes available",
+  log_debug_ckt(ckt, "flush timer expired, %lu bytes available",
                 (unsigned long)
                 evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
   circuit_send(ckt);
@@ -334,7 +334,7 @@ circuit_recv_eof(circuit_t *ckt)
     struct evbuffer *outbuf = bufferevent_get_output(ckt->up_buffer);
     size_t outlen = evbuffer_get_length(outbuf);
     if (outlen) {
-      log_debug_ckt(ckt, "flushing %ld bytes to upstream",
+      log_debug_ckt(ckt, "flushing %lu bytes to upstream",
                     (unsigned long)outlen);
       circuit_do_flush(ckt);
     } else if (ckt->connected) {

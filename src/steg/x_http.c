@@ -285,8 +285,8 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
     unsigned char *data, *p, *limit;
     unsigned char c, h, secondhalf;
 
-    log_debug("x_http: %ld byte query stream available",
-              evbuffer_get_length(source));
+    log_debug("x_http: %lu byte query stream available",
+              (unsigned long)evbuffer_get_length(source));
 
     if (downcast_steg(s)->have_received) {
       log_warn("x_http: protocol error: multiple queries");

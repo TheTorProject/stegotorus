@@ -312,7 +312,7 @@ rr_send_blocks(circuit_t *c, int at_eof)
       goto fail;
 
     log_debug_cn(target, "sent %lu+%u byte block [flags %04hx]",
-                 RR_WIRE_HDR_LEN, ckt->next_block_size, flags);
+                 (unsigned long)RR_WIRE_HDR_LEN, ckt->next_block_size, flags);
 
     ckt->next_down++;
     if (ckt->next_down == smartlist_len(ckt->downstreams))
@@ -369,7 +369,7 @@ rr_send_chaff(circuit_t *c, int at_eof)
     goto fail;
 
   log_debug_cn(d, "sent %lu+%u byte block [flags %04hx]",
-               RR_WIRE_HDR_LEN, ckt->next_block_size, flags);
+               (unsigned long)RR_WIRE_HDR_LEN, ckt->next_block_size, flags);
 
   evbuffer_free(chaff);
   evbuffer_free(block);
@@ -1002,7 +1002,7 @@ x_rr_conn_recv(conn_t *conn)
     if (avail == 0)
       break;
 
-    log_debug("rr_recv: %ld bytes available", (unsigned long)avail);
+    log_debug("rr_recv: %lu bytes available", (unsigned long)avail);
     if (avail < RR_MIN_BLOCK) {
       log_debug("rr_recv: incomplete block");
       break;
@@ -1012,8 +1012,8 @@ x_rr_conn_recv(conn_t *conn)
       return -1;
 
     if (avail < RR_WIRE_HDR_LEN + hdr.length) {
-      log_debug("rr_recv: incomplete block (need %ld bytes)",
-                RR_WIRE_HDR_LEN + hdr.length);
+      log_debug("rr_recv: incomplete block (need %lu bytes)",
+                (unsigned long)(RR_WIRE_HDR_LEN + hdr.length));
       break;
     }
 
@@ -1024,7 +1024,8 @@ x_rr_conn_recv(conn_t *conn)
 
     log_debug("rr_recv: receiving block of %lu+%u bytes "
               "[offset %u flags %04hx]",
-              RR_WIRE_HDR_LEN, hdr.length, hdr.offset, hdr.flags);
+              (unsigned long)RR_WIRE_HDR_LEN, hdr.length,
+              hdr.offset, hdr.flags);
 
     block = evbuffer_new();
     if (!block) {
