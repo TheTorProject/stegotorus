@@ -254,6 +254,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   socks = ckt->socks_state;
 
   log_debug_ckt(ckt, "%lu bytes available",
+                (unsigned long)
                 evbuffer_get_length(bufferevent_get_input(bev)));
 
   do {
@@ -800,7 +801,8 @@ create_outbound_connections_socks(circuit_t *ckt)
 void
 circuit_do_flush(circuit_t *ckt)
 {
-  log_debug_ckt(ckt, "flushing %ld bytes to upstream",
+  log_debug_ckt(ckt, "flushing %lu bytes to upstream",
+                (unsigned long)
                 evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)));
   ckt->flushing = 1;
 }
@@ -808,7 +810,8 @@ circuit_do_flush(circuit_t *ckt)
 void
 conn_do_flush(conn_t *conn)
 {
-  log_debug_cn(conn, "flushing %ld bytes to peer",
+  log_debug_cn(conn, "flushing %lu bytes to peer",
+               (unsigned long)
                evbuffer_get_length(conn_get_outbound(conn)));
   conn->flushing = 1;
 }

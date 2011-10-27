@@ -9,7 +9,11 @@
 #include "crypt.h"
 
 #include <event2/buffer.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <arpa/inet.h>
+#endif
 
 typedef struct x_dsteg_config_t {
   config_t super;

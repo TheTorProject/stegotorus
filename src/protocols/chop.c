@@ -304,7 +304,7 @@ chop_send_block(conn_t *d,
   if (flags & CHOP_F_FIN)
     ckt->sent_fin = true;
   log_debug_cn(d, "sent %lu+%u byte block [flags %04hx]",
-               CHOP_WIRE_HDR_LEN, length, flags);
+               (unsigned long)CHOP_WIRE_HDR_LEN, length, flags);
   if (dest->must_transmit_timer)
     evtimer_del(dest->must_transmit_timer);
   return 0;
@@ -658,7 +658,7 @@ chop_push_to_upstream(circuit_t *c)
   }
 
   log_debug_ckt(c, "can push %lu bytes to upstream",
-                evbuffer_get_length(ready->data));
+                (unsigned long)evbuffer_get_length(ready->data));
   if (evbuffer_add_buffer(bufferevent_get_output(c->up_buffer), ready->data)) {
     log_warn_ckt(c, "failure pushing data to upstream");
     return -1;
@@ -1132,8 +1132,8 @@ chop_conn_recv(conn_t *s)
       return -1;
 
     if (avail < CHOP_WIRE_HDR_LEN + hdr.length) {
-      log_debug_cn(s, "incomplete block (need %ld bytes)",
-                   CHOP_WIRE_HDR_LEN + hdr.length);
+      log_debug_cn(s, "incomplete block (need %lu bytes)",
+                   (unsigned long)(CHOP_WIRE_HDR_LEN + hdr.length));
       break;
     }
 
@@ -1144,7 +1144,8 @@ chop_conn_recv(conn_t *s)
 
     log_debug_cn(s, "receiving block of %lu+%u bytes "
                  "[offset %u flags %04hx]",
-                 CHOP_WIRE_HDR_LEN, hdr.length, hdr.offset, hdr.flags);
+                 (unsigned long)CHOP_WIRE_HDR_LEN,
+                 hdr.length, hdr.offset, hdr.flags);
 
     block = evbuffer_new();
     if (!block) {
