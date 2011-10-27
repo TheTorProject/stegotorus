@@ -24,13 +24,15 @@
 typedef struct chop_header
 {
   uint64_t ckt_id;
+  uint8_t  pkt_iv[8];
   uint32_t offset;
   uint16_t length;
   uint16_t flags;
 } chop_header;
 
 #define CHOP_WIRE_HDR_LEN (sizeof(struct chop_header))
-#define CHOP_MAX_BLOCK (CHOP_WIRE_HDR_LEN + 2048)
+#define CHOP_MAX_DATA 16384
+#define CHOP_MAX_CHAFF 2048
 
 #define CHOP_F_SYN   0x0001
 #define CHOP_F_FIN   0x0002
@@ -98,6 +100,15 @@ typedef struct chop_reassembly_elt
   uint16_t flags;
 } chop_reassembly_elt;
 
+/* Horrifically crude "encryption".  Uses a compiled-in pair of
+   encryption keys, no MAC, and recycles the circuit ID as a
+   partial IV.  To be replaced with something less laughable ASAP. */
+
+static const uchar c2s_key[] =
+  "\x44\x69\x5f\x45\x41\x67\xe9\x69\x14\x6c\x5f\xd2\x41\x63\xc4\x02";
+static const uchar s2c_key[] =
+  "\xfa\x31\x78\x6c\xb9\x4c\x66\x2a\xd0\x30\x59\xf7\x28\x22\x2f\x22";
+
 /* Connections and circuits */
 
 typedef struct chop_conn_t
@@ -114,6 +125,8 @@ typedef struct chop_circuit_t
   circuit_t super;
   chop_reassembly_elt reassembly_queue;
   smartlist_t *downstreams;
+  crypt_t *send_crypt;
+  crypt_t *recv_crypt;
 
   uint64_t circuit_id;
   uint32_t send_offset;
@@ -151,23 +164,51 @@ chop_write_header(uint8_t *wire_header, const struct chop_header *hdr)
   wire_header[ 6] = (hdr->ckt_id & 0x000000000000FF00ull) >>  8;
   wire_header[ 7] = (hdr->ckt_id & 0x00000000000000FFull) >>  0;
 
-  wire_header[ 8] = (hdr->offset & 0xFF000000u) >> 24;
-  wire_header[ 9] = (hdr->offset & 0x00FF0000u) >> 16;
-  wire_header[10] = (hdr->offset & 0x0000FF00u) >>  8;
-  wire_header[11] = (hdr->offset & 0x000000FFu) >>  0;
+  wire_header[ 8] = hdr->pkt_iv[0];
+  wire_header[ 9] = hdr->pkt_iv[1];
+  wire_header[10] = hdr->pkt_iv[2];
+  wire_header[11] = hdr->pkt_iv[3];
+  wire_header[12] = hdr->pkt_iv[4];
+  wire_header[13] = hdr->pkt_iv[5];
+  wire_header[14] = hdr->pkt_iv[6];
+  wire_header[15] = hdr->pkt_iv[7];
 
-  wire_header[12] = (hdr->length & 0xFF00u) >> 8;
-  wire_header[13] = (hdr->length & 0x00FFu) >> 0;
-  wire_header[14] = (hdr->flags  & 0xFF00u) >> 8;
-  wire_header[15] = (hdr->flags  & 0x00FFu) >> 0;
+  wire_header[16] = (hdr->offset & 0xFF000000u) >> 24;
+  wire_header[17] = (hdr->offset & 0x00FF0000u) >> 16;
+  wire_header[18] = (hdr->offset & 0x0000FF00u) >>  8;
+  wire_header[19] = (hdr->offset & 0x000000FFu) >>  0;
+
+  wire_header[20] = (hdr->length & 0xFF00u) >> 8;
+  wire_header[21] = (hdr->length & 0x00FFu) >> 0;
+  wire_header[22] = (hdr->flags  & 0xFF00u) >> 8;
+  wire_header[23] = (hdr->flags  & 0x00FFu) >> 0;
 }
 
 static int
-chop_peek_header(struct evbuffer *buf, struct chop_header *hdr)
+chop_peek_circuit_id(struct evbuffer *buf, struct chop_header *hdr)
+{
+  uint8_t wire_id[8];
+  if (evbuffer_copyout(buf, wire_id, 8) != 8)
+    return -1;
+  hdr->ckt_id = ((((uint64_t)wire_id[ 0]) << 56) +
+                 (((uint64_t)wire_id[ 1]) << 48) +
+                 (((uint64_t)wire_id[ 2]) << 40) +
+                 (((uint64_t)wire_id[ 3]) << 32) +
+                 (((uint64_t)wire_id[ 4]) << 24) +
+                 (((uint64_t)wire_id[ 5]) << 16) +
+                 (((uint64_t)wire_id[ 6]) <<  8) +
+                 (((uint64_t)wire_id[ 7]) <<  0));
+  return 0;
+}
+
+static int
+chop_decrypt_header(chop_circuit_t *ckt,
+                    struct evbuffer *buf,
+                    struct chop_header *hdr)
 {
   uint8_t wire_header[CHOP_WIRE_HDR_LEN];
-  if (evbuffer_get_length(buf) < CHOP_WIRE_HDR_LEN ||
-      evbuffer_copyout(buf, wire_header, CHOP_WIRE_HDR_LEN) != CHOP_WIRE_HDR_LEN) {
+  if (evbuffer_copyout(buf, wire_header, CHOP_WIRE_HDR_LEN)
+      != CHOP_WIRE_HDR_LEN) {
     log_warn("not enough data copied out");
     return -1;
   }
@@ -181,16 +222,33 @@ chop_peek_header(struct evbuffer *buf, struct chop_header *hdr)
                  (((uint64_t)wire_header[ 6]) <<  8) +
                  (((uint64_t)wire_header[ 7]) <<  0));
 
-  hdr->offset = ((((uint32_t)wire_header[ 8]) << 24) +
-                 (((uint32_t)wire_header[ 9]) << 16) +
-                 (((uint32_t)wire_header[10]) <<  8) +
-                 (((uint32_t)wire_header[11]) <<  0));
+  hdr->pkt_iv[0] = wire_header[ 8];
+  hdr->pkt_iv[1] = wire_header[ 9];
+  hdr->pkt_iv[2] = wire_header[10];
+  hdr->pkt_iv[3] = wire_header[11];
+  hdr->pkt_iv[4] = wire_header[12];
+  hdr->pkt_iv[5] = wire_header[13];
+  hdr->pkt_iv[6] = wire_header[14];
+  hdr->pkt_iv[7] = wire_header[15];
 
-  hdr->length = ((((uint16_t)wire_header[12]) << 8) +
-                 (((uint16_t)wire_header[13]) << 0));
+  /* The full IV is the circuit ID plus packet ID *as it is on the
+     wire*. */
+  crypt_set_iv(ckt->recv_crypt, wire_header, 16);
+  stream_crypt(ckt->recv_crypt, wire_header+16, CHOP_WIRE_HDR_LEN-16);
 
-  hdr->flags  = ((((uint16_t)wire_header[14]) <<  8) +
-                 (((uint16_t)wire_header[15]) <<  0));
+  hdr->offset = ((((uint32_t)wire_header[16]) << 24) +
+                 (((uint32_t)wire_header[17]) << 16) +
+                 (((uint32_t)wire_header[18]) <<  8) +
+                 (((uint32_t)wire_header[19]) <<  0));
+
+  hdr->length = ((((uint16_t)wire_header[20]) << 8) +
+                 (((uint16_t)wire_header[21]) << 0));
+
+  hdr->flags  = ((((uint16_t)wire_header[22]) <<  8) +
+                 (((uint16_t)wire_header[23]) <<  0));
+
+  log_debug("decoded offset %u length %hu flags %04hx",
+            hdr->offset, hdr->length, hdr->flags);
   return 0;
 }
 
@@ -204,8 +262,8 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
   conn_t *targbelow = NULL;
   conn_t *targabove = NULL;
 
-  if (desired > CHOP_MAX_BLOCK)
-    desired = CHOP_MAX_BLOCK;
+  if (desired > CHOP_MAX_DATA)
+    desired = CHOP_MAX_DATA;
 
   /* Find the best fit for the desired transmission from all the
      outbound connections' transmit rooms. */
@@ -219,8 +277,8 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
       log_debug_cn(c, "offers %lu bytes (%s)", (unsigned long)room,
                    conn->steg->vtable->name);
 
-      if (room > CHOP_MAX_BLOCK)
-        room = CHOP_MAX_BLOCK;
+      if (room > CHOP_MAX_DATA)
+        room = CHOP_MAX_DATA;
 
       if (room >= desired) {
         if (room < minabove) {
@@ -281,11 +339,16 @@ chop_send_block(conn_t *d,
   hdr.offset = ckt->send_offset;
   hdr.length = length;
   hdr.flags = flags;
+  random_bytes(hdr.pkt_iv, 8);
   chop_write_header(v.iov_base, &hdr);
 
   if (evbuffer_copyout(source, (uint8_t *)v.iov_base + CHOP_WIRE_HDR_LEN,
                        length) != length)
     goto fail;
+
+  crypt_set_iv(ckt->send_crypt, (uchar *)v.iov_base, 16);
+  stream_crypt(ckt->send_crypt, (uchar *)v.iov_base + 16,
+               length + CHOP_WIRE_HDR_LEN - 16);
 
   if (evbuffer_commit_space(block, &v, 1))
     goto fail;
@@ -372,34 +435,21 @@ chop_send_blocks(circuit_t *c, int at_eof)
 }
 
 static int
-chop_send_targeted_chaff(chop_circuit_t *ckt, conn_t *target,
-                         size_t blocksize, bool at_eof)
+chop_send_targeted(circuit_t *c, conn_t *target,
+                   size_t blocksize, bool at_eof)
 {
+  chop_circuit_t *ckt = downcast_circuit(c);
+  struct evbuffer *xmit_pending = bufferevent_get_input(c->up_buffer);
+  size_t avail = evbuffer_get_length(xmit_pending);
+  struct evbuffer *block = evbuffer_new();
   uint16_t flags;
-  struct evbuffer *chaff, *block;
-  struct evbuffer_iovec v;
 
-  if (blocksize > CHOP_MAX_BLOCK)
-    blocksize = CHOP_MAX_BLOCK;
-
-  log_debug_ckt(upcast_circuit(ckt),
-                "generating up to %lu bytes chaff",
-                (unsigned long)blocksize);
-  blocksize = random_range(1, blocksize);
-
-  chaff = evbuffer_new();
-  block = evbuffer_new();
-  if (!chaff || !block)
-    goto fail;
-
-  if (evbuffer_reserve_space(chaff, blocksize, &v, 1) != 1 ||
-      v.iov_len < blocksize)
-    goto fail;
-
-  v.iov_len = blocksize;
-  if (random_bytes(v.iov_base, v.iov_len) ||
-      evbuffer_commit_space(chaff, &v, 1))
-    goto fail;
+  log_debug_cn(target, "%lu bytes available, %lu bytes room",
+               (unsigned long)avail, (unsigned long)blocksize);
+  if (!block) {
+    log_warn_cn(target, "allocation failure");
+    return -1;
+  }
 
   flags = CHOP_F_CHAFF;
   if (!ckt->sent_syn)
@@ -407,19 +457,59 @@ chop_send_targeted_chaff(chop_circuit_t *ckt, conn_t *target,
   if (at_eof)
     flags |= CHOP_F_FIN;
 
-  if (chop_send_block(target, ckt, chaff, block, blocksize, flags))
-    goto fail;
+  if (avail) {
+    if (avail < blocksize)
+      blocksize = avail;
+    else if (avail > blocksize)
+      flags &= ~CHOP_F_FIN;
 
-  evbuffer_free(chaff);
-  evbuffer_free(block);
-  return 0;
+    if (chop_send_block(target, ckt, xmit_pending, block, blocksize, flags)) {
+      evbuffer_free(block);
+      return -1;
+    }
 
- fail:
-  log_warn_ckt(upcast_circuit(ckt),
-               "failed to construct chaff block");
-  if (chaff) evbuffer_free(chaff);
-  if (block) evbuffer_free(block);
-  return -1;
+    evbuffer_free(block);
+    avail = evbuffer_get_length(xmit_pending);
+    if (avail)
+      log_debug_ckt(c, "%lu bytes still waiting to be sent",
+                    (unsigned long)avail);
+    return 0;
+
+  } else {
+    struct evbuffer *chaff;
+    struct evbuffer_iovec v;
+
+    if (blocksize > CHOP_MAX_CHAFF)
+      blocksize = CHOP_MAX_CHAFF;
+
+    blocksize = random_range(1, blocksize);
+    log_debug_cn(target, "generating %lu bytes chaff",
+                 (unsigned long)blocksize);
+
+    chaff = evbuffer_new();
+    if (!chaff ||
+        evbuffer_reserve_space(chaff, blocksize, &v, 1) != 1 ||
+        v.iov_len < blocksize)
+      goto fail;
+
+    v.iov_len = blocksize;
+    memset(v.iov_base, 0, v.iov_len);
+    if (evbuffer_commit_space(chaff, &v, 1))
+      goto fail;
+
+    if (chop_send_block(target, ckt, chaff, block, blocksize, flags))
+      goto fail;
+
+    evbuffer_free(chaff);
+    evbuffer_free(block);
+    return 0;
+
+  fail:
+    log_warn_cn(target, "failed to construct chaff block");
+    if (chaff) evbuffer_free(chaff);
+    if (block) evbuffer_free(block);
+    return -1;
+  }
 }
 
 static int
@@ -434,7 +524,7 @@ chop_send_chaff(circuit_t *c, bool at_eof)
        for the server to respond.  Just wait. */
     return 0;
   }
-  return chop_send_targeted_chaff(ckt, target, room, at_eof);
+  return chop_send_targeted(c, target, room, at_eof);
 }
 
 static void
@@ -454,7 +544,7 @@ must_transmit_timer_cb(evutil_socket_t fd, short what, void *arg)
   }
 
   log_debug_cn(cn, "must transmit");
-  chop_send_targeted_chaff(downcast_circuit(cn->circuit), cn, room, false);
+  chop_send_targeted(cn->circuit, cn, room, false);
 }
 
 /* Receive subroutines. */
@@ -561,7 +651,9 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
      that this block goes after the last block in the list (aka p->prev). */
   if (!p->data && p->prev->data &&
       !mod32_lt(p->prev->offset + p->prev->length, hdr->offset)) {
-    log_warn_ckt(c, "protocol error: %u byte block does not fit at offset %u (sentinel case)",
+    log_warn_ckt(c,
+                 "protocol error: %u byte block does not fit at offset %u "
+                 "(sentinel case)",
                  hdr->length, hdr->offset);
     return -1;
   }
@@ -881,7 +973,13 @@ chop_circuit_create(config_t *cfg)
   ckt->reassembly_queue.next = &ckt->reassembly_queue;
   ckt->reassembly_queue.prev = &ckt->reassembly_queue;
   ckt->downstreams = smartlist_create();
-  if (cfg->mode != LSN_SIMPLE_SERVER) {
+
+  if (cfg->mode == LSN_SIMPLE_SERVER) {
+    ckt->send_crypt = crypt_new(s2c_key, 16);
+    ckt->recv_crypt = crypt_new(c2s_key, 16);
+  } else {
+    ckt->send_crypt = crypt_new(c2s_key, 16);
+    ckt->recv_crypt = crypt_new(s2c_key, 16);
     while (!ckt->circuit_id)
       random_bytes((unsigned char *)&ckt->circuit_id, sizeof(uint64_t));
   }
@@ -903,6 +1001,8 @@ chop_circuit_free(circuit_t *c)
       conn_close(conn);
   });
   smartlist_free(ckt->downstreams);
+  crypt_free(ckt->send_crypt);
+  crypt_free(ckt->recv_crypt);
 
   queue = &ckt->reassembly_queue;
   for (q = p = queue->next; p != queue; p = q) {
@@ -1083,6 +1183,7 @@ chop_conn_recv(conn_t *s)
   chop_header hdr;
   struct evbuffer *block;
   size_t avail;
+  uchar decodebuf[CHOP_MAX_DATA + CHOP_WIRE_HDR_LEN];
 
   if (!source->steg) {
     log_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
@@ -1102,12 +1203,10 @@ chop_conn_recv(conn_t *s)
 
   if (!s->circuit) {
     log_debug_cn(s, "finding circuit");
-    if (evbuffer_get_length(source->recv_pending) < CHOP_WIRE_HDR_LEN) {
+    if (chop_peek_circuit_id(source->recv_pending, &hdr)) {
       log_debug_cn(s, "not enough data to find circuit yet");
       return 0;
     }
-    if (chop_peek_header(source->recv_pending, &hdr))
-      return -1;
     if (chop_find_or_make_circuit(s, hdr.ckt_id))
       return -1;
     log_assert(s->circuit);
@@ -1128,7 +1227,7 @@ chop_conn_recv(conn_t *s)
       break;
     }
 
-    if (chop_peek_header(source->recv_pending, &hdr))
+    if (chop_decrypt_header(ckt, source->recv_pending, &hdr))
       return -1;
 
     if (avail < CHOP_WIRE_HDR_LEN + hdr.length) {
@@ -1147,25 +1246,39 @@ chop_conn_recv(conn_t *s)
                  (unsigned long)CHOP_WIRE_HDR_LEN,
                  hdr.length, hdr.offset, hdr.flags);
 
+    if (evbuffer_copyout(source->recv_pending, decodebuf,
+                         CHOP_WIRE_HDR_LEN + hdr.length)
+        != (ev_ssize_t)(CHOP_WIRE_HDR_LEN + hdr.length)) {
+      log_warn_cn(s, "failed to copy block to decode buffer");
+      return -1;
+    }
     block = evbuffer_new();
-    if (!block) {
+    if (!block || evbuffer_expand(block, hdr.length)) {
       log_warn_cn(s, "allocation failure");
       return -1;
     }
 
-    if (evbuffer_drain(source->recv_pending, CHOP_WIRE_HDR_LEN)) {
-      log_warn_cn(s, "failed to drain header");
-      return -1;
-    }
+    /* reset the IV just to be sure */
+    crypt_set_iv(ckt->recv_crypt, decodebuf, 16);
+    stream_crypt(ckt->recv_crypt, decodebuf + 16,
+                 hdr.length + CHOP_WIRE_HDR_LEN - 16);
 
-    if (evbuffer_remove_buffer(source->recv_pending, block, hdr.length)
-        != hdr.length) {
+    if (evbuffer_add(block, decodebuf + CHOP_WIRE_HDR_LEN, hdr.length)) {
       log_warn_cn(s, "failed to transfer block to reassembly queue");
+      evbuffer_free(block);
       return -1;
     }
 
-    if (chop_reassemble_block(c, block, &hdr))
+    if (evbuffer_drain(source->recv_pending, CHOP_WIRE_HDR_LEN + hdr.length)) {
+      log_warn_cn(s, "failed to drain header");
+      evbuffer_free(block);
       return -1;
+    }
+
+    if (chop_reassemble_block(c, block, &hdr)) {
+      evbuffer_free(block);
+      return -1;
+    }
   }
 
   if (chop_push_to_upstream(c))

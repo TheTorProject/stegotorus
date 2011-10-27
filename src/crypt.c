@@ -151,6 +151,9 @@ crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
 {
   log_assert(ivlen == sizeof(key->ivec));
   memcpy(key->ivec, iv, ivlen);
+  /* reset ecount_buf and pos */
+  memset(key->ecount_buf, 0, AES_BLOCK_SIZE);
+  key->pos = 0;
 }
 
 /*
