@@ -382,7 +382,7 @@ chop_send_block(conn_t *d,
 }
 
 static int
-chop_send_blocks(circuit_t *c, int at_eof)
+chop_send_blocks(circuit_t *c)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   struct evbuffer *xmit_pending = bufferevent_get_input(c->up_buffer);
@@ -416,7 +416,7 @@ chop_send_blocks(circuit_t *c, int at_eof)
 
     if (avail <= blocksize) {
       blocksize = avail;
-      if (at_eof)
+      if (ckt->upstream_eof && !ckt->sent_fin)
         flags |= CHOP_F_FIN;
     }
 
@@ -435,14 +435,13 @@ chop_send_blocks(circuit_t *c, int at_eof)
 }
 
 static int
-chop_send_targeted(circuit_t *c, conn_t *target,
-                   size_t blocksize, bool at_eof)
+chop_send_targeted(circuit_t *c, conn_t *target, size_t blocksize)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   struct evbuffer *xmit_pending = bufferevent_get_input(c->up_buffer);
   size_t avail = evbuffer_get_length(xmit_pending);
   struct evbuffer *block = evbuffer_new();
-  uint16_t flags;
+  uint16_t flags = 0;
 
   log_debug_cn(target, "%lu bytes available, %lu bytes room",
                (unsigned long)avail, (unsigned long)blocksize);
@@ -451,17 +450,16 @@ chop_send_targeted(circuit_t *c, conn_t *target,
     return -1;
   }
 
-  flags = CHOP_F_CHAFF;
   if (!ckt->sent_syn)
     flags |= CHOP_F_SYN;
-  if (at_eof)
-    flags |= CHOP_F_FIN;
 
   if (avail) {
-    if (avail < blocksize)
+    if (avail <= blocksize) {
       blocksize = avail;
-    else if (avail > blocksize)
-      flags &= ~CHOP_F_FIN;
+      if (ckt->upstream_eof && !ckt->sent_fin)
+        flags |= CHOP_F_FIN;
+    }
+
 
     if (chop_send_block(target, ckt, xmit_pending, block, blocksize, flags)) {
       evbuffer_free(block);
@@ -497,6 +495,9 @@ chop_send_targeted(circuit_t *c, conn_t *target,
     if (evbuffer_commit_space(chaff, &v, 1))
       goto fail;
 
+    flags |= CHOP_F_CHAFF;
+    if (ckt->upstream_eof && !ckt->sent_fin)
+      flags |= CHOP_F_FIN;
     if (chop_send_block(target, ckt, chaff, block, blocksize, flags))
       goto fail;
 
@@ -513,7 +514,7 @@ chop_send_targeted(circuit_t *c, conn_t *target,
 }
 
 static int
-chop_send_chaff(circuit_t *c, bool at_eof)
+chop_send_chaff(circuit_t *c)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   size_t room;
@@ -524,7 +525,7 @@ chop_send_chaff(circuit_t *c, bool at_eof)
        for the server to respond.  Just wait. */
     return 0;
   }
-  return chop_send_targeted(c, target, room, at_eof);
+  return chop_send_targeted(c, target, room);
 }
 
 static void
@@ -533,6 +534,13 @@ must_transmit_timer_cb(evutil_socket_t fd, short what, void *arg)
   conn_t *cn = arg;
   chop_conn_t *conn = downcast_conn(cn);
   size_t room;
+
+  if (!cn->circuit) {
+    log_debug_cn(cn, "must transmit, but no circuit (stale connection)");
+    conn_do_flush(cn);
+    return;
+  }
+
   if (!conn->steg) {
     log_warn_cn(cn, "must transmit, but no steg module available");
     return;
@@ -544,7 +552,7 @@ must_transmit_timer_cb(evutil_socket_t fd, short what, void *arg)
   }
 
   log_debug_cn(cn, "must transmit");
-  chop_send_targeted(cn->circuit, cn, room, false);
+  chop_send_targeted(cn->circuit, cn, room);
 }
 
 /* Receive subroutines. */
@@ -789,7 +797,10 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
   in.circuit_id = circuit_id;
   out = HT_FIND(chop_circuit_table_impl, &cfg->circuits.head, &in);
   if (out) {
-    log_assert(out->circuit);
+    if (!out->circuit) {
+      log_debug_cn(conn, "stale circuit");
+      return 0;
+    }
     log_debug_cn(conn, "found circuit to %s", out->circuit->up_peer);
   } else {
     out = xzalloc(sizeof(chop_circuit_entry_t));
@@ -991,7 +1002,7 @@ chop_circuit_free(circuit_t *c)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   chop_reassembly_elt *p, *q, *queue;
-  chop_circuit_entry_t in;
+  chop_circuit_entry_t in, *out;
 
   SMARTLIST_FOREACH(ckt->downstreams, conn_t *, conn, {
     conn->circuit = NULL;
@@ -1013,9 +1024,17 @@ chop_circuit_free(circuit_t *c)
   }
 
   if (c->cfg->mode == LSN_SIMPLE_SERVER) {
+    /* The IDs for old circuits are preserved for a while (at present,
+       indefinitely; FIXME: purge them on a timer) against the
+       possibility that we'll get a junk connection for one of them
+       right after we close it (same deal as the TIME_WAIT state in TCP). */
     chop_config_t *cfg = downcast_config(c->cfg);
     in.circuit_id = ckt->circuit_id;
-    free(HT_REMOVE(chop_circuit_table_impl, &cfg->circuits.head, &in));
+    out = HT_FIND(chop_circuit_table_impl, &cfg->circuits.head, &in);
+    if (out) {
+      log_assert(out->circuit == c);
+      out->circuit = NULL;
+    }
   }
   free(ckt);
 }
@@ -1141,10 +1160,10 @@ chop_circuit_send(circuit_t *c)
 
   if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)) == 0) {
     /* must-send timer expired and we still have nothing to say; send chaff */
-    if (chop_send_chaff(c, ckt->upstream_eof && !ckt->sent_fin))
+    if (chop_send_chaff(c))
       return -1;
   } else {
-    if (chop_send_blocks(c, ckt->upstream_eof && !ckt->sent_fin))
+    if (chop_send_blocks(c))
       return -1;
   }
 
@@ -1209,7 +1228,19 @@ chop_conn_recv(conn_t *s)
     }
     if (chop_find_or_make_circuit(s, hdr.ckt_id))
       return -1;
-    log_assert(s->circuit);
+    /* If we get here and s->circuit is not set, this is a connection
+       for a stale circuit: that is, a new connection made by the
+       client (to draw more data down from the server) that crossed
+       with a server-to-client FIN.  We can't decrypt the packet, but
+       it's either chaff or a protocol error; either way we can just
+       discard it.  Since we will never reply, call conn_do_flush so
+       the connection will be dropped as soon as we receive an EOF. */
+    if (!s->circuit) {
+      evbuffer_drain(source->recv_pending,
+                     evbuffer_get_length(source->recv_pending));
+      conn_do_flush(s);
+      return 0;
+    }
   }
 
   c = s->circuit;

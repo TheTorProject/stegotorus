@@ -801,17 +801,27 @@ create_outbound_connections_socks(circuit_t *ckt)
 void
 circuit_do_flush(circuit_t *ckt)
 {
-  log_debug_ckt(ckt, "flushing %lu bytes to upstream",
-                (unsigned long)
-                evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)));
+  size_t remain = evbuffer_get_length(bufferevent_get_output(ckt->up_buffer));
   ckt->flushing = 1;
+
+  /* If 'remain' is already zero, we have to call the flush callback
+     manually; libevent won't do it for us. */
+  if (remain == 0)
+    upstream_flush_cb(ckt->up_buffer, ckt);
+  else
+    log_debug_ckt(ckt, "flushing %lu bytes to upstream", (unsigned long)remain);
 }
 
 void
 conn_do_flush(conn_t *conn)
 {
-  log_debug_cn(conn, "flushing %lu bytes to peer",
-               (unsigned long)
-               evbuffer_get_length(conn_get_outbound(conn)));
+  size_t remain = evbuffer_get_length(conn_get_outbound(conn));
   conn->flushing = 1;
+
+  /* If 'remain' is already zero, we have to call the flush callback
+     manually; libevent won't do it for us. */
+  if (remain == 0)
+    downstream_flush_cb(conn->buffer, conn);
+  else
+    log_debug_cn(conn, "flushing %lu bytes to peer", (unsigned long)remain);
 }
