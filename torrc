@@ -1,0 +1,12 @@
+SocksPort 9060 # what port to open for local application connections
+SocksListenAddress 127.0.0.1 # accept connections only from localhost
+
+SafeLogging 0
+Log info file ./info.log
+Log debug file ./debug.log
+
+Socks4Proxy 127.0.0.1:1080
+
+# Bridge 87.73.82.145:8080
+Bridge 127.0.0.1:8080
+UseBridges 1

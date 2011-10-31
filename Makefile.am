@@ -22,7 +22,15 @@ PROTOCOLS = \
 	src/protocols/x_rr.c
 
 STEGANOGRAPHERS = \
-	src/steg/x_http.c
+	src/steg/x_http.c \
+	src/steg/x_http2.c \
+	src/steg/payloads.c \
+	src/steg/cookies.c \
+	src/steg/jsSteg.c \
+	src/steg/swfSteg.c \
+	src/steg/zpack.c \
+	src/steg/crc32.c \
+	src/steg/pdfSteg.c
 
 libobfsproxy_a_SOURCES = \
 	src/connections.c \
