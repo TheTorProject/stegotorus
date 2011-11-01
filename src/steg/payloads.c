@@ -454,11 +454,9 @@ unsigned int find_client_payload(char* buf, int len, int type) {
     pentry_header* p = &payload_hdrs[r];
     if (p->ptype == type) {
       inbuf = payloads[r];
-      if (find_uri_type(inbuf) != HTTP_CONTENT_SWF   &&
+      if (find_uri_type(inbuf) != HTTP_CONTENT_SWF &&
 	  find_uri_type(inbuf) != HTTP_CONTENT_JAVASCRIPT)
-
 	goto next;
-	
       if (p->length > len) {
 	fprintf(stderr, "BUFFER TOO SMALL... \n");
 	goto next;
@@ -497,7 +495,7 @@ unsigned int find_client_payload(char* buf, int len, int type) {
 int skipJSPattern (char *cp, int len) {
 
   // log_debug("Turning off skipJSPattern for debugging");
-  return 0;
+  //  return 0;
 
   if (len < 1) return 0;
 
@@ -575,6 +573,8 @@ int offset2Alnum_ (char *p, int range) {
   }
 }
 
+
+
 /*
  * offset2Hex returns the offset to the next usable hex char.
  * usable here refer to char that our steg module can use to encode
@@ -608,15 +608,13 @@ int offset2Hex (char *p, int range, int isLastCharHex) {
   if (isLastCharHex) {
     if (isxdigit(*cp)) return 0; // base case
     else {
-      cp++;
-      i = offset2Alnum_(cp, p+range-cp);
-      while (i == 0) {
-        if (isxdigit(*cp)) return (cp-p);
+      while (cp < (p+range) && isalnum_(*cp)) {
         cp++;
-        i = offset2Alnum_(cp, p+range-cp);
+        if (isxdigit(*cp)) return (cp-p);
       }
-      if (i == -1) return -1;
-      // if (i > 0), fallthru and handle case 2
+      if (cp >= (p+range)) return -1;
+      // non-alnum_ found
+      // fallthru and handle case 2
     }
   }
  
@@ -626,29 +624,29 @@ int offset2Hex (char *p, int range, int isLastCharHex) {
 
   i = offset2Alnum_(cp, p+range-cp);
   if (i == -1) return -1;
-  // isFirstWordChar = 1; 
 
   while (cp < (p+range) && i != -1) {
-  
-    if (i == 0) {
-      j = skipJSPattern(cp, p+range-cp); 
-      if (j > 0) {
-      // cp points a word that should not be used (e.g., JS keyword)
-        cp = cp+j; isFirstWordChar = 1;
-      } else { // j == 0
-        if (isFirstWordChar) { 
+
+    if (i == 0) { 
+      if (isFirstWordChar) {
+        j = skipJSPattern(cp, p+range-cp); 
+        if (j > 0) {
+          cp = cp+j;
+        } else {
           cp++; isFirstWordChar = 0; // skip the 1st char of a word
-        } 
-	else { // we are in the middle of a word; no need to invoke skipJSPattern
-          if (isxdigit(*cp)) return (cp-p);
-          else cp++;
         }
-      }
-    } else { // i > 0
-      cp += i; isFirstWordChar = 1;
-    }
-    i = offset2Alnum_(cp, p+range-cp);
-     
+      } else { // we are in the middle of a word; no need to invoke skipJSPattern
+        if (isxdigit(*cp)) return (cp-p);
+        if (! isalnum_(*cp)) {
+          isFirstWordChar = 1;
+        }
+        cp++;
+     }
+   } else {
+     cp += i; isFirstWordChar = 1;
+   }
+   i = offset2Alnum_(cp, p+range-cp);
+
   } // while
 
   // cannot find next usable hex char 
