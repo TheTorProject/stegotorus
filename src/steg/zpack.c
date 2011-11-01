@@ -52,7 +52,7 @@ int def(char *source, int slen, char *dest, int dlen, int level)
 
     memcpy (in, source, strm.avail_in);
     slen = slen - strm.avail_in;
-    source - source + strm.avail_in;
+    source = source + strm.avail_in;
 
     flush = (slen == 0) ? Z_FINISH : Z_NO_FLUSH;
     strm.next_in = in;
