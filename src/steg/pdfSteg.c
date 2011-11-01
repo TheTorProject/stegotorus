@@ -460,6 +460,13 @@ x_http2_handle_client_PDF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest
     return RECV_INCOMPLETE;
 
   httpHdr = (char *) evbuffer_pullup(source, response_len);
+
+  if (httpHdr == NULL) {
+    log_warn("CLIENT unable to pullup the complete HTTP body");
+    return RECV_BAD;
+  }
+
+
   httpBody = httpHdr + hdrLen;
 
 
