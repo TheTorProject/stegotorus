@@ -49,6 +49,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
+
+
 #define MIN_COOKIE_SIZE 128
 #define MAX_COOKIE_SIZE 2048
 
@@ -154,6 +156,7 @@ x_http2_new(rng_t *rng, unsigned int is_clientside)
   else {
     load_payloads("traces/server.out");
     init_JS_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
+    init_HTML_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
     //    init_PDF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE);
     init_SWF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
   }
@@ -295,6 +298,17 @@ x_http2_transmit_room(steg_t *s, conn_t *conn)
 
     case HTTP_CONTENT_JAVASCRIPT:
       mjc = get_max_JS_capacity() / 2;
+      if (mjc > 1024) {
+	// it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
+	int rval = 512 + rand()%(mjc - 1024);  
+	//	fprintf(stderr, "returning rval %d, mjc  %d\n", rval, mjc);
+	return rval;
+      }
+      log_warn("js capacity too small\n");
+      exit(-1);
+
+    case HTTP_CONTENT_HTML:
+      mjc = get_max_HTML_capacity() / 2;
       if (mjc > 1024) {
 	// it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
 	int rval = 512 + rand()%(mjc - 1024);  
@@ -462,7 +476,11 @@ x_http2_client_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
       log_debug("error ***********************");
       return -1;
     }
-  
+ 
+  // debug
+  // log_warn("CLIENT HTTP request header:");
+  // buf_dump((unsigned char*)buf, len, stderr);
+ 
   //  sofar += datalen/2;
   evbuffer_drain(source, datalen/2);
   
@@ -517,8 +535,13 @@ x_http2_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     case HTTP_CONTENT_SWF: 
       rval = x_http2_server_SWF_transmit(s, source, conn);
       break;
+
     case HTTP_CONTENT_JAVASCRIPT:
-      rval = x_http2_server_JS_transmit(s, source, conn);
+      rval = x_http2_server_JS_transmit(s, source, conn, HTTP_CONTENT_JAVASCRIPT);
+      break;
+
+    case HTTP_CONTENT_HTML:
+      rval = x_http2_server_JS_transmit(s, source, conn, HTTP_CONTENT_HTML);
       break;
 
     case HTTP_CONTENT_PDF:
@@ -680,7 +703,9 @@ x_http2_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
     case HTTP_CONTENT_SWF: 
       rval = x_http2_handle_client_SWF_receive(s, conn, dest, source);
       break;
+
     case HTTP_CONTENT_JAVASCRIPT:
+    case HTTP_CONTENT_HTML:
       rval = x_http2_handle_client_JS_receive(s, conn, dest, source);
       break;
 

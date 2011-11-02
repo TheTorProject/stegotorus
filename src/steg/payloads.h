@@ -28,7 +28,8 @@
 #define NO_NEXT_STATE -1
 
 #define MAX_PAYLOADS 10000
-// #define HTTP_MSG_BUF_SIZE 100000
+#define MAX_RESP_HDR_SIZE 512
+
 
 // jsSteg-specific defines
 #define JS_DELIMITER '?'
@@ -39,13 +40,12 @@
 // data encoding will be replaced by JS_DELIMITER_REPLACEMENT
 #define JS_DELIMITER_SIZE 1
 
-#define JS_MIN_AVAIL_SIZE 2050
+// #define JS_MIN_AVAIL_SIZE 2050
+#define JS_MIN_AVAIL_SIZE 1026
 // JS_MIN_AVAIL_SIZE should reflect the min number of data bytes
 // a JavaScript may encapsulate
-// Using hex-based encoding, it takes 2 hex char in JS
-// to encode 1 data byte. Thus the size of data that can be encoded
-// is about half this value
 
+#define HTML_MIN_AVAIL_SIZE 1026
 
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
@@ -128,6 +128,7 @@ unsigned int find_server_payload(char** buf, int len, int type, int contentType)
 int init_JS_payload_pool(int len, int type, int minCapacity);
 int init_SWF_payload_pool(int len, int type, int minCapacity);
 int init_PDF_payload_pool(int len, int type,int minCapacity);
+int init_HTML_payload_pool(int len, int type, int minCapacity);
 
 
 int get_next_payload (int contentType, char** buf, int* size, int* cap);
@@ -145,6 +146,7 @@ int offset2Hex (char *p, int range, int isLastCharHex);
 unsigned int capacityJS (char* buf, int len, int mode);
 unsigned int capacityJS3 (char* buf, int len, int mode);
 unsigned int get_max_JS_capacity(void);
+unsigned int get_max_HTML_capacity(void);
 
 char * strInBinary (const char *pattern, unsigned int patternLen, const char *blob, unsigned int blobLen);
 

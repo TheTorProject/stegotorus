@@ -12,6 +12,7 @@ static int typePayloadCap[MAX_CONTENT_TYPE][MAX_PAYLOADS];
 
 
 static unsigned int max_JS_capacity = 0;
+static unsigned int max_HTML_capacity = 0;
 static unsigned int max_PDF_capacity = 0;
 
 
@@ -23,6 +24,10 @@ int payload_count = 0;
 
 unsigned int get_max_JS_capacity() {
   return max_JS_capacity;
+}
+
+unsigned int get_max_HTML_capacity() {
+  return max_HTML_capacity;
 }
 
 unsigned int get_max_PDF_capacity() {
@@ -422,16 +427,18 @@ find_uri_type(char* buf) {
   if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
     return HTTP_CONTENT_SWF;
 
-  //  if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
-  return HTTP_CONTENT_JAVASCRIPT;
+  if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
+    return HTTP_CONTENT_JAVASCRIPT;
 
   if (!strncmp(ext-1, "html", 4) || !strncmp(ext, "htm", 3) || strchr(ext-1, '.') == NULL)
     return HTTP_CONTENT_HTML;
 
+  // default type
+  return HTTP_CONTENT_HTML;
+  // return HTTP_CONTENT_JAVASCRIPT;
   return -1;
   
 }
-
 
 
 
@@ -455,8 +462,10 @@ unsigned int find_client_payload(char* buf, int len, int type) {
     if (p->ptype == type) {
       inbuf = payloads[r];
       if (find_uri_type(inbuf) != HTTP_CONTENT_SWF &&
-	  find_uri_type(inbuf) != HTTP_CONTENT_JAVASCRIPT)
+          find_uri_type(inbuf) != HTTP_CONTENT_HTML &&
+	  find_uri_type(inbuf) != HTTP_CONTENT_JAVASCRIPT) {
 	goto next;
+      }
       if (p->length > len) {
 	fprintf(stderr, "BUFFER TOO SMALL... \n");
 	goto next;
@@ -490,7 +499,7 @@ unsigned int find_client_payload(char* buf, int len, int type) {
  * keyword 
  *
  * todo: 
- * Use a more efficient algo (e.g., Aho-Corasick) in the next iteration
+ * Use a more efficient regular expression matching algo
  */
 int skipJSPattern (char *cp, int len) {
 
@@ -864,9 +873,9 @@ int has_eligible_HTTP_content (char* buf, int len, int type) {
 #endif
 
   if (type != HTTP_CONTENT_JAVASCRIPT &&
+      type != HTTP_CONTENT_HTML &&
       type != HTTP_CONTENT_PDF && type != HTTP_CONTENT_SWF)
     return 0;
-
 
   // assumption: buf is null-terminated
   if (!strstr(buf, "\r\n\r\n"))
@@ -918,7 +927,8 @@ int has_eligible_HTTP_content (char* buf, int len, int type) {
     tjFlag, thFlag, ceFlag, teFlag, http304Flag, clZeroFlag);
 #endif
 
-  if (type == HTTP_CONTENT_JAVASCRIPT) {
+  // if (type == HTTP_CONTENT_JAVASCRIPT)
+  if (type == HTTP_CONTENT_JAVASCRIPT || type == HTTP_CONTENT_HTML) {
     // empty body if it's HTTP not modified (304) or zero Content-Length
     if (http304Flag || clZeroFlag) return 0; 
 
@@ -1072,7 +1082,7 @@ int  init_JS_payload_pool(int len, int type, int minCapacity) {
     msgbuf = payloads[r];
 
     mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_JAVASCRIPT);
-    if (mode > 0) {
+    if (mode == CONTENT_JAVASCRIPT) {
       
       cap = capacityJS3(msgbuf, p->length, mode);
       if (cap <  JS_DELIMITER_SIZE) 
@@ -1123,6 +1133,93 @@ int  init_JS_payload_pool(int len, int type, int minCapacity) {
   return 1;
 }
 
+
+int  init_HTML_payload_pool(int len, int type, int minCapacity) {
+
+  // stat for usable payload
+  int minPayloadSize = 0, maxPayloadSize = 0; 
+  int sumPayloadSize = 0;
+  int minPayloadCap = 0, maxPayloadCap = 0;
+  int sumPayloadCap = 0;
+
+  unsigned int contentType = HTTP_CONTENT_HTML;
+
+  int cnt = 0;
+  int r;
+  pentry_header* p;
+  char* msgbuf;
+  int cap;
+  int mode;
+
+
+
+  if (payload_count == 0) {
+    log_debug("payload_count == 0; forgot to run load_payloads()?\n");
+    return 0;
+  }
+  
+  if (initTypePayload[contentType] != 0) return 1; // init is done already
+
+
+  for (r = 0; r < payload_count; r++) {
+    p = &payload_hdrs[r];
+    if (p->ptype != type || p->length > len) {
+      continue;
+    }
+
+    msgbuf = payloads[r];
+
+    mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_HTML);
+    if (mode == CONTENT_HTML_JAVASCRIPT) {
+      
+      cap = capacityJS3(msgbuf, p->length, mode);
+      if (cap <  JS_DELIMITER_SIZE) 
+	continue;
+
+      cap = (cap - JS_DELIMITER_SIZE)/2;
+
+      if (cap > minCapacity) {
+	typePayloadCap[contentType][cnt] = cap; // (cap-JS_DELIMITER_SIZE)/2;
+	// because we use 2 hex char to encode every data byte, the available
+	// capacity for encoding data is divided by 2
+	typePayload[contentType][cnt] = r;
+	cnt++;
+	
+	// update stat
+	if (cnt == 1) {
+	  minPayloadSize = p->length; maxPayloadSize = p->length;
+	  minPayloadCap = cap; maxPayloadCap = cap;
+	} 
+	else {
+	  if (minPayloadSize > p->length) minPayloadSize = p->length; 
+	  if (maxPayloadSize < p->length) maxPayloadSize = p->length; 
+	  if (minPayloadCap > cap) minPayloadCap = cap;
+	  if (maxPayloadCap < cap) {
+	    maxPayloadCap = cap;
+	  }
+	  
+	}
+	sumPayloadSize += p->length; sumPayloadCap += cap;
+      }
+    }
+  }
+
+  
+  max_HTML_capacity = maxPayloadCap;
+
+
+  initTypePayload[contentType] = 1;
+  typePayloadCount[contentType] = cnt;
+  log_debug("init_payload_pool: typePayloadCount for contentType %d = %d",
+     contentType, typePayloadCount[contentType]); 
+  log_debug("minPayloadSize = %d", minPayloadSize); 
+  log_debug("maxPayloadSize = %d", maxPayloadSize); 
+  log_debug("avgPayloadSize = %f", (float)sumPayloadSize/(float)cnt); 
+  log_debug("minPayloadCap  = %d", minPayloadCap); 
+  log_debug("maxPayloadCap  = %d", maxPayloadCap); 
+  log_debug("avgPayloadCap  = %f", (float)sumPayloadCap/(float)cnt); 
+  return 1;
+}
 
 
 

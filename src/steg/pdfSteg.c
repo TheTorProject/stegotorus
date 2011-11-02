@@ -79,8 +79,12 @@ addDelimiter(char *inbuf, int inbuflen, char *outbuf, int outbuflen,
  * 
  * returns the length of data written to outbuf, if succeed;
  * otherwise, it returns -1
+ *
  * endFlag indicates whether the end-of-encoding byte pattern (i.e.,
  * delimiter1 followed by non-delimiter1) is detected
+ *
+ * escape indicates if a dangling delimiter1 has been
+ * seen in the previous invocation of removeDelimiter
  */
 int
 removeDelimiter(char *inbuf, int inbuflen, char *outbuf, int outbuflen, 
@@ -113,16 +117,13 @@ removeDelimiter(char *inbuf, int inbuflen, char *outbuf, int outbuflen,
   while ((ibp-inbuf+1)<inbuflen && cnt<outbuflen) {
     ic1 = *(ibp++);
     if (ic1 != delimiter1) {
-      // *escape = 0;
       outbuf[cnt++] = ic1;
     } else {
-      // *escape = 1;
       // lookahead 1 char
       ic2 = *ibp;
       // if the next char is delimiter1
       if (ic2 == delimiter1) {
         outbuf[cnt++] = delimiter1; ibp++;
-        // *escape = 0;
       } else { // end-of-data pattern detected
         *endFlag = 1;
         break;
@@ -130,10 +131,6 @@ removeDelimiter(char *inbuf, int inbuflen, char *outbuf, int outbuflen,
     }
   }
 
-  // if (*escape) {
-  //   *escape = 0;
-  //   return cnt;
-  // }
   if (ibp-inbuf == inbuflen) return cnt;
 
   // handling the last char in inbuf, if needed
@@ -217,7 +214,7 @@ pdfWrap (char *data, unsigned int dlen,
           memcpy(op, dp, size2);
           op += size2; tp += size2; dp += size2; 
           cnt += size2;
-          printf("Encoded %d char in pdf. Done encoding\n", size2);
+          // printf("Encoded %d char in pdf. Done encoding\n", size2);
           break;
         }
         log_debug("Encoded %d char in pdf", size);
@@ -311,6 +308,9 @@ int x_http2_server_PDF_transmit (steg_t* s, struct evbuffer *source, conn_t *con
   char outbuf[HTTP_MSG_BUF_SIZE];
   int cnt, hLen, outbuflen, i;
 
+  char newHdr[MAX_RESP_HDR_SIZE];
+  int newHdrLen = 0;
+
   struct evbuffer_iovec *iv;
   int nv;
 
@@ -400,10 +400,21 @@ int x_http2_server_PDF_transmit (steg_t* s, struct evbuffer *source, conn_t *con
   // }
 
 
-  if (evbuffer_add(dest, pdfTemplate, hLen)) {
-    log_warn("SERVER ERROR: evbuffer_add() fails for pdfTemplate");
+  newHdrLen = gen_response_header((char*) "application/pdf", 0, outbuflen, newHdr, sizeof(newHdr));
+  if (newHdrLen < 0) {
+    log_warn("SERVER ERROR: gen_response_header fails for pdfSteg");
     return -1;
   }
+
+  if (evbuffer_add(dest, newHdr, newHdrLen)) {
+    log_warn("SERVER ERROR: evbuffer_add() fails for newHdr");
+    return -1;
+  }
+  // if (evbuffer_add(dest, pdfTemplate, hLen)) {
+  //   log_warn("SERVER ERROR: evbuffer_add() fails for pdfTemplate");
+  //   return -1;
+  // }
+
   if (evbuffer_add(dest, outbuf, outbuflen)) {
     log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
     return -1;

@@ -2,6 +2,8 @@
 #include "jsSteg.h"
 #include "cookies.h"
 
+void buf_dump(unsigned char* buf, int len, FILE *out);
+
 
 /*
  * jsSteg: A Javascript-based steganography module
@@ -610,7 +612,7 @@ int testDecode2(char *inBuf, char *outBuf,
 
 
 int 
-x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
+x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, unsigned int content_type) {
 
   struct evbuffer_iovec *iv;
   int nv;
@@ -620,6 +622,9 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
   char data[(int) sbuflen*2];
   unsigned int datalen;
 
+  char newHdr[MAX_RESP_HDR_SIZE];
+  int newHdrLen = 0;
+    
   size_t sofar = 0;
   unsigned int cnt = 0;
   int r;
@@ -638,12 +643,12 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
     int mode;
     char *hend;
     unsigned int hLen;
-    unsigned int mjs;
+    unsigned int mjs = 0;
 
     char *jsTemplate = NULL;
     int jsTemplateSize = 0;
 
-      
+
 
 
     /*    int hdrLen;
@@ -660,6 +665,13 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
 
     log_debug("sbuflen = %d sofar = %d\n", (int) sbuflen, (int) sofar);
 
+
+    if (content_type != HTTP_CONTENT_JAVASCRIPT &&
+        content_type != HTTP_CONTENT_HTML) {
+      log_warn("SERVER ERROR: Unknown content type (%d)", content_type);
+      return -1;
+    }
+
     // log_debug("SERVER: dumping data with length %d:", (int) sbuflen);
     // evbuffer_dump(source, stderr);
     // Convert data in 'source' to hexadecimal and write it to data
@@ -675,15 +687,19 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
     // jsTemplate should be init already, by x_http2_new or the previous invocation
     // of this function
 
-    mjs = get_max_JS_capacity();
+    if (content_type == HTTP_CONTENT_JAVASCRIPT) {
+      mjs = get_max_JS_capacity();
+    } else if (content_type == HTTP_CONTENT_HTML) {
+      mjs = get_max_HTML_capacity();
+    }
 
     if (mjs <= 0) {
-      log_debug("SERVER ERROR: (server_transmit) No JavaScript found in jsTemplate\n");
+      log_warn("SERVER ERROR: No JavaScript found in jsTemplate");
       return -1;
-    } 
+    }
 
     if (sbuflen > (size_t) mjs) {
-      log_debug("SERVER ERROR: (server_transmit) jsTemplate cannot accommodate data %d %dn",
+      log_warn("SERVER ERROR: (server_transmit) jsTemplate cannot accommodate data %d %dn",
 		(int) sbuflen, (int) mjs);
       return -1;
     }
@@ -712,10 +728,10 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
 
 
 
-    if (get_payload(HTTP_CONTENT_JAVASCRIPT, datalen, &jsTemplate, &jsTemplateSize) == 1) {
+    if (get_payload(content_type, datalen, &jsTemplate, &jsTemplateSize) == 1) {
       log_debug("SERVER found the next HTTP response template with size %d", jsTemplateSize);
     } else {
-      log_debug("SERVER couldn't find the next HTTP response template; reusing the previous one");
+      log_warn("SERVER couldn't find the next HTTP response template; reusing the previous one");
     }
 
     log_debug("MJS %d %d", datalen, mjs);
@@ -747,33 +763,9 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
     log_debug("SERVER: using HTTP resp template of length = %d\n", jsLen);
     // log_debug("HTTP resp tempmlate:");
     // buf_dump((unsigned char*)jsTemplate, jsLen, stderr);
-    // fprintf(stderr, "==========================\n");
 
     hLen = hend+4-jsTemplate;
     r = encodeHTTPBody(data, hend+4, outbuf, datalen, jsLen-hLen, HTTP_MSG_BUF_SIZE, mode);
-
-
-
-
-    /// NEW STUFF
-
-    
-/*     hdrLen  = strstr(jsTemplate, "\r\n\r\n") - jsTemplate + 4;
-     tmp = strstr(jsTemplate, "Content-Length: ") + strlen("Content-Length: ");
-
-     content_len = atoi(tmp);
-      
-     
-     decCnt = decodeHTTPBody(jsTemplate + hdrLen, data2, content_len, HTTP_MSG_BUF_SIZE, &fin2, mode);
-     
-     
-     if (decCnt == (int) datalen)
-	fprintf(stderr, "cnts match\n");
-      else
-	fprintf(stderr, "cnts don't match %d %d\n", decCnt, datalen);
-
-*/   
-
 
     if (r < 0 || ((unsigned int) r < datalen)) {
       fprintf(stderr, "incomplete data encoding\n");
@@ -782,27 +774,38 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
       return -1;
     }
 
-    // note: the transformation is length-preserving for now
-    log_debug("SERVER: HTTP body with encoded data:");
-    //     buf_dump((unsigned char*)outbuf, jsLen-hLen, stderr);
-    //    fprintf(stderr, "==========================\n");
-
-    if (evbuffer_add(dest, jsTemplate, hLen)) {
-      log_debug("SERVER ERROR: x_http2_server_transmit: evbuffer_add() fails for jsTemplate");
+    if (mode == CONTENT_JAVASCRIPT) { // JavaScript in HTTP body
+      newHdrLen = gen_response_header((char*) "application/x-javascript", 0, jsLen-hLen, newHdr, sizeof(newHdr));
+    } else if (mode == CONTENT_HTML_JAVASCRIPT) { // JavaScript(s) embedded in HTML doc
+      newHdrLen = gen_response_header((char*) "text/html", 0, jsLen-hLen, newHdr, sizeof(newHdr));
+    } else { // unknown mode
+      log_warn("SERVER ERROR: unknown mode for creating the HTTP response header");
+      return -1;
+    }
+    if (newHdrLen < 0) {
+      log_warn("SERVER ERROR: gen_response_header fails for jsSteg");
       return -1;
     }
 
-    //    fprintf(stderr, "HELLO ==========================\n");
+    if (evbuffer_add(dest, newHdr, newHdrLen)) {
+      log_warn("SERVER ERROR: evbuffer_add() fails for newHdr");
+      return -1;
+    }
+
+    // if (evbuffer_add(dest, jsTemplate, hLen)) {
+    //   log_warn("SERVER ERROR: evbuffer_add() fails for jsTemplate");
+    //   return -1;
+    // }
+
     
     if (evbuffer_add(dest, outbuf, jsLen-hLen)) {
-      log_debug("SERVER ERROR: x_http2_server_transmit: evbuffer_add() fails for outbuf");
+      log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
       return -1;
     }
 
     sofar += datalen/2;
     evbuffer_drain(source, datalen/2);
     //  } while (sbuflen > sofar);
-
 
 
     //    fprintf(stderr, "SERVER TRANSMITTED payload of size %d\n", (int) sbuflen);
@@ -814,10 +817,6 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
   log_debug("SERVER finding the next HTTP response template");
 
 
-
-  
-
-  // conn_cease_transmission(conn);
   conn_close_after_transmit(conn);
   //  downcast_steg(s)->have_transmitted = 1;
   return 0;
@@ -920,9 +919,9 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
   }
   
   log_debug("CLIENT received HTTP response with length %d\n", response_len);
-  log_debug("HTTP response:");
-  //    buf_dump((unsigned char*)respMsg, response_len, stderr);
-  //    fprintf(stderr, "==========================\n");
+  // buf_dump((unsigned char*)respMsg, response_len, stderr);
+  // log_debug("HTTP response header:");
+  // buf_dump((unsigned char*)respMsg, hdrLen, stderr);
   
   httpBody = respMsg + hdrLen;
   
@@ -936,7 +935,6 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
 
   log_debug("CLIENT Before decodeHTTPBody; mode: %d\n", mode);
   
-  // call decodeHTTPBody
   decCnt = decodeHTTPBody(httpBody, data, response_len-hdrLen, HTTP_MSG_BUF_SIZE, &fin, mode);
   data[decCnt] = 0;
   
@@ -950,12 +948,12 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
   }
   
   if (! isxString(data)) {
-    log_debug("CLIENT ERROR: Data received not hex");
+    log_warn("CLIENT ERROR: Data received not hex");
     //      buf_dump((unsigned char*)data, decCnt, stderr);
     return RECV_BAD;
   }
   
-  log_debug("Hex data received:");
+  // log_debug("Hex data received:");
   //    buf_dump ((unsigned char*)data, decCnt, stderr);
   
   // get a scratch buffer
@@ -963,7 +961,7 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
   if (!scratch) return RECV_BAD;
   
   if (evbuffer_expand(scratch, decCnt/2)) {
-    log_debug("CLIENT ERROR: Evbuffer expand failed \n");
+    log_warn("CLIENT ERROR: Evbuffer expand failed \n");
     evbuffer_free(scratch);
     return RECV_BAD;
   }
@@ -975,16 +973,16 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
     evbuffer_add(scratch, &c, 1);
   }
   
-  log_debug("CLIENT Done converting hex data to binary:\n");
+  // log_debug("CLIENT Done converting hex data to binary:\n");
   // evbuffer_dump(scratch, stderr);
   
  
   //  fprintf(stderr, "CLIENT RECEIVED payload of size %d\n", (int) evbuffer_get_length(scratch));
- // add the scratch buffer (which contains the data) to dest
+  // add the scratch buffer (which contains the data) to dest
   
   if (evbuffer_add_buffer(dest, scratch)) {
     evbuffer_free(scratch);
-    log_debug("CLIENT ERROR: Failed to transfer buffer");
+    log_warn("CLIENT ERROR: Failed to transfer buffer");
     return RECV_BAD;
   }
   log_debug("Added scratch (buffer) to dest\n");
@@ -994,7 +992,7 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
   
   if (response_len <= evbuffer_get_length(source)) {
     if (evbuffer_drain(source, response_len) == -1) {
-      log_debug("CLIENT ERROR: Added scratch (buffer) to dest\n");
+      log_warn("CLIENT ERROR: Failed to drain source");
       return RECV_BAD;
     }
   }
