@@ -865,7 +865,7 @@ strInBinary (const char *pattern, unsigned int patternLen,
 int has_eligible_HTTP_content (char* buf, int len, int type) {
   char* ptr = buf;
   char* matchptr;
-  int tjFlag=0, thFlag=0, ceFlag=0, teFlag=0, http304Flag=0, clZeroFlag=0, pdfFlag=0, swfFlag=0;
+  int tjFlag=0, thFlag=0, ceFlag=0, teFlag=0, http304Flag=0, clZeroFlag=0, pdfFlag=0, swfFlag=0, gzipFlag=0;
   char* end, *cp;
 
 #ifdef DEBUG
@@ -906,7 +906,9 @@ int has_eligible_HTTP_content (char* buf, int len, int type) {
 	swfFlag = 1;
       }
 
-    } else if (!strncmp(ptr, "Content-Encoding:", 17)) {
+    } else if (!strncmp(ptr, "Content-Encoding: gzip", 22)) {
+      gzipFlag = 1;
+    } else if (!strncmp(ptr, "Content-Encoding:", 17)) { // Content-Encoding that is not gzip
       ceFlag = 1;
     } else if (!strncmp(ptr, "Transfer-Encoding:", 18)) {
       teFlag = 1;
@@ -923,8 +925,8 @@ int has_eligible_HTTP_content (char* buf, int len, int type) {
   }
 
 #ifdef DEBUG
-  printf("tjFlag=%d; thFlag=%d; ceFlag=%d; teFlag=%d; http304Flag=%d; clZeroFlag=%d\n", 
-    tjFlag, thFlag, ceFlag, teFlag, http304Flag, clZeroFlag);
+  printf("tjFlag=%d; thFlag=%d; gzipFlag=%d; ceFlag=%d; teFlag=%d; http304Flag=%d; clZeroFlag=%d\n", 
+    tjFlag, thFlag, gzipFlag, ceFlag, teFlag, http304Flag, clZeroFlag);
 #endif
 
   // if (type == HTTP_CONTENT_JAVASCRIPT)
@@ -933,12 +935,9 @@ int has_eligible_HTTP_content (char* buf, int len, int type) {
     if (http304Flag || clZeroFlag) return 0; 
 
     // for now, we're not dealing with Transfer-Encoding (e.g., chunked)
+    // or Content-Encoding that is not gzip
     // if (teFlag) return 0;
-    // if (ceFlag) return 0; // for now, we remove "Content-Encoding: gzip" in fixContentLen
     if (teFlag || ceFlag) return 0;
-/*****
-    if (teFlag) return 0;
- *****/
 
     if (tjFlag && ceFlag && end != NULL) {
       log_debug("(JS) gzip flag detected with hdr len %d", (int)(end-buf+4));
@@ -963,9 +962,8 @@ int has_eligible_HTTP_content (char* buf, int len, int type) {
     if (http304Flag || clZeroFlag) return 0; 
 
     // for now, we're not dealing with Transfer-Encoding (e.g., chunked)
-    // or Content-Encoding (e.g., gzip)
+    // or Content-Encoding that is not gzip
     // if (teFlag) return 0;
-    // if (ceFlag) return 0;
     if (teFlag || ceFlag) return 0;
 
     // check if HTTP body contains "endstream";

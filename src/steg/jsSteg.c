@@ -32,6 +32,101 @@ int isxString(char *str) {
 
 
 /*
+ * isGzipContent(char *msg)
+ *
+ * If the HTTP header of msg specifies that the content is gzipped,
+ * this function returns 1; otherwise, it returns 0
+ *
+ * Assumptions:
+ * msg is null terminated 
+ *
+ */
+int isGzipContent (char *msg) {
+  char *ptr = msg, *end;
+  int gzipFlag = 0;
+
+  if (!strstr(msg, "\r\n\r\n"))
+    return 0;
+
+  while (1) {
+    end = strstr(ptr, "\r\n");
+    if (end == NULL) {
+      break;
+    }
+
+    if (!strncmp(ptr, "Content-Encoding: gzip", 22)) {
+      gzipFlag = 1;
+      break;
+    }
+   
+    if (!strncmp(end, "\r\n\r\n", 4)){
+      break;
+    }
+    ptr = end+2;
+  }
+
+  return gzipFlag;
+}
+
+
+/*
+ * findContentType(char *msg)
+ *
+ * If the HTTP header of msg specifies that the content type:
+ * case (content type)
+ *   javascript: return HTTP_CONTENT_JAVASCRIPT
+ *   pdf:        return HTTP_CONTENT_PDF
+ *   shockwave:  return HTTP_CONTENT_SWF
+ *   html:       return HTTP_CONTENT_HTML
+ *   otherwise:  return 0
+ *
+ * Assumptions:
+ * msg is null terminated 
+ *
+ */
+int findContentType (char *msg) {
+  char *ptr = msg, *end;
+
+  if (!strstr(msg, "\r\n\r\n"))
+    return 0;
+
+  while (1) {
+    end = strstr(ptr, "\r\n");
+    if (end == NULL) {
+      break;
+    }
+
+    if (!strncmp(ptr, "Content-Type:", 13)) {
+        
+      if (!strncmp(ptr+14, "text/javascript", 15) || 
+          !strncmp(ptr+14, "application/javascript", 22) || 
+          !strncmp(ptr+14, "application/x-javascript", 24)) {
+        return HTTP_CONTENT_JAVASCRIPT;
+      }
+      if (!strncmp(ptr+14, "text/html", 9)) {
+        return HTTP_CONTENT_HTML;
+      }
+      if (!strncmp(ptr+14, "application/pdf", 15) || 
+          !strncmp(ptr+14, "application/x-pdf", 17)) {
+        return HTTP_CONTENT_PDF;
+      }
+      if (!strncmp(ptr+14, "application/x-shockwave-flash", strlen("application/x-shockwave-flash"))) {
+        return HTTP_CONTENT_SWF;
+      }
+    }
+ 
+    if (!strncmp(end, "\r\n\r\n", 4)){
+      break;
+    }
+    ptr = end+2;
+  }
+
+  return 0;
+}
+
+
+
+/*
  * int encode(char *data, char *jTemplate, char *jData,
  *            unsigned int dlen, unsigned int jtlen, unsigned int jdlen)
  *
@@ -618,205 +713,175 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, un
   int nv;
   struct evbuffer *dest = conn_get_outbound(conn);
   size_t sbuflen = evbuffer_get_length(source);
-  char outbuf[HTTP_MSG_BUF_SIZE];
+  char *hend, *jsTemplate = NULL, *outbuf, *outbuf2;
   char data[(int) sbuflen*2];
-  unsigned int datalen;
-
   char newHdr[MAX_RESP_HDR_SIZE];
-  int newHdrLen = 0;
-    
-  size_t sofar = 0;
-  unsigned int cnt = 0;
-  int r;
+  unsigned int datalen = 0, cnt = 0, mjs = 0;
+  int r, i, mode, jsLen, hLen, cLen, newHdrLen = 0, outbuf2len;
+  
+  int gzipMode = JS_GZIP_RESP;
 
 
+  log_debug("sbuflen = %d\n", (int) sbuflen);
 
-  // by dynamically configuring the size returned by x_http2_transmit_room(),
-  // we can ensure that the size of data (source) is less than the max
-  // data length the JavaScript (jsTemplate) can encode
+  if (content_type != HTTP_CONTENT_JAVASCRIPT &&
+      content_type != HTTP_CONTENT_HTML) {
+    log_warn("SERVER ERROR: Unknown content type (%d)", content_type);
+    return -1;
+  }
 
+  // log_debug("SERVER: dumping data with length %d:", (int) sbuflen);
+  // evbuffer_dump(source, stderr);
 
+  nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
+  iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
 
-  //  do {
-    int i;
-    unsigned int jsLen;
-    int mode;
-    char *hend;
-    unsigned int hLen;
-    unsigned int mjs = 0;
-
-    char *jsTemplate = NULL;
-    int jsTemplateSize = 0;
-
-
-
-
-    /*    int hdrLen;
-      int content_len;
-      int fin2;
-
-      char* tmp;
-      char data2[20000];
-      int decCnt;
-    */
-
-    datalen = 0;
-
-
-    log_debug("sbuflen = %d sofar = %d\n", (int) sbuflen, (int) sofar);
-
-
-    if (content_type != HTTP_CONTENT_JAVASCRIPT &&
-        content_type != HTTP_CONTENT_HTML) {
-      log_warn("SERVER ERROR: Unknown content type (%d)", content_type);
-      return -1;
-    }
-
-    // log_debug("SERVER: dumping data with length %d:", (int) sbuflen);
-    // evbuffer_dump(source, stderr);
-    // Convert data in 'source' to hexadecimal and write it to data
-
-    nv = evbuffer_peek(source, sbuflen - sofar, NULL, NULL, 0);
-    iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
-
-    if (evbuffer_peek(source, sbuflen - sofar, NULL, iv, nv) != nv) {
-      free(iv);
-      return -1;
-    }
-
-    // jsTemplate should be init already, by x_http2_new or the previous invocation
-    // of this function
-
-    if (content_type == HTTP_CONTENT_JAVASCRIPT) {
-      mjs = get_max_JS_capacity();
-    } else if (content_type == HTTP_CONTENT_HTML) {
-      mjs = get_max_HTML_capacity();
-    }
-
-    if (mjs <= 0) {
-      log_warn("SERVER ERROR: No JavaScript found in jsTemplate");
-      return -1;
-    }
-
-    if (sbuflen > (size_t) mjs) {
-      log_warn("SERVER ERROR: (server_transmit) jsTemplate cannot accommodate data %d %dn",
-		(int) sbuflen, (int) mjs);
-      return -1;
-    }
-    
-
-    cnt = 0;
-
-    for (i = 0; i < nv; i++) {
-      const unsigned char *p = iv[i].iov_base;
-      const unsigned char *limit = p + iv[i].iov_len;
-      char c;
-
-      while (p < limit && cnt < sbuflen-sofar) {
-        c = *p++;
-        data[datalen] = "0123456789abcdef"[(c & 0xF0) >> 4];
-        data[datalen+1] = "0123456789abcdef"[(c & 0x0F) >> 0];
-        datalen += 2;
-        cnt++;
-      }
-    }
-
-    log_debug("SERVER encoded data in hex string (len %d):", datalen);
-    //    buf_dump((unsigned char*)data, datalen, stderr);
-
+  if (evbuffer_peek(source, sbuflen, NULL, iv, nv) != nv) {
     free(iv);
+    return -1;
+  }
 
+  if (content_type == HTTP_CONTENT_JAVASCRIPT) {
+    mjs = get_max_JS_capacity();
+  } else if (content_type == HTTP_CONTENT_HTML) {
+    mjs = get_max_HTML_capacity();
+  }
 
+  if (mjs <= 0) {
+    log_warn("SERVER ERROR: No JavaScript found in jsTemplate");
+    return -1;
+  }
 
-    if (get_payload(content_type, datalen, &jsTemplate, &jsTemplateSize) == 1) {
-      log_debug("SERVER found the next HTTP response template with size %d", jsTemplateSize);
-    } else {
-      log_warn("SERVER couldn't find the next HTTP response template; reusing the previous one");
-    }
-
-    log_debug("MJS %d %d", datalen, mjs);
-
-
-
-    if (jsTemplate == NULL) {
-      fprintf(stderr, "NO suitable payload found %d %d\n", datalen, mjs);
-      exit(-1);
-    }
-
-
-    // use encodeHTTPBody to embed data in the JS jsTemplate
-    // assumption: jsTemplate is null-terminated
-
-    log_debug("strlen(jsTemplate) = %d", (int)strlen(jsTemplate));
-    log_debug("jsTemplateSize = %d", jsTemplateSize);
-    // unsigned int jsLen = strlen(jsTemplate);
-    jsLen = jsTemplateSize;
-
-
-    mode = has_eligible_HTTP_content (jsTemplate, jsLen, HTTP_CONTENT_JAVASCRIPT);
-    hend = strstr(jsTemplate, "\r\n\r\n");
-    if (hend == NULL) {
-      log_warn("Unable to find end of header in the HTTP template");
-      return -1;
-    }
-
-    log_debug("SERVER: using HTTP resp template of length = %d\n", jsLen);
-    // log_debug("HTTP resp tempmlate:");
-    // buf_dump((unsigned char*)jsTemplate, jsLen, stderr);
-
-    hLen = hend+4-jsTemplate;
-    r = encodeHTTPBody(data, hend+4, outbuf, datalen, jsLen-hLen, HTTP_MSG_BUF_SIZE, mode);
-
-    if (r < 0 || ((unsigned int) r < datalen)) {
-      fprintf(stderr, "incomplete data encoding\n");
-      exit(-1);
-      log_debug("SERVER ERROR: Incomplete data encoding");
-      return -1;
-    }
-
-    if (mode == CONTENT_JAVASCRIPT) { // JavaScript in HTTP body
-      newHdrLen = gen_response_header((char*) "application/x-javascript", 0, jsLen-hLen, newHdr, sizeof(newHdr));
-    } else if (mode == CONTENT_HTML_JAVASCRIPT) { // JavaScript(s) embedded in HTML doc
-      newHdrLen = gen_response_header((char*) "text/html", 0, jsLen-hLen, newHdr, sizeof(newHdr));
-    } else { // unknown mode
-      log_warn("SERVER ERROR: unknown mode for creating the HTTP response header");
-      return -1;
-    }
-    if (newHdrLen < 0) {
-      log_warn("SERVER ERROR: gen_response_header fails for jsSteg");
-      return -1;
-    }
-
-    if (evbuffer_add(dest, newHdr, newHdrLen)) {
-      log_warn("SERVER ERROR: evbuffer_add() fails for newHdr");
-      return -1;
-    }
-
-    // if (evbuffer_add(dest, jsTemplate, hLen)) {
-    //   log_warn("SERVER ERROR: evbuffer_add() fails for jsTemplate");
-    //   return -1;
-    // }
-
+  if (sbuflen > (size_t) mjs) {
+    log_warn("SERVER ERROR: jsTemplate cannot accommodate data %d %dn",
+             (int) sbuflen, (int) mjs);
+    return -1;
+  }
     
-    if (evbuffer_add(dest, outbuf, jsLen-hLen)) {
-      log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
+  // Convert data in 'source' to hexadecimal and write it to data
+  cnt = 0;
+  for (i = 0; i < nv; i++) {
+    const unsigned char *p = iv[i].iov_base;
+    const unsigned char *limit = p + iv[i].iov_len;
+    char c;
+
+    while (p < limit && cnt < sbuflen) {
+      c = *p++;
+      data[datalen] = "0123456789abcdef"[(c & 0xF0) >> 4];
+      data[datalen+1] = "0123456789abcdef"[(c & 0x0F) >> 0];
+      datalen += 2;
+      cnt++;
+    }
+  }
+
+  free(iv);
+
+  log_debug("SERVER encoded data in hex string (len %d):", datalen);
+  //    buf_dump((unsigned char*)data, datalen, stderr);
+
+
+
+  if (get_payload(content_type, datalen, &jsTemplate, &jsLen) == 1) {
+    log_debug("SERVER found the applicable HTTP response template with size %d", jsLen);
+  } else {
+    log_warn("SERVER couldn't find the applicable HTTP response template");
+    return -1;
+  }
+
+  // log_debug("MJS %d %d", datalen, mjs);
+  if (jsTemplate == NULL) {
+    log_warn("NO suitable payload found %d %d", datalen, mjs);
+    return -1;
+  }
+
+  // assumption: jsTemplate is null-terminated
+  hend = strstr(jsTemplate, "\r\n\r\n");
+  if (hend == NULL) {
+    log_warn("Unable to find end of header in the HTTP template");
+    return -1;
+  }
+
+  mode = has_eligible_HTTP_content (jsTemplate, jsLen, HTTP_CONTENT_JAVASCRIPT);
+
+  // log_debug("SERVER: using HTTP resp template of length = %d", jsLen);
+  // log_debug("HTTP resp tempmlate:");
+  // buf_dump((unsigned char*)jsTemplate, jsLen, stderr);
+
+  hLen = hend+4-jsTemplate;
+  cLen = jsLen - hLen;
+  outbuf = malloc(cLen);
+  if (outbuf == NULL) {
+    log_warn("malloc for outbuf fails");
+    return -1;
+  }
+
+  r = encodeHTTPBody(data, hend+4, outbuf, datalen, cLen, cLen, mode);
+
+  if (r < 0 || ((unsigned int) r < datalen)) {
+    log_warn("SERVER ERROR: Incomplete data encoding");
+    return -1;
+  }
+
+  // work in progress
+  if (gzipMode == 1) {
+    // conservative estimate:
+    // sizeof outbuf2 = cLen + 10-byte for gzip header + 8-byte for crc 
+    outbuf2 = malloc(cLen+18);  
+    if (outbuf2 == NULL) {
+      log_warn("malloc for outbuf2 fails");
       return -1;
     }
 
-    sofar += datalen/2;
-    evbuffer_drain(source, datalen/2);
-    //  } while (sbuflen > sofar);
+    outbuf2len = gzDeflate(outbuf, cLen, outbuf2, cLen+18, time(NULL));
 
+    if (outbuf2len <= 0) {
+      log_warn("gzDeflate for outbuf fails");
+      free(outbuf2);
+      return -1;
+    }
+    free(outbuf);
 
-    //    fprintf(stderr, "SERVER TRANSMITTED payload of size %d\n", (int) sbuflen);
+  } else {
+    outbuf2 = outbuf;
+    outbuf2len = cLen;
+  }
 
-  // obtain a usable HTTP response template for the next data, and
-  // modify jsTemplateCapacity
+  // outbuf2 points to the HTTP payload (of length outbuf2len) to be sent 
 
+  if (mode == CONTENT_JAVASCRIPT) { // JavaScript in HTTP body
+    newHdrLen = gen_response_header((char*) "application/x-javascript", gzipMode,
+                                    outbuf2len, newHdr, sizeof(newHdr));
+  } else if (mode == CONTENT_HTML_JAVASCRIPT) { // JavaScript(s) embedded in HTML doc
+    newHdrLen = gen_response_header((char*) "text/html", gzipMode,
+                                    outbuf2len, newHdr, sizeof(newHdr));
+  } else { // unknown mode
+    log_warn("SERVER ERROR: unknown mode for creating the HTTP response header");
+    free(outbuf2);
+    return -1;
+  }
+  if (newHdrLen < 0) {
+    log_warn("SERVER ERROR: gen_response_header fails for jsSteg");
+    free(outbuf2);
+    return -1;
+  }
 
-  log_debug("SERVER finding the next HTTP response template");
+  // newHdr points to the HTTP header (of length newHdrLen) to be sent 
 
+  if (evbuffer_add(dest, newHdr, newHdrLen)) {
+    log_warn("SERVER ERROR: evbuffer_add() fails for newHdr");
+    free(outbuf2);
+    return -1;
+  }
 
+  if (evbuffer_add(dest, outbuf2, outbuf2len)) {
+    log_warn("SERVER ERROR: evbuffer_add() fails for outbuf2");
+    free(outbuf2);
+    return -1;
+  }
+
+  evbuffer_drain(source, sbuflen);
+
+  free(outbuf2);
   conn_close_after_transmit(conn);
   //  downcast_steg(s)->have_transmitted = 1;
   return 0;
@@ -836,17 +901,14 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
   char buf[10];
   char respMsg[HTTP_MSG_BUF_SIZE];
   char data[HTTP_MSG_BUF_SIZE];
+  char buf2[HTTP_MSG_BUF_SIZE];
 
-  unsigned char *field; 
-  unsigned char *fieldStart;
-  unsigned char* fieldEnd;
-  unsigned char *fieldValStart;
+  unsigned char *field, *fieldStart, *fieldEnd, *fieldValStart;
   char *httpBody;
  
+  int decCnt, fin, i, j, k, gzipMode=0, httpBodyLen, buf2len, contentType = 0;
   ev_ssize_t r;
-  int mode, decCnt, fin;
   struct evbuffer * scratch;
-  int i,j,k;
   char c;
   
   
@@ -897,9 +959,7 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
 
   if (response_len > evbuffer_get_length(source))
     return RECV_INCOMPLETE;
-  
-  
-  
+ 
   // read the entire HTTP resp
   if (response_len < HTTP_MSG_BUF_SIZE) {
     r = evbuffer_copyout(source, respMsg, response_len);
@@ -921,21 +981,37 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
   log_debug("CLIENT received HTTP response with length %d\n", response_len);
   // buf_dump((unsigned char*)respMsg, response_len, stderr);
   // log_debug("HTTP response header:");
-  // buf_dump((unsigned char*)respMsg, hdrLen, stderr);
-  
-  httpBody = respMsg + hdrLen;
-  
-  log_debug("CLIENT Before has_eligible HTTP content\n");
-  // find out if the resp is a JavaScript or JS embedded in HTML doc
-  mode = has_eligible_HTTP_content (respMsg, response_len, HTTP_CONTENT_JAVASCRIPT);
-  if (mode != 1 && mode != 2) {
-    log_debug("CLIENT ERROR: HTTP response not useful for jsSteg (mode %d)", mode);
+  // buf_dump((unsigned char*)respMsg, hdrLen+80, stderr);
+ 
+  contentType = findContentType (respMsg);
+  if (contentType != HTTP_CONTENT_JAVASCRIPT && contentType != HTTP_CONTENT_HTML) {
+    log_warn("ERROR: Invalid content type (%d)", contentType);
     return RECV_BAD;
   }
 
-  log_debug("CLIENT Before decodeHTTPBody; mode: %d\n", mode);
-  
-  decCnt = decodeHTTPBody(httpBody, data, response_len-hdrLen, HTTP_MSG_BUF_SIZE, &fin, mode);
+  httpBody = respMsg + hdrLen;
+  httpBodyLen = response_len - hdrLen;
+
+  gzipMode = isGzipContent(respMsg);
+  if (gzipMode) {
+    log_debug("gzip content encoding detected");
+    buf2len = gzInflate(httpBody, httpBodyLen, buf2, HTTP_MSG_BUF_SIZE);
+    if (buf2len <= 0) {
+      log_warn("gzInflate for httpBody fails");
+      return RECV_BAD;
+    }
+    buf2[buf2len] = 0;
+    httpBody = buf2;
+    httpBodyLen = buf2len;
+  }
+ 
+  if (contentType == HTTP_CONTENT_JAVASCRIPT) { 
+    decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_MSG_BUF_SIZE,
+                            &fin, CONTENT_JAVASCRIPT);
+  } else {
+    decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_MSG_BUF_SIZE,
+                            &fin, CONTENT_HTML_JAVASCRIPT);
+  }
   data[decCnt] = 0;
   
   log_debug("After decodeHTTPBody; decCnt: %d\n", decCnt);
@@ -1009,119 +1085,6 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
   
   return RECV_GOOD;
 }
-
-
-
-//int 
-//x_http2_handle_server_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
-//
-//  int cnt = 0;
-//
-//  do {
-//    struct evbuffer_ptr s2 = evbuffer_search(source, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
-//    unsigned char* data;
-//    unsigned char* limit;
-//    unsigned char *p;
-//    int unwrapped_cookie_len;
-//    struct evbuffer *scratch;
-//    unsigned char c, h, secondhalf;
-//    unsigned char buf[evbuffer_get_length(source)];
-//
-//
-//    if (s2.pos == -1) {
-//      log_debug("Did not find end of request %d", (int) evbuffer_get_length(source));
-//      //      evbuffer_dump(source, stderr);
-//      return RECV_INCOMPLETE;
-//    }
-//
-//    log_debug("SERVER received request header of length %d", (int)s2.pos);
-//
-//    data = evbuffer_pullup(source, s2.pos);
-//    if (data == NULL) {
-//      log_debug("SERVER evbuffer_pullup fails");
-//      return RECV_BAD;
-//    }
-//
-//    limit = data + s2.pos;
-//
-//    data = (unsigned char*) strstr((char*) data, "Cookie:");
-//
-//    if (data == NULL || memcmp(data, "Cookie:", sizeof "Cookie:"-1)) {
-//      log_debug("Unexpected HTTP verb: %.*s", 5, data);
-//      return RECV_BAD;
-//    }
-//
-//    p = data + sizeof "Cookie: "-1;
-//    unwrapped_cookie_len = unwrap_cookie(p, buf, (int) (limit - p));
-//
-//    log_debug("SERVER: received cookie of length = %d %d\n", unwrapped_cookie_len, (int) (limit-p));
-//    //    buf_dump(buf, unwrapped_cookie_len, stderr);
-//    //    fprintf(stderr, "==========================\n");
-//    //    buf_dump(p, (int) (limit-p), stderr);
-//
-//    
-//    //    log_debug("hello SERVER received %d cnt = %d\n", (int) (limit - p), cnt);
-//    //     buf_dump(p, (int) (limit-p), stderr);
-//
-//    /* We need a scratch buffer here because the contract is that if
-//       we hit a decode error we *don't* write anything to 'dest'. */
-//    scratch = evbuffer_new();
-//
-//    if (!scratch) return RECV_BAD;
-//
-//
-//    if (evbuffer_expand(scratch, unwrapped_cookie_len/2)) {
-//      log_debug("Evbuffer expand failed \n");
-//      evbuffer_free(scratch);
-//      return RECV_BAD;
-//    }
-//    p = buf;
-//
-//
-//    secondhalf = 0;
-//    while ((int) (p - buf) < unwrapped_cookie_len) {
-//      if (!secondhalf) c = 0;
-//      if ('0' <= *p && *p <= '9') h = *p - '0';
-//      else if ('a' <= *p && *p <= 'f') h = *p - 'a' + 10;
-//      else if ('A' <= *p && *p <= 'F') h = *p - 'A' + 10;
-//      else if (*p == '=' && !secondhalf) {
-//	p++;
-//	continue;
-//      } else {
-//	evbuffer_free(scratch);
-//	log_debug("Decode error: unexpected URI characterasdfaf %d", *p);
-//	return RECV_BAD;
-//      }
-//
-//      c = (c << 4) + h;
-//      if (secondhalf) {
-//	evbuffer_add(scratch, &c, 1);
-//	//	log_debug("adding to scratch");
-//	cnt++;
-//      }
-//      secondhalf = !secondhalf;
-//      p++;
-//    }
-//
-//
-//
-//    if (evbuffer_add_buffer(dest, scratch)) {
-//      evbuffer_free(scratch);
-//      log_debug("Failed to transfer buffer");
-//      return RECV_BAD;
-//    } 
-//    evbuffer_drain(source, s2.pos + sizeof("\r\n\r\n") - 1);
-//    evbuffer_free(scratch);
-//  } while (evbuffer_get_length(source));
-//  
-//
-//  log_debug("SERVER RECEIVED payload %d\n", cnt);
-//  //  downcast_steg(s)->have_received = 1;
-//  conn_transmit_soon(conn, 100);
-//  return RECV_GOOD;
-//}
-
-
 
 
 /*****

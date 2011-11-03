@@ -9,23 +9,32 @@
 #include "connections.h"
 #include "steg.h"
 #include <event2/buffer.h>
+#include "zpack.h"
 
-
-/* error codes */
+// error codes
 #define INVALID_BUF_SIZE	-1
 #define INVALID_DATA_CHAR	-2
+
+// controlling content gzipping for jsSteg
+#define JS_GZIP_RESP             1
 
 
 int encodeHTTPBody(char *data, char *jTemplate,  char *jData,unsigned int dlen, 
 		   unsigned int jtlen, unsigned int jdlen, int mode);
+
 int isxString(char *str);
+
+int isGzipContent (char *msg); 
+
+int findContentType (char *msg);
+
 int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
 		    unsigned int dataBufSize, int *fin, int mode);
 
 int encode(char *data, char *jTemplate, char *jData,
 	   unsigned int dlen, unsigned int jtlen, unsigned int jdlen );
 
-int  encode2(char *data, char *jTemplate, char *jData,
+int encode2(char *data, char *jTemplate, char *jData,
 	     unsigned int dlen, unsigned int jtlen,
 	     unsigned int jdlen, int *fin);
 
