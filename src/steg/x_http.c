@@ -71,7 +71,7 @@ x_http_detect(conn_t *conn)
 {
   struct evbuffer *buf = conn_get_inbound(conn);
   unsigned char *data;
-  return 0;
+   return 0;
 
   /* Look for the text of http_response_1. */
   if (evbuffer_get_length(buf) >= sizeof http_response_1 - 1) {

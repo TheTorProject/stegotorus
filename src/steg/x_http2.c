@@ -87,11 +87,12 @@ STEG_DEFINE_MODULE(x_http2,
 
 
 
-int x_http2_client_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
+int x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
+int x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
 
 void evbuffer_dump(struct evbuffer *buf, FILE *out);
 void buf_dump(unsigned char* buf, int len, FILE *out);
-
+int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen);
 
 
 void 
@@ -156,6 +157,7 @@ x_http2_new(rng_t *rng, unsigned int is_clientside)
   else {
     load_payloads("traces/server.out");
     init_JS_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
+    //   init_JS_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE, HTTP_CONTENT_HTML);
     init_HTML_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
     //    init_PDF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE);
     init_SWF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
@@ -376,7 +378,7 @@ lookup_peer_name_from_ip(char* p_ip, char* p_name)  {
 
 
 int 
-x_http2_client_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
+x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
 
   /* On the client side, we have to embed the data in a GET query somehow;
      the only plausible places to put it are the URL and cookies.  This
@@ -496,6 +498,153 @@ x_http2_client_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
 
 
 
+int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
+  unsigned int so_far = 0;
+  uri[0] = 0;
+
+  strcat(uri, "GET /");
+  so_far = 5;
+
+  while (datalen > 0) {
+    unsigned int r = rand() % 4;
+
+    if (r == 1) {
+      r = rand() % 46;
+      if (r < 20) 
+	uri[so_far++] = 'g' + r;      
+      else 
+	uri[so_far++] = 'A' + r - 20;
+    }
+    else {
+      uri[so_far++] = data[0];
+      data++;
+      datalen--;
+    }
+
+
+
+    r = rand() % 8;
+
+    if (r == 0 && datalen > 0)
+      uri[so_far++] = '/';
+
+    if (so_far > uri_sz - 6) {
+      fprintf(stderr, "too small\n");
+      return 0;
+    }
+  }
+
+  switch(rand()%4){
+  case 1:
+    memcpy(uri+so_far, ".htm ", 6);
+    break;
+  case 2:
+    memcpy(uri+so_far, ".html ", 7);
+    break;
+  case 3:
+    memcpy(uri+so_far, ".js ", 5);
+    break;
+  case 0:
+    memcpy(uri+so_far, ".swf ", 6);
+    break;
+
+  }
+
+  return strlen(uri);
+
+}
+
+
+
+
+
+int 
+x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
+
+
+  struct evbuffer *dest = conn_get_outbound(conn);
+
+  
+  struct evbuffer_iovec *iv;
+  int i, nv;
+  
+  /* Convert all the data in 'source' to hexadecimal and write it to
+     'scratch'. Data is padded to a multiple of four characters with
+     equals signs. */
+  size_t slen = evbuffer_get_length(source);
+  size_t datalen = 0;
+  int cnt = 0;
+  char data[2*slen];
+  
+  char outbuf[1024];
+  int len =0;
+  char buf[10000];
+  
+  
+  if (has_peer_name == 0 && lookup_peer_name_from_ip((char*) conn->peername, peername))
+    has_peer_name = 1;
+  
+  
+
+  nv = evbuffer_peek(source, slen, NULL, NULL, 0);
+  iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
+  if (evbuffer_peek(source, slen, NULL, iv, nv) != nv) {
+    free(iv);
+    return -1;
+  }
+  
+  for (i = 0; i < nv; i++) {
+    const unsigned char *p = iv[i].iov_base;
+    const unsigned char *limit = p + iv[i].iov_len;
+    char c;
+    while (p < limit) {
+      c = *p++;
+      data[datalen++] = "0123456789abcdef"[(c & 0xF0) >> 4];
+      data[datalen++] = "0123456789abcdef"[(c & 0x0F) >> 0];
+      }
+  }
+  free(iv);
+  
+
+
+  do {
+    datalen = gen_uri_field(outbuf, sizeof(outbuf), data, datalen);
+  } while (datalen == 0);
+  
+
+
+
+  // retry up to 10 times
+  while (!len) {
+    len = find_client_payload(buf, sizeof(buf), TYPE_HTTP_REQUEST);
+    if (cnt++ == 10) return -1;
+  }
+  
+  
+  //  fprintf(stderr, "outbuf = %s\n", outbuf);
+
+  if (evbuffer_add(dest, outbuf, datalen)  ||  // add uri field
+      evbuffer_add(dest, "HTTP 1.1\r\nHost: ", 19) ||
+      evbuffer_add(dest, peername, strlen(peername)) ||
+      evbuffer_add(dest, strstr(buf, "\r\n"), len - (unsigned int) (strstr(buf, "\r\n") - buf))  ||  // add everything but first line
+      evbuffer_add(dest, "\r\n", 2)) {
+      log_debug("error ***********************");
+      return -1;
+  }
+
+
+
+  evbuffer_drain(source, slen);
+  conn_cease_transmission(conn);
+  downcast_steg(s)->type = find_uri_type(outbuf);
+  downcast_steg(s)->have_transmitted = 1;
+  return 0;
+ 
+}
+
+
+
+
 
 
 
@@ -526,7 +675,9 @@ x_http2_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
        the only plausible places to put it are the URL and cookies.  This
        presently uses the URL. And it can't be binary. */
 
-    return x_http2_client_transmit(s, source, conn); //@@
+    if (evbuffer_get_length(source) < 256)
+      return x_http2_client_uri_transmit(s, source, conn); //@@
+    return x_http2_client_cookie_transmit(s, source, conn); //@@
   } 
   else {
     int rval = -1;
@@ -570,10 +721,10 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
     struct evbuffer_ptr s2 = evbuffer_search(source, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
     unsigned char* limit;
     unsigned char *p;
-    int unwrapped_cookie_len;
-    struct evbuffer *scratch;
     unsigned char c, h, secondhalf;
-    unsigned char buf[evbuffer_get_length(source)];
+    char outbuf[MAX_COOKIE_SIZE];
+    int sofar = 0;
+    int cookie_mode = 0;
 
 
     if (s2.pos == -1) {
@@ -584,7 +735,7 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
 
     log_debug("SERVER received request header of length %d", (int)s2.pos);
 
-    data = evbuffer_pullup(source, s2.pos);
+    data = evbuffer_pullup(source, s2.pos+4);
     if (data == NULL) {
       log_debug("SERVER evbuffer_pullup fails");
       return RECV_BAD;
@@ -593,81 +744,60 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
     limit = data + s2.pos;
 
     type = find_uri_type((char *)data);
-    log_warn ("*** Got type %d", type);
 
-    /*    if (type != 3) {
-	  fprintf(stderr, "type != 3, %d, data = %s \n", find_uri_type2((char *) data), data);
-	  exit(-1);
-	  }*/
+    data[s2.pos+4] = 0;
+    //    fprintf(stderr, "data = %s\n", data);
 
-    data = (unsigned char*) strstr((char*) data, "Cookie:");
-
-    if (data == NULL || memcmp(data, "Cookie:", sizeof "Cookie:"-1)) {
-      log_debug("Unexpected HTTP verb: %.*s", 5, data);
-      return RECV_BAD;
+    if (strstr((char*) data, "Cookie") != NULL) {
+      data = (unsigned char*) strstr((char*) data, "Cookie:");
+      p = data + sizeof "Cookie: "-1;
+      cookie_mode = 1;
     }
-
-    p = data + sizeof "Cookie: "-1;
-    unwrapped_cookie_len = unwrap_cookie(p, buf, (int) (limit - p));
-
-    log_debug("SERVER: received cookie of length = %d %d\n", unwrapped_cookie_len, (int) (limit-p));
-    //    buf_dump(buf, unwrapped_cookie_len, stderr);
-    //    fprintf(stderr, "==========================\n");
-    //    buf_dump(p, (int) (limit-p), stderr);
-
-    
-    //    log_debug("hello SERVER received %d cnt = %d\n", (int) (limit - p), cnt);
-    //     buf_dump(p, (int) (limit-p), stderr);
-
-    /* We need a scratch buffer here because the contract is that if
-       we hit a decode error we *don't* write anything to 'dest'. */
-    scratch = evbuffer_new();
-
-    if (!scratch) return RECV_BAD;
-
-
-    if (evbuffer_expand(scratch, unwrapped_cookie_len/2)) {
-      log_debug("Evbuffer expand failed \n");
-      evbuffer_free(scratch);
-      return RECV_BAD;
-    }
-    p = buf;
+    else
+      p = data + sizeof "GET /" -1;
 
 
     secondhalf = 0;
-    while ((int) (p - buf) < unwrapped_cookie_len) {
-      if (!secondhalf) c = 0;
-      if ('0' <= *p && *p <= '9') h = *p - '0';
-      else if ('a' <= *p && *p <= 'f') h = *p - 'a' + 10;
-      else if ('A' <= *p && *p <= 'F') h = *p - 'A' + 10;
-      else if (*p == '=' && !secondhalf) {
+    c = 0;
+   
+
+    while (strncmp((char*) p, "\r\n", 4) != 0 && (cookie_mode != 0 || p[0] != '.')) {
+      if (!secondhalf) 
+	c = 0;
+      if ('0' <= *p && *p <= '9') 
+	h = *p - '0';
+      else if ('a' <= *p && *p <= 'f') 
+	h = *p - 'a' + 10;
+      else {
 	p++;
 	continue;
-      } else {
-	evbuffer_free(scratch);
-	log_debug("Decode error: unexpected URI characterasdfaf %d", *p);
-	return RECV_BAD;
       }
 
       c = (c << 4) + h;
       if (secondhalf) {
-	evbuffer_add(scratch, &c, 1);
-	//	log_debug("adding to scratch");
+	outbuf[sofar++] = c;
 	cnt++;
       }
       secondhalf = !secondhalf;
       p++;
     }
 
+    outbuf[sofar] = 0;
+
+    //    fprintf(stderr, "recvd = %d\n", sofar);
+
+    if (secondhalf) {
+      fprintf(stderr, "incorrect cookie or uri recovery \n");
+      exit(-1);
+    }
 
 
-    if (evbuffer_add_buffer(dest, scratch)) {
-      evbuffer_free(scratch);
+
+    if (evbuffer_add(dest, outbuf, sofar)) {
       log_debug("Failed to transfer buffer");
       return RECV_BAD;
     } 
     evbuffer_drain(source, s2.pos + sizeof("\r\n\r\n") - 1);
-    evbuffer_free(scratch);
   } while (evbuffer_get_length(source));
   
 
@@ -678,6 +808,9 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
   conn_transmit_soon(conn, 100);
   return RECV_GOOD;
 }
+
+
+
 
 
 
