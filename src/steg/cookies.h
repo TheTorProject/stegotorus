@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <strings.h>
 #include <stdlib.h>
+#include <string.h>
 
 int unwrap_cookie(unsigned char* inbuf, unsigned char* outbuf, int buflen);
 int gen_cookie_field(unsigned char* outbuf, int total_cookie_len, unsigned char* data, int datalen);
