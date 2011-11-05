@@ -675,7 +675,7 @@ x_http2_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
        the only plausible places to put it are the URL and cookies.  This
        presently uses the URL. And it can't be binary. */
 
-    if (evbuffer_get_length(source) < 256)
+    if (evbuffer_get_length(source) < 128)
       return x_http2_client_uri_transmit(s, source, conn); //@@
     return x_http2_client_cookie_transmit(s, source, conn); //@@
   } 
