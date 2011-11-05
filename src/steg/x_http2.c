@@ -624,7 +624,7 @@ x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
   //  fprintf(stderr, "outbuf = %s\n", outbuf);
 
   if (evbuffer_add(dest, outbuf, datalen)  ||  // add uri field
-      evbuffer_add(dest, "HTTP 1.1\r\nHost: ", 19) ||
+      evbuffer_add(dest, "HTTP/1.1\r\nHost: ", 19) ||
       evbuffer_add(dest, peername, strlen(peername)) ||
       evbuffer_add(dest, strstr(buf, "\r\n"), len - (unsigned int) (strstr(buf, "\r\n") - buf))  ||  // add everything but first line
       evbuffer_add(dest, "\r\n", 2)) {

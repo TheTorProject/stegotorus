@@ -1018,7 +1018,7 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
 
   // decCnt is an odd number or data is not a hex string
   if (decCnt % 2) {
-    log_debug("CLIENT ERROR: An odd number of hex characters received");
+    fprintf(stderr, "CLIENT ERROR: An odd number of hex characters received\n");
     //      buf_dump((unsigned char*)data, decCnt, stderr);
     return RECV_BAD;
   }
