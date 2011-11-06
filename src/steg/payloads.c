@@ -398,6 +398,60 @@ find_uri_type(char* buf) {
 
   buf = strchr(buf, ' ') + 1;
   uri_len = strchr(buf, ' ') - buf;
+  
+  if (uri_len < 0) {
+    fprintf(stderr, "buf = %sabc\n", buf);
+    exit (-1);
+
+  }
+
+  uri = malloc(uri_len + 1);
+
+  strncpy(uri, buf, uri_len);
+  uri[uri_len] = 0;
+
+  ext = strrchr(uri, '/');
+
+  if (ext == NULL) {
+    fprintf(stderr, "no / in url: find_uri_type...");
+    return -1;
+  }
+
+  ext = strchr(ext, '.');
+
+
+  if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
+      || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))
+    return HTTP_CONTENT_HTML;
+
+
+  if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
+    return HTTP_CONTENT_JAVASCRIPT;
+
+  if (!strncmp(ext, ".pdf", 4) || !strncmp(ext, ".PDF", 4))
+    return HTTP_CONTENT_PDF;
+
+
+  if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
+    return HTTP_CONTENT_SWF;
+
+  return -1;
+  
+}
+
+/*
+int 
+find_uri_type(char* buf) {
+
+  char* uri;
+  int uri_len;
+  char* ext;
+
+  if (strncmp(buf, "GET", 3) != 0 && strncmp(buf, "POST", 4) != 0) 
+    return -1;
+
+  buf = strchr(buf, ' ') + 1;
+  uri_len = strchr(buf, ' ') - buf;
   uri = malloc(uri_len + 1);
 
   strncpy(uri, buf, uri_len);
@@ -428,7 +482,7 @@ find_uri_type(char* buf) {
   
 }
 
-
+*/
 
 
 
