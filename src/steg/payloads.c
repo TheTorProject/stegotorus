@@ -303,19 +303,7 @@ void gen_rfc_1123_date(char* buf, int buf_size) {
 
 
 
-/* sample response header */
-/*
 
-HTTP/1.1 200 OK
-Date: Fri, 21 Oct 2011 19:09:49 GMT
-Server: Apache
-Content-Length: 1441
-* Content-Encoding: gzip
-Content-Type: text/html;charset=UTF-8
-* Keep-Alive: timeout=15, max=93
-Connection: close
-
-*/
 
 
 int gen_response_header(char* content_type, int gzip, int length, char* buf, int buflen) {
@@ -501,6 +489,52 @@ unsigned int find_client_payload(char* buf, int len, int type) {
  * todo: 
  * Use a more efficient regular expression matching algo
  */
+
+
+
+int skipJSPattern(char *cp, int len) {
+  int i,j;
+
+  char keywords [21][10]= {"function", "return", "var", "int", "random", "Math", "while", 
+			   "else", "for", "document", "write", "writeln", "true", 
+			   "false", "True", "False", "window", "indexOf", "navigator", "case", "if"};
+
+  if (len < 1) return 0;
+
+  // change the limit to 21 to enable if as a keyword
+  for (i=0; i < 20; i++) {
+    char* word = keywords[i];
+    
+    if (len <= (int) strlen(word))
+      continue;
+
+    if (word[0] != cp[0])
+      continue;
+
+    for (j=1; j < (int) strlen(word); j++) {
+      if (isxdigit(word[j])) {
+	if (!isxdigit(cp[j]))
+	  goto next_word;
+	else
+	  continue;
+      }
+      
+      if (cp[j] != word[j])
+	goto next_word;
+    }
+    if (!isalnum(cp[j]))
+      return strlen(word)+1;
+      
+  next_word:
+    continue;
+  }
+
+  return 0;
+}
+
+
+/*
+
 int skipJSPattern (char *cp, int len) {
 
   // log_debug("Turning off skipJSPattern for debugging");
@@ -561,6 +595,7 @@ int skipJSPattern (char *cp, int len) {
 
   return 0;
 }
+*/
 
 
 int isalnum_ (char c) {
