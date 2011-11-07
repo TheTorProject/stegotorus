@@ -126,7 +126,7 @@ removeDelimiter(char *inbuf, int inbuflen, char *outbuf, int outbuflen,
         outbuf[cnt++] = delimiter1; ibp++;
       } else { // end-of-data pattern detected
         *endFlag = 1;
-        break;
+        return cnt;
       }
     }
   }
@@ -488,12 +488,6 @@ x_http2_handle_client_PDF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest
   }
 
   log_debug("CLIENT unwrapped data of length %d:", outbuflen);
-
-
-  // debugging
-  // buf_dump((unsigned char *)outbuf, outbuflen, stderr);
-  // ***** not sure why there is an extra char at the end of outbuf
-  outbuflen--;
 
 
   if (evbuffer_add(dest, outbuf, outbuflen)) {
