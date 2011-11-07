@@ -546,48 +546,51 @@ unsigned int find_client_payload(char* buf, int len, int type) {
 
 
 
-int skipJSPattern(char *cp, int len) {
-  int i,j;
+/* int skipJSPattern(char *cp, int len) { */
+/*   int i,j; */
 
-  char keywords [21][10]= {"function", "return", "var", "int", "random", "Math", "while", 
-			   "else", "for", "document", "write", "writeln", "true", 
-			   "false", "True", "False", "window", "indexOf", "navigator", "case", "if"};
 
-  if (len < 1) return 0;
+/*   char keywords [21][10]= {"function", "return", "var", "int", "random", "Math", "while",  */
+/* 			   "else", "for", "document", "write", "writeln", "true",  */
+/* 			   "false", "True", "False", "window", "indexOf", "navigator", "case", "if"}; */
 
-  // change the limit to 21 to enable if as a keyword
-  for (i=0; i < 20; i++) {
-    char* word = keywords[i];
+
+/*   return 0; */
+/*   if (len < 1) return 0; */
+
+/*   // change the limit to 21 to enable if as a keyword */
+/*   for (i=0; i < 20; i++) { */
+/*     char* word = keywords[i]; */
     
-    if (len <= (int) strlen(word))
-      continue;
+/*     if (len <= (int) strlen(word)) */
+/*       continue; */
 
-    if (word[0] != cp[0])
-      continue;
+/*     if (word[0] != cp[0]) */
+/*       continue; */
 
-    for (j=1; j < (int) strlen(word); j++) {
-      if (isxdigit(word[j])) {
-	if (!isxdigit(cp[j]))
-	  goto next_word;
-	else
-	  continue;
-      }
+/*     for (j=1; j < (int) strlen(word); j++) { */
+/*       if (isxdigit(word[j])) { */
+/* 	if (!isxdigit(cp[j])) */
+/* 	  goto next_word; */
+/* 	else */
+/* 	  continue; */
+/*       } */
       
-      if (cp[j] != word[j])
-	goto next_word;
-    }
-    if (!isalnum(cp[j]))
-      return strlen(word)+1;
+/*       if (cp[j] != word[j]) */
+/* 	goto next_word; */
+/*     } */
+/*     if (!isalnum(cp[j])) */
+/*       return strlen(word)+1; */
       
-  next_word:
-    continue;
-  }
+/*   next_word: */
+/*     continue; */
+/*   } */
 
-  return 0;
-}
+/*   return 0; */
+/* } */
 
 
-/*
+
 
 int skipJSPattern (char *cp, int len) {
 
@@ -649,7 +652,7 @@ int skipJSPattern (char *cp, int len) {
 
   return 0;
 }
-*/
+
 
 
 int isalnum_ (char c) {
@@ -750,89 +753,6 @@ int offset2Hex (char *p, int range, int isLastCharHex) {
   // cannot find next usable hex char 
   return -1;
  
-}
-
-/*
- * capacityJS returns the number of usable hex char 
- * in the input HTTP message for data encoding
- *
- * Input:
- * buf - pointer to HTTP message
- * len - sizeof buf
- * mode - 
- *   CONTENT_JAVASCRIPT (case 1); HTTP message body is a JavaScript 
- *     (e.g., Content-Type: {text/javascript, application/x-javascript,
- *     application/javascript})
- *   CONTENT_HTML_JAVASCRIPT (case 2)
- *     Content-Type: text/html and HTTP message body contains
- *     <script type="text/javascript"> ... </script>
- *
- * Output:
- * capacityJS returns the number of usable hex char that can be embedded
- * in the HTTP message
- *
- * Note:
- * This is a prototype for the simple version (all hex char are usable)
- * will refine this to skip JavaScript keywords in the next iteration
- *
- */
-
-
-
-unsigned int capacityJS (char* buf, int len, int mode) {
-  char *hEnd, *bp, *jsStart, *jsEnd;
-  int cnt=0;
-
-  // jump to the beginning of the body of the HTTP message
-  hEnd = strstr(buf, "\r\n\r\n");
-  if (hEnd == NULL) {
-    // cannot find the separator between HTTP header and HTTP body
-    return 0;
-  }
-  bp = hEnd + 4;
-
-  if (mode == CONTENT_JAVASCRIPT) {
-     while (bp < (buf+len)) {
-       if (isxdigit(*bp)) {
-         cnt++;
-#ifdef DEBUG
-         printf("%c", *bp);
-#endif
-       }
-       bp++;
-     }
-#ifdef DEBUG
-     printf("\n");
-#endif
-     return cnt;
-  } else if (mode == CONTENT_HTML_JAVASCRIPT) {
-     while (bp < (buf+len)) {
-       jsStart = strstr(bp, "<script type=\"text/javascript\">");
-       if (jsStart == NULL) break;
-       bp = jsStart+31;
-       jsEnd = strstr(bp, "</script>");
-       if (jsEnd == NULL) break;
-       // count the number of usable hex char between jsStart+31 and jsEnd
-       while (bp < jsEnd) {
-         if (isxdigit(*bp)) {
-           cnt++;
-#ifdef DEBUG
-           printf("%c", *bp);
-#endif
-         }
-         bp++;
-       }
-       bp += 9;
-     }
-#ifdef DEBUG
-     printf("\n");
-#endif
-     return cnt;
-  } else {
-    fprintf(stderr, "Unknown mode (%d) for capacityJS() ... \n", mode);
-    return 0;
-  }
-
 }
 
 /*

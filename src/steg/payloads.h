@@ -143,7 +143,6 @@ int skipJSPattern (char *cp, int len);
 int isalnum_ (char c);
 int offset2Alnum_ (char *p, int range);
 int offset2Hex (char *p, int range, int isLastCharHex);
-unsigned int capacityJS (char* buf, int len, int mode);
 unsigned int capacityJS3 (char* buf, int len, int mode);
 unsigned int get_max_JS_capacity(void);
 unsigned int get_max_HTML_capacity(void);
