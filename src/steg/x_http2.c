@@ -51,8 +51,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
-#define MIN_COOKIE_SIZE 128
-#define MAX_COOKIE_SIZE 2048
+#define MIN_COOKIE_SIZE 24
+#define MAX_COOKIE_SIZE 1024
 
 
 int 
@@ -187,7 +187,7 @@ x_http2_detect(conn_t *conn)
   struct evbuffer *buf = conn_get_inbound(conn);
   unsigned char *data;
 
-  // return 0;
+  //return 0;
 /*****
  Here is a list of HTTP response codes extracted from the server-portals.out trace
 
@@ -490,7 +490,7 @@ x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn
   
   conn_cease_transmission(conn);
 
-  downcast_steg(s)->type = find_uri_type(buf);
+  downcast_steg(s)->type = find_uri_type(buf, sizeof(buf));
   downcast_steg(s)->have_transmitted = 1;
   return 0;
 }
@@ -527,6 +527,10 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 
     if (r == 0 && datalen > 0)
       uri[so_far++] = '/';
+
+    if (r == 2 && datalen > 0)
+      uri[so_far++] = '_';
+
 
     if (so_far > uri_sz - 6) {
       fprintf(stderr, "too small\n");
@@ -636,7 +640,7 @@ x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
 
   evbuffer_drain(source, slen);
   conn_cease_transmission(conn);
-  downcast_steg(s)->type = find_uri_type(outbuf);
+  downcast_steg(s)->type = find_uri_type(outbuf, sizeof(outbuf));
   downcast_steg(s)->have_transmitted = 1;
   return 0;
  
@@ -675,7 +679,7 @@ x_http2_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
        the only plausible places to put it are the URL and cookies.  This
        presently uses the URL. And it can't be binary. */
 
-    if (evbuffer_get_length(source) < 128)
+    if (evbuffer_get_length(source) < 72)
       return x_http2_client_uri_transmit(s, source, conn); //@@
     return x_http2_client_cookie_transmit(s, source, conn); //@@
   } 
@@ -736,21 +740,21 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
     log_debug("SERVER received request header of length %d", (int)s2.pos);
 
     data = evbuffer_pullup(source, s2.pos+4);
+
     if (data == NULL) {
       log_debug("SERVER evbuffer_pullup fails");
       return RECV_BAD;
     }
 
+
+    data[s2.pos+3] = 0;
+
     limit = data + s2.pos;
 
-    type = find_uri_type((char *)data);
-
-    data[s2.pos+4] = 0;
-    //    fprintf(stderr, "data = %s\n", data);
+    type = find_uri_type((char *)data, s2.pos+4);
 
     if (strstr((char*) data, "Cookie") != NULL) {
-      data = (unsigned char*) strstr((char*) data, "Cookie:");
-      p = data + sizeof "Cookie: "-1;
+      p = (unsigned char*) strstr((char*) data, "Cookie:") + + sizeof "Cookie: "-1;
       cookie_mode = 1;
     }
     else
@@ -783,8 +787,6 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
     }
 
     outbuf[sofar] = 0;
-
-    //    fprintf(stderr, "recvd = %d\n", sofar);
 
     if (secondhalf) {
       fprintf(stderr, "incorrect cookie or uri recovery \n");

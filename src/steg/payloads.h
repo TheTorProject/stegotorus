@@ -153,7 +153,7 @@ char * strInBinary (const char *pattern, unsigned int patternLen, const char *bl
 unsigned int capacityPDF (char* buf, int len);
 unsigned int get_max_PDF_capacity(void);
 int find_content_length (char *hdr, int hlen);
-int find_uri_type(char* buf);
+int find_uri_type(char* buf, int size);
 
 int gen_response_header(char* content_type, int gzip, int length, char* buf, int buflen);
 

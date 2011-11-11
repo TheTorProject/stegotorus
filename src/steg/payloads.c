@@ -387,28 +387,46 @@ int parse_client_headers(char* inbuf, char* outbuf, int len) {
 
 
 int 
-find_uri_type(char* buf) {
+find_uri_type(char* buf_orig, int buflen) {
 
   char* uri;
-  int uri_len;
   char* ext;
 
-  if (strncmp(buf, "GET", 3) != 0 && strncmp(buf, "POST", 4) != 0) 
-    return -1;
+  char* buf = malloc(buflen+1);
+  char* uri_end;
 
-  buf = strchr(buf, ' ') + 1;
-  uri_len = strchr(buf, ' ') - buf;
+
+  memcpy(buf, buf_orig, buflen);
+  buf[buflen] = 0;
+
   
-  if (uri_len < 0) {
-    fprintf(stderr, "buf = %sabc\n", buf);
-    exit (-1);
+  if (strncmp(buf, "GET", 3) != 0
+      && strncmp(buf, "POST", 4) != 0) {
+    fprintf(stderr, "HERE %s\n", buf);
+    return -1;
+  }
+  
 
+
+  uri = strchr(buf, ' ') + 1;
+
+  if (uri == NULL) {
+    fprintf(stderr, "Invalid URL\n");
+    return -1;
   }
 
-  uri = malloc(uri_len + 1);
+  uri_end = strchr(uri, ' ');
 
-  strncpy(uri, buf, uri_len);
-  uri[uri_len] = 0;
+  if (uri_end == NULL) {
+    fprintf(stderr, "unterminated uri\n");
+    return -1;
+  }
+
+  uri_end[0] = 0;
+  
+
+
+
 
   ext = strrchr(uri, '/');
 
@@ -435,6 +453,9 @@ find_uri_type(char* buf) {
   if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
     return HTTP_CONTENT_SWF;
 
+
+
+  free(buf);
   return -1;
   
 }
@@ -503,9 +524,9 @@ unsigned int find_client_payload(char* buf, int len, int type) {
     pentry_header* p = &payload_hdrs[r];
     if (p->ptype == type) {
       inbuf = payloads[r];
-      if (find_uri_type(inbuf) != HTTP_CONTENT_SWF &&
-          find_uri_type(inbuf) != HTTP_CONTENT_HTML &&
-	  find_uri_type(inbuf) != HTTP_CONTENT_JAVASCRIPT) {
+      if (find_uri_type(inbuf, p->length) != HTTP_CONTENT_SWF &&
+          find_uri_type(inbuf, p->length) != HTTP_CONTENT_HTML &&
+	  find_uri_type(inbuf, p->length) != HTTP_CONTENT_JAVASCRIPT) {
 	goto next;
       }
       if (p->length > len) {
@@ -546,112 +567,111 @@ unsigned int find_client_payload(char* buf, int len, int type) {
 
 
 
-/* int skipJSPattern(char *cp, int len) { */
-/*   int i,j; */
+int skipJSPattern(char *cp, int len) {
+  int i,j;
 
 
-/*   char keywords [21][10]= {"function", "return", "var", "int", "random", "Math", "while",  */
-/* 			   "else", "for", "document", "write", "writeln", "true",  */
-/* 			   "false", "True", "False", "window", "indexOf", "navigator", "case", "if"}; */
+  char keywords [21][10]= {"function", "return", "var", "int", "random", "Math", "while",
+			   "else", "for", "document", "write", "writeln", "true",
+			   "false", "True", "False", "window", "indexOf", "navigator", "case", "if"};
 
-
-/*   return 0; */
-/*   if (len < 1) return 0; */
-
-/*   // change the limit to 21 to enable if as a keyword */
-/*   for (i=0; i < 20; i++) { */
-/*     char* word = keywords[i]; */
-    
-/*     if (len <= (int) strlen(word)) */
-/*       continue; */
-
-/*     if (word[0] != cp[0]) */
-/*       continue; */
-
-/*     for (j=1; j < (int) strlen(word); j++) { */
-/*       if (isxdigit(word[j])) { */
-/* 	if (!isxdigit(cp[j])) */
-/* 	  goto next_word; */
-/* 	else */
-/* 	  continue; */
-/*       } */
-      
-/*       if (cp[j] != word[j]) */
-/* 	goto next_word; */
-/*     } */
-/*     if (!isalnum(cp[j])) */
-/*       return strlen(word)+1; */
-      
-/*   next_word: */
-/*     continue; */
-/*   } */
-
-/*   return 0; */
-/* } */
-
-
-
-
-int skipJSPattern (char *cp, int len) {
-
-  // log_debug("Turning off skipJSPattern for debugging");
-  //  return 0;
 
   if (len < 1) return 0;
 
-  if (len > 8) {
-    // "function " and "function("
-    if (cp[0] == 'f' &&
-        !strncmp(cp+1, "un", 2) &&
-        isxdigit(cp[3]) &&
-        !strncmp(cp+4, "tion", 4) &&
-        (cp[8] == ' ' || cp[8] == '('))
-    return 9;
-  }
+  // change the limit to 21 to enable if as a keyword
+  for (i=0; i < 20; i++) {
+    char* word = keywords[i];
+    
+    if (len <= (int) strlen(word))
+      continue;
 
-  if (len > 6) {
-    // "return "
-    if (cp[0] == 'r' &&
-        isxdigit(cp[1]) &&
-        !strncmp(cp+2, "turn ", 5)) 
-    return 7;
-    // "switch "
-    if (cp[0] == 's' &&
-        !strncmp(cp+1, "wit", 3) &&
-        isxdigit(cp[4]) &&
-        !strncmp(cp+5, "h ", 2)) 
-    return 7;
-  }
+    if (word[0] != cp[0])
+      continue;
 
-  if (len > 5) {
-    // "while " and "while("
-    if (cp[0] == 'w' &&
-        !strncmp(cp+1, "hil", 3) &&
-        isxdigit(cp[4]) &&
-        (cp[5] == ' ' || cp[5] == '('))
-    return 6;
-  }
-
-  if (len > 4) {
-    // "else " and "else{"
-    if (cp[0] == 'e' &&
-        !strncmp(cp, "ls", 2) &&
-        isxdigit(cp[3]) &&
-        (cp[4] == ' ' || cp[4] == '{'))
-    return 5;
-  }
-
-  if (len > 3) {
-    // "var "
-    if (cp[0] == 'v' &&
-        isxdigit(cp[1]) &&
-        cp[2] == 'r' &&
-        cp[3] == ' ')
-    return 4;
+    for (j=1; j < (int) strlen(word); j++) {
+      if (isxdigit(word[j])) {
+	if (!isxdigit(cp[j]))
+	  goto next_word;
+	else
+	  continue;
+      }
+      
+      if (cp[j] != word[j])
+	goto next_word;
+    }
+    if (!isalnum(cp[j]))
+      return strlen(word)+1;
+      
+  next_word:
+    continue;
   }
 
   return 0;
 }
+
+
+
+
+/* int skipJSPattern (char *cp, int len) { */
+
+/*   // log_debug("Turning off skipJSPattern for debugging"); */
+/*   //  return 0; */
+
+/*   if (len < 1) return 0; */
+
+/*   if (len > 8) { */
+/*     // "function " and "function(" */
+/*     if (cp[0] == 'f' && */
+/*         !strncmp(cp+1, "un", 2) && */
+/*         isxdigit(cp[3]) && */
+/*         !strncmp(cp+4, "tion", 4) && */
+/*         (cp[8] == ' ' || cp[8] == '(')) */
+/*     return 9; */
+/*   } */
+
+/*   if (len > 6) { */
+/*     // "return " */
+/*     if (cp[0] == 'r' && */
+/*         isxdigit(cp[1]) && */
+/*         !strncmp(cp+2, "turn ", 5))  */
+/*     return 7; */
+/*     // "switch " */
+/*     if (cp[0] == 's' && */
+/*         !strncmp(cp+1, "wit", 3) && */
+/*         isxdigit(cp[4]) && */
+/*         !strncmp(cp+5, "h ", 2))  */
+/*     return 7; */
+/*   } */
+
+/*   if (len > 5) { */
+/*     // "while " and "while(" */
+/*     if (cp[0] == 'w' && */
+/*         !strncmp(cp+1, "hil", 3) && */
+/*         isxdigit(cp[4]) && */
+/*         (cp[5] == ' ' || cp[5] == '(')) */
+/*     return 6; */
+/*   } */
+
+/*   if (len > 4) { */
+/*     // "else " and "else{" */
+/*     if (cp[0] == 'e' && */
+/*         !strncmp(cp, "ls", 2) && */
+/*         isxdigit(cp[3]) && */
+/*         (cp[4] == ' ' || cp[4] == '{')) */
+/*     return 5; */
+/*   } */
+
+/*   if (len > 3) { */
+/*     // "var " */
+/*     if (cp[0] == 'v' && */
+/*         isxdigit(cp[1]) && */
+/*         cp[2] == 'r' && */
+/*         cp[3] == ' ') */
+/*     return 4; */
+/*   } */
+
+/*   return 0; */
+/* } */
 
 
 
@@ -781,9 +801,10 @@ unsigned int capacityJS3 (char* buf, int len, int mode) {
       } else {
         bp = bp+j+1;
       }
-// #ifdef DEBUG
-// printf("got |%c|\n", *(bp-1));
-// #endif
+
+      if (len < buf + len - bp) {
+	fprintf(stderr, "HERE\n");
+      }
       j = offset2Hex(bp, (buf+len)-bp, 1);
     } // while
     return cnt;
@@ -804,11 +825,19 @@ unsigned int capacityJS3 (char* buf, int len, int mode) {
          } else {
            bp = bp+j+1;
          }
-#ifdef DEBUG
-printf("got |%c|\n", *(bp-1));
-#endif
+
+	 if (len < jsEnd - buf || len < jsEnd - bp) {
+	   fprintf(stderr, "HERE2\n");
+	 }
+
+
          j = offset2Hex(bp, jsEnd-bp, 1);
        } // while (j != -1)
+
+       if (buf + len < bp + 9) {
+	 fprintf(stderr, "HERE3\n");
+       }
+
 
        bp += 9;
      } // while (bp < (buf+len))
