@@ -723,7 +723,6 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
 
   do {
     struct evbuffer_ptr s2 = evbuffer_search(source, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
-    unsigned char* limit;
     unsigned char *p;
     unsigned char c, h, secondhalf;
     char outbuf[MAX_COOKIE_SIZE];
@@ -749,12 +748,10 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
 
     data[s2.pos+3] = 0;
 
-    limit = data + s2.pos;
-
     type = find_uri_type((char *)data, s2.pos+4);
 
     if (strstr((char*) data, "Cookie") != NULL) {
-      p = (unsigned char*) strstr((char*) data, "Cookie:") + + sizeof "Cookie: "-1;
+      p = (unsigned char*) strstr((char*) data, "Cookie:") + sizeof "Cookie: "-1;
       cookie_mode = 1;
     }
     else
@@ -765,7 +762,7 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
     c = 0;
    
 
-    while (strncmp((char*) p, "\r\n", 4) != 0 && (cookie_mode != 0 || p[0] != '.')) {
+    while (strncmp((char*) p, "\r\n", 2) != 0 && (cookie_mode != 0 || p[0] != '.')) {
       if (!secondhalf) 
 	c = 0;
       if ('0' <= *p && *p <= '9') 
