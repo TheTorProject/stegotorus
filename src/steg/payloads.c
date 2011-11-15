@@ -577,7 +577,8 @@ unsigned int find_client_payload(char* buf, int len, int type) {
       inbuf = payloads[r];
       if (find_uri_type(inbuf, p->length) != HTTP_CONTENT_SWF &&
           find_uri_type(inbuf, p->length) != HTTP_CONTENT_HTML &&
-	  find_uri_type(inbuf, p->length) != HTTP_CONTENT_JAVASCRIPT) {
+	  find_uri_type(inbuf, p->length) != HTTP_CONTENT_JAVASCRIPT &&
+	  find_uri_type(inbuf, p->length) != HTTP_CONTENT_PDF) {
 	goto next;
       }
       if (p->length > len) {

@@ -159,7 +159,7 @@ x_http2_new(rng_t *rng, unsigned int is_clientside)
     init_JS_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
     //   init_JS_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE, HTTP_CONTENT_HTML);
     init_HTML_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
-    //    init_PDF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE);
+    init_PDF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE);
     init_SWF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
   }
 
