@@ -138,6 +138,7 @@ int get_payload (int contentType, int cap, char** buf, int* size);
 int has_eligible_HTTP_content (char* buf, int len, int type);
 int fixContentLen (char* payload, int payloadLen, char *buf, int bufLen);
 void gen_rfc_1123_date(char* buf, int buf_size);
+void gen_rfc_1123_expiry_date(char* buf, int buf_size);
 int parse_client_headers(char* inbuf, char* outbuf, int len);
 int skipJSPattern (char *cp, int len);
 int isalnum_ (char c);

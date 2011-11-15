@@ -48,7 +48,8 @@ int gen_one_cookie(unsigned char* outbuf, int cookielen, unsigned char* data, in
 
   while (sofar < namelen) {
     c = rand() % (127 - 33) + 33;
-    if (c == '=' || c == ';' || c == '`' || c == '\'' || c == '%')
+    if (c == '=' || c == ';' || c == '`' || c == '\'' || c == '%' || c == '+' || c == '{' || c == '}' ||
+	c == '<' || c == '>' || c == '?' || c == '#')
       continue;
 
     if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || (rand () % 4 != 0)) {
@@ -65,8 +66,11 @@ int gen_one_cookie(unsigned char* outbuf, int cookielen, unsigned char* data, in
 
   while (sofar < cookielen) {
     c = rand() % (127 - 33) + 33;
-    if (c == '=' || c == ';' || c == '`' || c == '\'' || c == '%')
+    if (c == '=' || c == ';' || c == '`' || c == '\'' || c == '%' || c == '+' || c == '{' || c == '}' ||
+	c == '<' || c == '>' || c == '?' || c == '#')
       continue;
+
+
 
     if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || (rand() % 4 != 0)) {
       if (data_consumed < datalen) 

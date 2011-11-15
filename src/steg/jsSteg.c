@@ -998,6 +998,8 @@ x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
     buf2len = gzInflate(httpBody, httpBodyLen, buf2, HTTP_MSG_BUF_SIZE);
     if (buf2len <= 0) {
       log_warn("gzInflate for httpBody fails");
+      fprintf(stderr, "gzInflate for httpBody fails");
+      exit(-1);
       return RECV_BAD;
     }
     buf2[buf2len] = 0;

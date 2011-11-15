@@ -303,6 +303,13 @@ void gen_rfc_1123_date(char* buf, int buf_size) {
 
 
 
+void gen_rfc_1123_expiry_date(char* buf, int buf_size) {
+  time_t t = time(NULL) + rand() % 10000;
+  struct tm *my_tm = gmtime(&t);
+  strftime(buf, buf_size, "Expires: %a, %d %b %Y %H:%M:%S GMT\r\n", my_tm);
+}
+
+
 
 
 
@@ -310,7 +317,7 @@ int gen_response_header(char* content_type, int gzip, int length, char* buf, int
   char* ptr;
 
   // conservative assumption here.... 
-  if (buflen < 256) {
+  if (buflen < 400) {
     fprintf(stderr, "gen_response_header: buflen too small\n");
     return -1;
   }
@@ -320,11 +327,55 @@ int gen_response_header(char* content_type, int gzip, int length, char* buf, int
   gen_rfc_1123_date(ptr, buflen - (ptr - buf));
   ptr = ptr + strlen(ptr);
 
+  sprintf(ptr, "Server: Apache\r\n");
+  ptr = ptr + strlen(ptr);
+
+  switch(rand() % 9) {
+  case 1:
+    sprintf(ptr, "Vary: Cookie\r\n");
+    ptr = ptr + strlen(ptr);
+    break;
+
+  case 2:
+    sprintf(ptr, "Vary: Accept-Encoding, User-Agent\r\n");
+    ptr = ptr + strlen(ptr);
+    break;
+
+  case 3:
+    sprintf(ptr, "Vary: *\r\n");
+    ptr = ptr + strlen(ptr);
+    break;
+
+  }
+
+
+  switch(rand() % 4) {
+  case 2:
+    gen_rfc_1123_expiry_date(ptr, buflen - (ptr - buf));
+    ptr = ptr + strlen(ptr);
+  }
+
+
+  
+
   if (gzip) 
-    sprintf(ptr, "Server: Apache\r\nContent-Length: %d\r\nContent-Encoding: gzip\r\nContent-Type: %s\r\nConnection: close\r\n\r\n", length, content_type);
+    sprintf(ptr, "Content-Length: %d\r\nContent-Encoding: gzip\r\nContent-Type: %s\r\n", length, content_type);
   else
-    sprintf(ptr, "Server: Apache\r\nContent-Length: %d\r\nContent-Type: %s\r\nConnection: close\r\n\r\n", length, content_type);
+    sprintf(ptr, "Content-Length: %d\r\nContent-Type: %s\r\n", length, content_type);
     
+  ptr += strlen(ptr);
+
+  switch(rand() % 4) {
+  case 2:
+  case 3:
+  case 4:
+    sprintf(ptr, "Connection: Keep-Alive\r\n\r\n");
+    break;
+  default:
+    sprintf(ptr, "Connection: close\r\n\r\n");
+    break;    
+  }
+
   ptr += strlen(ptr);
 
   return ptr - buf;
