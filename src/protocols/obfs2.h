@@ -32,7 +32,7 @@ typedef struct obfs2_config_t {
   config_t super;
   struct evutil_addrinfo *listen_addr;
   struct evutil_addrinfo *target_addr;
-  uchar shared_secret[SHARED_SECRET_LENGTH];
+  uint8_t shared_secret[SHARED_SECRET_LENGTH];
 } obfs2_config_t;
 
 typedef struct obfs2_conn_t {
@@ -47,11 +47,11 @@ typedef struct obfs2_conn_t {
     ST_OPEN
   } state;
   /** Random seed we generated for this stream */
-  uchar initiator_seed[OBFUSCATE_SEED_LENGTH];
+  uint8_t initiator_seed[OBFUSCATE_SEED_LENGTH];
   /** Random seed the other side generated for this stream */
-  uchar responder_seed[OBFUSCATE_SEED_LENGTH];
+  uint8_t responder_seed[OBFUSCATE_SEED_LENGTH];
   /** Shared secret seed value. */
-  uchar secret_seed[SHARED_SECRET_LENGTH];
+  uint8_t secret_seed[SHARED_SECRET_LENGTH];
   /** True iff we opened this connection */
   int we_are_initiator;
   /** True if we need to send pending data before we can close the connection */

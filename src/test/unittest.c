@@ -54,7 +54,7 @@ static uint32_t taus88(struct taus_state *s)
   return s->s1 ^ s->s2 ^ s->s3;
 }
 
-static int ut_rand_bytes(unsigned char *buf, int num)
+static int ut_rand_bytes(uint8_t *buf, int num)
 {
   int i = 0;
   uint32_t x;

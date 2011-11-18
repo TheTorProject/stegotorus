@@ -7,7 +7,6 @@
 
 #define SOCKS_PRIVATE
 #include "socks.h"
-#include "crypt.h" /* for uchar */
 
 #include <event2/buffer.h>
 
@@ -66,15 +65,15 @@ static void
 test_socks_socks5_send_negotiation(void *data)
 {
   struct test_socks_state *s = (struct test_socks_state *)data;
-  uchar req1[2];
-  uchar rep1[2];
-  uchar req2[10];
-  uchar rep2[2];
-  uchar req3[100];
-  uchar rep3[2];
-  uchar req4[4];
-  uchar rep4[2];
-  uchar req5[5];
+  uint8_t req1[2];
+  uint8_t rep1[2];
+  uint8_t req2[10];
+  uint8_t rep2[2];
+  uint8_t req3[100];
+  uint8_t rep3[2];
+  uint8_t req4[4];
+  uint8_t rep4[2];
+  uint8_t req5[5];
 
   /* First test:
      Only one method: NOAUTH.
@@ -170,15 +169,15 @@ test_socks_socks5_request(void *data)
   const uint16_t port = htons(80);    /* 80 */
   size_t buffer_len;
   struct parsereq pr1;
-  uchar req1[7];
-  uchar req2[7];
-  uchar req3[9];
-  uchar req4[24];
+  uint8_t req1[7];
+  uint8_t req2[7];
+  uint8_t req3[9];
+  uint8_t req4[24];
   static const char fqdn[17] = "www.test.example";
-  uchar req5[24];
-  uchar req6[3];
-  uchar req7[5];
-  uchar req8[9];
+  uint8_t req5[24];
+  uint8_t req6[3];
+  uint8_t req7[5];
+  uint8_t req8[9];
 
   /* First test:
      Broken IPV4 req packet with no destport */
@@ -319,10 +318,10 @@ test_socks_socks5_request_reply(void *data)
   struct test_socks_state *s = (struct test_socks_state *)data;
   size_t buffer_len;
   static const char fqdn[] = "www.test.example";
-  uchar rep1[255];
-  uchar rep2[255];
-  uchar rep3[255];
-  uchar rep4[255];
+  uint8_t rep1[255];
+  uint8_t rep2[255];
+  uint8_t rep3[255];
+  uint8_t rep4[255];
 
   s->state->parsereq.af = AF_INET;
   strcpy(s->state->parsereq.addr, "127.0.0.1");
@@ -415,7 +414,7 @@ test_socks_socks4_request(void *data)
   const uint32_t addr_4a = htonl(0x00000042); /* 127.0.0.1 */
   const uint16_t port = htons(80);    /* 80 */
   struct parsereq pr1;
-  uchar req1[8];
+  uint8_t req1[8];
   char req2[10];
   char req3[16];
   char req4[33];
@@ -540,8 +539,8 @@ test_socks_socks4_request_reply(void *data)
   struct test_socks_state *s = (struct test_socks_state *)data;
   static const char fqdn[] = "www.test.example";
   size_t buffer_len;
-  uchar rep1[255];
-  uchar rep2[255];
+  uint8_t rep1[255];
+  uint8_t rep2[255];
 
   s->state->parsereq.af = AF_INET;
   strcpy(s->state->parsereq.addr, "127.0.0.1");

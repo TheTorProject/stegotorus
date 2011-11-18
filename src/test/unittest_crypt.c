@@ -47,11 +47,11 @@ test_crypt_hashvec(void *data)
   };
 
   digest_t *d;
-  uchar output[32];
+  uint8_t output[32];
   int i;
   for (i = 0; testvecs[i].input; i++) {
     d = digest_new();
-    digest_update(d, (unsigned char *) testvecs[i].input,
+    digest_update(d, (uint8_t *) testvecs[i].input,
                   strlen(testvecs[i].input));
     digest_getdigest(d, output, 32);
     digest_free(d);
@@ -69,15 +69,15 @@ test_crypt_aes1(void *data)
   /* In-place encryption of the test vectors from
      http://csrc.nist.gov/publications/nistpubs/800-38a/sp800-38a.pdf
      for AES128 in counter mode (section F.5.1) */
-  static const uchar key[16] =
+  static const uint8_t key[16] =
     "\x2b\x7e\x15\x16\x28\xae\xd2\xa6\xab\xf7\x15\x88\x09\xcf\x4f\x3c";
-  static const uchar iv[16] =
+  static const uint8_t iv[16] =
     "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff";
   struct testblock {
-    const uchar counter[16];
-    const uchar keystream[16];
-    const uchar plaintext[16];
-    const uchar ciphertext[16];
+    const uint8_t counter[16];
+    const uint8_t keystream[16];
+    const uint8_t plaintext[16];
+    const uint8_t ciphertext[16];
   };
   static const struct testblock testvec[4] = {
     { "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff",
@@ -98,7 +98,7 @@ test_crypt_aes1(void *data)
       "\x1e\x03\x1d\xda\x2f\xbe\x03\xd1\x79\x21\x70\xa0\xf3\x00\x9c\xee" }
   };
 
-  uchar vec[16];
+  uint8_t vec[16];
   unsigned int i;
 
   crypt_t *crypt = crypt_new(key, sizeof(key));
@@ -124,11 +124,11 @@ static void
 test_crypt_aes2(void *data)
 {
   /* Trying stream_crypt() */
-  uchar key1[16] = "aesunittest1_key";
-  uchar key2[16] = "aesunittest2_key";
+  uint8_t key1[16] = "aesunittest1_key";
+  uint8_t key2[16] = "aesunittest2_key";
 
-  uchar res1[16] = "aestest1_message";
-  uchar res2[16] = "aestest2_message";
+  uint8_t res1[16] = "aestest1_message";
+  uint8_t res2[16] = "aestest2_message";
 
   crypt_t *crypt1;
   crypt_t *crypt2;
@@ -156,7 +156,7 @@ test_crypt_rng(void *data)
      An entropy test wouldn't really help either.
      I guess I'll just copy Tor's unit test methodology here :3 */
 
-  uchar data1[100],data2[100];
+  uint8_t data1[100],data2[100];
 
   tt_int_op(0, ==, random_bytes(data1, 100));
   tt_int_op(0, ==, random_bytes(data2, 100));

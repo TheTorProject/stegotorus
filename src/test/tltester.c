@@ -149,7 +149,7 @@ flush_text(tstate *st, bool near)
         evbuffer_add(tobuf, p, 1);
         ll++;
       } else {
-        evbuffer_add_printf(tobuf, "\\x%02x", (unsigned char)*p);
+        evbuffer_add_printf(tobuf, "\\x%02x", (uint8_t)*p);
         ll += 4;
       }
       if (ll >= 64) {

@@ -12,8 +12,6 @@ typedef struct crypt_t crypt_t;
 /* Digest state */
 typedef struct digest_t digest_t;
 
-typedef unsigned char uchar;
-
 /** Initialize global crypto state.  Returrn 0 on success, -1 on failure */
 int initialize_crypto(void);
 /** Clean up global crypto state */
@@ -22,26 +20,26 @@ void cleanup_crypto(void);
 /** Return a newly allocated digest state; cannot fail. */
 digest_t *digest_new(void);
 /** Add n bytes from b to the digest state. */
-void digest_update(digest_t *, const uchar *b, size_t n);
+void digest_update(digest_t *, const uint8_t *b, size_t n);
 /** Get a digest from the digest state.  Put it in up the first n bytes of the
 buffer b.  Return the number of bytes actually written.*/
-size_t digest_getdigest(digest_t *, uchar *b, size_t n);
+size_t digest_getdigest(digest_t *, uint8_t *b, size_t n);
 /** Clear and free a digest state */
 void digest_free(digest_t *);
 
 /** Return a new stream cipher state using 'key' as the symmetric key.
  * The data length must be exactly 16 bytes. Cannot fail. */
-crypt_t *crypt_new(const uchar *key, size_t);
+crypt_t *crypt_new(const uint8_t *key, size_t);
 /* Set the IV of a stream-cipher state.  Cannot fail. */
-void crypt_set_iv(crypt_t *, const uchar *iv, size_t ivlen);
+void crypt_set_iv(crypt_t *, const uint8_t *iv, size_t ivlen);
 
 /** Encrypt n bytes of data in the buffer b, in place. */
-void stream_crypt(crypt_t *, uchar *b, size_t n);
+void stream_crypt(crypt_t *, uint8_t *b, size_t n);
 /** Clear and free a stream cipher state. */
 void crypt_free(crypt_t *);
 
 /** Set b to contain n random bytes. */
-int random_bytes(uchar *b, size_t n);
+int random_bytes(uint8_t *b, size_t n);
 
 /** Return a random integer in the range [0, max).
  * 'max' must be between 1 and INT_MAX+1, inclusive.
@@ -67,8 +65,8 @@ random_range(unsigned int min, unsigned int max)
 */
 struct crypt_t {
   AES_KEY key;
-  uchar ivec[AES_BLOCK_SIZE];
-  uchar ecount_buf[AES_BLOCK_SIZE];
+  uint8_t ivec[AES_BLOCK_SIZE];
+  uint8_t ecount_buf[AES_BLOCK_SIZE];
   unsigned int pos;
 };
 #endif

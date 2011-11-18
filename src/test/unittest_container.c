@@ -494,7 +494,7 @@ test_container_digestset(void *unused)
   digestset_t *set = NULL;
 
   for (i = 0; i < 1000; ++i) {
-    random_bytes((uchar *)d, SHA256_LENGTH);
+    random_bytes((uint8_t *)d, SHA256_LENGTH);
     smartlist_add(included, xmemdup(d, SHA256_LENGTH));
   }
   set = digestset_new(1000);
@@ -509,7 +509,7 @@ test_container_digestset(void *unused)
                       ok = 0);
   tt_assert(ok);
   for (i = 0; i < 1000; ++i) {
-    random_bytes((uchar *)d, SHA256_LENGTH);
+    random_bytes((uint8_t *)d, SHA256_LENGTH);
     if (digestset_isin(set, d))
       ++false_positives;
   }

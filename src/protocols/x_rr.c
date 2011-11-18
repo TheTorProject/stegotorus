@@ -791,7 +791,7 @@ x_rr_circuit_create(config_t *cfg)
   ckt->downstreams = smartlist_create();
   if (cfg->mode != LSN_SIMPLE_SERVER) {
     while (!ckt->circuit_id)
-      random_bytes((unsigned char *)&ckt->circuit_id, sizeof(uint64_t));
+      random_bytes((uint8_t *)&ckt->circuit_id, sizeof(uint64_t));
   }
   return c;
 }

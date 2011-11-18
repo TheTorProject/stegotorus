@@ -90,8 +90,8 @@ struct parsereq {
 };
 struct socks_state_t {
   enum socks_status_t state;
-  unsigned char version;
-  unsigned char broken;
+  uint8_t version;
+  uint8_t broken;
   struct parsereq parsereq;
 };
 

@@ -70,7 +70,7 @@ static unsigned int
 x_http_detect(conn_t *conn)
 {
   struct evbuffer *buf = conn_get_inbound(conn);
-  unsigned char *data;
+  uint8_t *data;
 
   /* Look for the text of http_response_1. */
   if (evbuffer_get_length(buf) >= sizeof http_response_1 - 1) {
@@ -156,8 +156,8 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     }
 
     for (i = 0; i < nv; i++) {
-      const unsigned char *p = iv[i].iov_base;
-      const unsigned char *limit = p + iv[i].iov_len;
+      const uint8_t *p = iv[i].iov_base;
+      const uint8_t *limit = p + iv[i].iov_len;
       char hex[2], c;
       while (p < limit) {
         c = *p++;
@@ -215,7 +215,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
        guarantee that that much data is available. */
 
     size_t hlen = evbuffer_get_length(source);
-    unsigned char *data, *p, *limit;
+    uint8_t *data, *p, *limit;
     uint64_t clen;
 
     log_debug("x_http: %lu byte response stream available%s",
@@ -282,8 +282,8 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
        we hit a decode error we *don't* write anything to 'dest'. */
     struct evbuffer *scratch;
     struct evbuffer_ptr s2, s3;
-    unsigned char *data, *p, *limit;
-    unsigned char c, h, secondhalf;
+    uint8_t *data, *p, *limit;
+    uint8_t c, h, secondhalf;
 
     log_debug("x_http: %lu byte query stream available",
               (unsigned long)evbuffer_get_length(source));

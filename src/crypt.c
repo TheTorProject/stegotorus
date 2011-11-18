@@ -57,7 +57,7 @@ digest_new(void)
    'len' bytes of 'buf'.
 */
 void
-digest_update(digest_t *d, const uchar *buf, size_t len)
+digest_update(digest_t *d, const uint8_t *buf, size_t len)
 {
   SHA256_Update(&d->ctx, buf, len);
 }
@@ -66,13 +66,13 @@ digest_update(digest_t *d, const uchar *buf, size_t len)
    Returns the digest stored in 'd' into 'buf' of length 'len'.
 */
 size_t
-digest_getdigest(digest_t *d, uchar *buf, size_t len)
+digest_getdigest(digest_t *d, uint8_t *buf, size_t len)
 {
   if (len >= SHA256_LENGTH) {
     SHA256_Final(buf, &d->ctx);
     return SHA256_LENGTH;
   } else {
-    uchar tmp[SHA256_LENGTH];
+    uint8_t tmp[SHA256_LENGTH];
     SHA256_Final(tmp, &d->ctx);
     memcpy(buf, tmp, len);
     memset(tmp, 0, SHA256_LENGTH);
@@ -95,7 +95,7 @@ digest_free(digest_t *d)
    Initializes the AES cipher with 'key'.
 */
 crypt_t *
-crypt_new(const uchar *key, size_t keylen)
+crypt_new(const uint8_t *key, size_t keylen)
 {
   crypt_t *k;
 
@@ -110,7 +110,7 @@ crypt_new(const uchar *key, size_t keylen)
    Sets the IV of 'key' to 'iv'.
 */
 void
-crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
+crypt_set_iv(crypt_t *key, const uint8_t *iv, size_t ivlen)
 {
   log_assert(ivlen == sizeof(key->ivec));
   memcpy(key->ivec, iv, ivlen);
@@ -123,7 +123,7 @@ crypt_set_iv(crypt_t *key, const uchar *iv, size_t ivlen)
   In-place encrypts 'buf' with 'key'.
 */
 void
-stream_crypt(crypt_t *key, uchar *buf, size_t len)
+stream_crypt(crypt_t *key, uint8_t *buf, size_t len)
 {
   AES_ctr128_encrypt(buf, buf, len,
                      &key->key, key->ivec, key->ecount_buf,
@@ -149,7 +149,7 @@ crypt_free(crypt_t *key)
    Returns -1 on failure.
 */
 int
-random_bytes(uchar *buf, size_t buflen)
+random_bytes(uint8_t *buf, size_t buflen)
 {
   return RAND_bytes(buf, buflen) == 1 ? 0 : -1;
 }
@@ -172,7 +172,7 @@ random_int(unsigned int max)
    */
   cutoff = UINT_MAX - (UINT_MAX%max);
   while (1) {
-    random_bytes((uchar*)&val, sizeof(val));
+    random_bytes((uint8_t*)&val, sizeof(val));
     if (val < cutoff)
       return val % max;
   }

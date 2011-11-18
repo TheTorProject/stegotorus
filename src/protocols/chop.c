@@ -104,9 +104,9 @@ typedef struct chop_reassembly_elt
    encryption keys, no MAC, and recycles the circuit ID as a
    partial IV.  To be replaced with something less laughable ASAP. */
 
-static const uchar c2s_key[] =
+static const uint8_t c2s_key[] =
   "\x44\x69\x5f\x45\x41\x67\xe9\x69\x14\x6c\x5f\xd2\x41\x63\xc4\x02";
-static const uchar s2c_key[] =
+static const uint8_t s2c_key[] =
   "\xfa\x31\x78\x6c\xb9\x4c\x66\x2a\xd0\x30\x59\xf7\x28\x22\x2f\x22";
 
 /* Connections and circuits */
@@ -346,8 +346,8 @@ chop_send_block(conn_t *d,
                        length) != length)
     goto fail;
 
-  crypt_set_iv(ckt->send_crypt, (uchar *)v.iov_base, 16);
-  stream_crypt(ckt->send_crypt, (uchar *)v.iov_base + 16,
+  crypt_set_iv(ckt->send_crypt, (uint8_t *)v.iov_base, 16);
+  stream_crypt(ckt->send_crypt, (uint8_t *)v.iov_base + 16,
                length + CHOP_WIRE_HDR_LEN - 16);
 
   if (evbuffer_commit_space(block, &v, 1))
@@ -992,7 +992,7 @@ chop_circuit_create(config_t *cfg)
     ckt->send_crypt = crypt_new(c2s_key, 16);
     ckt->recv_crypt = crypt_new(s2c_key, 16);
     while (!ckt->circuit_id)
-      random_bytes((unsigned char *)&ckt->circuit_id, sizeof(uint64_t));
+      random_bytes((uint8_t *)&ckt->circuit_id, sizeof(uint64_t));
   }
   return c;
 }
@@ -1202,7 +1202,7 @@ chop_conn_recv(conn_t *s)
   chop_header hdr;
   struct evbuffer *block;
   size_t avail;
-  uchar decodebuf[CHOP_MAX_DATA + CHOP_WIRE_HDR_LEN];
+  uint8_t decodebuf[CHOP_MAX_DATA + CHOP_WIRE_HDR_LEN];
 
   if (!source->steg) {
     log_assert(s->cfg->mode == LSN_SIMPLE_SERVER);

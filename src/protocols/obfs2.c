@@ -43,7 +43,7 @@ parse_and_set_options(int n_options, const char *const *options, config_t *c)
         /* ASN we must say in spec that we hash command line shared
            secret. */
         digest = digest_new();
-        digest_update(digest, (uchar*)*options+16, strlen(*options+16));
+        digest_update(digest, (uint8_t*)*options+16, strlen(*options+16));
         digest_getdigest(digest, cfg->shared_secret, SHARED_SECRET_LENGTH);
         digest_free(digest);
 
@@ -93,17 +93,17 @@ parse_and_set_options(int n_options, const char *const *options, config_t *c)
 
 /** Return true iff the OBFUSCATE_SEED_LENGTH-byte seed in 'seed' is nonzero */
 static inline int
-seed_nonzero(const uchar *seed)
+seed_nonzero(const uint8_t *seed)
 {
-  static const uchar OBFUSCATE_ZERO_SEED[OBFUSCATE_SEED_LENGTH] = {0};
+  static const uint8_t OBFUSCATE_ZERO_SEED[OBFUSCATE_SEED_LENGTH] = {0};
   return memcmp(seed, OBFUSCATE_ZERO_SEED, OBFUSCATE_SEED_LENGTH) != 0;
 }
 
 /** Return true iff the SHARED_SECRET_LENGTH-byte seed in 'seed' is nonzero */
 static inline int
-shared_seed_nonzero(const uchar *seed)
+shared_seed_nonzero(const uint8_t *seed)
 {
-  static const uchar SHARED_ZERO_SEED[SHARED_SECRET_LENGTH] = {0};
+  static const uint8_t SHARED_ZERO_SEED[SHARED_SECRET_LENGTH] = {0};
   return memcmp(seed, SHARED_ZERO_SEED, SHARED_SECRET_LENGTH) != 0;
 }
 
@@ -227,21 +227,21 @@ obfs2_circuit_drop_downstream(circuit_t *c, conn_t *conn)
    currently set in state 's'.
 */
 static crypt_t *
-derive_padding_key(void *s, const uchar *seed,
+derive_padding_key(void *s, const uint8_t *seed,
                    const char *keytype)
 {
   obfs2_conn_t *state = s;
 
   crypt_t *cryptstate;
-  uchar buf[SHA256_LENGTH];
+  uint8_t buf[SHA256_LENGTH];
   digest_t *c = digest_new();
 
-  digest_update(c, (uchar*)keytype, strlen(keytype));
+  digest_update(c, (uint8_t*)keytype, strlen(keytype));
   if (seed_nonzero(seed))
     digest_update(c, seed, OBFUSCATE_SEED_LENGTH);
   if (shared_seed_nonzero(state->secret_seed))
     digest_update(c, state->secret_seed, OBFUSCATE_SEED_LENGTH);
-  digest_update(c, (uchar*)keytype, strlen(keytype));
+  digest_update(c, (uint8_t*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
   digest_free(c);
 
@@ -271,7 +271,7 @@ obfs2_conn_create(config_t *c)
 {
   obfs2_config_t *cfg = downcast_config(c);
   obfs2_conn_t *conn = xzalloc(sizeof(obfs2_conn_t));
-  uchar *seed;
+  uint8_t *seed;
   const char *send_pad_type;
 
   conn->super.cfg = c;
@@ -343,8 +343,8 @@ obfs2_conn_handshake(conn_t *s)
   struct evbuffer *buf = conn_get_outbound(s);
 
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE), plength, send_plength;
-  uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
-  const uchar *seed;
+  uint8_t msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
+  const uint8_t *seed;
 
   /* We're going to send:
       SEED | E_PAD_KEY( UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN) )
@@ -353,7 +353,7 @@ obfs2_conn_handshake(conn_t *s)
   log_assert(sizeof(magic) == 4);
 
   /* generate padlen */
-  if (random_bytes((uchar*)&plength, 4) < 0)
+  if (random_bytes((uint8_t*)&plength, 4) < 0)
     return -1;
   plength %= OBFUSCATE_MAX_PADDING;
   send_plength = htonl(plength);
@@ -392,7 +392,7 @@ static void
 obfs2_crypt_and_transmit(crypt_t *crypto,
                          struct evbuffer *source, struct evbuffer *dest)
 {
-  uchar data[1024];
+  uint8_t data[1024];
   int n;
   while ((n = evbuffer_remove(source, data, 1024)) > 0) {
     stream_crypt(crypto, data, n);
@@ -462,17 +462,17 @@ derive_key(void *s, const char *keytype)
 {
   obfs2_conn_t *state = s;
   crypt_t *cryptstate;
-  uchar buf[SHA256_LENGTH];
+  uint8_t buf[SHA256_LENGTH];
   digest_t *c = digest_new();
 
-  digest_update(c, (uchar*)keytype, strlen(keytype));
+  digest_update(c, (uint8_t*)keytype, strlen(keytype));
   if (seed_nonzero(state->initiator_seed))
     digest_update(c, state->initiator_seed, OBFUSCATE_SEED_LENGTH);
   if (seed_nonzero(state->responder_seed))
     digest_update(c, state->responder_seed, OBFUSCATE_SEED_LENGTH);
   if (shared_seed_nonzero(state->secret_seed))
     digest_update(c, state->secret_seed, SHARED_SECRET_LENGTH);
-  digest_update(c, (uchar*)keytype, strlen(keytype));
+  digest_update(c, (uint8_t*)keytype, strlen(keytype));
   digest_getdigest(c, buf, sizeof(buf));
 
   if (shared_seed_nonzero(state->secret_seed)) {
@@ -505,7 +505,7 @@ init_crypto(void *s)
   const char *send_keytype;
   const char *recv_keytype;
   const char *recv_pad_keytype;
-  const uchar *recv_seed;
+  const uint8_t *recv_seed;
 
   if (state->we_are_initiator) {
     send_keytype = INITIATOR_SEND_TYPE;
@@ -541,7 +541,7 @@ obfs2_conn_recv(conn_t *s)
   if (state->state == ST_WAIT_FOR_KEY) {
     /* We're waiting for the first OBFUSCATE_SEED_LENGTH+8 bytes to show up
      * so we can learn the partner's seed and padding length */
-    uchar buf[OBFUSCATE_SEED_LENGTH+8], *other_seed;
+    uint8_t buf[OBFUSCATE_SEED_LENGTH+8], *other_seed;
     uint32_t magic, plength;
     if (evbuffer_get_length(source) < OBFUSCATE_SEED_LENGTH+8) {
       log_debug("%s: waiting for key, %lu/%u bytes so far",

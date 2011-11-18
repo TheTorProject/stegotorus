@@ -70,19 +70,19 @@ test_obfs2_split_handshake(void *state)
 
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);
   uint32_t plength1, plength1_msg1, plength1_msg2, send_plength1;
-  const uchar *seed1;
+  const uint8_t *seed1;
 
-  uchar msgclient_1[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
-  uchar msgclient_2[OBFUSCATE_MAX_PADDING];
+  uint8_t msgclient_1[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
+  uint8_t msgclient_2[OBFUSCATE_MAX_PADDING];
 
   uint32_t plength2, send_plength2;
-  const uchar *seed2;
+  const uint8_t *seed2;
 
-  uchar msgserver_1[OBFUSCATE_SEED_LENGTH + 8];
-  uchar msgserver_2[OBFUSCATE_MAX_PADDING];
+  uint8_t msgserver_1[OBFUSCATE_SEED_LENGTH + 8];
+  uint8_t msgserver_2[OBFUSCATE_MAX_PADDING];
 
   /* generate padlen */
-  tt_int_op(0, <=, random_bytes((uchar*)&plength1, 4));
+  tt_int_op(0, <=, random_bytes((uint8_t*)&plength1, 4));
 
   plength1 %= OBFUSCATE_MAX_PADDING;
 
@@ -124,7 +124,7 @@ test_obfs2_split_handshake(void *state)
   /* Since everything went right, let's do a server to client handshake now! */
 
   /* generate padlen */
-  tt_int_op(0, <=, random_bytes((uchar*)&plength2, 4));
+  tt_int_op(0, <=, random_bytes((uint8_t*)&plength2, 4));
 
   plength2 %= OBFUSCATE_MAX_PADDING;
   send_plength2 = htonl(plength2);
@@ -183,10 +183,10 @@ test_obfs2_wrong_handshake_magic(void *state)
   uint32_t wrong_magic = 0xD15EA5E;
 
   uint32_t plength, send_plength;
-  const uchar *seed;
-  uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
+  const uint8_t *seed;
+  uint8_t msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8];
 
-  tt_int_op(0, >=, random_bytes((uchar*)&plength, 4));
+  tt_int_op(0, >=, random_bytes((uint8_t*)&plength, 4));
   plength %= OBFUSCATE_MAX_PADDING;
   send_plength = htonl(plength);
 
@@ -218,10 +218,10 @@ test_obfs2_wrong_handshake_plength(void *state)
   obfs2_conn_t *client_state = downcast_conn(s->conn_client);
   obfs2_conn_t *server_state = downcast_conn(s->conn_server);
 
-  uchar msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8 + 1];
+  uint8_t msg[OBFUSCATE_MAX_PADDING + OBFUSCATE_SEED_LENGTH + 8 + 1];
   uint32_t magic = htonl(OBFUSCATE_MAGIC_VALUE);
   uint32_t plength, send_plength;
-  const uchar *seed;
+  const uint8_t *seed;
   seed = client_state->initiator_seed;
 
   plength = OBFUSCATE_MAX_PADDING + 1U;
