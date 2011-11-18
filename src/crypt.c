@@ -10,17 +10,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <openssl/opensslv.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
-
-#if OPENSSL_VERSION_NUMBER >= 0x0090800f
-#define USE_OPENSSL_RANDPOLL 1
-#define USE_OPENSSL_SHA256 1
 #include <openssl/sha.h>
-#else
-#include "sha256.h"
-#endif
 
 /**
    Initializes the crypto subsystem.
@@ -29,29 +21,7 @@ int
 initialize_crypto(void)
 {
   ERR_load_crypto_strings();
-
-#ifdef USE_OPENSSL_RANDPOLL
   return RAND_poll() == 1 ? 0 : -1;
-#else
-  /* XXX Or maybe fall back to the arc4random implementation in libevent2? */
-  {
-    char buf[32];
-    int fd, n;
-    fd = open("/dev/urandom", O_RDONLY);
-    if (fd == -1) {
-      perror("open");
-      return -1;
-    }
-    n = read(fd, buf, sizeof(buf));
-    if (n != sizeof(buf)) {
-      close(fd);
-      return -1;
-    }
-    RAND_seed(buf, sizeof(buf));
-    close(fd);
-    return 0;
-  }
-#endif
 }
 
 /**
@@ -66,13 +36,6 @@ cleanup_crypto(void)
 /* =====
    Digests
    ===== */
-
-#ifndef USE_OPENSSL_SHA256
-#define SHA256_CTX sha256_state
-#define SHA256_Init(ctx) sha256_init(ctx)
-#define SHA256_Update(ctx, buf, len) sha256_process(ctx, buf, len)
-#define SHA256_Final(buf, ctx) sha256_done(ctx, buf)
-#endif
 
 struct digest_t {
   SHA256_CTX ctx;

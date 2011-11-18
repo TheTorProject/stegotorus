@@ -40,3 +40,5 @@
 /tltester
 /unittests
 
+/build/
+/build-*/

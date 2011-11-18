@@ -37,10 +37,6 @@ libobfsproxy_a_SOURCES = \
 
 nodist_libobfsproxy_a_SOURCES = protolist.c steglist.c
 
-if NEED_SHA256
-libobfsproxy_a_SOURCES += src/sha256.c
-endif
-
 obfsproxy_SOURCES = \
 	src/main.c
 
@@ -70,7 +66,6 @@ noinst_HEADERS = \
 	src/main.h \
 	src/protocol.h \
 	src/rng.h \
-	src/sha256.h \
 	src/socks.h \
 	src/steg.h \
 	src/util.h \
