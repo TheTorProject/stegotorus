@@ -20,7 +20,7 @@ OPTIONS:
    -h             Show this message
    -i <addr>      IP address (default: 127.0.0.1)
    -p <n>         port number (default: 8080)
-   -l <severity>  Log severity: warn, error, debug (default: debug)
+   -l <severity>  Log severity: warn, error, debug (default: error)
    -b <host>      Host name (or IP address) of Tor Bridge
                   with port number attached via ':' or omitted
                   (default: 87.73.82.145:8080)
@@ -35,7 +35,7 @@ EOF
 IP=127.0.0.1
 PORT=8080
 N=1
-LOG=debug
+LOG=error
 BRIDGE_IP=87.73.82.145
 BRIDGE_PORT=8080
 while getopts "hi:p:l:b:n:" OPTION
