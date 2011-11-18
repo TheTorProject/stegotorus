@@ -178,7 +178,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     if (evbuffer_drain(source, 1) == -1)
       goto err;
 
-  if (evbuffer_remove(source, destaddr, addrlen) != (ev_ssize_t)addrlen)
+  if (evbuffer_remove(source, destaddr, addrlen) != (ssize_t)addrlen)
     goto err;
 
   if (evbuffer_remove(source, (char *)&destport, 2) != 2)

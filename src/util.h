@@ -25,6 +25,13 @@
 #define SHUT_WR SD_SEND
 #endif
 
+/* event2/util.h finds us a ssize_t but refuses to actually call it
+   that. Correct this. */
+#ifdef _EVENT_ssize_t
+#undef ssize_t
+#define ssize_t _EVENT_ssize_t
+#endif
+
 struct bufferevent;
 struct evbuffer;
 struct evconnlistener;

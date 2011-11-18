@@ -1279,7 +1279,7 @@ chop_conn_recv(conn_t *s)
 
     if (evbuffer_copyout(source->recv_pending, decodebuf,
                          CHOP_WIRE_HDR_LEN + hdr.length)
-        != (ev_ssize_t)(CHOP_WIRE_HDR_LEN + hdr.length)) {
+        != (ssize_t)(CHOP_WIRE_HDR_LEN + hdr.length)) {
       log_warn_cn(s, "failed to copy block to decode buffer");
       return -1;
     }

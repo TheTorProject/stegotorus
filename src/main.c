@@ -137,7 +137,7 @@ static void
 stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
 {
   size_t nread = 0;
-  ev_ssize_t r;
+  ssize_t r;
   char buf[4096];
   for (;;) {
     r = read(fd, buf, sizeof buf);
