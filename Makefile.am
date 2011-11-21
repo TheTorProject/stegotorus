@@ -2,17 +2,22 @@
 # Copyright 2011 Nick Mathewson, George Kadianakis, Zack Weinberg
 # See LICENSE for other credits and copying information
 
-ACLOCAL_AMFLAGS = -I m4
-WARNINGS = -std=gnu99 -pedantic -Wall -Wextra -Wformat=2 -Wwrite-strings \
- -Wstrict-prototypes -Wmissing-prototypes -Wdeclaration-after-statement \
- -Wno-unused-parameter -Wno-overlength-strings -Wno-long-long -Werror
-AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2
-AM_CFLAGS = $(WARNINGS) @libevent_CFLAGS@ @libcrypto_CFLAGS@
-LDADD = libobfsproxy.a @libevent_LIBS@ @libcrypto_LIBS@ @ws32_LIBS@
+ACLOCAL_AMFLAGS = -I m4 --install
 
-bin_PROGRAMS = obfsproxy
+WARNINGS  = -Werror -Wall -Wextra -Wformat=2 \
+ -Wno-unused-parameter -Wno-overlength-strings -Wno-long-long
+CWARNINGS = -pedantic -Wwrite-strings -Wdeclaration-after-statement \
+ -Wstrict-prototypes -Wmissing-prototypes
+
+AM_CFLAGS   = -std=gnu99 $(WARNINGS) $(CWARNINGS)
+AM_CXXFLAGS = -std=gnu++0x $(WARNINGS)
+
+AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
+LDADD       = libobfsproxy.a
+
 noinst_LIBRARIES = libobfsproxy.a
-noinst_PROGRAMS = unittests tltester
+noinst_PROGRAMS  = unittests tltester
+bin_PROGRAMS     = obfsproxy
 
 PROTOCOLS = \
 	src/protocols/dummy.c \
@@ -27,7 +32,7 @@ STEGANOGRAPHERS = \
 libobfsproxy_a_SOURCES = \
 	src/connections.c \
 	src/container.c \
-	src/crypt.c \
+	src/crypt.cc \
 	src/network.c \
 	src/protocol.c \
 	src/socks.c \
@@ -82,6 +87,14 @@ EXTRA_DIST = doc \
 	src/test/obfstestlib.py \
 	src/test/test_socks.py \
 	src/test/test_tl.py
+
+# Automake does not realize that because libobfsproxy.a contains
+# a C++ source file, every program that has it in LDADD must be
+# linked with the C++ compiler.  Persuade it to do so anyway.
+# The file forcecxxlink.cc need not, and does not, exist.
+nodist_EXTRA_obfsproxy_SOURCES = forcecxxlink.cc
+nodist_EXTRA_tltester_SOURCES  = forcecxxlink.cc
+nodist_EXTRA_unittests_SOURCES = forcecxxlink.cc
 
 # Generated source files
 CLEANFILES = protolist.c steglist.c unitgrplist.c \

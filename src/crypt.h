@@ -5,7 +5,12 @@
 #ifndef CRYPT_H
 #define CRYPT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SHA256_LENGTH 32
+#define AES_BLOCK_SIZE 16
 
 /* Stream cipher state */
 typedef struct crypt_t crypt_t;
@@ -47,28 +52,13 @@ int random_bytes(uint8_t *b, size_t n);
 int random_int(unsigned int max);
 
 /** Return a random integer in the range [min, max).
+ *  'max' must be at least one greater than 'min' and no greater than
+ *  INT_MAX+1.
  */
-static inline int
-random_range(unsigned int min, unsigned int max)
-{
-  return random_int(max-min) + min;
-}
+int random_range(unsigned int min, unsigned int max);
 
-#ifdef CRYPT_PRIVATE
-
-#include <openssl/aes.h>
-
-/* ==========
-   These definitions are not part of the crypt interface.
-   They're exposed here so that the unit tests can use them.
-   ==========
-*/
-struct crypt_t {
-  AES_KEY key;
-  uint8_t ivec[AES_BLOCK_SIZE];
-  uint8_t ecount_buf[AES_BLOCK_SIZE];
-  unsigned int pos;
-};
+#ifdef __cplusplus
+} /* extern "C" */
 #endif
 
 #endif

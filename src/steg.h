@@ -5,6 +5,10 @@
 #ifndef STEG_H
 #define STEG_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** A steganography instance stores all its state in one of these
     structures.  Most of the state is private to the module. */
 struct steg_t
@@ -126,5 +130,9 @@ int steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
 
 #define STEG_DEL(var_)                                  \
   do { } while (0)
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

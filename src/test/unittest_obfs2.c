@@ -4,14 +4,30 @@
 
 #include "util.h"
 #include "unittest.h"
-
-#define CRYPT_PRIVATE
 #include "crypt.h"
 #include "protocols/obfs2.h"
 
 #include <event2/buffer.h>
 
 PROTO_CAST_HELPERS(obfs2)
+
+/* Verify that two crypto states are synchronized, by encrypting data
+   with one and decrypting it with the other. */
+static void
+check_crypto_sync(crypt_t *send, crypt_t *recv)
+{
+  static const uint8_t text[] =
+    "fencing wickers cloture bedrooms slotted raiding probate thermos";
+  uint8_t buf[sizeof text - 1];
+  size_t n = sizeof text - 1;
+
+  memcpy(buf, text, n);
+  stream_crypt(send, buf, n);
+  stream_crypt(recv, buf, n);
+  tt_mem_op(buf, ==, text, n);
+
+ end:;
+}
 
 static void
 test_obfs2_handshake(void *state)
@@ -42,11 +58,8 @@ test_obfs2_handshake(void *state)
   /* The handshake is now complete. We should have:
      client's send_crypto == server's recv_crypto
      server's send_crypto == client's recv_crypto . */
-  tt_mem_op(client_state->send_crypto, ==, server_state->recv_crypto,
-            sizeof(crypt_t));
-
-  tt_mem_op(client_state->recv_crypto, ==, server_state->send_crypto,
-            sizeof(crypt_t));
+  check_crypto_sync(client_state->send_crypto, server_state->recv_crypto);
+  check_crypto_sync(server_state->send_crypto, client_state->recv_crypto);
 
  end:;
 }
@@ -160,11 +173,8 @@ test_obfs2_split_handshake(void *state)
   /* The handshake is finally complete. We should have: */
   /*    client's send_crypto == server's recv_crypto */
   /*    server's send_crypto == client's recv_crypto . */
-  tt_mem_op(client_state->send_crypto, ==, server_state->recv_crypto,
-            sizeof(crypt_t));
-
-  tt_mem_op(client_state->recv_crypto, ==, server_state->send_crypto,
-            sizeof(crypt_t));
+  check_crypto_sync(client_state->send_crypto, server_state->recv_crypto);
+  check_crypto_sync(server_state->send_crypto, client_state->recv_crypto);
 
  end:;
 }

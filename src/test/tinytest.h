@@ -28,6 +28,10 @@
 
 #include <stddef.h> /* size_t */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** Flag for a test that needs to run in a subprocess. */
 #define TT_FORK  (1<<0)
 /** Runtime flag for a test we've decided to skip. */
@@ -88,5 +92,9 @@ int testcase_run_one(const struct testgroup_t *,const struct testcase_t *);
     as selected from the command line. */
 int tinytest_main(int argc, const char **argv,
                   const struct testgroup_t *groups);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

@@ -8,6 +8,10 @@
 #ifndef HT_H
 #define HT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define HT_HEAD(name, type)                                             \
   struct name {                                                         \
     /* The hash table itself. */                                        \
@@ -466,6 +470,10 @@ ht_string_hash(const char *s)
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif
 

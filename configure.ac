@@ -14,6 +14,7 @@ m4_pushdef([AC_INCLUDES_DEFAULT], [$1])
 
 AC_PROG_CC
 AM_PROG_CC_C_O
+AC_PROG_CXX
 AC_PROG_CPP
 AC_PROG_RANLIB
 PKG_PROG_PKG_CONFIG
@@ -35,17 +36,18 @@ AM_CONDITIONAL([INTEGRATION_TESTS], [test "$PYOS" = "posix"])
 ### Libraries ###
 
 PKG_CHECK_MODULES([libevent], [libevent >= 2.0])
-# Presently no need for libssl, only libcrypto.
-# We require version 1.0.1 for GCM support.
-PKG_CHECK_MODULES([libcrypto], [libcrypto >= 1.0.1])
+# libcrypto++ 5.6.0 is the earliest version with GCM support.
+PKG_CHECK_MODULES([libcryptopp], [libcrypto++ >= 5.6.0])
+
+LIBS="$libevent_LIBS $libcryptopp_LIBS"
+lib_CPPFLAGS="$libevent_CFLAGS $libcryptopp_CFLAGS"
+AC_SUBST(lib_CPPFLAGS)
 
 # ntohl and a bunch of related functions require a special library on Windows.
 # It is possible that libevent or libcrypto has hooked us up already.
 # This can't be done with AC_SEARCH_LIBS -- see m4/winsock.m4 for gory details.
-save_LIBS="$LIBS"
-LIBS="$libevent_LIBS $libcrypto_LIBS"
 AX_LIB_WINSOCK2
-LIBS="$save_LIBS"
+LIBS="$LIBS $ws32_LIBS"
 
 ### C features ###
 

@@ -8,6 +8,10 @@
 
 #include <time.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** A resizeable list of pointers, with associated helpful functionality.
  *
  * The members of this struct are exposed only so that macros and inlines can
@@ -679,5 +683,9 @@ median_long(long *array, int n_elements)
 {
   return find_nth_long(array, n_elements, (n_elements-1)/2);
 }
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

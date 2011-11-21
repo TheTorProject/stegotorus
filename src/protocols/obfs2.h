@@ -9,6 +9,10 @@
 #include "connections.h"
 #include "protocol.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ==========
    These definitions are not part of the obfs2_protocol interface.
    They're exposed here so that the unit tests can use them.
@@ -77,5 +81,9 @@ typedef struct obfs2_circuit_t {
   circuit_t super;
   conn_t *downstream;
 } obfs2_circuit_t;
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

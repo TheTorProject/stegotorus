@@ -5,6 +5,10 @@
 #ifndef SOCKS_H
 #define SOCKS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum socks_status_t {
   /* Waiting for initial socks4 or socks5 message */
   ST_WAITING,
@@ -106,5 +110,9 @@ void socks4_send_reply(struct evbuffer *dest,
                        socks_state_t *state, int status);
 
 #endif /* SOCKS_PRIVATE */
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif /* socks.h */

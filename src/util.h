@@ -32,6 +32,10 @@
 #define ssize_t _EVENT_ssize_t
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct bufferevent;
 struct evbuffer;
 struct evconnlistener;
@@ -160,7 +164,7 @@ void close_obfsproxy_logfile(void);
     these functions: generic, circuit-related, and
     connection-related. */
 
-#if __STDC_VERSION__ >= 199901L
+#if __STDC_VERSION__ >= 199901L || __GNUC__ >= 4
 
 /** Fatal errors: the program cannot continue and will exit. */
 void log_abort(const char *fn, const char *format, ...)
@@ -247,5 +251,9 @@ void log_debug_cn(conn_t *conn,const char *format, ...) ATTR_PRINTF_2;
       log_abort("assertion failure at %s:%d: %s",       \
                 __FILE__, __LINE__, #expr);             \
   } while (0)
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

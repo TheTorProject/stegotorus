@@ -5,8 +5,16 @@
 #ifndef LISTENER_H
 #define LISTENER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* returns 1 on success, 0 on failure */
 int listener_open(struct event_base *base, config_t *cfg);
 void listener_close_all(void);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif
