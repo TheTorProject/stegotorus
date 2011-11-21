@@ -24,7 +24,7 @@ static smartlist_t *circuits;
 static unsigned int last_conn_serial = 0;
 static unsigned int last_ckt_serial = 0;
 
-/** True when obfsproxy is shutting down: no further connections or
+/** True when stegotorus is shutting down: no further connections or
     circuits may be created, and we break out of the event loop when
     the last one (of either) is closed. */
 static int shutting_down;

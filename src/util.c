@@ -135,7 +135,7 @@ ui64_log2(uint64_t u64)
   return r;
 }
 
-/************************ Obfsproxy Network Routines *************************/
+/************************ Network Routines *************************/
 
 /**
    Accepts a string 'address' of the form ADDRESS:PORT and attempts to
@@ -213,7 +213,7 @@ printable_address(struct sockaddr *addr, socklen_t addrlen)
     struct sockaddr_in *sin = (struct sockaddr_in*)addr;
     if (!inet_ntop(AF_INET, &sin->sin_addr, abuf, INET6_ADDRSTRLEN))
       break;
-    obfs_snprintf(apbuf, sizeof apbuf, "%s:%d", abuf, ntohs(sin->sin_port));
+    xsnprintf(apbuf, sizeof apbuf, "%s:%d", abuf, ntohs(sin->sin_port));
     return xstrdup(apbuf);
   }
 
@@ -222,8 +222,7 @@ printable_address(struct sockaddr *addr, socklen_t addrlen)
     struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)addr;
     if (!inet_ntop(AF_INET, &sin6->sin6_addr, abuf, INET6_ADDRSTRLEN))
       break;
-    obfs_snprintf(apbuf, sizeof apbuf, "[%s]:%d", abuf,
-                  ntohs(sin6->sin6_port));
+    xsnprintf(apbuf, sizeof apbuf, "[%s]:%d", abuf, ntohs(sin6->sin6_port));
     return xstrdup(apbuf);
   }
 #endif
@@ -236,8 +235,7 @@ printable_address(struct sockaddr *addr, socklen_t addrlen)
     break;
   }
 
-  obfs_snprintf(apbuf, sizeof apbuf,
-                "<addr family %d>", addr->sa_family);
+  xsnprintf(apbuf, sizeof apbuf, "<addr family %d>", addr->sa_family);
   return xstrdup(apbuf);
 }
 
@@ -268,21 +266,21 @@ init_evdns_base(struct event_base *base)
  * it is to emulate "return number that would be written" with
  * non-conformant implementations.) */
 int
-obfs_snprintf(char *str, size_t size, const char *format, ...)
+xsnprintf(char *str, size_t size, const char *format, ...)
 {
   va_list ap;
   int r;
   va_start(ap,format);
-  r = obfs_vsnprintf(str,size,format,ap);
+  r = xvsnprintf(str,size,format,ap);
   va_end(ap);
   return r;
 }
 
-/** Replacement for vsnprintf; behavior differs as obfs_snprintf differs from
+/** Replacement for vsnprintf; behavior differs as xsnprintf differs from
  * snprintf.
  */
 int
-obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
+xvsnprintf(char *str, size_t size, const char *format, va_list args)
 {
   int r;
   if (size == 0)
@@ -308,7 +306,7 @@ obfs_vsnprintf(char *str, size_t size, const char *format, va_list args)
  *    |stream| should have been opened in binary mode.
  */
 size_t
-obfs_getline(char **lineptr, size_t *nptr, FILE *stream)
+xgetline(char **lineptr, size_t *nptr, FILE *stream)
 {
   char *line = *lineptr;
   size_t asize = *nptr;
@@ -435,7 +433,7 @@ string_to_sev(const char *string)
 }
 
 /**
-   Returns True if 'severity' is a valid obfsproxy logging severity.
+   Returns True if 'severity' is a valid logging severity.
    Otherwise, it returns False.
 */
 static int
@@ -448,11 +446,11 @@ sev_is_valid(int severity)
 }
 
 /**
-   Helper: Opens 'filename' and sets it as the obfsproxy logfile.
+   Helper: Opens 'filename' and sets it as the logfile.
    On success it returns 0, on fail it returns -1.
 */
 static int
-open_obfsproxy_logfile(const char *filename)
+log_open(const char *filename)
 {
   if (!filename)
     return -1;
@@ -461,7 +459,7 @@ open_obfsproxy_logfile(const char *filename)
   if (!log_dest)
     return -1;
 
-  fputs("\nBrand new obfsproxy log:\n", log_dest);
+  fputs("\nBrand new log:\n", log_dest);
   fflush(log_dest);
   setvbuf(log_dest, NULL, _IOLBF, 0);
 
@@ -469,11 +467,11 @@ open_obfsproxy_logfile(const char *filename)
 }
 
 /**
-   Closes the obfsproxy logfile if it exists.
+   Closes the logfile if it exists.
    Ignores errors.
 */
 void
-close_obfsproxy_logfile(void)
+log_close(void)
 {
   if (log_dest && log_dest != stderr)
     fclose(log_dest);
@@ -487,7 +485,7 @@ close_obfsproxy_logfile(void)
 int
 log_set_method(int method, const char *filename)
 {
-  close_obfsproxy_logfile();
+  log_close();
 
   switch (method) {
   case LOG_METHOD_NULL:
@@ -500,7 +498,7 @@ log_set_method(int method, const char *filename)
     return 0;
 
   case LOG_METHOD_FILE:
-    return open_obfsproxy_logfile(filename);
+    return log_open(filename);
 
   default:
     abort();
@@ -508,10 +506,9 @@ log_set_method(int method, const char *filename)
 }
 
 /**
-   Sets the minimum logging severity of obfsproxy to the severity
-   described by 'sev_string', then it returns 0.  If 'sev_string' is
-   not a valid severity, it returns -1.
-*/
+   Sets the minimum logging severity to the severity described by
+   'sev_string', then it returns 0.  If 'sev_string' is not a valid
+   severity, it returns -1.  */
 int
 log_set_min_severity(const char* sev_string)
 {
@@ -534,11 +531,9 @@ log_do_debug(void)
 }
 
 /**
-    Logging worker function.
-    Accepts a logging 'severity' and a 'format' string and logs the
-    message in 'format' according to the configured obfsproxy minimum
-    logging severity and logging method.
-*/
+    Logging worker function.  Accepts a logging 'severity' and a
+    'format' string and logs the message in 'format' according to the
+    configured minimum logging severity and logging method.  */
 static void
 logv(int severity, const char *format, va_list ap)
 {

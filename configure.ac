@@ -1,5 +1,5 @@
 AC_PREREQ([2.61])dnl Possibly earlier will do, but this is what I have
-AC_INIT([obfsproxy], [0.0])
+AC_INIT([stegotorus], [0.0])
 AC_CONFIG_SRCDIR([src/main.c])
 AM_INIT_AUTOMAKE([foreign nostdinc silent-rules subdir-objects])
 AM_MAINTAINER_MODE([enable])
@@ -20,15 +20,25 @@ AC_PROG_RANLIB
 PKG_PROG_PKG_CONFIG
 
 # We need python 2.7 for TestLoader.discover().
-# The unit tests presently only work on POSIX systems.
-AM_PATH_PYTHON([2.7],, [:])
-if test "$PYTHON" = ":"; then
-  AC_MSG_WARN([Python interpreter not found; integration tests disabled.])
+# The unit tests presently only work on POSIX systems,
+# and are flaky enough that we let them be configured off.
+AC_ARG_ENABLE(integration-tests,
+  [AS_HELP_STRING([--disable-integration-tests],
+    [Disable tests of the complete program])],
+  [], [enable_integration_tests=yes])
+if test x$enable_integration_tests != xyes; then
+  AC_MSG_WARN([Integration tests disabled by configure option.])
   PYOS=none
 else
-  PYOS=`$PYTHON -c 'import os; print os.name'`
-  if test "$PYOS" != "posix"; then
-    AC_MSG_WARN([Not a POSIX platform; integration tests disabled.])
+  AM_PATH_PYTHON([2.7],, [:])
+  if test "$PYTHON" = ":"; then
+    AC_MSG_WARN([Python interpreter not found; integration tests disabled.])
+    PYOS=none
+  else
+    PYOS=`$PYTHON -c 'import os; print os.name'`
+    if test "$PYOS" != "posix"; then
+      AC_MSG_WARN([Not a POSIX platform; integration tests disabled.])
+    fi
   fi
 fi
 AM_CONDITIONAL([INTEGRATION_TESTS], [test "$PYOS" = "posix"])

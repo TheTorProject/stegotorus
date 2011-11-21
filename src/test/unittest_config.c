@@ -54,68 +54,25 @@ cleanup_test_config(const struct testcase_t *tc, void *state)
 static const struct testcase_setup_t config_fixture =
   { setup_test_config, cleanup_test_config };
 
-static struct option_parsing_case oc_dummy[] = {
+static struct option_parsing_case oc_x_null[] = {
   /* wrong number of options */
-  { 0, 0, 1, {"dummy"} },
-  { 0, 0, 2, {"dummy", "client"} },
-  { 0, 0, 3, {"dummy", "client", "127.0.0.1:5552"} },
-  { 0, 0, 3, {"dummy", "server", "127.0.0.1:5552"} },
-  { 0, 0, 4, {"dummy", "socks", "127.0.0.1:5552", "192.168.1.99:11253"} },
+  { 0, 0, 1, {"x_null"} },
+  { 0, 0, 2, {"x_null", "client"} },
+  { 0, 0, 3, {"x_null", "client", "127.0.0.1:5552"} },
+  { 0, 0, 3, {"x_null", "server", "127.0.0.1:5552"} },
+  { 0, 0, 4, {"x_null", "socks", "127.0.0.1:5552", "192.168.1.99:11253"} },
   /* unrecognized mode */
-  { 0, 0, 3, {"dummy", "floodcontrol", "127.0.0.1:5552" } },
-  { 0, 0, 4, {"dummy", "--frobozz", "client", "127.0.0.1:5552"} },
-  { 0, 0, 4, {"dummy", "client", "--frobozz", "127.0.0.1:5552"} },
+  { 0, 0, 3, {"x_null", "floodcontrol", "127.0.0.1:5552" } },
+  { 0, 0, 4, {"x_null", "--frobozz", "client", "127.0.0.1:5552"} },
+  { 0, 0, 4, {"x_null", "client", "--frobozz", "127.0.0.1:5552"} },
   /* bad address */
-  { 0, 0, 3, {"dummy", "socks", "@:5552"} },
-  { 0, 0, 3, {"dummy", "socks", "127.0.0.1:notanumber"} },
+  { 0, 0, 3, {"x_null", "socks", "@:5552"} },
+  { 0, 0, 3, {"x_null", "socks", "127.0.0.1:notanumber"} },
   /* should succeed */
-  { 0, 1, 4, {"dummy", "client", "127.0.0.1:5552", "192.168.1.99:11253" } },
-  { 0, 1, 4, {"dummy", "client", "127.0.0.1", "192.168.1.99:11253" } },
-  { 0, 1, 4, {"dummy", "server", "127.0.0.1:5552", "192.168.1.99:11253" } },
-  { 0, 1, 3, {"dummy", "socks", "127.0.0.1:5552" } },
-
-  { 0, 0, 0, {0} }
-};
-
-static struct option_parsing_case oc_obfs2[] = {
-  /** good option list */
-  { 0, 1, 4, {"obfs2", "--shared-secret=a", "socks", "127.0.0.1:0"} },
-  /** two --dest. */
-  { 0, 0, 5, {"obfs2", "--dest=127.0.0.1:5555", "--dest=a",
-              "server", "127.0.0.1:5552"} },
-  /** unknown arg */
-  { 0, 0, 4, {"obfs2", "--gabura=a", "server", "127.0.0.1:5552"} },
-  /** too many args */
-  { 0, 0, 6, {"obfs2", "1", "2", "3", "4", "5" } },
-  /** wrong mode  */
-  { 0, 0, 4, {"obfs2", "--dest=1:1", "gladiator", "127.0.0.1:5552"} },
-  /** bad listen addr */
-  { 0, 0, 4, {"obfs2", "--dest=1:1", "server", "127.0.0.1:a"} },
-  /** bad dest addr */
-  { 0, 0, 4, {"obfs2", "--dest=1:b", "server", "127.0.0.1:1"} },
-  /** socks with dest */
-  { 0, 0, 4, {"obfs2", "--dest=1:2", "socks", "127.0.0.1:1"} },
-  /** server without dest */
-  { 0, 0, 4, {"obfs2", "--shared-secret=a", "server", "127.0.0.1:1"} },
-
-  { 0, 0, 0, {0} }
-};
-
-static struct option_parsing_case oc_s_x_http[] = {
-  /* good */
-  { 0, 1, 4, {"x_dsteg", "socks", "127.0.0.1:1800", "x_http"} },
-  { 0, 1, 4, {"x_dsteg", "server", "127.0.0.1:1800", "127.0.0.1:1801"} },
-  { 0, 1, 5, {"x_dsteg", "client", "127.0.0.1:1800", "127.0.0.1:1801","x_http"}},
-  /* wrong number of options */
-  { 0, 0, 1, {"x_dsteg"} },
-  { 0, 0, 2, {"x_dsteg", "client"} },
-  { 0, 0, 3, {"x_dsteg", "client", "127.0.0.1:5552"} },
-  { 0, 0, 4, {"x_dsteg", "client", "127.0.0.1:5552", "192.168.1.99:11253" } },
-  { 0, 0, 3, {"x_dsteg", "socks", "127.0.0.1:5552" } },
-  /* unrecognized mode */
-  { 0, 0, 3, {"x_dsteg", "floodcontrol", "127.0.0.1:5552" } },
-  { 0, 0, 4, {"x_dsteg", "--frobozz", "client", "127.0.0.1:5552"} },
-  { 0, 0, 4, {"x_dsteg", "client", "--frobozz", "127.0.0.1:5552"} },
+  { 0, 1, 4, {"x_null", "client", "127.0.0.1:5552", "192.168.1.99:11253" } },
+  { 0, 1, 4, {"x_null", "client", "127.0.0.1", "192.168.1.99:11253" } },
+  { 0, 1, 4, {"x_null", "server", "127.0.0.1:5552", "192.168.1.99:11253" } },
+  { 0, 1, 3, {"x_null", "socks", "127.0.0.1:5552" } },
 
   { 0, 0, 0, {0} }
 };
@@ -124,8 +81,6 @@ static struct option_parsing_case oc_s_x_http[] = {
   { #name, test_config, 0, &config_fixture, oc_##name }
 
 struct testcase_t config_tests[] = {
-  T(dummy),
-  T(obfs2),
-  T(s_x_http),
+  T(x_null),
   END_OF_TESTCASES
 };

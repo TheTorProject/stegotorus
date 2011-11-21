@@ -1,4 +1,4 @@
-# Makefile for obfsproxy
+# Makefile for stegotorus
 # Copyright 2011 Nick Mathewson, George Kadianakis, Zack Weinberg
 # See LICENSE for other credits and copying information
 
@@ -13,23 +13,20 @@ AM_CFLAGS   = -std=gnu99 $(WARNINGS) $(CWARNINGS)
 AM_CXXFLAGS = -std=gnu++98 $(WARNINGS)
 
 AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
-LDADD       = libobfsproxy.a
+LDADD       = libstegotorus.a
 
-noinst_LIBRARIES = libobfsproxy.a
+noinst_LIBRARIES = libstegotorus.a
 noinst_PROGRAMS  = unittests tltester
-bin_PROGRAMS     = obfsproxy
+bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \
-	src/protocols/dummy.c \
-	src/protocols/chop.c \
-	src/protocols/obfs2.c \
-	src/protocols/x_dsteg.c \
-	src/protocols/x_rr.c
+	src/protocol/chop.c \
+	src/protocol/x_null.c
 
 STEGANOGRAPHERS = \
 	src/steg/x_http.c
 
-libobfsproxy_a_SOURCES = \
+libstegotorus_a_SOURCES = \
 	src/connections.c \
 	src/container.c \
 	src/crypt.cc \
@@ -40,16 +37,15 @@ libobfsproxy_a_SOURCES = \
 	src/util.c \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
 
-nodist_libobfsproxy_a_SOURCES = protolist.c steglist.c
+nodist_libstegotorus_a_SOURCES = protolist.c steglist.c
 
-obfsproxy_SOURCES = \
+stegotorus_SOURCES = \
 	src/main.c
 
 UTGROUPS = \
 	src/test/unittest_container.c \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c \
-	src/test/unittest_obfs2.c \
 	src/test/unittest_config.c \
 	src/test/unittest_transfer.c
 
@@ -74,7 +70,6 @@ noinst_HEADERS = \
 	src/socks.h \
 	src/steg.h \
 	src/util.h \
-	src/protocols/obfs2.h \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h \
 	src/test/unittest.h
@@ -84,15 +79,15 @@ dist_noinst_SCRIPTS = \
 	src/test/genunitgrps.sh
 
 EXTRA_DIST = doc \
-	src/test/obfstestlib.py \
+	src/test/itestlib.py \
 	src/test/test_socks.py \
 	src/test/test_tl.py
 
-# Automake does not realize that because libobfsproxy.a contains
+# Automake does not realize that because libstegotorus.a contains
 # a C++ source file, every program that has it in LDADD must be
 # linked with the C++ compiler.  Persuade it to do so anyway.
 # The file forcecxxlink.cc need not, and does not, exist.
-nodist_EXTRA_obfsproxy_SOURCES = forcecxxlink.cc
+nodist_EXTRA_stegotorus_SOURCES = forcecxxlink.cc
 nodist_EXTRA_tltester_SOURCES  = forcecxxlink.cc
 nodist_EXTRA_unittests_SOURCES = forcecxxlink.cc
 

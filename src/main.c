@@ -31,7 +31,7 @@
 static struct event_base *the_event_base;
 
 /**
-   Puts obfsproxy's networking subsystem on "closing time" mode. This
+   Puts stegotorus's networking subsystem on "closing time" mode. This
    means that we stop accepting new connections and we shutdown when
    the last connection is closed.
 
@@ -54,7 +54,7 @@ start_shutdown(int barbaric, const char *label)
   conn_start_shutdown(barbaric); /* possibly break existing connections */
 }
 
-/** Stop obfsproxy's event loop. Final cleanup happens in main().
+/** Stop stegotorus's event loop. Final cleanup happens in main().
     Called by conn_start_shutdown and/or conn_free (see connections.c). */
 void
 finish_shutdown(void)
@@ -72,7 +72,7 @@ finish_shutdown(void)
            keep the already existing connections open,
            and terminate when they all close.
            On a second SIGINT we shut down immediately but cleanly.
-   SIGTERM: Shut down obfsproxy immediately but cleanly.
+   SIGTERM: Shut down immediately but cleanly.
 */
 static void
 handle_signal_cb(evutil_socket_t fd, short what, void *arg)
@@ -107,11 +107,11 @@ lethal_signal(int signum, siginfo_t *si, void *uc)
 #endif
 
   /* Print a basic diagnostic first. */
-  obfs_snprintf(faultmsg, sizeof faultmsg,
-                sizeof(unsigned long) == 4
-                ? "\n[error] %s at %08lx\n"
-                : "\n[error] %s at %016lx\n",
-                strsignal(signum), (unsigned long)si->si_addr);
+  xsnprintf(faultmsg, sizeof faultmsg,
+            sizeof(unsigned long) == 4
+            ? "\n[error] %s at %08lx\n"
+            : "\n[error] %s at %016lx\n",
+            strsignal(signum), (unsigned long)si->si_addr);
   /* we really, truly don't care about a short write here */
   if(write(2, faultmsg, strlen(faultmsg))) {}
 
@@ -154,14 +154,14 @@ stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
 }
 
 /**
-   Prints the obfsproxy usage instructions then exits.
+   Prints usage instructions then exits.
 */
 static void ATTR_NORETURN
 usage(void)
 {
   const proto_vtable *const *p;
 
-  fputs("usage: obfsproxy protocol_name [protocol_args] protocol_options "
+  fputs("usage: stegotorus protocol_name [protocol_args] protocol_options "
         "protocol_name ...\n"
         "* Available protocols:\n", stderr);
   /* this is awful. */
@@ -176,15 +176,15 @@ usage(void)
 }
 
 /**
-   Receives 'argv' and scans for any obfsproxy optional arguments and
-   tries to set them in effect.
+   Receives 'argv' and scans for any non-protocol-specific optional
+   arguments and tries to set them in effect.
 
    If it succeeds it returns the number of argv arguments its caller
    should skip to get past the optional arguments we already handled.
-   If it fails, it exits obfsproxy.
+   If it fails, it exits the program.
 */
 static int
-handle_obfsproxy_args(const char *const *argv)
+handle_generic_args(const char *const *argv)
 {
   int logmethod_set=0;
   int logsev_set=0;
@@ -224,7 +224,7 @@ handle_obfsproxy_args(const char *const *argv)
         }
         logsev_set=1;
     } else {
-      log_warn("unrecognizable obfsproxy argument '%s'", argv[i]);
+      log_warn("unrecognizable argument '%s'", argv[i]);
       exit(1);
     }
     i++;
@@ -249,8 +249,8 @@ main(int argc, const char *const *argv)
      variable to stderr. */
   log_set_method(LOG_METHOD_STDERR, NULL);
 
-  /* Handle optional obfsproxy arguments. */
-  begin = argv + handle_obfsproxy_args(argv);
+  /* Handle optional non-protocol-specific arguments. */
+  begin = argv + handle_generic_args(argv);
 
   /* Find the subsets of argv that define each configuration.
      Each configuration's subset consists of the entries in argv from
@@ -371,8 +371,7 @@ main(int argc, const char *const *argv)
 
   /* We are go for launch. As a signal to any monitoring process that may
      be running, close stdout now. */
-  log_info("obfsproxy process %lu now initialized",
-           (unsigned long)getpid());
+  log_info("%s process %lu now initialized", argv[0], (unsigned long)getpid());
   fclose(stdout);
 
   event_base_dispatch(the_event_base);
@@ -393,7 +392,7 @@ main(int argc, const char *const *argv)
   event_base_free(the_event_base);
 
   cleanup_crypto();
-  close_obfsproxy_logfile();
+  log_close();
 
   return 0;
 }

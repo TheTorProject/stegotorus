@@ -8,22 +8,22 @@
 
 #include <event2/buffer.h>
 
-typedef struct dummy_config_t {
+typedef struct x_null_config_t {
   config_t super;
   struct evutil_addrinfo *listen_addr;
   struct evutil_addrinfo *target_addr;
-} dummy_config_t;
+} x_null_config_t;
 
-typedef struct dummy_conn_t {
+typedef struct x_null_conn_t {
   conn_t super;
-} dummy_conn_t;
+} x_null_conn_t;
 
-typedef struct dummy_circuit_t {
+typedef struct x_null_circuit_t {
   circuit_t super;
   conn_t *downstream;
-} dummy_circuit_t;
+} x_null_circuit_t;
 
-PROTO_DEFINE_MODULE(dummy, NOSTEG);
+PROTO_DEFINE_MODULE(x_null, NOSTEG);
 
 /**
    Helper: Parses 'options' and fills 'cfg'.
@@ -33,7 +33,7 @@ parse_and_set_options(int n_options, const char *const *options,
                       config_t *c)
 {
   const char* defport;
-  dummy_config_t *cfg = downcast_config(c);
+  x_null_config_t *cfg = downcast_config(c);
 
   if (n_options < 1)
     return -1;
@@ -68,9 +68,9 @@ parse_and_set_options(int n_options, const char *const *options,
 
 /* Deallocate 'cfg'. */
 static void
-dummy_config_free(config_t *c)
+x_null_config_free(config_t *c)
 {
-  dummy_config_t *cfg = downcast_config(c);
+  x_null_config_t *cfg = downcast_config(c);
   if (cfg->listen_addr)
     evutil_freeaddrinfo(cfg->listen_addr);
   if (cfg->target_addr)
@@ -83,32 +83,32 @@ dummy_config_free(config_t *c)
    {"socks","127.0.0.1:6666"}
 */
 static config_t *
-dummy_config_create(int n_options, const char *const *options)
+x_null_config_create(int n_options, const char *const *options)
 {
-  dummy_config_t *cfg = xzalloc(sizeof(dummy_config_t));
+  x_null_config_t *cfg = xzalloc(sizeof(x_null_config_t));
   config_t *c = upcast_config(cfg);
-  c->vtable = &p_dummy_vtable;
+  c->vtable = &p_x_null_vtable;
 
   if (parse_and_set_options(n_options, options, c) == 0)
     return c;
 
-  dummy_config_free(c);
-  log_warn("dummy syntax:\n"
-           "\tdummy <mode> <listen_address> [<target_address>]\n"
+  x_null_config_free(c);
+  log_warn("x_null syntax:\n"
+           "\tx_null <mode> <listen_address> [<target_address>]\n"
            "\t\tmode ~ server|client|socks\n"
            "\t\tlisten_address, target_address ~ host:port\n"
            "\ttarget_address is required for server and client mode,\n"
            "\tand forbidden for socks mode.\n"
            "Examples:\n"
-           "\tobfsproxy dummy socks 127.0.0.1:5000\n"
-           "\tobfsproxy dummy client 127.0.0.1:5000 192.168.1.99:11253\n"
-           "\tobfsproxy dummy server 192.168.1.99:11253 127.0.0.1:9005");
+           "\tstegotorus x_null socks 127.0.0.1:5000\n"
+           "\tstegotorus x_null client 127.0.0.1:5000 192.168.1.99:11253\n"
+           "\tstegotorus x_null server 192.168.1.99:11253 127.0.0.1:9005");
   return NULL;
 }
 
 /** Retrieve the 'n'th set of listen addresses for this configuration. */
 static struct evutil_addrinfo *
-dummy_config_get_listen_addrs(config_t *cfg, size_t n)
+x_null_config_get_listen_addrs(config_t *cfg, size_t n)
 {
   if (n > 0)
     return 0;
@@ -117,7 +117,7 @@ dummy_config_get_listen_addrs(config_t *cfg, size_t n)
 
 /* Retrieve the target address for this configuration. */
 static struct evutil_addrinfo *
-dummy_config_get_target_addrs(config_t *cfg, size_t n)
+x_null_config_get_target_addrs(config_t *cfg, size_t n)
 {
   if (n > 0)
     return 0;
@@ -126,18 +126,18 @@ dummy_config_get_target_addrs(config_t *cfg, size_t n)
 
 /* Create a circuit object. */
 static circuit_t *
-dummy_circuit_create(config_t *c)
+x_null_circuit_create(config_t *c)
 {
-  circuit_t *ckt = upcast_circuit(xzalloc(sizeof(dummy_circuit_t)));
+  circuit_t *ckt = upcast_circuit(xzalloc(sizeof(x_null_circuit_t)));
   ckt->cfg = c;
   return ckt;
 }
 
 /* Destroy a circuit object. */
 static void
-dummy_circuit_free(circuit_t *c)
+x_null_circuit_free(circuit_t *c)
 {
-  dummy_circuit_t *ckt = downcast_circuit(c);
+  x_null_circuit_t *ckt = downcast_circuit(c);
   if (ckt->downstream) {
     /* break the circular reference before deallocating the
        downstream connection */
@@ -150,9 +150,9 @@ dummy_circuit_free(circuit_t *c)
 
 /* Add a connection to this circuit. */
 static void
-dummy_circuit_add_downstream(circuit_t *c, conn_t *conn)
+x_null_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
-  dummy_circuit_t *ckt = downcast_circuit(c);
+  x_null_circuit_t *ckt = downcast_circuit(c);
   log_assert(!ckt->downstream);
   ckt->downstream = conn;
   log_debug_ckt(c, "added connection <%d.%d> to %s",
@@ -163,9 +163,9 @@ dummy_circuit_add_downstream(circuit_t *c, conn_t *conn)
    protocol, it is because of a network error, and the whole circuit
    should be closed.  */
 static void
-dummy_circuit_drop_downstream(circuit_t *c, conn_t *conn)
+x_null_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
-  dummy_circuit_t *ckt = downcast_circuit(c);
+  x_null_circuit_t *ckt = downcast_circuit(c);
   log_assert(ckt->downstream == conn);
   log_debug_ckt(c, "dropped connection <%d.%d> to %s",
                 c->serial, conn->serial, conn->peername);
@@ -175,46 +175,46 @@ dummy_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 
 /* Send data from circuit C. */
 static int
-dummy_circuit_send(circuit_t *c)
+x_null_circuit_send(circuit_t *c)
 {
-  dummy_circuit_t *ckt = downcast_circuit(c);
+  x_null_circuit_t *ckt = downcast_circuit(c);
   return evbuffer_add_buffer(conn_get_outbound(ckt->downstream),
                              bufferevent_get_input(c->up_buffer));
 }
 
 /* Send an EOF on circuit C. */
 static int
-dummy_circuit_send_eof(circuit_t *c)
+x_null_circuit_send_eof(circuit_t *c)
 {
-  dummy_circuit_t *ckt = downcast_circuit(c);
+  x_null_circuit_t *ckt = downcast_circuit(c);
   if (ckt->downstream)
     conn_send_eof(ckt->downstream);
   return 0;
 }
 
 /*
-  This is called everytime we get a connection for the dummy
+  This is called everytime we get a connection for the x_null
   protocol.
 */
 
 static conn_t *
-dummy_conn_create(config_t *cfg)
+x_null_conn_create(config_t *cfg)
 {
-  dummy_conn_t *conn = xzalloc(sizeof(dummy_conn_t));
+  x_null_conn_t *conn = xzalloc(sizeof(x_null_conn_t));
   conn_t *c = upcast_conn(conn);
   c->cfg = cfg;
   return c;
 }
 
 static void
-dummy_conn_free(conn_t *c)
+x_null_conn_free(conn_t *c)
 {
   free(downcast_conn(c));
 }
 
-/** Dummy inbound-to-outbound connections are 1:1 */
+/** Null inbound-to-outbound connections are 1:1 */
 static int
-dummy_conn_maybe_open_upstream(conn_t *conn)
+x_null_conn_maybe_open_upstream(conn_t *conn)
 {
   circuit_t *ckt = circuit_create(conn->cfg);
   if (!ckt)
@@ -225,16 +225,16 @@ dummy_conn_maybe_open_upstream(conn_t *conn)
   return 0;
 }
 
-/** Dummy has no handshake */
+/** Null has no handshake */
 static int
-dummy_conn_handshake(conn_t *c)
+x_null_conn_handshake(conn_t *c)
 {
   return 0;
 }
 
 /** Receive data from connection SOURCE */
 static int
-dummy_conn_recv(conn_t *source)
+x_null_conn_recv(conn_t *source)
 {
   log_assert(source->circuit);
   return evbuffer_add_buffer(bufferevent_get_output(source->circuit->up_buffer),
@@ -243,11 +243,11 @@ dummy_conn_recv(conn_t *source)
 
 /** Receive EOF from connection SOURCE */
 static int
-dummy_conn_recv_eof(conn_t *source)
+x_null_conn_recv_eof(conn_t *source)
 {
   if (source->circuit) {
     if (evbuffer_get_length(conn_get_inbound(source)) > 0)
-      if (dummy_conn_recv(source))
+      if (x_null_conn_recv(source))
         return -1;
 
     circuit_recv_eof(source->circuit);

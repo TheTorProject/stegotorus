@@ -13,8 +13,7 @@
 #include <event2/event.h>
 #include <event2/bufferevent.h>
 
-/* Generic test fixture for protocol tests (currently used by obfs2
-   and transfer). */
+/* Generic test fixture for protocol tests (currently used by transfer). */
 
 static void *
 setup_proto_test_state(const struct testcase_t *tcase)

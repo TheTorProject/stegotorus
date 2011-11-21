@@ -940,9 +940,9 @@ chop_config_create(int n_options, const char *const *options)
            "\t\tin client and socks mode, and forbidden otherwise.\n"
            "\t\tThe down_address list is still required in socks mode.\n"
            "Examples:\n"
-           "\tobfsproxy chop client 127.0.0.1:5000 "
+           "\tstegotorus chop client 127.0.0.1:5000 "
            "192.168.1.99:11253 http 192.168.1.99:11254 skype\n"
-           "\tobfsproxy chop server 127.0.0.1:9005 "
+           "\tstegotorus chop server 127.0.0.1:9005 "
            "192.168.1.99:11253 192.168.1.99:11254");
   return NULL;
 }

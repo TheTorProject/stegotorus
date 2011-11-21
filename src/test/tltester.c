@@ -385,7 +385,7 @@ script_next_action(tstate *st)
   }
 
   for (;;) {
-    n = obfs_getline(&st->lbuf, &st->lbufsize, st->script);
+    n = xgetline(&st->lbuf, &st->lbufsize, st->script);
     line = st->lbuf;
 
     if (n == 0) {

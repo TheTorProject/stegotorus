@@ -128,13 +128,11 @@ static inline int ascii_isxdigit(unsigned char c)
 void ascii_strstrip(char *s, const char *kill);
 void ascii_strlower(char *s);
 
-int obfs_vsnprintf(char *str, size_t size,
-                   const char *format, va_list args);
-int obfs_snprintf(char *str, size_t size,
-                  const char *format, ...)
+int xvsnprintf(char *str, size_t size, const char *format, va_list args);
+int xsnprintf(char *str, size_t size, const char *format, ...)
   ATTR_PRINTF_3;
 
-size_t obfs_getline(char **lineptr, size_t *nptr, FILE *stream);
+size_t xgetline(char **lineptr, size_t *nptr, FILE *stream);
 
 /***** Logging. *****/
 
@@ -158,7 +156,7 @@ int log_set_min_severity(const char* sev_string);
 int log_do_debug(void);
 
 /** Close the logfile if it's open.  Ignores errors. */
-void close_obfsproxy_logfile(void);
+void log_close(void);
 
 /** The actual log-emitting functions.  There are three families of
     these functions: generic, circuit-related, and

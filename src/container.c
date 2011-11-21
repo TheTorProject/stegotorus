@@ -204,7 +204,7 @@ int
 smartlist_string_num_isin(const smartlist_t *sl, int num)
 {
   char buf[32]; /* long enough for 64-bit int, and then some. */
-  obfs_snprintf(buf,sizeof(buf),"%d", num);
+  xsnprintf(buf,sizeof(buf),"%d", num);
   return smartlist_string_isin(sl, buf);
 }
 
