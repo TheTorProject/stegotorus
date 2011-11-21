@@ -10,7 +10,7 @@ CWARNINGS = -pedantic -Wwrite-strings -Wdeclaration-after-statement \
  -Wstrict-prototypes -Wmissing-prototypes
 
 AM_CFLAGS   = -std=gnu99 $(WARNINGS) $(CWARNINGS)
-AM_CXXFLAGS = -std=gnu++0x $(WARNINGS)
+AM_CXXFLAGS = -std=gnu++98 $(WARNINGS)
 
 AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
 LDADD       = libobfsproxy.a
