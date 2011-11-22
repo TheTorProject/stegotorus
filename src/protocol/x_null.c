@@ -170,7 +170,12 @@ x_null_circuit_drop_downstream(circuit_t *c, conn_t *conn)
   log_debug_ckt(c, "dropped connection <%d.%d> to %s",
                 c->serial, conn->serial, conn->peername);
   ckt->downstream = NULL;
-  circuit_close(c);
+  if (evbuffer_get_length(bufferevent_get_output(c->up_buffer)) > 0)
+    /* this may already have happened, but there's no harm in
+       doing it again */
+    circuit_do_flush(c);
+  else
+    circuit_close(c);
 }
 
 /* Send data from circuit C. */

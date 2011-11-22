@@ -10,7 +10,7 @@ class SocksTest(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.client = Stegotorus("dummy", "socks", "127.0.0.1:4999")
+        cls.client = Stegotorus("x_null", "socks", "127.0.0.1:4999")
 
     @classmethod
     def tearDownClass(cls):
