@@ -28,7 +28,7 @@ for g in $groups; do
     printf 'extern struct testcase_t %s_tests[];\n' "$g"
 done
 
-printf '\nconst struct testgroup_t unittest_groups[] = {\n'
+printf '\nextern const struct testgroup_t unittest_groups[] = {\n'
 
 for g in $groups; do
     printf '  { "%s/", %s_tests },\n' "$g" "$g"

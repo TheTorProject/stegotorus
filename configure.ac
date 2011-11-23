@@ -1,6 +1,7 @@
 AC_PREREQ([2.61])dnl Possibly earlier will do, but this is what I have
 AC_INIT([stegotorus], [0.0])
 AC_CONFIG_SRCDIR([src/main.cc])
+AC_LANG([C++])
 AM_INIT_AUTOMAKE([foreign nostdinc silent-rules subdir-objects])
 AM_MAINTAINER_MODE([enable])
 
@@ -12,10 +13,8 @@ m4_pushdef([AC_INCLUDES_DEFAULT], [$1])
 
 ### Programs ###
 
-AC_PROG_CC
-AM_PROG_CC_C_O
 AC_PROG_CXX
-AC_PROG_CPP
+AX_PROG_CXX_C_O
 AC_PROG_RANLIB
 PKG_PROG_PKG_CONFIG
 
@@ -59,9 +58,8 @@ AC_SUBST(lib_CPPFLAGS)
 AX_LIB_WINSOCK2
 LIBS="$LIBS $ws32_LIBS"
 
-### C features ###
+### Language features ###
 
-AC_C_INLINE
 AC_CHECK_HEADERS([execinfo.h],,, [AC_INCLUDES_DEFAULT()])
 
 ### Output ###

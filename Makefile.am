@@ -36,7 +36,7 @@ libstegotorus_a_SOURCES = \
 	src/util.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
 
-nodist_libstegotorus_a_SOURCES = protolist.c steglist.c
+nodist_libstegotorus_a_SOURCES = protolist.cc steglist.cc
 
 stegotorus_SOURCES = \
 	src/main.cc
@@ -52,7 +52,7 @@ unittests_SOURCES = \
 	src/test/unittest.cc \
 	$(UTGROUPS)
 
-nodist_unittests_SOURCES = unitgrplist.c
+nodist_unittests_SOURCES = unitgrplist.cc
 
 tltester_SOURCES = src/test/tltester.cc
 
@@ -80,7 +80,7 @@ EXTRA_DIST = doc \
 	src/test/test_tl.py
 
 # Generated source files
-CLEANFILES = protolist.c steglist.c unitgrplist.c \
+CLEANFILES = protolist.cc steglist.cc unitgrplist.cc \
 	stamp-protolist stamp-steglist stamp-unitgrplist
 
 GMOD  = $(SHELL) $(srcdir)/src/genmodtable.sh
@@ -90,19 +90,19 @@ AM_V_gs   = $(AM_V_gs_$(V))
 AM_V_gs_  = $(AM_V_gs_$(AM_DEFAULT_VERBOSITY))
 AM_V_gs_0 = @echo "  GEN   " $(patsubst stamp-%,%.c,$@);
 
-protolist.c: stamp-protolist ;
+protolist.cc: stamp-protolist ;
 stamp-protolist: $(PROTOCOLS) Makefile src/genmodtable.sh
-	$(AM_V_gs) $(GMOD) protolist.c $(filter %.cc, $^)
+	$(AM_V_gs) $(GMOD) protolist.cc $(filter %.cc, $^)
 	$(AM_V_at) touch stamp-protolist
 
-steglist.c: stamp-steglist ;
+steglist.cc: stamp-steglist ;
 stamp-steglist: $(STEGANOGRAPHERS) Makefile src/genmodtable.sh
-	$(AM_V_gs) $(GMOD) steglist.c $(filter %.cc, $^)
+	$(AM_V_gs) $(GMOD) steglist.cc $(filter %.cc, $^)
 	$(AM_V_at) touch stamp-steglist
 
-unitgrplist.c: stamp-unitgrplist ;
+unitgrplist.cc: stamp-unitgrplist ;
 stamp-unitgrplist: $(UTGROUPS) Makefile src/test/genunitgrps.sh
-	$(AM_V_gs) $(GUNIT) unitgrplist.c $(filter %.cc, $^)
+	$(AM_V_gs) $(GUNIT) unitgrplist.cc $(filter %.cc, $^)
 	$(AM_V_at) touch stamp-unitgrplist
 
 # Testing

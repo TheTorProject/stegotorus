@@ -3,7 +3,7 @@
 set -e
 
 output="$1"
-ttag="${1%list.c}"
+ttag="${1%list.cc}"
 vtag="$(echo $1 | cut -c1)"
 shift
 
@@ -28,7 +28,7 @@ for m in $modules; do
     printf 'extern const %s_vtable %s_%s_vtable;\n' "$ttag" "$vtag" "$m"
 done
 
-printf '\nconst %s_vtable *const supported_%ss[] =\n{\n' "$ttag" "$ttag"
+printf '\nextern const %s_vtable *const supported_%ss[] =\n{\n' "$ttag" "$ttag"
 
 for m in $modules; do
     printf '  &%s_%s_vtable,\n' "$vtag" "$m"
