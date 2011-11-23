@@ -302,10 +302,6 @@ main(int argc, const char *const *argv)
   }
 #endif
 
-  /* Initialize crypto */
-  if (initialize_crypto() < 0)
-    log_abort("failed to initialize cryptography");
-
   /* Initialize libevent */
   the_event_base = event_base_new();
   if (!the_event_base)
@@ -396,7 +392,6 @@ main(int argc, const char *const *argv)
   free(stdin_eof);
   event_base_free(the_event_base);
 
-  cleanup_crypto();
   log_close();
 
   return 0;

@@ -112,10 +112,8 @@ main(int argc, const char **argv)
   }
 #endif
 
-  initialize_crypto();
   rv = tinytest_main(argc, argv, unittest_groups);
   conn_start_shutdown(1);
-  cleanup_crypto();
 
   return rv;
 }

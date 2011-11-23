@@ -31,6 +31,7 @@ libstegotorus_a_SOURCES = \
 	src/crypt.cc \
 	src/network.cc \
 	src/protocol.cc \
+	src/rng.cc \
 	src/socks.cc \
 	src/steg.cc \
 	src/util.cc \

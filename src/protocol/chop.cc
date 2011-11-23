@@ -10,6 +10,7 @@
 #include "connections.h"
 #include "crypt.h"
 #include "protocol.h"
+#include "rng.h"
 #include "steg.h"
 
 #include <tr1/unordered_map>
@@ -307,7 +308,7 @@ chop_send_block(conn_t *d,
   hdr.offset = ckt->send_offset;
   hdr.length = length;
   hdr.flags = flags;
-  random_bytes(hdr.pkt_iv, 8);
+  rng_bytes(hdr.pkt_iv, 8);
   chop_write_header((uint8_t*)v.iov_base, &hdr);
 
   if (evbuffer_copyout(source, (uint8_t *)v.iov_base + CHOP_WIRE_HDR_LEN,
@@ -446,7 +447,7 @@ chop_send_targeted(circuit_t *c, conn_t *target, size_t blocksize)
     if (blocksize > CHOP_MAX_CHAFF)
       blocksize = CHOP_MAX_CHAFF;
 
-    blocksize = random_range(1, blocksize);
+    blocksize = rng_range(1, blocksize);
     log_debug(target, "generating %lu bytes chaff", (unsigned long)blocksize);
 
     chaff = evbuffer_new();
@@ -951,7 +952,7 @@ chop_circuit_create(config_t *cfg)
     ckt->send_crypt = crypt_new(c2s_key, 16);
     ckt->recv_crypt = crypt_new(s2c_key, 16);
     while (!ckt->circuit_id)
-      random_bytes((uint8_t *)&ckt->circuit_id, sizeof(uint64_t));
+      rng_bytes((uint8_t *)&ckt->circuit_id, sizeof(uint64_t));
   }
   return c;
 }

@@ -5,79 +5,11 @@
 #include "util.h"
 #include "unittest.h"
 #include "crypt.h"
+#include "rng.h"
 
-/* SHA256 test vectors from
-   http://csrc.nist.gov/groups/STM/cavp/documents/shs/shabytetestvectors.zip
-   AES/GCM test vectors from
+/* AES/GCM test vectors from
    http://csrc.nist.gov/groups/STM/cavp/documents/mac/gcmtestvectors.zip
 */
-
-static void
-test_crypt_sha256(void *data)
-{
-  struct testvec
-  {
-    const char *input;
-    const char *output;
-  };
-  static const struct testvec testvecs[] = {
-    /* Note: code below relies on there being no NUL bytes in any input. */
-    /* 0 bits */
-    { "",
-      "\xe3\xb0\xc4\x42\x98\xfc\x1c\x14\x9a\xfb\xf4\xc8\x99\x6f\xb9\x24"
-      "\x27\xae\x41\xe4\x64\x9b\x93\x4c\xa4\x95\x99\x1b\x78\x52\xb8\x55" },
-    /* 256 bits */
-    { "\x8c\xf5\x3d\x90\x07\x7d\xf9\xa0\x43\xbf\x8d\x10\xb4\x70\xb1\x44"
-      "\x78\x44\x11\xc9\x3a\x4d\x50\x45\x56\x83\x4d\xae\x3e\xa4\xa5\xbb",
-      "\x56\x05\x9e\x8c\xb3\xc2\x97\x8b\x19\x82\x08\xbf\x5c\xa1\xe1\xea"
-      "\x56\x59\xb7\x37\xa5\x06\x32\x4b\x7c\xec\x75\xb5\xeb\xaf\x05\x7d" },
-    /* 1304 bits */
-    { "\xeb\xac\xcc\x34\xd6\xd6\xd3\xd2\x1e\xd0\xad\x2b\xa7\xc0\x7c\x21"
-      "\xd2\x53\xc4\x81\x4f\x4a\xd8\x9d\x32\x36\x92\x37\x49\x7f\x47\xa1"
-      "\xad\xab\xfa\x23\x98\xdd\xd0\x9d\x76\x9c\xc4\x6d\x3f\xd6\x9c\x93"
-      "\x03\x25\x1c\x13\xc7\x50\x79\x9b\x8f\x15\x11\x66\xbc\x26\x58\x60"
-      "\x98\x71\x16\x8b\x30\xa4\xd0\xa1\x62\xf1\x83\xfb\x36\x0f\x99\xb1"
-      "\x72\x81\x15\x03\x68\x1a\x11\xf8\x13\xc1\x6a\x44\x62\x72\xba\x6f"
-      "\xd4\x85\x86\x34\x45\x33\xb9\x28\x08\x56\x51\x9c\x35\x70\x59\xc3"
-      "\x44\xef\x17\x18\xdb\xaf\x86\xfa\xe5\xc1\x07\x99\xe4\x6b\x53\x16"
-      "\x88\x6f\xb4\xe6\x80\x90\x75\x78\x90\x53\x96\x17\xe4\x03\xc5\x11"
-      "\xa4\xf7\x8a\x19\xc8\x18\xc2\xea\x2e\x9d\x4e\x2d\xe9\x19\x0c\x9d"
-      "\xdd\xb8\x06",
-      "\xc9\x07\x18\x04\x43\xde\xe3\xcb\xcc\xb4\xc3\x13\x28\xe6\x25\x15"
-      "\x85\x27\xa5\x93\xb8\x78\xde\x1b\x8e\x4b\xa3\x7f\x1d\x69\xfb\x66" },
-    { 0, 0 }
-  };
-
-  digest_t *d;
-  uint8_t output[SHA256_LEN];
-  int i;
-  size_t len, j, b;
-
-  /* init, update, output */
-  for (i = 0; testvecs[i].input; i++) {
-    d = digest_new();
-    digest_update(d, (const uint8_t *)testvecs[i].input,
-                  strlen(testvecs[i].input));
-    digest_getdigest(d, output, SHA256_LEN);
-    digest_free(d);
-    tt_mem_op(output, ==, testvecs[i].output, SHA256_LEN);
-  }
-
-  /* init, update*N, output */
-  for (i = 1; testvecs[i].input; i++) {
-    d = digest_new();
-    len = strlen(testvecs[i].input);
-    for (j = 0; j < len; j += SHA256_LEN) {
-      b = len - j < SHA256_LEN ? len - j : SHA256_LEN;
-      digest_update(d, (const uint8_t *)testvecs[i].input + j, b);
-    }
-    digest_getdigest(d, output, SHA256_LEN);
-    digest_free(d);
-    tt_mem_op(output, ==, testvecs[i].output, SHA256_LEN);
-  }
-
- end:;
-}
 
 static void
 test_crypt_aesgcm_enc(void *data)
@@ -326,8 +258,8 @@ test_crypt_rng(void *data)
 
   uint8_t data1[100],data2[100];
 
-  tt_int_op(0, ==, random_bytes(data1, 100));
-  tt_int_op(0, ==, random_bytes(data2, 100));
+  tt_int_op(0, ==, rng_bytes(data1, 100));
+  tt_int_op(0, ==, rng_bytes(data2, 100));
 
   tt_mem_op(data1, !=, data2, 100);
 
@@ -339,7 +271,6 @@ test_crypt_rng(void *data)
   { #name, test_crypt_##name, 0, 0, 0 }
 
 struct testcase_t crypt_tests[] = {
-  T(sha256),
   T(aesgcm_enc),
   T(aesgcm_good_dec),
   T(aesgcm_bad_dec),
