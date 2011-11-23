@@ -18,7 +18,7 @@ static const char msg2[] =
 static void
 test_transfer(void *state)
 {
-  struct proto_test_state *s = state;
+  struct proto_test_state *s = (struct proto_test_state *)state;
   const struct proto_test_args *a = s->args;
 
   /* Handshake */

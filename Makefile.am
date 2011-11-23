@@ -42,14 +42,14 @@ stegotorus_SOURCES = \
 	src/main.cc
 
 UTGROUPS = \
-	src/test/unittest_crypt.c \
-	src/test/unittest_socks.c \
-	src/test/unittest_config.c \
-	src/test/unittest_transfer.c
+	src/test/unittest_crypt.cc \
+	src/test/unittest_socks.cc \
+	src/test/unittest_config.cc \
+	src/test/unittest_transfer.cc
 
 unittests_SOURCES = \
-	src/test/tinytest.c \
-	src/test/unittest.c \
+	src/test/tinytest.cc \
+	src/test/unittest.cc \
 	$(UTGROUPS)
 
 nodist_unittests_SOURCES = unitgrplist.c
@@ -79,12 +79,6 @@ EXTRA_DIST = doc \
 	src/test/test_socks.py \
 	src/test/test_tl.py
 
-# Automake does not realize that because libstegotorus.a contains
-# a C++ source file, every program that has it in LDADD must be
-# linked with the C++ compiler.  Persuade it to do so anyway.
-# The file forcecxxlink.cc need not, and does not, exist.
-nodist_EXTRA_unittests_SOURCES = forcecxxlink.cc
-
 # Generated source files
 CLEANFILES = protolist.c steglist.c unitgrplist.c \
 	stamp-protolist stamp-steglist stamp-unitgrplist
@@ -108,7 +102,7 @@ stamp-steglist: $(STEGANOGRAPHERS) Makefile src/genmodtable.sh
 
 unitgrplist.c: stamp-unitgrplist ;
 stamp-unitgrplist: $(UTGROUPS) Makefile src/test/genunitgrps.sh
-	$(AM_V_gs) $(GUNIT) unitgrplist.c $(filter %.c, $^)
+	$(AM_V_gs) $(GUNIT) unitgrplist.c $(filter %.cc, $^)
 	$(AM_V_at) touch stamp-unitgrplist
 
 # Testing

@@ -18,8 +18,10 @@
 static void *
 setup_proto_test_state(const struct testcase_t *tcase)
 {
-  struct proto_test_state *s = xzalloc(sizeof(struct proto_test_state));
-  const struct proto_test_args *args = tcase->setup_data;
+  struct proto_test_state *s =
+    (struct proto_test_state *)xzalloc(sizeof(struct proto_test_state));
+  const struct proto_test_args *args =
+    (struct proto_test_args *)tcase->setup_data;
   struct bufferevent *pairs[3][2];
   int i;
 
@@ -62,7 +64,7 @@ setup_proto_test_state(const struct testcase_t *tcase)
 static int
 cleanup_proto_test_state(const struct testcase_t *tcase, void *state)
 {
-  struct proto_test_state *s = state;
+  struct proto_test_state *s = (struct proto_test_state *)state;
 
   /* We don't want to trigger circuit_*_shutdown, so dissociate the circuits
      from their connections and close each separately. */

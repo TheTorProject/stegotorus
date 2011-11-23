@@ -37,7 +37,8 @@ cleanup_socks_state(const struct testcase_t *unused, void *data)
 static void *
 setup_socks_state(const struct testcase_t *unused)
 {
-  struct test_socks_state *s = xzalloc(sizeof(struct test_socks_state));
+  struct test_socks_state *s =
+    (struct test_socks_state *)xzalloc(sizeof(struct test_socks_state));
 
   s->dest = evbuffer_new();
   tt_assert(s->dest);

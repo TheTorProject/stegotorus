@@ -18,7 +18,7 @@ static void
 test_config(void *cases)
 {
   struct option_parsing_case *c;
-  for (c = cases; c->n_opts; c++) {
+  for (c = (struct option_parsing_case *)cases; c->n_opts; c++) {
     c->result = config_create(c->n_opts, c->opts);
     if (c->should_succeed)
       tt_ptr_op(c->result, !=, NULL);
@@ -42,7 +42,7 @@ static int
 cleanup_test_config(const struct testcase_t *tc, void *state)
 {
   struct option_parsing_case *c;
-  for (c = state; c->n_opts; c++)
+  for (c = (struct option_parsing_case *)state; c->n_opts; c++)
     if (c->result)
       config_free(c->result);
 
