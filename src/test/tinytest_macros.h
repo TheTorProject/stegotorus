@@ -31,10 +31,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Helpers for defining statement-like macros */
 #define TT_STMT_BEGIN do {
 #define TT_STMT_END } while(0)
@@ -193,9 +189,5 @@ extern "C" {
                           { _print = tt_base16_encode(_value, len); },  \
                           { free(_print); }                             \
                           );
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #endif

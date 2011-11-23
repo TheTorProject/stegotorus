@@ -5,10 +5,6 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
    This struct defines a "configuration" of the proxy.
    A configuration is a set of addresses to listen on, and what to do
@@ -226,9 +222,5 @@ extern const proto_vtable *const supported_protos[];
     PROTO_VTABLE_COMMON(name)                   \
     PROTO_VTABLE_##stegp(name)                  \
   } /* deliberate absence of semicolon */
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #endif

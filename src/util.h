@@ -34,10 +34,6 @@
 #define ssize_t _EVENT_ssize_t
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 struct bufferevent;
 struct evbuffer;
 struct evconnlistener;
@@ -255,9 +251,5 @@ void log_debug_cn(conn_t *conn,const char *format, ...) ATTR_PRINTF_2;
       log_abort("assertion failure at %s:%d: %s",       \
                 __FILE__, __LINE__, #expr);             \
   } while (0)
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #endif

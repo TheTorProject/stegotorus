@@ -7,10 +7,6 @@
 
 #include "tinytest_macros.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Test fixture shared by most protocol tests. */
 
 struct proto_test_state
@@ -55,9 +51,5 @@ struct proto_test_args
 extern const struct testgroup_t unittest_groups[];
 
 #define ALEN(x) (sizeof x/sizeof x[0])
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #endif

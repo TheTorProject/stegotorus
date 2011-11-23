@@ -7,10 +7,6 @@
 
 #include <event2/bufferevent.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
    This struct defines the state of one downstream socket-level
    connection.  Each protocol may extend this structure with
@@ -147,9 +143,5 @@ void circuit_disarm_axe_timer(circuit_t *ckt);
 void circuit_do_flush(circuit_t *ckt);
 
 unsigned long circuit_count(void);
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #endif

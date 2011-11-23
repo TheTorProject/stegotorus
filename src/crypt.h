@@ -5,10 +5,6 @@
 #ifndef CRYPT_H
 #define CRYPT_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define SHA256_LEN 32
 #define AES_BLOCK_LEN 16
 #define GCM_TAG_LEN 16
@@ -79,9 +75,5 @@ int random_int(unsigned int max);
  *  INT_MAX+1.
  */
 int random_range(unsigned int min, unsigned int max);
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #endif
