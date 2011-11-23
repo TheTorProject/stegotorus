@@ -75,17 +75,17 @@ test_crypt_aesgcm_enc(void *data)
     { 0, 0, 0, 0, 0, 0 }
   };
 
-  crypt_t *c;
+  encryptor *c;
   uint8_t obuf[144];
   int i;
 
   for (i = 0; testvecs[i].key; i++) {
-    c = crypt_new((const uint8_t *)testvecs[i].key, 16);
+    c = encryptor::create((const uint8_t *)testvecs[i].key, 16);
     tt_int_op(c, !=, 0);
-    crypt_encrypt(c, obuf,
-                  (const uint8_t *)testvecs[i].pt, testvecs[i].len,
-                  (const uint8_t *)testvecs[i].iv, 16);
-    crypt_free(c);
+    c->encrypt(obuf,
+               (const uint8_t *)testvecs[i].pt, testvecs[i].len,
+               (const uint8_t *)testvecs[i].iv, 16);
+    delete c;
     tt_mem_op(obuf + testvecs[i].len, ==, testvecs[i].tag, 16);
     tt_mem_op(obuf, ==, testvecs[i].ct, testvecs[i].len);
   }
@@ -158,31 +158,31 @@ test_crypt_aesgcm_good_dec(void *data)
     { 0, 0, 0, 0, 0 }
   };
 
-  crypt_t *c;
+  decryptor *c;
   uint8_t obuf[128];
   int i, rv;
 
   for (i = 0; testvecs[i].key; i++) {
-    c = crypt_new((const uint8_t *)testvecs[i].key, 16);
+    c = decryptor::create((const uint8_t *)testvecs[i].key, 16);
     tt_int_op(c, !=, 0);
 
-    rv = crypt_decrypt(c, obuf,
-                       (const uint8_t *)testvecs[i].ct, testvecs[i].len + 16,
-                       (const uint8_t *)testvecs[i].iv, 16);
+    rv = c->decrypt(obuf,
+                    (const uint8_t *)testvecs[i].ct, testvecs[i].len + 16,
+                    (const uint8_t *)testvecs[i].iv, 16);
     tt_int_op(rv, ==, 0);
     tt_mem_op(obuf, ==, testvecs[i].pt, testvecs[i].len);
 
-    crypt_decrypt_unchecked(c, obuf,
-                            (const uint8_t *)testvecs[i].ct, testvecs[i].len,
-                            (const uint8_t *)testvecs[i].iv, 16);
+    c->decrypt_unchecked(obuf,
+                         (const uint8_t *)testvecs[i].ct, testvecs[i].len,
+                         (const uint8_t *)testvecs[i].iv, 16);
     tt_mem_op(obuf, ==, testvecs[i].pt, testvecs[i].len);
 
-    crypt_free(c);
+    delete c;
   }
   c = 0;
 
  end:
-  if (c) crypt_free(c);
+  if (c) delete c;
 }
 
 static void
@@ -231,18 +231,18 @@ test_crypt_aesgcm_bad_dec(void *data)
     { 0, 0, 0, 0 }
   };
 
-  crypt_t *c;
+  decryptor *c;
   uint8_t obuf[128];
   int i, rv;
 
   for (i = 0; testvecs[i].key; i++) {
-    c = crypt_new((const uint8_t *)testvecs[i].key, 16);
+    c = decryptor::create((const uint8_t *)testvecs[i].key, 16);
     tt_int_op(c, !=, 0);
 
-    rv = crypt_decrypt(c, obuf,
-                       (const uint8_t *)testvecs[i].ct, testvecs[i].len + 16,
-                       (const uint8_t *)testvecs[i].iv, 16);
-    crypt_free(c);
+    rv = c->decrypt(obuf,
+                    (const uint8_t *)testvecs[i].ct, testvecs[i].len + 16,
+                    (const uint8_t *)testvecs[i].iv, 16);
+    delete c;
     tt_int_op(rv, ==, -1);
   }
 

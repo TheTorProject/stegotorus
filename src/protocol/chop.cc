@@ -86,8 +86,8 @@ typedef struct chop_circuit_t
   circuit_t super;
   chop_reassembly_elt reassembly_queue;
   unordered_set<conn_t *> *downstreams;
-  crypt_t *send_crypt;
-  crypt_t *recv_crypt;
+  encryptor *send_crypt;
+  decryptor *recv_crypt;
 
   uint64_t circuit_id;
   uint32_t send_offset;
@@ -196,9 +196,9 @@ chop_decrypt_header(chop_circuit_t *ckt,
 
   /* The full IV is the circuit ID plus packet ID *as it is on the
      wire*. */
-  crypt_decrypt_unchecked(ckt->recv_crypt, decoded_header,
-                          wire_header + 16, CHOP_WIRE_HDR_LEN - 16,
-                          wire_header, 16);
+  ckt->recv_crypt->decrypt_unchecked(decoded_header,
+                                     wire_header + 16, CHOP_WIRE_HDR_LEN - 16,
+                                     wire_header, 16);
 
   hdr->offset = ((((uint32_t)decoded_header[0]) << 24) +
                  (((uint32_t)decoded_header[1]) << 16) +
@@ -316,8 +316,8 @@ chop_send_block(conn_t *d,
     goto fail;
 
   p = (uint8_t *)v.iov_base;
-  crypt_encrypt(ckt->send_crypt,
-                p + 16, p + 16, length + CHOP_WIRE_HDR_LEN - 16, p, 16);
+  ckt->send_crypt->encrypt(p + 16, p + 16, length + CHOP_WIRE_HDR_LEN - 16,
+                           p, 16);
 
   if (evbuffer_commit_space(block, &v, 1))
     goto fail;
@@ -946,11 +946,11 @@ chop_circuit_create(config_t *cfg)
   ckt->downstreams = new unordered_set<conn_t *>;
 
   if (cfg->mode == LSN_SIMPLE_SERVER) {
-    ckt->send_crypt = crypt_new(s2c_key, 16);
-    ckt->recv_crypt = crypt_new(c2s_key, 16);
+    ckt->send_crypt = encryptor::create(s2c_key, 16);
+    ckt->recv_crypt = decryptor::create(c2s_key, 16);
   } else {
-    ckt->send_crypt = crypt_new(c2s_key, 16);
-    ckt->recv_crypt = crypt_new(s2c_key, 16);
+    ckt->send_crypt = encryptor::create(c2s_key, 16);
+    ckt->recv_crypt = decryptor::create(s2c_key, 16);
     while (!ckt->circuit_id)
       rng_bytes((uint8_t *)&ckt->circuit_id, sizeof(uint64_t));
   }
@@ -974,8 +974,8 @@ chop_circuit_free(circuit_t *c)
       conn_close(conn);
   }
   delete ckt->downstreams;
-  crypt_free(ckt->send_crypt);
-  crypt_free(ckt->recv_crypt);
+  delete ckt->send_crypt;
+  delete ckt->recv_crypt;
 
   queue = &ckt->reassembly_queue;
   for (q = p = queue->next; p != queue; p = q) {
@@ -1250,10 +1250,10 @@ chop_conn_recv(conn_t *s)
       return -1;
     }
 
-    if (crypt_decrypt(ckt->recv_crypt,
-                      decodebuf + 16, decodebuf + 16,
-                      hdr.length + CHOP_WIRE_HDR_LEN + GCM_TAG_LEN - 16,
-                      decodebuf, 16)) {
+    if (ckt->recv_crypt
+        ->decrypt(decodebuf + 16, decodebuf + 16,
+                  hdr.length + CHOP_WIRE_HDR_LEN + GCM_TAG_LEN - 16,
+                  decodebuf, 16)) {
       log_warn(s, "MAC verification failure");
       evbuffer_free(block);
       return -1;

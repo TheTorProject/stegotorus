@@ -20,81 +20,94 @@
   }                                                             \
   return rv /* deliberate absence of semicolon */
 
-// We don't know which way this will be used, so we need both
-// encryption and decryption contexts.
-struct crypt_t {
-  CryptoPP::GCM<CryptoPP::AES>::Encryption e;
-  CryptoPP::GCM<CryptoPP::AES>::Decryption d;
+struct encryptor_impl : encryptor
+{
+  CryptoPP::GCM<CryptoPP::AES>::Encryption ctx;
+  virtual void encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                       const uint8_t *nonce, size_t nlen);
+  virtual ~encryptor_impl();
 };
 
-crypt_t *
-crypt_new(const uint8_t *key, size_t keylen)
+struct decryptor_impl : decryptor
 {
-  // Crypto++ doesn't let us set a key without also setting an IV,
-  // even though we will always override the IV later.
-  static const uint8_t dummy_iv[16] = {};
+  CryptoPP::GCM<CryptoPP::AES>::Decryption ctx;
+  virtual int decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                      const uint8_t *nonce, size_t nlen);
+  virtual void decrypt_unchecked(uint8_t *out, const uint8_t *in, size_t inlen,
+                                 const uint8_t *nonce, size_t nlen);
+  virtual ~decryptor_impl();
+};
 
+// Crypto++ doesn't let us set a key without also setting an IV,
+// even though we will always override the IV later.
+static const uint8_t dummy_iv[16] = {};
+
+encryptor *
+encryptor::create(const uint8_t *key, size_t keylen)
+{
   try {
-    crypt_t *state = new crypt_t;
-
+    encryptor_impl *enc = new encryptor_impl;
     // sadly, these are not checkable at compile time
-    log_assert(state->e.DigestSize() == 16);
-    log_assert(state->d.DigestSize() == 16);
-    log_assert(!state->e.NeedsPrespecifiedDataLengths());
-    log_assert(!state->d.NeedsPrespecifiedDataLengths());
-
-    state->e.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
-    state->d.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
-    return state;
+    log_assert(enc->ctx.DigestSize() == 16);
+    log_assert(!enc->ctx.NeedsPrespecifiedDataLengths());
+    enc->ctx.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
+    return enc;
   }
   CATCH_ALL_EXCEPTIONS(0);
 }
 
-void
-crypt_encrypt(crypt_t *state,
-              uint8_t *out, const uint8_t *in, size_t inlen,
-              const uint8_t *nonce, size_t nlen)
+decryptor *
+decryptor::create(const uint8_t *key, size_t keylen)
 {
   try {
-    state->e.EncryptAndAuthenticate(out, out + inlen, 16,
-                                    nonce, nlen, 0, 0, in, inlen);
+    decryptor_impl *dec = new decryptor_impl;
+    // sadly, these are not checkable at compile time
+    log_assert(dec->ctx.DigestSize() == 16);
+    log_assert(!dec->ctx.NeedsPrespecifiedDataLengths());
+    dec->ctx.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
+    return dec;
+  }
+  CATCH_ALL_EXCEPTIONS(0);
+}
+
+encryptor::~encryptor() {}
+encryptor_impl::~encryptor_impl() {}
+decryptor::~decryptor() {}
+decryptor_impl::~decryptor_impl() {}
+
+void
+encryptor_impl::encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                        const uint8_t *nonce, size_t nlen)
+{
+  try {
+    this->ctx.EncryptAndAuthenticate(out, out + inlen, 16,
+                                     nonce, nlen, 0, 0, in, inlen);
   }
   CATCH_ALL_EXCEPTIONS();
 }
 
 int
-crypt_decrypt(crypt_t *state,
-              uint8_t *out, const uint8_t *in, size_t inlen,
-              const uint8_t *nonce, size_t nlen)
+decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                        const uint8_t *nonce, size_t nlen)
 {
   try {
-    return state->d.DecryptAndVerify(out,
-                                     in + inlen - 16, 16,
-                                     nonce, nlen, 0, 0, in, inlen - 16)
+    return this->ctx.DecryptAndVerify(out,
+                                      in + inlen - 16, 16,
+                                      nonce, nlen, 0, 0, in, inlen - 16)
       ? 0 : -1; // caller will log decryption failure
   }
   CATCH_ALL_EXCEPTIONS(-1);
 }
 
 void
-crypt_decrypt_unchecked(crypt_t *state,
-                        uint8_t *out, const uint8_t *in, size_t inlen,
-                        const uint8_t *nonce, size_t nlen)
+decryptor_impl::decrypt_unchecked(uint8_t *out,
+                                  const uint8_t *in, size_t inlen,
+                                  const uint8_t *nonce, size_t nlen)
 {
   try {
     // there is no convenience function for this
-    state->d.Resynchronize(nonce, nlen);
-    state->d.ProcessData(out, in, inlen);
+    this->ctx.Resynchronize(nonce, nlen);
+    this->ctx.ProcessData(out, in, inlen);
   }
   CATCH_ALL_EXCEPTIONS();
-}
-
-
-/**
-   Deallocates 'c'.
-*/
-void
-crypt_free(crypt_t *c)
-{
-  delete c;
 }
