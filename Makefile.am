@@ -54,7 +54,7 @@ unittests_SOURCES = \
 
 nodist_unittests_SOURCES = unitgrplist.c
 
-tltester_SOURCES = src/test/tltester.c
+tltester_SOURCES = src/test/tltester.cc
 
 noinst_HEADERS = \
 	src/connections.h \
@@ -83,7 +83,6 @@ EXTRA_DIST = doc \
 # a C++ source file, every program that has it in LDADD must be
 # linked with the C++ compiler.  Persuade it to do so anyway.
 # The file forcecxxlink.cc need not, and does not, exist.
-nodist_EXTRA_tltester_SOURCES  = forcecxxlink.cc
 nodist_EXTRA_unittests_SOURCES = forcecxxlink.cc
 
 # Generated source files
