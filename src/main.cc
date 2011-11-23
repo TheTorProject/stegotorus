@@ -163,7 +163,7 @@ stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
 static void ATTR_NORETURN
 usage(void)
 {
-  const proto_vtable *const *p;
+  const proto_module *const *p;
 
   fputs("usage: stegotorus protocol_name [protocol_args] protocol_options "
         "protocol_name ...\n"

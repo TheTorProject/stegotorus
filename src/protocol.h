@@ -14,7 +14,7 @@
  */
 struct config_t
 {
-  const struct proto_vtable *vtable;
+  const struct proto_module *vtable;
   struct event_base         *base;
   enum listen_mode           mode;
   /* stopgap, see create_outbound_connections_socks */
@@ -33,11 +33,10 @@ struct evutil_addrinfo *config_get_target_addrs(config_t *cfg, size_t n);
    of them are methods on the same object in the C++ sense.
    See connections.h for the definitions of 'conn_t' and 'circuit_t'.
 
-   A filled-in, statically allocated proto_vtable object is the
-   principal interface between each individual protocol and generic
-   code.  At present there is a static list of these objects in protocol.c.
+   A filled-in, statically allocated proto_module object is the
+   principal interface between each individual protocol and generic code.
  */
-struct proto_vtable
+struct proto_module
 {
   /** The short name of this protocol. Must be a valid C identifier. */
   const char *name;
@@ -136,7 +135,7 @@ struct proto_vtable
   void (*conn_transmit_soon)(conn_t *conn, unsigned long timeout);
 };
 
-extern const proto_vtable *const supported_protos[];
+extern const proto_module *const supported_protos[];
 
 /** Use these macros to define protocol modules; they ensure all the
     methods are in the correct order in the vtable, enforce a
@@ -218,7 +217,7 @@ extern const proto_vtable *const supported_protos[];
   PROTO_FWD_COMMON(name)                        \
   PROTO_FWD_##stegp(name)                       \
                                                 \
-  extern const proto_vtable p_##name##_vtable = { \
+  extern const proto_module p_mod_##name = {    \
     PROTO_VTABLE_COMMON(name)                   \
     PROTO_VTABLE_##stegp(name)                  \
   } /* deliberate absence of semicolon */

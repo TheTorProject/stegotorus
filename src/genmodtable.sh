@@ -20,18 +20,18 @@ printf \
  * This file defines a table of all supported %s modules.
  */
 
-typedef struct %s_vtable %s_vtable;
+struct %s_module;
 
 ' $(basename "$0") "$ttag" "$ttag" "$ttag"
 
 for m in $modules; do
-    printf 'extern const %s_vtable %s_%s_vtable;\n' "$ttag" "$vtag" "$m"
+    printf 'extern const %s_module %s_mod_%s;\n' "$ttag" "$vtag" "$m"
 done
 
-printf '\nextern const %s_vtable *const supported_%ss[] =\n{\n' "$ttag" "$ttag"
+printf '\nextern const %s_module *const supported_%ss[] =\n{\n' "$ttag" "$ttag"
 
 for m in $modules; do
-    printf '  &%s_%s_vtable,\n' "$vtag" "$m"
+    printf '  &%s_mod_%s,\n' "$vtag" "$m"
 done
 
 printf '  0\n};\n'

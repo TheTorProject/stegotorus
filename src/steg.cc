@@ -10,9 +10,9 @@
 int
 steg_is_supported(const char *name)
 {
-  const steg_vtable *const *s;
+  const steg_module *const *s;
   for (s = supported_stegs; *s; s++)
-    if (!strcmp(name, (*s)->name))
+    if (!strcmp(name, (**s).name))
       return 1;
   return 0;
 }
@@ -21,10 +21,10 @@ steg_is_supported(const char *name)
 steg_t *
 steg_new(const char *name)
 {
-  const steg_vtable *const *s;
+  const steg_module *const *s;
   for (s = supported_stegs; *s; s++)
-    if (!strcmp(name, (*s)->name))
-      return (*s)->new_(NULL, /*is_clientside=*/1);
+    if (!strcmp(name, (**s).name))
+      return (**s).new_(/*is_clientside=*/true);
   return NULL;
 }
 
@@ -32,36 +32,13 @@ steg_new(const char *name)
 steg_t *
 steg_detect(conn_t *conn)
 {
-  const steg_vtable *const *s;
+  const steg_module *const *s;
   for (s = supported_stegs; *s; s++)
-    if ((*s)->detect(conn))
-      return (*s)->new_(NULL, /*is_clientside=*/0);
+    if ((**s).detect(conn))
+      return (**s).new_(/*is_clientside=*/false);
   return NULL;
 }
 
-/* Vtable shims. */
-
-void
-steg_del(steg_t *state)
-{
-  if (!state) return;
-  state->vtable->del(state);
-}
-
-size_t
-steg_transmit_room(steg_t *state, conn_t *conn)
-{
-  return state->vtable->transmit_room(state, conn);
-}
-
-int
-steg_transmit(steg_t *state, struct evbuffer *source, conn_t *conn)
-{
-  return state->vtable->transmit(state, source, conn);
-}
-
-int
-steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest)
-{
-  return state->vtable->receive(state, conn, dest);
-}
+/* Define this here rather than in the class definition so that the
+   vtable will be emitted in only one place. */
+steg_t::~steg_t() {}

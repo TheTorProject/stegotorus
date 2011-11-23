@@ -107,9 +107,6 @@ struct rng_t;
 struct socks_state_t;
 struct steg_t;
 
-struct proto_vtable;
-struct steg_vtable;
-
 enum listen_mode {
   LSN_SIMPLE_CLIENT = 1,
   LSN_SIMPLE_SERVER,

@@ -238,9 +238,9 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
     if (conn->steg) {
       /* Find the connections whose transmit rooms are closest to the
          desired transmission length from both directions. */
-      size_t room = steg_transmit_room(conn->steg, c);
+      size_t room = conn->steg->transmit_room(c);
       log_debug(c, "offers %lu bytes (%s)", (unsigned long)room,
-                conn->steg->vtable->name);
+                conn->steg->name);
 
       if (room > CHOP_MAX_DATA)
         room = CHOP_MAX_DATA;
@@ -321,7 +321,7 @@ chop_send_block(conn_t *d,
   if (evbuffer_commit_space(block, &v, 1))
     goto fail;
 
-  if (steg_transmit(dest->steg, block, d))
+  if (dest->steg->transmit(block, d))
     goto fail_committed;
 
   if (evbuffer_drain(source, length))
@@ -510,7 +510,7 @@ must_transmit_timer_cb(evutil_socket_t fd, short what, void *arg)
     log_warn(cn, "must transmit, but no steg module available");
     return;
   }
-  room = steg_transmit_room(conn->steg, cn);
+  room = conn->steg->transmit_room(cn);
   if (!room) {
     log_warn(cn, "must transmit, but no transmit room");
     return;
@@ -882,7 +882,7 @@ chop_config_create(int n_options, const char *const *options)
 {
   chop_config_t *cfg = (chop_config_t *)xzalloc(sizeof(chop_config_t));
   config_t *c = upcast_config(cfg);
-  c->vtable = &p_chop_vtable;
+  c->vtable = &p_mod_chop;
   c->ignore_socks_destination = 1;
   cfg->circuits = new chop_circuit_table;
   cfg->down_addresses = new vector<struct evutil_addrinfo *>;
@@ -1066,7 +1066,7 @@ chop_conn_free(conn_t *c)
 {
   chop_conn_t *conn = downcast_conn(c);
   if (conn->steg)
-    steg_del(conn->steg);
+    delete conn->steg;
   if (conn->must_transmit_timer)
     event_free(conn->must_transmit_timer);
   evbuffer_free(conn->recv_pending);
@@ -1173,11 +1173,11 @@ chop_conn_recv(conn_t *s)
       log_debug(s, "no recognized steg pattern detected");
       return -1;
     } else {
-      log_debug(s, "detected steg pattern %s", source->steg->vtable->name);
+      log_debug(s, "detected steg pattern %s", source->steg->name);
     }
   }
 
-  if (steg_receive(source->steg, s, source->recv_pending))
+  if (source->steg->receive(s, source->recv_pending))
     return -1;
 
   if (!s->circuit) {

@@ -87,7 +87,7 @@ x_null_config_create(int n_options, const char *const *options)
 {
   x_null_config_t *cfg = (x_null_config_t *)xzalloc(sizeof(x_null_config_t));
   config_t *c = upcast_config(cfg);
-  c->vtable = &p_x_null_vtable;
+  c->vtable = &p_mod_x_null;
 
   if (parse_and_set_options(n_options, options, c) == 0)
     return c;
