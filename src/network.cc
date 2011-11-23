@@ -79,7 +79,7 @@ listener_open(struct event_base *base, config_t *cfg)
     addrs = config_get_listen_addrs(cfg, i);
     if (!addrs) break;
     do {
-      lsn = xzalloc(sizeof(listener_t));
+      lsn = (listener_t *)xzalloc(sizeof(listener_t));
       lsn->cfg = cfg;
       lsn->address = printable_address(addrs->ai_addr, addrs->ai_addrlen);
       lsn->listener =
@@ -142,7 +142,7 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
                    struct sockaddr *peeraddr, int peerlen,
                    void *closure)
 {
-  listener_t *lsn = closure;
+  listener_t *lsn = (listener_t *)closure;
   char *peername = printable_address(peeraddr, peerlen);
   struct bufferevent *buf = NULL;
   circuit_t *ckt = NULL;
@@ -194,7 +194,7 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
                    struct sockaddr *peeraddr, int peerlen,
                    void *closure)
 {
-  listener_t *lsn = closure;
+  listener_t *lsn = (listener_t *)closure;
   char *peername = printable_address(peeraddr, peerlen);
   struct bufferevent *buf;
   conn_t *conn;
@@ -246,7 +246,7 @@ server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
 static void
 socks_read_cb(struct bufferevent *bev, void *arg)
 {
-  circuit_t *ckt = arg;
+  circuit_t *ckt = (circuit_t *)arg;
   socks_state_t *socks;
   enum socks_ret socks_ret;
   log_assert(ckt->cfg->mode == LSN_SOCKS_CLIENT);
@@ -294,7 +294,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
 static void
 upstream_read_cb(struct bufferevent *bev, void *arg)
 {
-  circuit_t *ckt = arg;
+  circuit_t *ckt = (circuit_t *)arg;
   log_debug_ckt(ckt, "%lu bytes available",
                 (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
@@ -310,7 +310,7 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
 static void
 downstream_read_cb(struct bufferevent *bev, void *arg)
 {
-  conn_t *down = arg;
+  conn_t *down = (conn_t *)arg;
 
   log_debug_cn(down, "%lu bytes available",
                (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
@@ -329,7 +329,7 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
 static void
 upstream_event_cb(struct bufferevent *bev, short what, void *arg)
 {
-  circuit_t *ckt = arg;
+  circuit_t *ckt = (circuit_t *)arg;
 
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
     if (what & BEV_EVENT_ERROR)
@@ -373,7 +373,7 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
 static void
 downstream_event_cb(struct bufferevent *bev, short what, void *arg)
 {
-  conn_t *conn = arg;
+  conn_t *conn = (conn_t *)arg;
 
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
     if (what & BEV_EVENT_ERROR)
@@ -416,7 +416,7 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
 static void
 upstream_flush_cb(struct bufferevent *bev, void *arg)
 {
-  circuit_t *ckt = arg;
+  circuit_t *ckt = (circuit_t *)arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
   log_debug_ckt(ckt, "%lu bytes still to transmit%s%s",
                 (unsigned long)remain,
@@ -441,7 +441,7 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
 static void
 downstream_flush_cb(struct bufferevent *bev, void *arg)
 {
-  conn_t *conn = arg;
+  conn_t *conn = (conn_t *)arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
   log_debug_cn(conn, "%lu bytes still to transmit%s%s",
                (unsigned long)remain,
@@ -466,7 +466,7 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 static void
 upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 {
-  circuit_t *ckt = arg;
+  circuit_t *ckt = (circuit_t *)arg;
   log_debug_ckt(ckt, "what=%04hx", what);
 
   /* Upon successful connection, enable traffic on both sides of the
@@ -496,7 +496,7 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 static void
 downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 {
-  conn_t *conn = arg;
+  conn_t *conn = (conn_t *)arg;
   log_debug_cn(conn, "what=%04hx", what);
 
   /* Upon successful connection, enable traffic on both sides of the
@@ -537,7 +537,7 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 static void
 downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
 {
-  conn_t *conn = arg;
+  conn_t *conn = (conn_t *)arg;
   circuit_t *ckt = conn->circuit;
   socks_state_t *socks;
 

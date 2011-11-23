@@ -222,7 +222,7 @@ extern const proto_vtable *const supported_protos[];
   PROTO_FWD_COMMON(name)                        \
   PROTO_FWD_##stegp(name)                       \
                                                 \
-  const proto_vtable p_##name##_vtable = {      \
+  extern const proto_vtable p_##name##_vtable = { \
     PROTO_VTABLE_COMMON(name)                   \
     PROTO_VTABLE_##stegp(name)                  \
   } /* deliberate absence of semicolon */

@@ -147,7 +147,7 @@ stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
 
   log_debug("read %lu bytes from stdin", (unsigned long)nread);
   if (nread == 0) {
-    struct event *ev = arg;
+    struct event *ev = (struct event *)arg;
     event_del(ev);
     start_shutdown(0, "stdin closing");
   }
@@ -352,7 +352,7 @@ main(int argc, const char *const *argv)
        (S_ISCHR(st.st_mode) && isatty(STDIN_FILENO)))) {
     /* We do this this way because we want to make the event itself the
        callback argument. */
-    stdin_eof = xmalloc(event_get_struct_event_size());
+    stdin_eof = (struct event *)xmalloc(event_get_struct_event_size());
     evutil_make_socket_nonblocking(STDIN_FILENO);
     event_assign(stdin_eof, the_event_base,
                  STDIN_FILENO, EV_READ|EV_PERSIST,

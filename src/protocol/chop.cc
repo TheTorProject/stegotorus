@@ -14,8 +14,6 @@
 #include "protocol.h"
 #include "steg.h"
 
-#include <stdbool.h>
-#include <stdint.h>
 #include <event2/event.h>
 #include <event2/buffer.h>
 
@@ -47,10 +45,7 @@ typedef struct chop_circuit_entry_t
   circuit_t *circuit;
 } chop_circuit_entry_t;
 
-typedef struct chop_circuit_table
-{
-  HT_HEAD(chop_circuit_table_impl, chop_circuit_entry_t) head;
-} chop_circuit_table;
+HT_HEAD(chop_circuit_table, chop_circuit_entry_t);
 
 /* This is "hash6432shift" from
    http://www.concentric.net/~Ttwang/tech/inthash.htm . */
@@ -73,12 +68,12 @@ chop_circuit_id_eq(const chop_circuit_entry_t *a, const chop_circuit_entry_t *b)
   return a->circuit_id == b->circuit_id;
 }
 
-HT_PROTOTYPE(chop_circuit_table_impl,
+HT_PROTOTYPE(chop_circuit_table,
              chop_circuit_entry_t,
              node,
              chop_circuit_id_hash,
              chop_circuit_id_eq)
-HT_GENERATE(chop_circuit_table_impl,
+HT_GENERATE(chop_circuit_table,
             chop_circuit_entry_t,
             node,
             chop_circuit_id_hash,
@@ -346,13 +341,13 @@ chop_send_block(conn_t *d,
   hdr.length = length;
   hdr.flags = flags;
   random_bytes(hdr.pkt_iv, 8);
-  chop_write_header(v.iov_base, &hdr);
+  chop_write_header((uint8_t*)v.iov_base, &hdr);
 
   if (evbuffer_copyout(source, (uint8_t *)v.iov_base + CHOP_WIRE_HDR_LEN,
                        length) != length)
     goto fail;
 
-  p = v.iov_base;
+  p = (uint8_t *)v.iov_base;
   crypt_encrypt(ckt->send_crypt,
                 p + 16, p + 16, length + CHOP_WIRE_HDR_LEN - 16, p, 16);
 
@@ -537,7 +532,7 @@ chop_send_chaff(circuit_t *c)
 static void
 must_transmit_timer_cb(evutil_socket_t fd, short what, void *arg)
 {
-  conn_t *cn = arg;
+  conn_t *cn = (conn_t *)arg;
   chop_conn_t *conn = downcast_conn(cn);
   size_t room;
 
@@ -672,7 +667,7 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
     return -1;
   }
 
-  q = xzalloc(sizeof(chop_reassembly_elt));
+  q = (chop_reassembly_elt *)xzalloc(sizeof(chop_reassembly_elt));
   q->data = block;
   q->offset = hdr->offset;
   q->length = hdr->length;
@@ -801,7 +796,7 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
 
   log_assert(c->mode == LSN_SIMPLE_SERVER);
   in.circuit_id = circuit_id;
-  out = HT_FIND(chop_circuit_table_impl, &cfg->circuits.head, &in);
+  out = HT_FIND(chop_circuit_table, &cfg->circuits, &in);
   if (out) {
     if (!out->circuit) {
       log_debug_cn(conn, "stale circuit");
@@ -809,7 +804,7 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
     }
     log_debug_cn(conn, "found circuit to %s", out->circuit->up_peer);
   } else {
-    out = xzalloc(sizeof(chop_circuit_entry_t));
+    out = (chop_circuit_entry_t *)xzalloc(sizeof(chop_circuit_entry_t));
     out->circuit = circuit_create(c);
     if (!out->circuit) {
       free(out);
@@ -826,7 +821,7 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
                  out->circuit->up_peer);
     out->circuit_id = circuit_id;
     downcast_circuit(out->circuit)->circuit_id = circuit_id;
-    HT_INSERT(chop_circuit_table_impl, &cfg->circuits.head, out);
+    HT_INSERT(chop_circuit_table, &cfg->circuits, out);
   }
 
   circuit_add_downstream(out->circuit, conn);
@@ -896,7 +891,7 @@ static void
 chop_config_free(config_t *c)
 {
   chop_config_t *cfg = downcast_config(c);
-  chop_circuit_entry_t **ent, **next, *this;
+  chop_circuit_entry_t **ent, **next, *cur;
 
   if (cfg->up_address)
     evutil_freeaddrinfo(cfg->up_address);
@@ -910,15 +905,15 @@ chop_config_free(config_t *c)
   if (cfg->steg_targets)
     smartlist_free(cfg->steg_targets);
 
-  for (ent = HT_START(chop_circuit_table_impl, &cfg->circuits.head);
+  for (ent = HT_START(chop_circuit_table, &cfg->circuits);
        ent; ent = next) {
-    this = *ent;
-    next = HT_NEXT_RMV(chop_circuit_table_impl, &cfg->circuits.head, ent);
-    if (this->circuit)
-      circuit_close(this->circuit);
-    free(this);
+    cur = *ent;
+    next = HT_NEXT_RMV(chop_circuit_table, &cfg->circuits, ent);
+    if (cur->circuit)
+      circuit_close(cur->circuit);
+    free(cur);
   }
-  HT_CLEAR(chop_circuit_table_impl, &cfg->circuits.head);
+  HT_CLEAR(chop_circuit_table, &cfg->circuits);
 
   free(cfg);
 }
@@ -926,11 +921,11 @@ chop_config_free(config_t *c)
 static config_t *
 chop_config_create(int n_options, const char *const *options)
 {
-  chop_config_t *cfg = xzalloc(sizeof(chop_config_t));
+  chop_config_t *cfg = (chop_config_t *)xzalloc(sizeof(chop_config_t));
   config_t *c = upcast_config(cfg);
   c->vtable = &p_chop_vtable;
   c->ignore_socks_destination = 1;
-  HT_INIT(chop_circuit_table_impl, &cfg->circuits.head);
+  HT_INIT(chop_circuit_table, &cfg->circuits);
   cfg->down_addresses = smartlist_create();
 
 
@@ -959,7 +954,7 @@ chop_config_get_listen_addrs(config_t *c, size_t n)
   chop_config_t *cfg = downcast_config(c);
   if (c->mode == LSN_SIMPLE_SERVER) {
     if (n < (size_t)smartlist_len(cfg->down_addresses))
-      return smartlist_get(cfg->down_addresses, n);
+      return (struct evutil_addrinfo *)smartlist_get(cfg->down_addresses, n);
   } else {
     if (n == 0)
       return cfg->up_address;
@@ -976,7 +971,7 @@ chop_config_get_target_addrs(config_t *c, size_t n)
       return cfg->up_address;
   } else {
     if (n < (size_t)smartlist_len(cfg->down_addresses))
-      return smartlist_get(cfg->down_addresses, n);
+      return (struct evutil_addrinfo *)smartlist_get(cfg->down_addresses, n);
   }
   return NULL;
 }
@@ -984,7 +979,7 @@ chop_config_get_target_addrs(config_t *c, size_t n)
 static circuit_t *
 chop_circuit_create(config_t *cfg)
 {
-  chop_circuit_t *ckt = xzalloc(sizeof(chop_circuit_t));
+  chop_circuit_t *ckt = (chop_circuit_t *)xzalloc(sizeof(chop_circuit_t));
   circuit_t *c = upcast_circuit(ckt);
   c->cfg = cfg;
   ckt->reassembly_queue.next = &ckt->reassembly_queue;
@@ -1036,7 +1031,7 @@ chop_circuit_free(circuit_t *c)
        right after we close it (same deal as the TIME_WAIT state in TCP). */
     chop_config_t *cfg = downcast_config(c->cfg);
     in.circuit_id = ckt->circuit_id;
-    out = HT_FIND(chop_circuit_table_impl, &cfg->circuits.head, &in);
+    out = HT_FIND(chop_circuit_table, &cfg->circuits, &in);
     if (out) {
       log_assert(out->circuit == c);
       out->circuit = NULL;
@@ -1093,13 +1088,13 @@ static conn_t *
 chop_conn_create(config_t *c)
 {
   chop_config_t *cfg = downcast_config(c);
-  chop_conn_t *conn = xzalloc(sizeof(chop_conn_t));
+  chop_conn_t *conn = (chop_conn_t *)xzalloc(sizeof(chop_conn_t));
   conn_t *cn = upcast_conn(conn);
   cn->cfg = c;
   if (c->mode != LSN_SIMPLE_SERVER) {
     /* XXX currently uses steg target 0 for all connections.
        Need protocol-specific listener state to fix this. */
-    conn->steg = steg_new(smartlist_get(cfg->steg_targets, 0));
+    conn->steg = steg_new((const char *)smartlist_get(cfg->steg_targets, 0));
     if (!conn->steg) {
       free(conn);
       return 0;

@@ -7,8 +7,10 @@
 
 #include "config.h"
 
+#define __STDC_LIMIT_MACROS
 #include <limits.h>
 #include <stdarg.h> /* va_list */
+#include <stdbool.h> /* bool, in C */
 #include <stddef.h> /* size_t, ptrdiff_t, offsetof, NULL */
 #include <stdint.h> /* intN_t, uintN_t */
 #include <stdio.h>
@@ -162,7 +164,11 @@ void log_close(void);
     these functions: generic, circuit-related, and
     connection-related. */
 
-#if __STDC_VERSION__ >= 199901L || __GNUC__ >= 4
+/* Note: we are using the C99/C++11 syntax for variadic macros, but
+   nonetheless we are only doing them if we know we have GCC, because
+   to do otherwise is too much tsuris with the predefined macros.
+   Maybe there should be an autoconf test. */
+#if  __GNUC__ >= 3
 
 /** Fatal errors: the program cannot continue and will exit. */
 void log_abort(const char *fn, const char *format, ...)

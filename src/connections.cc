@@ -201,7 +201,7 @@ conn_transmit_soon(conn_t *conn, unsigned long timeout)
 static void
 flush_timer_cb(evutil_socket_t fd, short what, void *arg)
 {
-  circuit_t *ckt = arg;
+  circuit_t *ckt = (circuit_t *)arg;
   log_debug_ckt(ckt, "flush timer expired, %lu bytes available",
                 (unsigned long)
                 evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
@@ -215,7 +215,7 @@ flush_timer_cb(evutil_socket_t fd, short what, void *arg)
 static void
 axe_timer_cb(evutil_socket_t fd, short what, void *arg)
 {
-  circuit_t *ckt = arg;
+  circuit_t *ckt = (circuit_t *)arg;
   log_warn_ckt(ckt, "timeout waiting for new connections");
 
   if (ckt->connected &&

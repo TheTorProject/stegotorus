@@ -57,7 +57,7 @@ struct steg_vtable
 
   /** Prepare to handle new connections.
       More arguments may be added to this method later. */
-  steg_t *(*new)(rng_t *rng, unsigned int is_clientside);
+  steg_t *(*new_)(rng_t *rng, unsigned int is_clientside);
 
   /** Destroy a steg_t object created by this module. */
   void (*del)(steg_t *state);
@@ -114,7 +114,7 @@ int steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
   static int name##_receive(steg_t *, conn_t *, struct evbuffer *);     \
                                                                         \
   /* vtable */                                                          \
-  const steg_vtable s_##name##_vtable = {                               \
+  extern const steg_vtable s_##name##_vtable = {                        \
     #name, csm, scm, mcci, mci,                                         \
     name##_detect, name##_new, name##_del,                              \
     name##_transmit_room, name##_transmit,                              \
@@ -122,7 +122,7 @@ int steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
   } /* deliberate absence of semicolon */
 
 #define STEG_NEW(name, var_, rng_, is_clientside_)      \
-  name##_steg_t *var_ = xzalloc(sizeof(name##_steg_t)); \
+  name##_steg_t *var_ = (name##_steg_t *)xzalloc(sizeof(name##_steg_t)); \
   var_->super.vtable = &s_##name##_vtable;              \
   var_->super.rng = rng_;                               \
   var_->super.is_clientside = is_clientside_;           \

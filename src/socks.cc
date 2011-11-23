@@ -38,7 +38,7 @@
 socks_state_t *
 socks_state_new(void)
 {
-  socks_state_t *state = xzalloc(sizeof(socks_state_t));
+  socks_state_t *state = (socks_state_t *)xzalloc(sizeof(socks_state_t));
   state->state = ST_WAITING;
   return state;
 }

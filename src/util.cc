@@ -83,7 +83,7 @@ xmemdup(const void *ptr, size_t size)
 char *
 xstrdup(const char *s)
 {
-  return xmemdup(s, strlen(s) + 1);
+  return (char *)xmemdup(s, strlen(s) + 1);
 }
 
 char *
@@ -96,7 +96,7 @@ xstrndup(const char *s, size_t maxsize)
     if (s[size] == '\0')
       break;
 
-  copy = xmalloc(size + 1);
+  copy = (char *)xmalloc(size + 1);
   memcpy(copy, s, size);
   copy[size] = '\0';
   return copy;
@@ -315,14 +315,14 @@ xgetline(char **lineptr, size_t *nptr, FILE *stream)
 
   if (!line) {
     /* start with an 80-character buffer */
-    line = xmalloc(80);
+    line = (char *)xmalloc(80);
     asize = 80;
   }
 
   while ((c = getc(stream)) != EOF) {
     if (linelen >= asize) {
       asize *= 2;
-      line = xrealloc(line, asize);
+      line = (char *)xrealloc(line, asize);
     }
 
     line[linelen++] = c;
@@ -339,7 +339,7 @@ xgetline(char **lineptr, size_t *nptr, FILE *stream)
 
   if (linelen >= asize) {
     asize++;
-    line = xrealloc(line, asize);
+    line = (char *)xrealloc(line, asize);
   }
   line[linelen] = '\0';
   *lineptr = line;
@@ -608,7 +608,7 @@ logpfx_cn(int severity, const char *fn, conn_t *conn)
     va_end(ap_);                                \
   } while (0)
 
-#if __STDC_VERSION__ >= 199901L
+#if __GNUC__ >= 3
 #define FNARG const char *fn,
 #define FN fn
 #else

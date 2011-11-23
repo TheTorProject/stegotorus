@@ -221,7 +221,7 @@ char *smartlist_join_strings2(smartlist_t *sl, const char *join,
     type var;                                                   \
     for (var ## _sl_idx = 0; var ## _sl_idx < var ## _sl_len;   \
          ++var ## _sl_idx) {                                    \
-      var = (sl)->list[var ## _sl_idx];
+      var = (type) (sl)->list[var ## _sl_idx];
 
 #define SMARTLIST_FOREACH_END(var)              \
     var = NULL;                                 \
@@ -553,7 +553,7 @@ bitarray_init_zero(unsigned int n_bits)
 {
   /* round up to the next int. */
   size_t sz = (n_bits+BITARRAY_MASK) >> BITARRAY_SHIFT;
-  return xzalloc(sz*sizeof(unsigned int));
+  return (bitarray_t *)xzalloc(sz*sizeof(unsigned int));
 }
 /** Expand <b>ba</b> from holding <b>n_bits_old</b> to <b>n_bits_new</b>,
  * clearing all new bits.  Returns a possibly changed pointer to the
@@ -567,7 +567,7 @@ bitarray_expand(bitarray_t *ba,
   char *ptr;
   if (sz_new <= sz_old)
     return ba;
-  ptr = xrealloc(ba, sz_new*sizeof(unsigned int));
+  ptr = (char *)xrealloc(ba, sz_new*sizeof(unsigned int));
   /* This memset does nothing to the older excess bytes.  But they were
    * already set to 0 by bitarry_init_zero. */
   memset(ptr+sz_old*sizeof(unsigned int), 0,

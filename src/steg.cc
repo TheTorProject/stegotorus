@@ -24,7 +24,7 @@ steg_new(const char *name)
   const steg_vtable *const *s;
   for (s = supported_stegs; *s; s++)
     if (!strcmp(name, (*s)->name))
-      return (*s)->new(NULL, /*is_clientside=*/1);
+      return (*s)->new_(NULL, /*is_clientside=*/1);
   return NULL;
 }
 
@@ -35,7 +35,7 @@ steg_detect(conn_t *conn)
   const steg_vtable *const *s;
   for (s = supported_stegs; *s; s++)
     if ((*s)->detect(conn))
-      return (*s)->new(NULL, /*is_clientside=*/0);
+      return (*s)->new_(NULL, /*is_clientside=*/0);
   return NULL;
 }
 

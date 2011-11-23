@@ -44,10 +44,6 @@ static const char http_response_1[] =
   "Connection: close\r\n"
   "Content-Type: application/octet-stream\r\n"
   "Content-Length: ";
-static const char http_response_2[] =
-  "%lu\r\n"
-  "\r\n";
-
 
 static steg_t *
 x_http_new(rng_t *rng, unsigned int is_clientside)
@@ -148,7 +144,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     }
 
     nv = evbuffer_peek(source, slen, NULL, NULL, 0);
-    iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
+    iv = (struct evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
     if (evbuffer_peek(source, slen, NULL, iv, nv) != nv) {
       evbuffer_free(scratch);
       free(iv);
@@ -156,7 +152,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     }
 
     for (i = 0; i < nv; i++) {
-      const uint8_t *p = iv[i].iov_base;
+      const uint8_t *p = (const uint8_t *)iv[i].iov_base;
       const uint8_t *limit = p + iv[i].iov_len;
       char hex[2], c;
       while (p < limit) {
@@ -191,7 +187,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
        and then splat the data we were given. Binary is OK.  */
     if (evbuffer_add(dest, http_response_1, sizeof http_response_1-1))
         return -1;
-    if (evbuffer_add_printf(dest, http_response_2,
+    if (evbuffer_add_printf(dest, "%lu\r\n\r\n",
                             (unsigned long)evbuffer_get_length(source)) == -1)
       return -1;
     if (evbuffer_add_buffer(dest, source))

@@ -315,7 +315,7 @@ ht_string_hash(const char *s)
       new_load_limit = (unsigned)(load*new_len);                        \
     } while (new_load_limit <= size &&                                  \
              prime_idx < (int)name##_N_PRIMES);                         \
-    if ((new_table = mallocfn(new_len*sizeof(struct type*)))) {         \
+    if ((new_table = (struct type **)mallocfn(new_len*sizeof(struct type*)))) { \
       unsigned b;                                                       \
       memset(new_table, 0, new_len*sizeof(struct type*));               \
       for (b = 0; b < head->hth_table_length; ++b) {                    \
@@ -335,7 +335,7 @@ ht_string_hash(const char *s)
       head->hth_table = new_table;                                      \
     } else {                                                            \
       unsigned b, b2;                                                   \
-      new_table = reallocfn(head->hth_table, new_len*sizeof(struct type*)); \
+      new_table = (struct type **)reallocfn(head->hth_table, new_len*sizeof(struct type*)); \
       if (!new_table) return -1;                                        \
       memset(new_table + head->hth_table_length, 0,                     \
              (new_len - head->hth_table_length)*sizeof(struct type*));  \

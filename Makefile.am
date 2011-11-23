@@ -20,27 +20,27 @@ noinst_PROGRAMS  = unittests tltester
 bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \
-	src/protocol/chop.c \
-	src/protocol/x_null.c
+	src/protocol/chop.cc \
+	src/protocol/x_null.cc
 
 STEGANOGRAPHERS = \
-	src/steg/x_http.c
+	src/steg/x_http.cc
 
 libstegotorus_a_SOURCES = \
-	src/connections.c \
+	src/connections.cc \
 	src/container.c \
 	src/crypt.cc \
-	src/network.c \
-	src/protocol.c \
-	src/socks.c \
-	src/steg.c \
-	src/util.c \
+	src/network.cc \
+	src/protocol.cc \
+	src/socks.cc \
+	src/steg.cc \
+	src/util.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
 
 nodist_libstegotorus_a_SOURCES = protolist.c steglist.c
 
 stegotorus_SOURCES = \
-	src/main.c
+	src/main.cc
 
 UTGROUPS = \
 	src/test/unittest_container.c \
@@ -87,7 +87,6 @@ EXTRA_DIST = doc \
 # a C++ source file, every program that has it in LDADD must be
 # linked with the C++ compiler.  Persuade it to do so anyway.
 # The file forcecxxlink.cc need not, and does not, exist.
-nodist_EXTRA_stegotorus_SOURCES = forcecxxlink.cc
 nodist_EXTRA_tltester_SOURCES  = forcecxxlink.cc
 nodist_EXTRA_unittests_SOURCES = forcecxxlink.cc
 
@@ -104,12 +103,12 @@ AM_V_gs_0 = @echo "  GEN   " $(patsubst stamp-%,%.c,$@);
 
 protolist.c: stamp-protolist ;
 stamp-protolist: $(PROTOCOLS) Makefile src/genmodtable.sh
-	$(AM_V_gs) $(GMOD) protolist.c $(filter %.c, $^)
+	$(AM_V_gs) $(GMOD) protolist.c $(filter %.cc, $^)
 	$(AM_V_at) touch stamp-protolist
 
 steglist.c: stamp-steglist ;
 stamp-steglist: $(STEGANOGRAPHERS) Makefile src/genmodtable.sh
-	$(AM_V_gs) $(GMOD) steglist.c $(filter %.c, $^)
+	$(AM_V_gs) $(GMOD) steglist.c $(filter %.cc, $^)
 	$(AM_V_at) touch stamp-steglist
 
 unitgrplist.c: stamp-unitgrplist ;

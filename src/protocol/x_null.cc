@@ -85,7 +85,7 @@ x_null_config_free(config_t *c)
 static config_t *
 x_null_config_create(int n_options, const char *const *options)
 {
-  x_null_config_t *cfg = xzalloc(sizeof(x_null_config_t));
+  x_null_config_t *cfg = (x_null_config_t *)xzalloc(sizeof(x_null_config_t));
   config_t *c = upcast_config(cfg);
   c->vtable = &p_x_null_vtable;
 
@@ -128,7 +128,8 @@ x_null_config_get_target_addrs(config_t *cfg, size_t n)
 static circuit_t *
 x_null_circuit_create(config_t *c)
 {
-  circuit_t *ckt = upcast_circuit(xzalloc(sizeof(x_null_circuit_t)));
+  circuit_t *ckt = upcast_circuit((x_null_circuit_t *)
+                                  xzalloc(sizeof(x_null_circuit_t)));
   ckt->cfg = c;
   return ckt;
 }
@@ -205,7 +206,7 @@ x_null_circuit_send_eof(circuit_t *c)
 static conn_t *
 x_null_conn_create(config_t *cfg)
 {
-  x_null_conn_t *conn = xzalloc(sizeof(x_null_conn_t));
+  x_null_conn_t *conn = (x_null_conn_t *)xzalloc(sizeof(x_null_conn_t));
   conn_t *c = upcast_conn(conn);
   c->cfg = cfg;
   return c;
