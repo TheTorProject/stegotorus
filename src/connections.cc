@@ -4,19 +4,22 @@
 
 #include "util.h"
 #include "connections.h"
-#include "container.h"
 #include "main.h"
 #include "protocol.h"
 #include "socks.h"
 
+#include <tr1/unordered_set>
+
 #include <event2/event.h>
 #include <event2/buffer.h>
 
+using std::tr1::unordered_set;
+
 /** All active connections.  */
-static smartlist_t *connections;
+static unordered_set<conn_t *> connections;
 
 /** All active circuits.  */
-static smartlist_t *circuits;
+static unordered_set<circuit_t *> circuits;
 
 /** Most recently assigned serial numbers for connections and circuits.
     Note that serial number 0 is never used. These are only used for
@@ -27,61 +30,60 @@ static unsigned int last_ckt_serial = 0;
 /** True when stegotorus is shutting down: no further connections or
     circuits may be created, and we break out of the event loop when
     the last one (of either) is closed. */
-static int shutting_down;
+static bool shutting_down;
 
-void
-conn_initialize(void)
-{
-  connections = smartlist_create();
-  circuits = smartlist_create();
-}
+/** True in the middle of a barbaric connection shutdown; prevents
+    maybe_finish_shutdown from shutting down too early. */
+static bool closing_all_connections;
 
 static void
 maybe_finish_shutdown(void)
 {
-  if (!shutting_down)
-    return;
-  if ((circuits && smartlist_len(circuits) > 0) ||
-      (connections && smartlist_len(connections) > 0))
+  if (!shutting_down || closing_all_connections ||
+      !circuits.empty() || !connections.empty())
     return;
 
-  if (circuits)
-    smartlist_free(circuits);
-  if (connections)
-    smartlist_free(connections);
   finish_shutdown();
 }
 
 void
 conn_start_shutdown(int barbaric)
 {
-  /* Do not set 'shutting_down' until after we take care of barbaric
-     connection breakage, so that the calls below to circuit_close or
-     conn_close do not cause maybe_finish_shutdown to take one of the
-     lists out from under us. */
-  shutting_down = 0;
+  shutting_down = true;
 
-  if (barbaric && circuits && smartlist_len(circuits) > 0) {
-    SMARTLIST_FOREACH(circuits, circuit_t *, ckt, circuit_close(ckt));
-  }
-  if (barbaric && connections && smartlist_len(connections) > 0) {
-    SMARTLIST_FOREACH(connections, conn_t *, conn, conn_close(conn));
+  if (barbaric) {
+    closing_all_connections = true;
+
+    if (!circuits.empty()) {
+      unordered_set<circuit_t *> v;
+      v.swap(circuits);
+      for (unordered_set<circuit_t *>::iterator i = v.begin();
+           i != v.end(); i++)
+        circuit_close(*i);
+    }
+    if (!connections.empty()) {
+      unordered_set<conn_t *> v;
+      v.swap(connections);
+      for (unordered_set<conn_t *>::iterator i = v.begin();
+           i != v.end(); i++)
+        conn_close(*i);
+    }
+    closing_all_connections = false;
   }
 
-  shutting_down = 1;
   maybe_finish_shutdown();
 }
 
-unsigned long
+size_t
 conn_count(void)
 {
-  return smartlist_len(connections);
+  return connections.size();
 }
 
-unsigned long
+size_t
 circuit_count(void)
 {
-  return smartlist_len(circuits);
+  return circuits.size();
 }
 
 /**
@@ -98,7 +100,7 @@ conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
   conn->buffer = buf;
   conn->peername = peername;
   conn->serial = ++last_conn_serial;
-  smartlist_add(connections, conn);
+  connections.insert(conn);
   log_debug_cn(conn, "new connection");
   return conn;
 }
@@ -109,9 +111,9 @@ conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
 void
 conn_close(conn_t *conn)
 {
-  log_debug_cn(conn, "closing connection");
-  smartlist_remove(connections, conn);
-  log_debug("%d connections remaining", smartlist_len(connections));
+  connections.erase(conn);
+  log_debug_cn(conn, "closing connection; %lu remaining",
+               (unsigned long) connections.size());
 
   if (conn->circuit) {
     circuit_drop_downstream(conn->circuit, conn);
@@ -238,7 +240,7 @@ circuit_create(config_t *cfg)
   if (cfg->mode == LSN_SOCKS_CLIENT)
     ckt->socks_state = socks_state_new();
 
-  smartlist_add(circuits, ckt);
+  circuits.insert(ckt);
   log_debug_ckt(ckt, "new circuit");
   return ckt;
 }
@@ -274,9 +276,9 @@ circuit_drop_downstream(circuit_t *ckt, conn_t *down)
 void
 circuit_close(circuit_t *ckt)
 {
-  log_debug_ckt(ckt, "closing circuit");
-  smartlist_remove(circuits, ckt);
-  log_debug("%d circuits remaining", smartlist_len(circuits));
+  circuits.erase(ckt);
+  log_debug_ckt(ckt, "closing circuit; %lu remaining",
+                circuits.size());
 
   if (ckt->up_buffer)
     bufferevent_free(ckt->up_buffer);

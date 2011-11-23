@@ -6,18 +6,16 @@
 #include "main.h"
 
 #include "connections.h"
-#include "container.h"
 #include "crypt.h"
 #include "listener.h"
 #include "protocol.h"
 
+#include <vector>
+#include <string>
+
 #include <errno.h>
 #include <signal.h>
 #include <sys/stat.h>
-
-#include <event2/event.h>
-#include <event2/dns.h>
-
 #ifdef _WIN32
 #include <process.h>
 #include <io.h>
@@ -27,6 +25,12 @@
 #include <execinfo.h>
 #endif
 #endif
+
+#include <event2/event.h>
+#include <event2/dns.h>
+
+using std::vector;
+using std::string;
 
 static struct event_base *the_event_base;
 
@@ -239,7 +243,7 @@ main(int argc, const char *const *argv)
   struct event *sig_int;
   struct event *sig_term;
   struct event *stdin_eof;
-  smartlist_t *configs = smartlist_create();
+  vector<config_t *> configs;
   const char *const *begin;
   const char *const *end;
   struct stat st;
@@ -264,31 +268,30 @@ main(int argc, const char *const *argv)
     while (*end && !config_is_supported(*end))
       end++;
     if (log_do_debug()) {
-      smartlist_t *s = smartlist_create();
-      char *joined;
+      string joined = *begin;
       const char *const *p;
-      for (p = begin; p < end; p++)
-        smartlist_add(s, (void *)*p);
-      joined = smartlist_join_strings(s, " ", 0, NULL);
-      log_debug("configuration %d: %s", smartlist_len(configs)+1, joined);
-      free(joined);
-      smartlist_free(s);
+      for (p = begin+1; p < end; p++) {
+        joined += " ";
+        joined += *p;
+      }
+      log_debug("configuration %lu: %s",
+                (unsigned long)configs.size()+1, joined.c_str());
     }
     if (end == begin+1) {
-      log_warn("no arguments for configuration %d", smartlist_len(configs)+1);
+      log_warn("no arguments for configuration %lu",
+               (unsigned long)configs.size()+1);
       usage();
     } else {
       config_t *cfg = config_create(end - begin, begin);
       if (!cfg)
         return 2; /* diagnostic already issued */
-      smartlist_add(configs, cfg);
+      configs.push_back(cfg);
     }
     begin = end;
   } while (*begin);
-  log_assert(smartlist_len(configs) > 0);
+  log_assert(configs.size() > 0);
 
   /* Configurations have been established; proceed with initialization. */
-  conn_initialize();
 
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
@@ -364,10 +367,11 @@ main(int argc, const char *const *argv)
   }
 
   /* Open listeners for each configuration. */
-  SMARTLIST_FOREACH(configs, config_t *, cfg, {
-    if (!listener_open(the_event_base, cfg))
-      log_abort("failed to open listeners for configuration %d", cfg_sl_idx+1);
-  });
+  for (vector<config_t *>::iterator i = configs.begin(); i != configs.end();
+       i++)
+    if (!listener_open(the_event_base, *i))
+      log_abort("failed to open listeners for configuration %lu",
+                (unsigned long)(i - configs.begin()) + 1);
 
   /* We are go for launch. As a signal to any monitoring process that may
      be running, close stdout now. */
@@ -382,8 +386,9 @@ main(int argc, const char *const *argv)
   /* By the time we get to this point, all listeners and connections
      have already been freed. */
 
-  SMARTLIST_FOREACH(configs, config_t *, cfg, config_free(cfg));
-  smartlist_free(configs);
+  for (vector<config_t *>::iterator i = configs.begin(); i != configs.end();
+       i++)
+    config_free(*i);
 
   evdns_base_free(get_evdns_base(), 0);
   event_free(sig_int);

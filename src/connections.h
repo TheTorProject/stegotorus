@@ -32,10 +32,6 @@ struct conn_t {
   unsigned int        flushing : 1;
 };
 
-/** Initialize connection and circuit tracking.  Must be called before
-    any function that creates connections or circuits is called. */
-void conn_initialize(void);
-
 /** When all currently-open connections and circuits are closed, stop
     the main event loop and exit the program.  If 'barbaric' is true,
     forcibly close them all now, then stop the event loop.  It

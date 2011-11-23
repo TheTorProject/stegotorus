@@ -62,7 +62,6 @@ LIBS="$LIBS $ws32_LIBS"
 ### C features ###
 
 AC_C_INLINE
-AC_CHECK_SIZEOF(int)
 AC_CHECK_HEADERS([execinfo.h],,, [AC_INCLUDES_DEFAULT()])
 
 ### Output ###

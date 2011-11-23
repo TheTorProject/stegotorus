@@ -6,15 +6,18 @@
 #include "listener.h"
 
 #include "connections.h"
-#include "container.h"
 #include "socks.h"
 #include "protocol.h"
+
+#include <vector>
 
 #include <errno.h>
 
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
+
+using std::vector;
 
 /**
   This struct defines the state of a listener on a particular address.
@@ -26,7 +29,7 @@ typedef struct listener_t {
 } listener_t;
 
 /** All our listeners. */
-static smartlist_t *listeners;
+static vector<listener_t *> listeners;
 
 static void listener_close(listener_t *lsn);
 
@@ -67,10 +70,6 @@ listener_open(struct event_base *base, config_t *cfg)
     cfg->mode == LSN_SIMPLE_SERVER ? server_listener_cb
                                    : client_listener_cb;
 
-  /* If we don't have a listener list, create one now. */
-  if (!listeners)
-    listeners = smartlist_create();
-
   /* We can now record the event_base to be used with this configuration. */
   cfg->base = base;
 
@@ -94,7 +93,7 @@ listener_open(struct event_base *base, config_t *cfg)
         return 0;
       }
 
-      smartlist_add(listeners, lsn);
+      listeners.push_back(lsn);
       log_debug("now listening on %s for protocol %s",
                 lsn->address, cfg->vtable->name);
 
@@ -124,13 +123,12 @@ listener_close(listener_t *lsn)
 void
 listener_close_all(void)
 {
-  if (!listeners)
-    return;
   log_info("closing all listeners");
 
-  SMARTLIST_FOREACH(listeners, listener_t *, lsn, listener_close(lsn));
-  smartlist_free(listeners);
-  listeners = NULL;
+  for (vector<listener_t *>::iterator i = listeners.begin();
+       i != listeners.end(); i++)
+    listener_close(*i);
+  listeners.clear();
 }
 
 /**

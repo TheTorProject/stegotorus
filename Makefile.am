@@ -28,7 +28,6 @@ STEGANOGRAPHERS = \
 
 libstegotorus_a_SOURCES = \
 	src/connections.cc \
-	src/container.c \
 	src/crypt.cc \
 	src/network.cc \
 	src/protocol.cc \
@@ -43,7 +42,6 @@ stegotorus_SOURCES = \
 	src/main.cc
 
 UTGROUPS = \
-	src/test/unittest_container.c \
 	src/test/unittest_crypt.c \
 	src/test/unittest_socks.c \
 	src/test/unittest_config.c \
@@ -60,9 +58,7 @@ tltester_SOURCES = src/test/tltester.c
 
 noinst_HEADERS = \
 	src/connections.h \
-	src/container.h \
 	src/crypt.h \
-	src/ht.h \
 	src/listener.h \
 	src/main.h \
 	src/protocol.h \

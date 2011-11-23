@@ -8,14 +8,20 @@
 
 #include "util.h"
 #include "connections.h"
-#include "container.h"
 #include "crypt.h"
-#include "ht.h"
 #include "protocol.h"
 #include "steg.h"
 
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
+#include <vector>
+
 #include <event2/event.h>
 #include <event2/buffer.h>
+
+using std::tr1::unordered_map;
+using std::tr1::unordered_set;
+using std::vector;
 
 /* Header serialization and deserialization */
 
@@ -36,49 +42,6 @@ typedef struct chop_header
 #define CHOP_F_FIN   0x0002
 #define CHOP_F_CHAFF 0x0004
 /* further flags values are reserved */
-
-/* circuit ID lookups are done by hash table */
-typedef struct chop_circuit_entry_t
-{
-  HT_ENTRY(chop_circuit_entry_t) node;
-  uint64_t circuit_id;
-  circuit_t *circuit;
-} chop_circuit_entry_t;
-
-HT_HEAD(chop_circuit_table, chop_circuit_entry_t);
-
-/* This is "hash6432shift" from
-   http://www.concentric.net/~Ttwang/tech/inthash.htm . */
-static inline unsigned int
-chop_circuit_id_hash(const chop_circuit_entry_t *a)
-{
-  uint64_t key = a->circuit_id;
-  key = (~key) + (key << 18);
-  key = key ^ (key >> 31);
-  key = key * 21;
-  key = key ^ (key >> 11);
-  key = key + (key << 6);
-  key = key ^ (key >> 22);
-  return (unsigned int)key;
-}
-
-static inline int
-chop_circuit_id_eq(const chop_circuit_entry_t *a, const chop_circuit_entry_t *b)
-{
-  return a->circuit_id == b->circuit_id;
-}
-
-HT_PROTOTYPE(chop_circuit_table,
-             chop_circuit_entry_t,
-             node,
-             chop_circuit_id_hash,
-             chop_circuit_id_eq)
-HT_GENERATE(chop_circuit_table,
-            chop_circuit_entry_t,
-            node,
-            chop_circuit_id_hash,
-            chop_circuit_id_eq,
-            0.6, xzalloc, xrealloc, free)
 
 /* Reassembly queue.  This is a doubly-linked circular list with a
    sentinel element at the head (identified by data == 0).  List
@@ -106,6 +69,8 @@ static const uint8_t s2c_key[] =
 
 /* Connections and circuits */
 
+typedef unordered_map<uint64_t, circuit_t *> chop_circuit_table;
+
 typedef struct chop_conn_t
 {
   conn_t super;
@@ -119,7 +84,7 @@ typedef struct chop_circuit_t
 {
   circuit_t super;
   chop_reassembly_elt reassembly_queue;
-  smartlist_t *downstreams;
+  unordered_set<conn_t *> *downstreams;
   crypt_t *send_crypt;
   crypt_t *recv_crypt;
 
@@ -137,9 +102,9 @@ typedef struct chop_config_t
 {
   config_t super;
   struct evutil_addrinfo *up_address;
-  smartlist_t *down_addresses;
-  smartlist_t *steg_targets;
-  chop_circuit_table circuits;
+  vector<struct evutil_addrinfo *> *down_addresses;
+  vector<const char *> *steg_targets;
+  chop_circuit_table *circuits;
 } chop_config_t;
 
 PROTO_DEFINE_MODULE(chop, STEG);
@@ -265,7 +230,9 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
 
   /* Find the best fit for the desired transmission from all the
      outbound connections' transmit rooms. */
-  SMARTLIST_FOREACH(ckt->downstreams, conn_t *, c, {
+  for (unordered_set<conn_t *>::iterator i = ckt->downstreams->begin();
+       i != ckt->downstreams->end(); i++) {
+    conn_t *c = *i;
     chop_conn_t *conn = downcast_conn(c);
     /* We can only use candidates that have a steg target already. */
     if (conn->steg) {
@@ -292,7 +259,7 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
     } else {
       log_debug_cn(c, "offers 0 bytes (no steg)");
     }
-  });
+  }
 
   /* If we have a connection that can take all the data, use it.
      Otherwise, use the connection that can take as much of the data
@@ -790,41 +757,38 @@ chop_push_to_upstream(circuit_t *c)
 static int
 chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
 {
+  log_assert(conn->cfg->mode == LSN_SIMPLE_SERVER);
+
   config_t *c = conn->cfg;
   chop_config_t *cfg = downcast_config(c);
-  chop_circuit_entry_t *out, in;
+  chop_circuit_table::value_type in(circuit_id, 0);
+  std::pair<chop_circuit_table::iterator, bool> out = cfg->circuits->insert(in);
+  circuit_t *ck;
 
-  log_assert(c->mode == LSN_SIMPLE_SERVER);
-  in.circuit_id = circuit_id;
-  out = HT_FIND(chop_circuit_table, &cfg->circuits, &in);
-  if (out) {
-    if (!out->circuit) {
+  if (!out.second) { // element already exists
+    if (!out.first->second) {
       log_debug_cn(conn, "stale circuit");
       return 0;
     }
-    log_debug_cn(conn, "found circuit to %s", out->circuit->up_peer);
+    ck = out.first->second;
+    log_debug_cn(conn, "found circuit to %s", ck->up_peer);
   } else {
-    out = (chop_circuit_entry_t *)xzalloc(sizeof(chop_circuit_entry_t));
-    out->circuit = circuit_create(c);
-    if (!out->circuit) {
-      free(out);
+    ck = circuit_create(c);
+    if (!ck) {
       log_warn_cn(conn, "failed to create new circuit");
       return -1;
     }
-    if (circuit_open_upstream(out->circuit)) {
+    if (circuit_open_upstream(ck)) {
       log_warn_cn(conn, "failed to begin upstream connection");
-      circuit_close(out->circuit);
-      free(out);
+      circuit_close(ck);
       return -1;
     }
-    log_debug_cn(conn, "created new circuit to %s",
-                 out->circuit->up_peer);
-    out->circuit_id = circuit_id;
-    downcast_circuit(out->circuit)->circuit_id = circuit_id;
-    HT_INSERT(chop_circuit_table, &cfg->circuits, out);
+    log_debug_cn(conn, "created new circuit to %s", ck->up_peer);
+    downcast_circuit(ck)->circuit_id = circuit_id;
+    out.first->second = ck;
   }
 
-  circuit_add_downstream(out->circuit, conn);
+  circuit_add_downstream(ck, conn);
   return 0;
 }
 
@@ -848,12 +812,12 @@ parse_and_set_options(int n_options, const char *const *options,
   if (!strcmp(options[0], "client")) {
     defport = "48988"; /* bf5c */
     c->mode = LSN_SIMPLE_CLIENT;
-    cfg->steg_targets = smartlist_create();
+    cfg->steg_targets = new vector<const char *>;
     listen_up = 1;
   } else if (!strcmp(options[0], "socks")) {
     defport = "23548"; /* 5bf5 */
     c->mode = LSN_SOCKS_CLIENT;
-    cfg->steg_targets = smartlist_create();
+    cfg->steg_targets = new vector<const char *>;
     listen_up = 1;
   } else if (!strcmp(options[0], "server")) {
     defport = "11253"; /* 2bf5 */
@@ -870,10 +834,11 @@ parse_and_set_options(int n_options, const char *const *options,
      addresses and steg targets, if we're the client.  If we're not
      the client, the arguments are just downstream addresses. */
   for (i = 2; i < n_options; i++) {
-    void *addr = resolve_address_port(options[i], 1, !listen_up, NULL);
+    struct evutil_addrinfo *addr =
+      resolve_address_port(options[i], 1, !listen_up, NULL);
     if (!addr)
       return -1;
-    smartlist_add(cfg->down_addresses, addr);
+    cfg->down_addresses->push_back(addr);
 
     if (c->mode == LSN_SIMPLE_SERVER)
       continue;
@@ -882,7 +847,7 @@ parse_and_set_options(int n_options, const char *const *options,
 
     if (!steg_is_supported(options[i]))
       return -1;
-    smartlist_add(cfg->steg_targets, (void *)options[i]);
+    cfg->steg_targets->push_back(options[i]);
   }
   return 0;
 }
@@ -891,30 +856,28 @@ static void
 chop_config_free(config_t *c)
 {
   chop_config_t *cfg = downcast_config(c);
-  chop_circuit_entry_t **ent, **next, *cur;
 
   if (cfg->up_address)
     evutil_freeaddrinfo(cfg->up_address);
   if (cfg->down_addresses) {
-    SMARTLIST_FOREACH(cfg->down_addresses, struct evutil_addrinfo *, addr,
-                      evutil_freeaddrinfo(addr));
-    smartlist_free(cfg->down_addresses);
+    for (vector<struct evutil_addrinfo *>::iterator i =
+           cfg->down_addresses->begin();
+         i != cfg->down_addresses->end(); i++)
+      evutil_freeaddrinfo(*i);
+    delete cfg->down_addresses;
   }
 
   /* The strings in cfg->steg_targets are not on the heap. */
   if (cfg->steg_targets)
-    smartlist_free(cfg->steg_targets);
+    delete cfg->steg_targets;
 
-  for (ent = HT_START(chop_circuit_table, &cfg->circuits);
-       ent; ent = next) {
-    cur = *ent;
-    next = HT_NEXT_RMV(chop_circuit_table, &cfg->circuits, ent);
-    if (cur->circuit)
-      circuit_close(cur->circuit);
-    free(cur);
-  }
-  HT_CLEAR(chop_circuit_table, &cfg->circuits);
+  for (chop_circuit_table::iterator i = cfg->circuits->begin();
+       i != cfg->circuits->end(); i++)
+    if (i->second)
+      circuit_close(i->second);
 
+  cfg->circuits->clear();
+  delete cfg->circuits;
   free(cfg);
 }
 
@@ -925,9 +888,8 @@ chop_config_create(int n_options, const char *const *options)
   config_t *c = upcast_config(cfg);
   c->vtable = &p_chop_vtable;
   c->ignore_socks_destination = 1;
-  HT_INIT(chop_circuit_table, &cfg->circuits);
-  cfg->down_addresses = smartlist_create();
-
+  cfg->circuits = new chop_circuit_table;
+  cfg->down_addresses = new vector<struct evutil_addrinfo *>;
 
   if (parse_and_set_options(n_options, options, c) == 0)
     return c;
@@ -953,8 +915,8 @@ chop_config_get_listen_addrs(config_t *c, size_t n)
 {
   chop_config_t *cfg = downcast_config(c);
   if (c->mode == LSN_SIMPLE_SERVER) {
-    if (n < (size_t)smartlist_len(cfg->down_addresses))
-      return (struct evutil_addrinfo *)smartlist_get(cfg->down_addresses, n);
+    if (n < cfg->down_addresses->size())
+      return cfg->down_addresses->at(n);
   } else {
     if (n == 0)
       return cfg->up_address;
@@ -970,8 +932,8 @@ chop_config_get_target_addrs(config_t *c, size_t n)
     if (n == 0)
       return cfg->up_address;
   } else {
-    if (n < (size_t)smartlist_len(cfg->down_addresses))
-      return (struct evutil_addrinfo *)smartlist_get(cfg->down_addresses, n);
+    if (n < cfg->down_addresses->size())
+      return cfg->down_addresses->at(n);
   }
   return NULL;
 }
@@ -984,7 +946,7 @@ chop_circuit_create(config_t *cfg)
   c->cfg = cfg;
   ckt->reassembly_queue.next = &ckt->reassembly_queue;
   ckt->reassembly_queue.prev = &ckt->reassembly_queue;
-  ckt->downstreams = smartlist_create();
+  ckt->downstreams = new unordered_set<conn_t *>;
 
   if (cfg->mode == LSN_SIMPLE_SERVER) {
     ckt->send_crypt = crypt_new(s2c_key, 16);
@@ -1003,16 +965,18 @@ chop_circuit_free(circuit_t *c)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   chop_reassembly_elt *p, *q, *queue;
-  chop_circuit_entry_t in, *out;
+  chop_circuit_table::iterator out;
 
-  SMARTLIST_FOREACH(ckt->downstreams, conn_t *, conn, {
+  for (unordered_set<conn_t *>::iterator i = ckt->downstreams->begin();
+       i != ckt->downstreams->end(); i++) {
+    conn_t *conn = *i;
     conn->circuit = NULL;
     if (evbuffer_get_length(conn_get_outbound(conn)) > 0)
       conn_do_flush(conn);
     else
       conn_close(conn);
-  });
-  smartlist_free(ckt->downstreams);
+  }
+  delete ckt->downstreams;
   crypt_free(ckt->send_crypt);
   crypt_free(ckt->recv_crypt);
 
@@ -1030,12 +994,10 @@ chop_circuit_free(circuit_t *c)
        possibility that we'll get a junk connection for one of them
        right after we close it (same deal as the TIME_WAIT state in TCP). */
     chop_config_t *cfg = downcast_config(c->cfg);
-    in.circuit_id = ckt->circuit_id;
-    out = HT_FIND(chop_circuit_table, &cfg->circuits, &in);
-    if (out) {
-      log_assert(out->circuit == c);
-      out->circuit = NULL;
-    }
+    out = cfg->circuits->find(ckt->circuit_id);
+    log_assert(out != cfg->circuits->end());
+    log_assert(out->second == c);
+    out->second = NULL;
   }
   free(ckt);
 }
@@ -1044,10 +1006,10 @@ static void
 chop_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
-  smartlist_add(ckt->downstreams, conn);
-  log_debug_ckt(c, "added connection <%d.%d> to %s, now %d",
+  ckt->downstreams->insert(conn);
+  log_debug_ckt(c, "added connection <%d.%d> to %s, now %lu",
                 c->serial, conn->serial, conn->peername,
-                smartlist_len(ckt->downstreams));
+                (unsigned long)ckt->downstreams->size());
 
   circuit_disarm_axe_timer(c);
 }
@@ -1056,11 +1018,10 @@ static void
 chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
-  smartlist_remove(ckt->downstreams, conn);
-  log_debug_ckt(c, "dropped connection <%d.%d> to %s, now %d",
+  ckt->downstreams->erase(conn);
+  log_debug_ckt(c, "dropped connection <%d.%d> to %s, now %lu",
                 c->serial, conn->serial, conn->peername,
-                smartlist_len(ckt->downstreams));
-
+                (unsigned long)ckt->downstreams->size());
   /* If that was the last connection on this circuit AND we've both
      received and sent a FIN, close the circuit.  Otherwise, if we're
      the server, arm a timer that will kill off this circuit in a
@@ -1068,7 +1029,7 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
      our connections to protocol errors, or because the steg modules
      wanted them closed); if we're the client, send chaff in a bit,
      to enable further transmissions from the server. */
-  if (smartlist_len(ckt->downstreams) == 0) {
+  if (ckt->downstreams->empty()) {
     if (ckt->sent_fin && ckt->received_fin) {
       if (evbuffer_get_length(bufferevent_get_output(c->up_buffer)) > 0)
         /* this may already have happened, but there's no harm in
@@ -1094,7 +1055,7 @@ chop_conn_create(config_t *c)
   if (c->mode != LSN_SIMPLE_SERVER) {
     /* XXX currently uses steg target 0 for all connections.
        Need protocol-specific listener state to fix this. */
-    conn->steg = steg_new((const char *)smartlist_get(cfg->steg_targets, 0));
+    conn->steg = steg_new(cfg->steg_targets->at(0));
     if (!conn->steg) {
       free(conn);
       return 0;
@@ -1146,7 +1107,7 @@ chop_circuit_send(circuit_t *c)
 
   circuit_disarm_flush_timer(c);
 
-  if (smartlist_len(ckt->downstreams) == 0) {
+  if (ckt->downstreams->empty()) {
     /* We have no connections, but we must send.  If we're the client,
        reopen our outbound connections; the on-connection event will
        bring us back here.  If we're the server, we have to just
@@ -1173,13 +1134,15 @@ chop_circuit_send(circuit_t *c)
      as long as we haven't both sent and received a FIN, or we might
      deadlock. */
   if (ckt->sent_fin && ckt->received_fin) {
-    SMARTLIST_FOREACH(ckt->downstreams, conn_t *, cn, {
+    for (unordered_set<conn_t *>::iterator i = ckt->downstreams->begin();
+         i != ckt->downstreams->end(); i++) {
+      conn_t *cn = *i;
       chop_conn_t *conn = downcast_conn(cn);
       if (conn->must_transmit_timer &&
           evtimer_pending(conn->must_transmit_timer, NULL))
         must_transmit_timer_cb(-1, 0, cn);
       conn_send_eof(cn);
-    });
+    }
   } else {
     if (c->cfg->mode != LSN_SIMPLE_SERVER)
       circuit_arm_flush_timer(c, 5);
