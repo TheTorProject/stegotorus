@@ -362,9 +362,9 @@ test_container_smartlist_digests(void *unused)
   smartlist_t *sl = smartlist_create();
 
   /* digest_isin. */
-  smartlist_add(sl, xmemdup("AAAAAAAAAAAAAAAAAAAA", SHA256_LENGTH));
-  smartlist_add(sl, xmemdup("\00090AAB2AAAAaasdAAAAA", SHA256_LENGTH));
-  smartlist_add(sl, xmemdup("\00090AAB2AAAAaasdAAAAA", SHA256_LENGTH));
+  smartlist_add(sl, xmemdup("AAAAAAAAAAAAAAAAAAAA", SHA256_LEN));
+  smartlist_add(sl, xmemdup("\00090AAB2AAAAaasdAAAAA", SHA256_LEN));
+  smartlist_add(sl, xmemdup("\00090AAB2AAAAaasdAAAAA", SHA256_LEN));
   tt_int_op(smartlist_digest_isin(NULL, "AAAAAAAAAAAAAAAAAAAA"), ==, 0);
   tt_assert(smartlist_digest_isin(sl, "AAAAAAAAAAAAAAAAAAAA"));
   tt_assert(smartlist_digest_isin(sl, "\00090AAB2AAAAaasdAAAAA"));
@@ -372,16 +372,16 @@ test_container_smartlist_digests(void *unused)
 
   /* sort digests */
   smartlist_sort_digests(sl);
-  tt_mem_op(smartlist_get(sl, 0), ==, "\00090AAB2AAAAaasdAAAAA", SHA256_LENGTH);
-  tt_mem_op(smartlist_get(sl, 1), ==, "\00090AAB2AAAAaasdAAAAA", SHA256_LENGTH);
-  tt_mem_op(smartlist_get(sl, 2), ==, "AAAAAAAAAAAAAAAAAAAA", SHA256_LENGTH);
+  tt_mem_op(smartlist_get(sl, 0), ==, "\00090AAB2AAAAaasdAAAAA", SHA256_LEN);
+  tt_mem_op(smartlist_get(sl, 1), ==, "\00090AAB2AAAAaasdAAAAA", SHA256_LEN);
+  tt_mem_op(smartlist_get(sl, 2), ==, "AAAAAAAAAAAAAAAAAAAA", SHA256_LEN);
   tt_int_op(smartlist_len(sl), ==, 3);
 
   /* uniq_digests */
   smartlist_uniq_digests(sl);
   tt_int_op(smartlist_len(sl), ==, 2);
-  tt_mem_op(smartlist_get(sl, 0), ==, "\00090AAB2AAAAaasdAAAAA", SHA256_LENGTH);
-  tt_mem_op(smartlist_get(sl, 1), ==, "AAAAAAAAAAAAAAAAAAAA", SHA256_LENGTH);
+  tt_mem_op(smartlist_get(sl, 0), ==, "\00090AAB2AAAAaasdAAAAA", SHA256_LEN);
+  tt_mem_op(smartlist_get(sl, 1), ==, "AAAAAAAAAAAAAAAAAAAA", SHA256_LEN);
 
  end:
   SMARTLIST_FOREACH(sl, char *, cp, free(cp));
@@ -487,15 +487,15 @@ static void
 test_container_digestset(void *unused)
 {
   smartlist_t *included = smartlist_create();
-  char d[SHA256_LENGTH];
+  char d[SHA256_LEN];
   int i;
   int ok = 1;
   int false_positives = 0;
   digestset_t *set = NULL;
 
   for (i = 0; i < 1000; ++i) {
-    random_bytes((uint8_t *)d, SHA256_LENGTH);
-    smartlist_add(included, xmemdup(d, SHA256_LENGTH));
+    random_bytes((uint8_t *)d, SHA256_LEN);
+    smartlist_add(included, xmemdup(d, SHA256_LEN));
   }
   set = digestset_new(1000);
   SMARTLIST_FOREACH(included, const char *, cp,
@@ -509,7 +509,7 @@ test_container_digestset(void *unused)
                       ok = 0);
   tt_assert(ok);
   for (i = 0; i < 1000; ++i) {
-    random_bytes((uint8_t *)d, SHA256_LENGTH);
+    random_bytes((uint8_t *)d, SHA256_LEN);
     if (digestset_isin(set, d))
       ++false_positives;
   }

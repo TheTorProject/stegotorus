@@ -9,8 +9,9 @@
 extern "C" {
 #endif
 
-#define SHA256_LENGTH 32
-#define AES_BLOCK_SIZE 16
+#define SHA256_LEN 32
+#define AES_BLOCK_LEN 16
+#define GCM_TAG_LEN 16
 
 /* Stream cipher state */
 typedef struct crypt_t crypt_t;
@@ -22,7 +23,7 @@ int initialize_crypto(void);
 /** Clean up global crypto state */
 void cleanup_crypto(void);
 
-/** Return a newly allocated digest state; cannot fail. */
+/** Return a newly allocated digest state. */
 digest_t *digest_new(void);
 /** Add n bytes from b to the digest state. */
 void digest_update(digest_t *, const uint8_t *b, size_t n);
@@ -32,15 +33,37 @@ size_t digest_getdigest(digest_t *, uint8_t *b, size_t n);
 /** Clear and free a digest state */
 void digest_free(digest_t *);
 
-/** Return a new stream cipher state using 'key' as the symmetric key.
- * The data length must be exactly 16 bytes. Cannot fail. */
-crypt_t *crypt_new(const uint8_t *key, size_t);
-/* Set the IV of a stream-cipher state.  Cannot fail. */
-void crypt_set_iv(crypt_t *, const uint8_t *iv, size_t ivlen);
+/** Return a new AES/GCM cipher state using 'key' (of length 'keylen')
+ * as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
+crypt_t *crypt_new(const uint8_t *key, size_t keylen);
 
-/** Encrypt n bytes of data in the buffer b, in place. */
-void stream_crypt(crypt_t *, uint8_t *b, size_t n);
-/** Clear and free a stream cipher state. */
+/** Encrypt 'inlen' bytes of data in the buffer 'in', writing the
+    result plus a MAC to the buffer 'out', whose length must be at
+    least 'inlen'+16 bytes.  Use 'nonce' (of length 'nlen') as the
+    encryption nonce; 'nlen' must be at least 12 bytes.  */
+void crypt_encrypt(crypt_t *state,
+                   uint8_t *out, const uint8_t *in, size_t inlen,
+                   const uint8_t *nonce, size_t nlen);
+
+/** Decrypt 'inlen' bytes of data in the buffer 'in'; the last 16 bytes
+    of this buffer are assumed to be the MAC.  Write the result to the
+    buffer 'out', whose length must be at least 'inlen'-16 bytes.  Use
+    'nonce' (of length 'nlen') as the encryption nonce; as above, 'nlen'
+    must be at least 12 bytes.  Returns 0 if successful, -1 if the MAC
+    did not validate. */
+int crypt_decrypt(crypt_t *state,
+                  uint8_t *out, const uint8_t *in, size_t inlen,
+                  const uint8_t *nonce, size_t nlen);
+
+/** Decrypt 'inlen' bytes of data in the buffer 'in' WITHOUT CHECKING
+    THE MAC.  Arguments same as crypt_decrypt.  This should be used only
+    to decode just enough of an incoming superencrypted block to know
+    how long it's going to be and therefore where the MAC begins. */
+void crypt_decrypt_unchecked(crypt_t *state,
+                             uint8_t *out, const uint8_t *in, size_t inlen,
+                             const uint8_t *nonce, size_t nlen);
+
+/** Clear and free a cipher state. */
 void crypt_free(crypt_t *);
 
 /** Set b to contain n random bytes. */

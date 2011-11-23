@@ -207,6 +207,8 @@ chop_decrypt_header(chop_circuit_t *ckt,
                     struct chop_header *hdr)
 {
   uint8_t wire_header[CHOP_WIRE_HDR_LEN];
+  uint8_t decoded_header[CHOP_WIRE_HDR_LEN-16];
+
   if (evbuffer_copyout(buf, wire_header, CHOP_WIRE_HDR_LEN)
       != CHOP_WIRE_HDR_LEN) {
     log_warn("not enough data copied out");
@@ -233,19 +235,20 @@ chop_decrypt_header(chop_circuit_t *ckt,
 
   /* The full IV is the circuit ID plus packet ID *as it is on the
      wire*. */
-  crypt_set_iv(ckt->recv_crypt, wire_header, 16);
-  stream_crypt(ckt->recv_crypt, wire_header+16, CHOP_WIRE_HDR_LEN-16);
+  crypt_decrypt_unchecked(ckt->recv_crypt, decoded_header,
+                          wire_header + 16, CHOP_WIRE_HDR_LEN - 16,
+                          wire_header, 16);
 
-  hdr->offset = ((((uint32_t)wire_header[16]) << 24) +
-                 (((uint32_t)wire_header[17]) << 16) +
-                 (((uint32_t)wire_header[18]) <<  8) +
-                 (((uint32_t)wire_header[19]) <<  0));
+  hdr->offset = ((((uint32_t)decoded_header[0]) << 24) +
+                 (((uint32_t)decoded_header[1]) << 16) +
+                 (((uint32_t)decoded_header[2]) <<  8) +
+                 (((uint32_t)decoded_header[3]) <<  0));
 
-  hdr->length = ((((uint16_t)wire_header[20]) << 8) +
-                 (((uint16_t)wire_header[21]) << 0));
+  hdr->length = ((((uint16_t)decoded_header[4]) << 8) +
+                 (((uint16_t)decoded_header[5]) << 0));
 
-  hdr->flags  = ((((uint16_t)wire_header[22]) <<  8) +
-                 (((uint16_t)wire_header[23]) <<  0));
+  hdr->flags  = ((((uint16_t)decoded_header[6]) <<  8) +
+                 (((uint16_t)decoded_header[7]) <<  0));
 
   log_debug("decoded offset %u length %hu flags %04hx",
             hdr->offset, hdr->length, hdr->flags);
@@ -322,18 +325,21 @@ chop_send_block(conn_t *d,
   chop_conn_t *dest = downcast_conn(d);
   chop_header hdr;
   struct evbuffer_iovec v;
+  uint8_t *p;
 
   log_assert(evbuffer_get_length(block) == 0);
   log_assert(evbuffer_get_length(source) >= length);
   log_assert(dest->steg);
 
   /* We take special care not to modify 'source' if any step fails. */
-  if (evbuffer_reserve_space(block, length + CHOP_WIRE_HDR_LEN, &v, 1) != 1)
+  if (evbuffer_reserve_space(block,
+                             length + CHOP_WIRE_HDR_LEN + GCM_TAG_LEN,
+                             &v, 1) != 1)
     return -1;
-  if (v.iov_len < length + CHOP_WIRE_HDR_LEN)
+  if (v.iov_len < length + CHOP_WIRE_HDR_LEN + GCM_TAG_LEN)
     goto fail;
 
-  v.iov_len = length + CHOP_WIRE_HDR_LEN;
+  v.iov_len = length + CHOP_WIRE_HDR_LEN + GCM_TAG_LEN;
 
   hdr.ckt_id = ckt->circuit_id;
   hdr.offset = ckt->send_offset;
@@ -346,9 +352,9 @@ chop_send_block(conn_t *d,
                        length) != length)
     goto fail;
 
-  crypt_set_iv(ckt->send_crypt, (uint8_t *)v.iov_base, 16);
-  stream_crypt(ckt->send_crypt, (uint8_t *)v.iov_base + 16,
-               length + CHOP_WIRE_HDR_LEN - 16);
+  p = v.iov_base;
+  crypt_encrypt(ckt->send_crypt,
+                p + 16, p + 16, length + CHOP_WIRE_HDR_LEN - 16, p, 16);
 
   if (evbuffer_commit_space(block, &v, 1))
     goto fail;
@@ -1261,9 +1267,10 @@ chop_conn_recv(conn_t *s)
     if (chop_decrypt_header(ckt, source->recv_pending, &hdr))
       return -1;
 
-    if (avail < CHOP_WIRE_HDR_LEN + hdr.length) {
+    if (avail < CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length) {
       log_debug_cn(s, "incomplete block (need %lu bytes)",
-                   (unsigned long)(CHOP_WIRE_HDR_LEN + hdr.length));
+                   (unsigned long)(CHOP_WIRE_HDR_LEN + GCM_TAG_LEN +
+                                   hdr.length));
       break;
     }
 
@@ -1274,12 +1281,12 @@ chop_conn_recv(conn_t *s)
 
     log_debug_cn(s, "receiving block of %lu+%u bytes "
                  "[offset %u flags %04hx]",
-                 (unsigned long)CHOP_WIRE_HDR_LEN,
+                 (unsigned long)CHOP_WIRE_HDR_LEN + GCM_TAG_LEN,
                  hdr.length, hdr.offset, hdr.flags);
 
     if (evbuffer_copyout(source->recv_pending, decodebuf,
-                         CHOP_WIRE_HDR_LEN + hdr.length)
-        != (ssize_t)(CHOP_WIRE_HDR_LEN + hdr.length)) {
+                         CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length)
+        != (ssize_t)(CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length)) {
       log_warn_cn(s, "failed to copy block to decode buffer");
       return -1;
     }
@@ -1289,10 +1296,14 @@ chop_conn_recv(conn_t *s)
       return -1;
     }
 
-    /* reset the IV just to be sure */
-    crypt_set_iv(ckt->recv_crypt, decodebuf, 16);
-    stream_crypt(ckt->recv_crypt, decodebuf + 16,
-                 hdr.length + CHOP_WIRE_HDR_LEN - 16);
+    if (crypt_decrypt(ckt->recv_crypt,
+                      decodebuf + 16, decodebuf + 16,
+                      hdr.length + CHOP_WIRE_HDR_LEN + GCM_TAG_LEN - 16,
+                      decodebuf, 16)) {
+      log_warn_cn(s, "MAC verification failure");
+      evbuffer_free(block);
+      return -1;
+    }
 
     if (evbuffer_add(block, decodebuf + CHOP_WIRE_HDR_LEN, hdr.length)) {
       log_warn_cn(s, "failed to transfer block to reassembly queue");
@@ -1300,8 +1311,9 @@ chop_conn_recv(conn_t *s)
       return -1;
     }
 
-    if (evbuffer_drain(source->recv_pending, CHOP_WIRE_HDR_LEN + hdr.length)) {
-      log_warn_cn(s, "failed to drain header");
+    if (evbuffer_drain(source->recv_pending,
+                       CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length)) {
+      log_warn_cn(s, "failed to consume block from wire");
       evbuffer_free(block);
       return -1;
     }

@@ -228,7 +228,7 @@ smartlist_strings_eq(const smartlist_t *sl1, const smartlist_t *sl2)
 }
 
 /** Return true iff <b>sl</b> has some element E such that
- * !memcmp(E,<b>element</b>,SHA256_LENGTH)
+ * !memcmp(E,<b>element</b>,SHA256_LEN)
  */
 int
 smartlist_digest_isin(const smartlist_t *sl, const char *element)
@@ -236,7 +236,7 @@ smartlist_digest_isin(const smartlist_t *sl, const char *element)
   int i;
   if (!sl) return 0;
   for (i=0; i < sl->num_used; i++)
-    if (!memcmp((const char*)sl->list[i],element,SHA256_LENGTH))
+    if (!memcmp((const char*)sl->list[i],element,SHA256_LEN))
       return 1;
   return 0;
 }
@@ -836,14 +836,14 @@ smartlist_pqueue_assert_ok(smartlist_t *sl,
   }
 }
 
-/** Helper: compare two SHA256_LENGTH digests. */
+/** Helper: compare two SHA256_LEN digests. */
 static int
 _compare_digests(const void **_a, const void **_b)
 {
-  return memcmp((const char*)*_a, (const char*)*_b, SHA256_LENGTH);
+  return memcmp((const char*)*_a, (const char*)*_b, SHA256_LEN);
 }
 
-/** Sort the list of SHA256_LENGTH-byte digests into ascending order. */
+/** Sort the list of SHA256_LEN-byte digests into ascending order. */
 void
 smartlist_sort_digests(smartlist_t *sl)
 {
@@ -873,7 +873,7 @@ smartlist_uniq_digests(smartlist_t *sl)
   }
 
 DEFINE_MAP_STRUCTS(strmap_t, char *key, strmap_);
-DEFINE_MAP_STRUCTS(digestmap_t, char key[SHA256_LENGTH], digestmap_);
+DEFINE_MAP_STRUCTS(digestmap_t, char key[SHA256_LEN], digestmap_);
 
 /** Helper: compare strmap_entry_t objects by key value. */
 static inline int
@@ -893,7 +893,7 @@ strmap_entry_hash(const strmap_entry_t *a)
 static inline int
 digestmap_entries_eq(const digestmap_entry_t *a, const digestmap_entry_t *b)
 {
-  return !memcmp(a->key, b->key, SHA256_LENGTH);
+  return !memcmp(a->key, b->key, SHA256_LEN);
 }
 
 /** Helper: return a hash value for a digest_map_t. */
@@ -986,7 +986,7 @@ digestmap_set(digestmap_t *map, const char *key, void *val)
   log_assert(map);
   log_assert(key);
   log_assert(val);
-  memcpy(&search.key, key, SHA256_LENGTH);
+  memcpy(&search.key, key, SHA256_LEN);
 #ifndef OPTIMIZED_DIGESTMAP_SET
   resolve = HT_FIND(digestmap_impl, &map->head, &search);
   if (resolve) {
@@ -995,7 +995,7 @@ digestmap_set(digestmap_t *map, const char *key, void *val)
     return oldval;
   } else {
     resolve = xzalloc(sizeof(digestmap_entry_t));
-    memcpy(resolve->key, key, SHA256_LENGTH);
+    memcpy(resolve->key, key, SHA256_LEN);
     resolve->val = val;
     HT_INSERT(digestmap_impl, &map->head, resolve);
     return NULL;
@@ -1018,7 +1018,7 @@ digestmap_set(digestmap_t *map, const char *key, void *val)
            /* We didn't find the entry. */
            digestmap_entry_t *newent =
              xzalloc(sizeof(digestmap_entry_t));
-           memcpy(newent->key, key, SHA256_LENGTH);
+           memcpy(newent->key, key, SHA256_LEN);
            newent->val = val;
            _HT_FOI_INSERT(node, &(map->head), &search, newent, ptr);
            return NULL;
@@ -1053,7 +1053,7 @@ digestmap_get(const digestmap_t *map, const char *key)
   digestmap_entry_t search;
   log_assert(map);
   log_assert(key);
-  memcpy(&search.key, key, SHA256_LENGTH);
+  memcpy(&search.key, key, SHA256_LEN);
   resolve = HT_FIND(digestmap_impl, &map->head, &search);
   if (resolve) {
     return resolve->val;
@@ -1097,7 +1097,7 @@ digestmap_remove(digestmap_t *map, const char *key)
   void *oldval;
   log_assert(map);
   log_assert(key);
-  memcpy(&search.key, key, SHA256_LENGTH);
+  memcpy(&search.key, key, SHA256_LEN);
   resolve = HT_REMOVE(digestmap_impl, &map->head, &search);
   if (resolve) {
     oldval = resolve->val;

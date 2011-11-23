@@ -11,8 +11,8 @@
 
 #include <stdexcept>
 #include <cryptopp/aes.h>
+#include <cryptopp/gcm.h>
 #include <cryptopp/sha.h>
-#include <cryptopp/modes.h>
 #include <cryptopp/osrng.h>
 
 #define CATCH_ALL_EXCEPTIONS(rv)                                \
@@ -88,15 +88,15 @@ size_t
 digest_getdigest(digest_t *d, uint8_t *buf, size_t len)
 {
   try {
-    log_assert(d->ctx.DigestSize() == SHA256_LENGTH);
-    if (len >= SHA256_LENGTH) {
+    log_assert(d->ctx.DigestSize() == SHA256_LEN);
+    if (len >= SHA256_LEN) {
       d->ctx.Final(buf);
-      return SHA256_LENGTH;
+      return SHA256_LEN;
     } else {
-      uint8_t tmp[SHA256_LENGTH];
+      uint8_t tmp[SHA256_LEN];
       d->ctx.Final(tmp);
       memcpy(buf, tmp, len);
-      memset(tmp, 0, SHA256_LENGTH);
+      memset(tmp, 0, SHA256_LEN);
       return len;
     }
   }
@@ -109,55 +109,77 @@ digest_free(digest_t *d)
   delete d;
 }
 
-/* =====
-   Stream crypto
-   ===== */
+/** Encryption and decryption. */
 
-static const uint8_t dummy_iv[16] = {};
-
+// We don't know which way this will be used, so we need both
+// encryption and decryption contexts.
 struct crypt_t {
-  CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption ctx;
-  crypt_t(const uint8_t *key) : ctx(key, AES_BLOCK_SIZE, dummy_iv) {}
+  CryptoPP::GCM<CryptoPP::AES>::Encryption e;
+  CryptoPP::GCM<CryptoPP::AES>::Decryption d;
 };
 
-/**
-   Initializes the AES cipher with 'key'.
-*/
 crypt_t *
 crypt_new(const uint8_t *key, size_t keylen)
 {
-  log_assert(keylen == AES_BLOCK_SIZE);
+  // Crypto++ doesn't let us set a key without also setting an IV,
+  // even though we will always override the IV later.
+  static const uint8_t dummy_iv[16] = {};
 
   try {
-    return new crypt_t(key);
+    crypt_t *state = new crypt_t;
+
+    // sadly, these are not checkable at compile time
+    log_assert(state->e.DigestSize() == 16);
+    log_assert(state->d.DigestSize() == 16);
+    log_assert(!state->e.NeedsPrespecifiedDataLengths());
+    log_assert(!state->d.NeedsPrespecifiedDataLengths());
+
+    state->e.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
+    state->d.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
+    return state;
   }
   CATCH_ALL_EXCEPTIONS(0);
 }
 
-/**
-   Sets the IV of 'c' to 'iv'.
-*/
 void
-crypt_set_iv(crypt_t *c, const uint8_t *iv, size_t ivlen)
+crypt_encrypt(crypt_t *state,
+              uint8_t *out, const uint8_t *in, size_t inlen,
+              const uint8_t *nonce, size_t nlen)
 {
-  log_assert(ivlen == AES_BLOCK_SIZE);
   try {
-    c->ctx.Resynchronize(iv, ivlen);
+    state->e.EncryptAndAuthenticate(out, out + inlen, 16,
+                                    nonce, nlen, 0, 0, in, inlen);
   }
   CATCH_ALL_EXCEPTIONS();
 }
 
-/*
-  In-place encrypts 'buf' with 'c'.
-*/
-void
-stream_crypt(crypt_t *c, uint8_t *buf, size_t len)
+int
+crypt_decrypt(crypt_t *state,
+              uint8_t *out, const uint8_t *in, size_t inlen,
+              const uint8_t *nonce, size_t nlen)
 {
   try {
-    c->ctx.ProcessData(buf, buf, len);
+    return state->d.DecryptAndVerify(out,
+                                     in + inlen - 16, 16,
+                                     nonce, nlen, 0, 0, in, inlen - 16)
+      ? 0 : -1; // caller will log decryption failure
+  }
+  CATCH_ALL_EXCEPTIONS(-1);
+}
+
+void
+crypt_decrypt_unchecked(crypt_t *state,
+                        uint8_t *out, const uint8_t *in, size_t inlen,
+                        const uint8_t *nonce, size_t nlen)
+{
+  try {
+    // there is no convenience function for this
+    state->d.Resynchronize(nonce, nlen);
+    state->d.ProcessData(out, in, inlen);
   }
   CATCH_ALL_EXCEPTIONS();
 }
+
 
 /**
    Deallocates 'c'.
