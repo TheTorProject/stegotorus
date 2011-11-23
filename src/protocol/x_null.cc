@@ -156,8 +156,8 @@ x_null_circuit_add_downstream(circuit_t *c, conn_t *conn)
   x_null_circuit_t *ckt = downcast_circuit(c);
   log_assert(!ckt->downstream);
   ckt->downstream = conn;
-  log_debug_ckt(c, "added connection <%d.%d> to %s",
-                c->serial, conn->serial, conn->peername);
+  log_debug(c, "added connection <%d.%d> to %s",
+            c->serial, conn->serial, conn->peername);
 }
 
 /* Drop a connection from this circuit.  If this happens in this
@@ -168,8 +168,8 @@ x_null_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   x_null_circuit_t *ckt = downcast_circuit(c);
   log_assert(ckt->downstream == conn);
-  log_debug_ckt(c, "dropped connection <%d.%d> to %s",
-                c->serial, conn->serial, conn->peername);
+  log_debug(c, "dropped connection <%d.%d> to %s",
+            c->serial, conn->serial, conn->peername);
   ckt->downstream = NULL;
   if (evbuffer_get_length(bufferevent_get_output(c->up_buffer)) > 0)
     /* this may already have happened, but there's no harm in

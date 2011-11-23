@@ -239,8 +239,8 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
       /* Find the connections whose transmit rooms are closest to the
          desired transmission length from both directions. */
       size_t room = steg_transmit_room(conn->steg, c);
-      log_debug_cn(c, "offers %lu bytes (%s)", (unsigned long)room,
-                   conn->steg->vtable->name);
+      log_debug(c, "offers %lu bytes (%s)", (unsigned long)room,
+                conn->steg->vtable->name);
 
       if (room > CHOP_MAX_DATA)
         room = CHOP_MAX_DATA;
@@ -257,7 +257,7 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
         }
       }
     } else {
-      log_debug_cn(c, "offers 0 bytes (no steg)");
+      log_debug(c, "offers 0 bytes (no steg)");
     }
   }
 
@@ -326,7 +326,7 @@ chop_send_block(conn_t *d,
 
   if (evbuffer_drain(source, length))
     /* this really should never happen, and we can't recover from it */
-    log_abort_cn(d, "evbuffer_drain failed"); /* does not return */
+    log_abort(d, "evbuffer_drain failed"); /* does not return */
 
   if (!(flags & CHOP_F_CHAFF))
     ckt->send_offset += length;
@@ -334,8 +334,8 @@ chop_send_block(conn_t *d,
     ckt->sent_syn = true;
   if (flags & CHOP_F_FIN)
     ckt->sent_fin = true;
-  log_debug_cn(d, "sent %lu+%u byte block [flags %04hx]",
-               (unsigned long)CHOP_WIRE_HDR_LEN, length, flags);
+  log_debug(d, "sent %lu+%u byte block [flags %04hx]",
+            (unsigned long)CHOP_WIRE_HDR_LEN, length, flags);
   if (dest->must_transmit_timer)
     evtimer_del(dest->must_transmit_timer);
   return 0;
@@ -345,7 +345,7 @@ chop_send_block(conn_t *d,
   evbuffer_commit_space(block, &v, 1);
  fail_committed:
   evbuffer_drain(block, evbuffer_get_length(block));
-  log_warn_cn(d, "allocation or buffer copy failed");
+  log_warn(d, "allocation or buffer copy failed");
   return -1;
 }
 
@@ -361,7 +361,7 @@ chop_send_blocks(circuit_t *c)
   uint16_t flags;
 
   if (!(block = evbuffer_new())) {
-    log_warn_ckt(c, "allocation failure");
+    log_warn(c, "allocation failure");
     return -1;
   }
 
@@ -369,14 +369,14 @@ chop_send_blocks(circuit_t *c)
     avail = evbuffer_get_length(xmit_pending);
     flags = ckt->sent_syn ? 0 : CHOP_F_SYN;
 
-    log_debug_ckt(c, "%lu bytes to send", (unsigned long)avail);
+    log_debug(c, "%lu bytes to send", (unsigned long)avail);
 
     if (avail == 0)
       break;
 
     target = chop_pick_connection(ckt, avail, &blocksize);
     if (!target) {
-      log_debug_ckt(c, "no target connection available");
+      log_debug(c, "no target connection available");
       /* this is not an error; it can happen e.g. when the server has
          something to send immediately and the client hasn't spoken yet */
       break;
@@ -397,8 +397,7 @@ chop_send_blocks(circuit_t *c)
   evbuffer_free(block);
   avail = evbuffer_get_length(xmit_pending);
   if (avail)
-    log_debug_ckt(c, "%lu bytes still waiting to be sent",
-                  (unsigned long)avail);
+    log_debug(c, "%lu bytes still waiting to be sent", (unsigned long)avail);
   return 0;
 }
 
@@ -411,10 +410,10 @@ chop_send_targeted(circuit_t *c, conn_t *target, size_t blocksize)
   struct evbuffer *block = evbuffer_new();
   uint16_t flags = 0;
 
-  log_debug_cn(target, "%lu bytes available, %lu bytes room",
-               (unsigned long)avail, (unsigned long)blocksize);
+  log_debug(target, "%lu bytes available, %lu bytes room",
+            (unsigned long)avail, (unsigned long)blocksize);
   if (!block) {
-    log_warn_cn(target, "allocation failure");
+    log_warn(target, "allocation failure");
     return -1;
   }
 
@@ -437,8 +436,7 @@ chop_send_targeted(circuit_t *c, conn_t *target, size_t blocksize)
     evbuffer_free(block);
     avail = evbuffer_get_length(xmit_pending);
     if (avail)
-      log_debug_ckt(c, "%lu bytes still waiting to be sent",
-                    (unsigned long)avail);
+      log_debug(c, "%lu bytes still waiting to be sent", (unsigned long)avail);
     return 0;
 
   } else {
@@ -449,8 +447,7 @@ chop_send_targeted(circuit_t *c, conn_t *target, size_t blocksize)
       blocksize = CHOP_MAX_CHAFF;
 
     blocksize = random_range(1, blocksize);
-    log_debug_cn(target, "generating %lu bytes chaff",
-                 (unsigned long)blocksize);
+    log_debug(target, "generating %lu bytes chaff", (unsigned long)blocksize);
 
     chaff = evbuffer_new();
     if (!chaff ||
@@ -474,7 +471,7 @@ chop_send_targeted(circuit_t *c, conn_t *target, size_t blocksize)
     return 0;
 
   fail:
-    log_warn_cn(target, "failed to construct chaff block");
+    log_warn(target, "failed to construct chaff block");
     if (chaff) evbuffer_free(chaff);
     if (block) evbuffer_free(block);
     return -1;
@@ -504,22 +501,22 @@ must_transmit_timer_cb(evutil_socket_t fd, short what, void *arg)
   size_t room;
 
   if (!cn->circuit) {
-    log_debug_cn(cn, "must transmit, but no circuit (stale connection)");
+    log_debug(cn, "must transmit, but no circuit (stale connection)");
     conn_do_flush(cn);
     return;
   }
 
   if (!conn->steg) {
-    log_warn_cn(cn, "must transmit, but no steg module available");
+    log_warn(cn, "must transmit, but no steg module available");
     return;
   }
   room = steg_transmit_room(conn->steg, cn);
   if (!room) {
-    log_warn_cn(cn, "must transmit, but no transmit room");
+    log_warn(cn, "must transmit, but no transmit room");
     return;
   }
 
-  log_debug_cn(cn, "must transmit");
+  log_debug(cn, "must transmit");
   chop_send_targeted(cn->circuit, cn, room);
 }
 
@@ -556,14 +553,14 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
        contents.  Doing all chaff-handling here simplifies the caller
        at the expense of slightly more buffer-management overhead. */
     if (!(hdr->flags & (CHOP_F_SYN|CHOP_F_FIN))) {
-      log_debug_ckt(c, "discarding chaff with no flags");
+      log_debug(c, "discarding chaff with no flags");
       evbuffer_free(block);
       return 0;
     }
 
     hdr->length = 0;
     evbuffer_drain(block, evbuffer_get_length(block));
-    log_debug_ckt(c, "chaff with flags, treating length as 0");
+    log_debug(c, "chaff with flags, treating length as 0");
   }
 
   /* SYN must occur at offset zero, may not be duplicated, and if we
@@ -574,7 +571,7 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
        (queue->next != queue &&
         ((queue->next->flags & CHOP_F_SYN) ||
          !mod32_le(hdr->offset + hdr->length, queue->next->offset))))) {
-    log_warn_ckt(c, "protocol error: inappropriate SYN block");
+    log_warn(c, "protocol error: inappropriate SYN block");
     return -1;
   }
 
@@ -583,7 +580,7 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
   if ((hdr->flags & CHOP_F_FIN) && queue->prev != queue &&
       ((queue->prev->flags & CHOP_F_FIN) ||
        !mod32_le(queue->prev->offset + queue->prev->length, hdr->offset))) {
-    log_warn_ckt(c, "protocol error: inappropriate FIN block");
+    log_warn(c, "protocol error: inappropriate FIN block");
     return -1;
   }
 
@@ -594,7 +591,7 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
         !mod32_le(queue->next->offset + queue->next->length, hdr->offset)) ||
        ((queue->prev->flags & CHOP_F_FIN) &&
         !mod32_le(hdr->offset + hdr->length, queue->prev->offset)))) {
-    log_warn_ckt(c, "protocol error: inappropriate normal block");
+    log_warn(c, "protocol error: inappropriate normal block");
     return -1;
   }
 
@@ -616,8 +613,8 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
 
       /* protocol error: this block goes before 'p' but does not fit
          after 'p->prev' */
-      log_warn_ckt(c, "protocol error: %u byte block does not fit at offset %u",
-                   hdr->length, hdr->offset);
+      log_warn(c, "protocol error: %u byte block does not fit at offset %u",
+               hdr->length, hdr->offset);
       return -1;
     }
   }
@@ -627,10 +624,9 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
      that this block goes after the last block in the list (aka p->prev). */
   if (!p->data && p->prev->data &&
       !mod32_lt(p->prev->offset + p->prev->length, hdr->offset)) {
-    log_warn_ckt(c,
-                 "protocol error: %u byte block does not fit at offset %u "
-                 "(sentinel case)",
-                 hdr->length, hdr->offset);
+    log_warn(c, "protocol error: %u byte block does not fit at offset %u "
+                "(sentinel case)",
+             hdr->length, hdr->offset);
     return -1;
   }
 
@@ -648,7 +644,7 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
 
  grow_back:
   if (evbuffer_add_buffer(p->data, block)) {
-    log_warn_ckt(c, "failed to append to existing buffer");
+    log_warn(c, "failed to append to existing buffer");
     return -1;
   }
   evbuffer_free(block);
@@ -659,7 +655,7 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
   while (p->next->data && p->offset + p->length == p->next->offset) {
     q = p->next;
     if (evbuffer_add_buffer(p->data, q->data)) {
-      log_warn_ckt(c, "failed to merge buffers");
+      log_warn(c, "failed to merge buffers");
       return -1;
     }
     p->length += q->length;
@@ -674,7 +670,7 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
 
  grow_front:
   if (evbuffer_prepend_buffer(p->data, block)) {
-    log_warn_ckt(c, "failed to prepend to existing buffer");
+    log_warn(c, "failed to prepend to existing buffer");
     return -1;
   }
   evbuffer_free(block);
@@ -686,7 +682,7 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
   while (p->prev->data && p->offset == p->prev->offset + p->prev->length) {
     q = p->prev;
     if (evbuffer_prepend_buffer(p->data, q->data)) {
-      log_warn_ckt(c, "failed to merge buffers");
+      log_warn(c, "failed to merge buffers");
       return -1;
     }
     p->length += q->length;
@@ -712,23 +708,23 @@ chop_push_to_upstream(circuit_t *c)
      are gaps between all queue elements).  */
   chop_reassembly_elt *ready = ckt->reassembly_queue.next;
   if (!ready->data || ckt->recv_offset != ready->offset) {
-    log_debug_ckt(c, "no data pushable to upstream yet");
+    log_debug(c, "no data pushable to upstream yet");
     return 0;
   }
 
   if (!ckt->received_syn) {
     if (!(ready->flags & CHOP_F_SYN)) {
-      log_debug_ckt(c, "waiting for SYN");
+      log_debug(c, "waiting for SYN");
       return 0;
     }
-    log_debug_ckt(c, "processed SYN");
+    log_debug(c, "processed SYN");
     ckt->received_syn = true;
   }
 
-  log_debug_ckt(c, "can push %lu bytes to upstream",
-                (unsigned long)evbuffer_get_length(ready->data));
+  log_debug(c, "can push %lu bytes to upstream",
+            (unsigned long)evbuffer_get_length(ready->data));
   if (evbuffer_add_buffer(bufferevent_get_output(c->up_buffer), ready->data)) {
-    log_warn_ckt(c, "failure pushing data to upstream");
+    log_warn(c, "failure pushing data to upstream");
     return -1;
   }
 
@@ -738,7 +734,7 @@ chop_push_to_upstream(circuit_t *c)
     log_assert(!ckt->received_fin);
     log_assert(ready->next == &ckt->reassembly_queue);
     ckt->received_fin = true;
-    log_debug_ckt(c, "processed FIN");
+    log_debug(c, "processed FIN");
     circuit_recv_eof(c);
   }
 
@@ -767,23 +763,23 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
 
   if (!out.second) { // element already exists
     if (!out.first->second) {
-      log_debug_cn(conn, "stale circuit");
+      log_debug(conn, "stale circuit");
       return 0;
     }
     ck = out.first->second;
-    log_debug_cn(conn, "found circuit to %s", ck->up_peer);
+    log_debug(conn, "found circuit to %s", ck->up_peer);
   } else {
     ck = circuit_create(c);
     if (!ck) {
-      log_warn_cn(conn, "failed to create new circuit");
+      log_warn(conn, "failed to create new circuit");
       return -1;
     }
     if (circuit_open_upstream(ck)) {
-      log_warn_cn(conn, "failed to begin upstream connection");
+      log_warn(conn, "failed to begin upstream connection");
       circuit_close(ck);
       return -1;
     }
-    log_debug_cn(conn, "created new circuit to %s", ck->up_peer);
+    log_debug(conn, "created new circuit to %s", ck->up_peer);
     downcast_circuit(ck)->circuit_id = circuit_id;
     out.first->second = ck;
   }
@@ -1007,9 +1003,9 @@ chop_circuit_add_downstream(circuit_t *c, conn_t *conn)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   ckt->downstreams->insert(conn);
-  log_debug_ckt(c, "added connection <%d.%d> to %s, now %lu",
-                c->serial, conn->serial, conn->peername,
-                (unsigned long)ckt->downstreams->size());
+  log_debug(c, "added connection <%d.%d> to %s, now %lu",
+            c->serial, conn->serial, conn->peername,
+            (unsigned long)ckt->downstreams->size());
 
   circuit_disarm_axe_timer(c);
 }
@@ -1019,9 +1015,9 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 {
   chop_circuit_t *ckt = downcast_circuit(c);
   ckt->downstreams->erase(conn);
-  log_debug_ckt(c, "dropped connection <%d.%d> to %s, now %lu",
-                c->serial, conn->serial, conn->peername,
-                (unsigned long)ckt->downstreams->size());
+  log_debug(c, "dropped connection <%d.%d> to %s, now %lu",
+            c->serial, conn->serial, conn->peername,
+            (unsigned long)ckt->downstreams->size());
   /* If that was the last connection on this circuit AND we've both
      received and sent a FIN, close the circuit.  Otherwise, if we're
      the server, arm a timer that will kill off this circuit in a
@@ -1112,7 +1108,7 @@ chop_circuit_send(circuit_t *c)
        reopen our outbound connections; the on-connection event will
        bring us back here.  If we're the server, we have to just
        twiddle our thumbs and hope the client reconnects. */
-    log_debug_ckt(c, "no downstream connections");
+    log_debug(c, "no downstream connections");
     if (c->cfg->mode != LSN_SIMPLE_SERVER)
       circuit_reopen_downstreams(c);
     else
@@ -1174,10 +1170,10 @@ chop_conn_recv(conn_t *s)
       return 0; /* need more data */
     source->steg = steg_detect(s);
     if (!source->steg) {
-      log_debug_cn(s, "no recognized steg pattern detected");
+      log_debug(s, "no recognized steg pattern detected");
       return -1;
     } else {
-      log_debug_cn(s, "detected steg pattern %s", source->steg->vtable->name);
+      log_debug(s, "detected steg pattern %s", source->steg->vtable->name);
     }
   }
 
@@ -1185,9 +1181,9 @@ chop_conn_recv(conn_t *s)
     return -1;
 
   if (!s->circuit) {
-    log_debug_cn(s, "finding circuit");
+    log_debug(s, "finding circuit");
     if (chop_peek_circuit_id(source->recv_pending, &hdr)) {
-      log_debug_cn(s, "not enough data to find circuit yet");
+      log_debug(s, "not enough data to find circuit yet");
       return 0;
     }
     if (chop_find_or_make_circuit(s, hdr.ckt_id))
@@ -1209,16 +1205,16 @@ chop_conn_recv(conn_t *s)
 
   c = s->circuit;
   ckt = downcast_circuit(c);
-  log_debug_cn(s, "circuit to %s", c->up_peer);
+  log_debug(s, "circuit to %s", c->up_peer);
 
   for (;;) {
     avail = evbuffer_get_length(source->recv_pending);
     if (avail == 0)
       break;
 
-    log_debug_cn(s, "%lu bytes available", (unsigned long)avail);
+    log_debug(s, "%lu bytes available", (unsigned long)avail);
     if (avail < CHOP_WIRE_HDR_LEN) {
-      log_debug_cn(s, "incomplete block");
+      log_debug(s, "incomplete block");
       break;
     }
 
@@ -1226,18 +1222,17 @@ chop_conn_recv(conn_t *s)
       return -1;
 
     if (avail < CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length) {
-      log_debug_cn(s, "incomplete block (need %lu bytes)",
-                   (unsigned long)(CHOP_WIRE_HDR_LEN + GCM_TAG_LEN +
-                                   hdr.length));
+      log_debug(s, "incomplete block (need %lu bytes)",
+                (unsigned long)(CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length));
       break;
     }
 
     if (ckt->circuit_id != hdr.ckt_id) {
-      log_warn_cn(s, "protocol error: circuit id mismatch");
+      log_warn(s, "protocol error: circuit id mismatch");
       return -1;
     }
 
-    log_debug_cn(s, "receiving block of %lu+%u bytes "
+    log_debug(s, "receiving block of %lu+%u bytes "
                  "[offset %u flags %04hx]",
                  (unsigned long)CHOP_WIRE_HDR_LEN + GCM_TAG_LEN,
                  hdr.length, hdr.offset, hdr.flags);
@@ -1245,12 +1240,12 @@ chop_conn_recv(conn_t *s)
     if (evbuffer_copyout(source->recv_pending, decodebuf,
                          CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length)
         != (ssize_t)(CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length)) {
-      log_warn_cn(s, "failed to copy block to decode buffer");
+      log_warn(s, "failed to copy block to decode buffer");
       return -1;
     }
     block = evbuffer_new();
     if (!block || evbuffer_expand(block, hdr.length)) {
-      log_warn_cn(s, "allocation failure");
+      log_warn(s, "allocation failure");
       return -1;
     }
 
@@ -1258,20 +1253,20 @@ chop_conn_recv(conn_t *s)
                       decodebuf + 16, decodebuf + 16,
                       hdr.length + CHOP_WIRE_HDR_LEN + GCM_TAG_LEN - 16,
                       decodebuf, 16)) {
-      log_warn_cn(s, "MAC verification failure");
+      log_warn(s, "MAC verification failure");
       evbuffer_free(block);
       return -1;
     }
 
     if (evbuffer_add(block, decodebuf + CHOP_WIRE_HDR_LEN, hdr.length)) {
-      log_warn_cn(s, "failed to transfer block to reassembly queue");
+      log_warn(s, "failed to transfer block to reassembly queue");
       evbuffer_free(block);
       return -1;
     }
 
     if (evbuffer_drain(source->recv_pending,
                        CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length)) {
-      log_warn_cn(s, "failed to consume block from wire");
+      log_warn(s, "failed to consume block from wire");
       evbuffer_free(block);
       return -1;
     }

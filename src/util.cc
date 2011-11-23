@@ -564,7 +564,7 @@ logpfx(int severity, const char *fn)
 }
 
 static void
-logpfx_ckt(int severity, const char *fn, circuit_t *ckt)
+logpfx(int severity, const char *fn, circuit_t *ckt)
 {
   if (!sev_is_valid(severity))
     abort();
@@ -581,7 +581,7 @@ logpfx_ckt(int severity, const char *fn, circuit_t *ckt)
 }
 
 static void
-logpfx_cn(int severity, const char *fn, conn_t *conn)
+logpfx(int severity, const char *fn, conn_t *conn)
 {
   if (!sev_is_valid(severity))
     abort();
@@ -625,17 +625,17 @@ void
 }
 
 void
-(log_abort_ckt)(FNARG circuit_t *ckt, const char *format, ...)
+(log_abort)(FNARG circuit_t *ckt, const char *format, ...)
 {
-  logpfx_ckt(LOG_SEV_ERR, FN, ckt);
+  logpfx(LOG_SEV_ERR, FN, ckt);
   logfmt(LOG_SEV_ERR, format);
   exit(1);
 }
 
 void
-(log_abort_cn)(FNARG conn_t *conn, const char *format, ...)
+(log_abort)(FNARG conn_t *conn, const char *format, ...)
 {
-  logpfx_cn(LOG_SEV_ERR, FN, conn);
+  logpfx(LOG_SEV_ERR, FN, conn);
   logfmt(LOG_SEV_ERR, format);
   exit(1);
 }
@@ -648,16 +648,16 @@ void
 }
 
 void
-(log_warn_ckt)(FNARG circuit_t *ckt, const char *format, ...)
+(log_warn)(FNARG circuit_t *ckt, const char *format, ...)
 {
-  logpfx_ckt(LOG_SEV_WARN, FN, ckt);
+  logpfx(LOG_SEV_WARN, FN, ckt);
   logfmt(LOG_SEV_WARN, format);
 }
 
 void
-(log_warn_cn)(FNARG conn_t *cn, const char *format, ...)
+(log_warn)(FNARG conn_t *cn, const char *format, ...)
 {
-  logpfx_cn(LOG_SEV_WARN, FN, cn);
+  logpfx(LOG_SEV_WARN, FN, cn);
   logfmt(LOG_SEV_WARN, format);
 }
 
@@ -669,16 +669,16 @@ void
 }
 
 void
-(log_info_ckt)(FNARG circuit_t *ckt, const char *format, ...)
+(log_info)(FNARG circuit_t *ckt, const char *format, ...)
 {
-  logpfx_ckt(LOG_SEV_INFO, FN, ckt);
+  logpfx(LOG_SEV_INFO, FN, ckt);
   logfmt(LOG_SEV_INFO, format);
 }
 
 void
-(log_info_cn)(FNARG conn_t *cn, const char *format, ...)
+(log_info)(FNARG conn_t *cn, const char *format, ...)
 {
-  logpfx_cn(LOG_SEV_INFO, FN, cn);
+  logpfx(LOG_SEV_INFO, FN, cn);
   logfmt(LOG_SEV_INFO, format);
 }
 
@@ -690,15 +690,15 @@ void
 }
 
 void
-(log_debug_ckt)(FNARG circuit_t *ckt, const char *format, ...)
+(log_debug)(FNARG circuit_t *ckt, const char *format, ...)
 {
-  logpfx_ckt(LOG_SEV_DEBUG, FN, ckt);
+  logpfx(LOG_SEV_DEBUG, FN, ckt);
   logfmt(LOG_SEV_DEBUG, format);
 }
 
 void
-(log_debug_cn)(FNARG conn_t *cn, const char *format, ...)
+(log_debug)(FNARG conn_t *cn, const char *format, ...)
 {
-  logpfx_cn(LOG_SEV_DEBUG, FN, cn);
+  logpfx(LOG_SEV_DEBUG, FN, cn);
   logfmt(LOG_SEV_DEBUG, format);
 }
