@@ -59,4 +59,44 @@ private:
   decryptor& operator=(const decryptor&);
 };
 
+/** Generate keying material from an initial key of some kind, a salt
+    value, and a context value, all of which are formally bitstrings.
+    See http://tools.ietf.org/html/rfc5869 for the requirements on the
+    salt and the context.  'from_random_secret' uses HKDF as described
+    in that document, and therefore requires the initial key to be a
+    high-entropy random value; 'from_password' stretches a low-entropy
+    passphrase with PBKDF2 first.  Either way, we use HKDF-Expand as
+    the actual pseudo-random function.  */
+
+struct key_generator
+{
+  /** Construct a key generator from a genuinely random secret, plus a
+      salt value (should be as random as possible, does not have to be
+      secret) and a context value (whatever you've got that uniquely
+      identifies the application context; doesn't have to be random
+      _or_ secret).  */
+  static key_generator *from_random_secret(const uint8_t *key,  size_t klen,
+                                           const uint8_t *salt, size_t slen,
+                                           const uint8_t *ctxt, size_t clen);
+
+  /** Construct a key generator from a passphrase.  The salt and context
+      arguments are the same as for from_random_secret. */
+  static key_generator *from_passphrase(const uint8_t *phra, size_t plen,
+                                        const uint8_t *salt, size_t slen,
+                                        const uint8_t *ctxt, size_t clen);
+
+  /** Write LEN bytes of key material to BUF.  May be called
+      repeatedly.  Note that HKDF has a hard upper limit on the total
+      amount of key material it can generate.  The return value is
+      therefore the amount of data actually written to BUF, and it
+      will be no greater than LEN, but may be as short as zero. */
+  virtual size_t generate(uint8_t *buf, size_t len) = 0;
+
+  virtual ~key_generator();
+  key_generator() {}
+private:
+  key_generator(const decryptor&);
+  key_generator& operator=(const decryptor&);
+};
+
 #endif
