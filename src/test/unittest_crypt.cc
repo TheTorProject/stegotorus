@@ -251,7 +251,7 @@ test_crypt_aesgcm_bad_dec(void *)
 
 /* HKDF-SHA256 test vectors from http://tools.ietf.org/html/rfc5869 */
 static void
-test_crypt_hkdf_simple(void *)
+test_crypt_hkdf(void *)
 {
   struct testvec
   {
@@ -309,7 +309,7 @@ test_crypt_hkdf_simple(void *)
 #undef TV
 
   key_generator *c;
-  uint8_t obuf[128];
+  uint8_t obuf[144];
   int i;
   size_t n;
 
@@ -328,6 +328,48 @@ test_crypt_hkdf_simple(void *)
     delete c;
   }
   c = 0;
+
+  // Read the key material in small, odd-sized chunks to test the
+  // "leftover" logic.
+  for (i = 0; testvecs[i].key; i++) {
+    c = key_generator::from_random_secret((const uint8_t *)testvecs[i].key,
+                                          testvecs[i].klen,
+                                          (const uint8_t *)testvecs[i].salt,
+                                          testvecs[i].slen,
+                                          (const uint8_t *)testvecs[i].info,
+                                          testvecs[i].ilen);
+    tt_int_op(c, !=, 0);
+
+    for (size_t j = 0; j < testvecs[i].olen; j += n) {
+      n = c->generate(obuf+j, 3);
+      tt_int_op(n, ==, 3);
+    }
+    tt_mem_op(obuf, ==, testvecs[i].okm, testvecs[i].olen);
+    delete c;
+  }
+  c = 0;
+
+  // Test the upper limit on the amount of key material that can be
+  // generated (255 * 32 = 8160 bytes), and also reading key material
+  // in large chunks.
+  c = key_generator::from_random_secret((const uint8_t *)testvecs[0].key,
+                                        testvecs[0].klen,
+                                        (const uint8_t *)testvecs[0].salt,
+                                        testvecs[0].slen,
+                                        (const uint8_t *)testvecs[0].info,
+                                        testvecs[0].ilen);
+  tt_int_op(c, !=, 0);
+  for (i = 0; i < 56; i++) {
+    n = c->generate(obuf, 144);
+    tt_int_op(n, ==, 144);
+  }
+  // on the fifty-seventh iteration we should get a short read
+  n = c->generate(obuf, 144);
+  tt_int_op(n, ==, 96);
+
+  // on the fifty-eighth iteration we should get nothing
+  n = c->generate(obuf, 144);
+  tt_int_op(n, ==, 0);
 
  end:
   if (c)
@@ -359,7 +401,7 @@ struct testcase_t crypt_tests[] = {
   T(aesgcm_enc),
   T(aesgcm_good_dec),
   T(aesgcm_bad_dec),
-  T(hkdf_simple),
+  T(hkdf),
   T(rng),
   END_OF_TESTCASES
 };
