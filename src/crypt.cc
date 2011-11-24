@@ -142,6 +142,8 @@ namespace {
     CryptoPP::SecByteBlock prevT;
     CryptoPP::SecByteBlock info;
     uint8_t counter;
+    uint8_t leftover;
+    bool dead : 1;
 
     virtual size_t generate(uint8_t *buf, size_t len);
     virtual ~key_generator_impl();
@@ -151,7 +153,9 @@ namespace {
       : expander(prk, SHA256_LEN),
         prevT(0),
         info(info, ilen),
-        counter(0)
+        counter(1),
+        leftover(0),
+        dead(false)
     {}
   };
 }
@@ -196,6 +200,14 @@ key_generator::from_passphrase(const uint8_t *phra, size_t plen,
       slen = SHA256_LEN;
     }
 
+    // The PBKDF2-HMAC<hash> construction, ignoring the iteration
+    // process, is very similar to the HKDF-Extract<hash> construction;
+    // the biggest difference is that you key the HMAC with the
+    // passphrase rather than the salt.  I *think* it is appropriate
+    // to just feed its output directly to the HKDF-Expand phase; an
+    // alternative would be to run PBKDF2 on the passphrase without a
+    // salt, then put the result through HKDF-Extract with the salt.
+    //
     // 1000 iterations or 50 ms, whichever is more
     extractor.DeriveKey(prk, SHA256_LEN, 0, phra, plen, salt, slen, 1000, 0.05);
 
@@ -209,11 +221,48 @@ key_generator::from_passphrase(const uint8_t *phra, size_t plen,
 size_t
 key_generator_impl::generate(uint8_t *buf, size_t len)
 {
-  try {
+  if (dead) {
     memset(buf, 0, len);
     return 0;
   }
-  CATCH_ALL_EXCEPTIONS(0);
+  try {
+    size_t n = 0;
+    if (leftover >= len) {
+      memcpy(buf, prevT.end() - leftover, len);
+      leftover -= len;
+      return len;
+    } else if (leftover) {
+      memcpy(buf, prevT.end() - leftover, leftover);
+      n += leftover;
+      leftover = 0;
+    }
+    while (n < len) {
+      // generate the next block
+      expander.Update(prevT, prevT.size());
+      expander.Update(info, info.size());
+      expander.Update(&counter, 1);
+      counter++;
+      prevT.New(SHA256_LEN);
+      expander.Final(prevT);
+
+      if (n + SHA256_LEN < len) {
+        memcpy(buf + n, prevT, SHA256_LEN);
+        n += SHA256_LEN;
+      } else {
+        leftover = SHA256_LEN - (len - n);
+        memcpy(buf + n, prevT, len - n);
+        n = len;
+      }
+      if (counter == 0) {
+        if (n < len)
+          memset(buf + n, 0, len - n);
+        dead = true;
+        break;
+      }
+    }
+    return n;
+  }
+  CATCH_ALL_EXCEPTIONS((memset(buf, 0, len), 0));
 }
 
 key_generator::~key_generator() {}
