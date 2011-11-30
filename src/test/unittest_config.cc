@@ -39,7 +39,7 @@ setup_test_config(const struct testcase_t *tc)
 }
 
 static int
-cleanup_test_config(const struct testcase_t *tc, void *state)
+cleanup_test_config(const struct testcase_t *, void *state)
 {
   struct option_parsing_case *c;
   for (c = (struct option_parsing_case *)state; c->n_opts; c++)

@@ -20,7 +20,7 @@ struct test_socks_state
 };
 
 static int
-cleanup_socks_state(const struct testcase_t *unused, void *data)
+cleanup_socks_state(const struct testcase_t *, void *data)
 {
   struct test_socks_state *s = (struct test_socks_state *)data;
 
@@ -35,7 +35,7 @@ cleanup_socks_state(const struct testcase_t *unused, void *data)
 }
 
 static void *
-setup_socks_state(const struct testcase_t *unused)
+setup_socks_state(const struct testcase_t *)
 {
   struct test_socks_state *s =
     (struct test_socks_state *)xzalloc(sizeof(struct test_socks_state));

@@ -86,7 +86,7 @@ x_http::detect(conn_t *conn)
 }
 
 size_t
-x_http::transmit_room(conn_t *conn)
+x_http::transmit_room(conn_t *)
 {
   if (this->have_transmitted)
     /* can't send any more on this connection */

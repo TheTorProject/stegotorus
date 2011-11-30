@@ -233,7 +233,7 @@ x_null_conn_maybe_open_upstream(conn_t *conn)
 
 /** Null has no handshake */
 static int
-x_null_conn_handshake(conn_t *c)
+x_null_conn_handshake(conn_t *)
 {
   return 0;
 }

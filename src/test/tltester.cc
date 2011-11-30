@@ -287,7 +287,7 @@ socket_event_cb(struct bufferevent *bev, short what, void *arg)
 }
 
 static void
-pause_expired_cb(evutil_socket_t fd, short what, void *arg)
+pause_expired_cb(evutil_socket_t, short, void *arg)
 {
   tstate *st = (tstate *)arg;
   script_next_action(st);

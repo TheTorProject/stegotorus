@@ -495,7 +495,7 @@ chop_send_chaff(circuit_t *c)
 }
 
 static void
-must_transmit_timer_cb(evutil_socket_t fd, short what, void *arg)
+must_transmit_timer_cb(evutil_socket_t, short, void *arg)
 {
   conn_t *cn = (conn_t *)arg;
   chop_conn_t *conn = downcast_conn(cn);
@@ -1075,7 +1075,7 @@ chop_conn_free(conn_t *c)
 }
 
 static int
-chop_conn_maybe_open_upstream(conn_t *conn)
+chop_conn_maybe_open_upstream(conn_t *)
 {
   /* We can't open the upstream until we have a circuit ID. */
   return 0;
@@ -1314,7 +1314,7 @@ chop_conn_recv_eof(conn_t *cn)
   return 0;
 }
 
-static void chop_conn_expect_close(conn_t *cn)
+static void chop_conn_expect_close(conn_t *)
 {
   /* do we need to do something here? */
 }

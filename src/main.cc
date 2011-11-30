@@ -50,8 +50,8 @@ start_shutdown(int barbaric, const char *label)
   log_info("%s shutdown triggered by %s "
            "(%lu connection%s, %lu circuit%s %s)",
            barbaric ? "barbaric" : "normal", label,
-           conn_count(), conn_count() == 1 ? "" : "s",
-           circuit_count(), circuit_count() == 1 ? "" : "s",
+           (unsigned long)conn_count(), conn_count() == 1 ? "" : "s",
+           (unsigned long)circuit_count(), circuit_count() == 1 ? "" : "s",
            barbaric ? "will be broken" : "remain");
 
   listener_close_all();          /* prevent further connections */
@@ -79,7 +79,7 @@ finish_shutdown(void)
    SIGTERM: Shut down immediately but cleanly.
 */
 static void
-handle_signal_cb(evutil_socket_t fd, short what, void *arg)
+handle_signal_cb(evutil_socket_t fd, short, void *)
 {
   static int got_sigint = 0;
   int signum = (int) fd;
@@ -102,7 +102,7 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 */
 #ifndef _WIN32
 static void
-lethal_signal(int signum, siginfo_t *si, void *uc)
+lethal_signal(int signum, siginfo_t *si, void *)
 {
   char faultmsg[80];
   int n;
@@ -138,7 +138,7 @@ lethal_signal(int signum, siginfo_t *si, void *uc)
    that channel receives an EOF.
 */
 static void
-stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
+stdin_detect_eof_cb(evutil_socket_t fd, short, void *arg)
 {
   size_t nread = 0;
   ssize_t r;
@@ -238,7 +238,7 @@ handle_generic_args(const char *const *argv)
 }
 
 int
-main(int argc, const char *const *argv)
+main(int, const char *const *argv)
 {
   struct event *sig_int;
   struct event *sig_term;

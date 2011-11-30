@@ -62,7 +62,7 @@ setup_proto_test_state(const struct testcase_t *tcase)
 }
 
 static int
-cleanup_proto_test_state(const struct testcase_t *tcase, void *state)
+cleanup_proto_test_state(const struct testcase_t *, void *state)
 {
   struct proto_test_state *s = (struct proto_test_state *)state;
 

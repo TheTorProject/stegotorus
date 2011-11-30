@@ -45,7 +45,7 @@ conn_t *conn_create(config_t *cfg, struct bufferevent *buf,
 void conn_close(conn_t *conn);
 
 /** Report the number of currently-open connections. */
-unsigned long conn_count(void);
+size_t conn_count(void);
 
 /** Retrieve the inbound evbuffer for a connection. */
 static inline struct evbuffer *conn_get_inbound(conn_t *conn)
@@ -142,6 +142,6 @@ void circuit_disarm_axe_timer(circuit_t *ckt);
 
 void circuit_do_flush(circuit_t *ckt);
 
-unsigned long circuit_count(void);
+size_t circuit_count(void);
 
 #endif

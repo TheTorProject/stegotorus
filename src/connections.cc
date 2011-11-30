@@ -201,7 +201,7 @@ conn_transmit_soon(conn_t *conn, unsigned long timeout)
    that can only send data in small chunks. */
 
 static void
-flush_timer_cb(evutil_socket_t fd, short what, void *arg)
+flush_timer_cb(evutil_socket_t, short, void *arg)
 {
   circuit_t *ckt = (circuit_t *)arg;
   log_debug(ckt, "flush timer expired, %lu bytes available",
@@ -215,7 +215,7 @@ flush_timer_cb(evutil_socket_t fd, short what, void *arg)
    connections. */
 
 static void
-axe_timer_cb(evutil_socket_t fd, short what, void *arg)
+axe_timer_cb(evutil_socket_t, short, void *arg)
 {
   circuit_t *ckt = (circuit_t *)arg;
   log_warn(ckt, "timeout waiting for new connections");
@@ -277,7 +277,8 @@ void
 circuit_close(circuit_t *ckt)
 {
   circuits.erase(ckt);
-  log_debug(ckt, "closing circuit; %lu remaining", circuits.size());
+  log_debug(ckt, "closing circuit; %lu remaining",
+            (unsigned long)circuits.size());
 
   if (ckt->up_buffer)
     bufferevent_free(ckt->up_buffer);

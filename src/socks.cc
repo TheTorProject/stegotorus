@@ -303,7 +303,8 @@ socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
 */
 enum socks_ret
 socks5_handle_negotiation(struct evbuffer *source,
-                          struct evbuffer *dest, socks_state_t *state)
+                          struct evbuffer *dest,
+                          socks_state_t *)
 {
   unsigned int found_noauth, i;
   uint8_t nmethods;

@@ -136,7 +136,7 @@ listener_close_all(void)
    receives a connection.
  */
 static void
-client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
+client_listener_cb(struct evconnlistener *, evutil_socket_t fd,
                    struct sockaddr *peeraddr, int peerlen,
                    void *closure)
 {
@@ -188,7 +188,7 @@ client_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
    This function is called when a server-mode listener receives a connection.
  */
 static void
-server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
+server_listener_cb(struct evconnlistener *, evutil_socket_t fd,
                    struct sockaddr *peeraddr, int peerlen,
                    void *closure)
 {
