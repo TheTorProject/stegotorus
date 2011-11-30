@@ -4,14 +4,10 @@
 
 ACLOCAL_AMFLAGS = -I m4 --install
 
-WARNINGS  = -Werror -Wall -Wextra -Wformat=2 \
+WARNINGS    = -Werror -Wall -Wextra -Wformat=2 \
  -Wno-unused-parameter -Wno-overlength-strings -Wno-long-long
-CWARNINGS = -pedantic -Wwrite-strings -Wdeclaration-after-statement \
- -Wstrict-prototypes -Wmissing-prototypes
 
-AM_CFLAGS   = -std=gnu99 $(WARNINGS) $(CWARNINGS)
 AM_CXXFLAGS = -std=gnu++98 $(WARNINGS)
-
 AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
 LDADD       = libstegotorus.a
 
