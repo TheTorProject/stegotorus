@@ -84,7 +84,7 @@ GUNIT = $(SHELL) $(srcdir)/src/test/genunitgrps.sh
 
 AM_V_gs   = $(AM_V_gs_$(V))
 AM_V_gs_  = $(AM_V_gs_$(AM_DEFAULT_VERBOSITY))
-AM_V_gs_0 = @echo "  GEN   " $(patsubst stamp-%,%.c,$@);
+AM_V_gs_0 = @echo "  GEN   " $(patsubst stamp-%,%.cc,$@);
 
 protolist.cc: stamp-protolist ;
 stamp-protolist: $(PROTOCOLS) Makefile src/genmodtable.sh
