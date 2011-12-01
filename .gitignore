@@ -35,8 +35,8 @@
 /steglist.c
 /unitgrplist.c
 
-/libobfsproxy.a
-/obfsproxy
+/libstegotorus.a
+/stegotorus
 /tltester
 /unittests
 
