@@ -296,7 +296,7 @@ pdfUnwrap (char *data, unsigned int dlen,
 
 
 
-int x_http2_server_PDF_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
+int http_server_PDF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
 
   struct evbuffer *dest = conn_get_outbound(conn);
   size_t sbuflen = evbuffer_get_length(source);
@@ -321,7 +321,7 @@ int x_http2_server_PDF_transmit (steg_t* s, struct evbuffer *source, conn_t *con
   log_debug("Entering SERVER PDF transmit with sbuflen %d", (int)sbuflen);
 
   nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
-  iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
+  iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
 
   if (evbuffer_peek(source, sbuflen, NULL, iv, nv) != nv) {
     free(iv);
@@ -330,7 +330,7 @@ int x_http2_server_PDF_transmit (steg_t* s, struct evbuffer *source, conn_t *con
 
   cnt = 0;
   for (i = 0; i < nv; i++) {
-    const unsigned char *p = iv[i].iov_base;
+    const unsigned char *p = (const unsigned char *)iv[i].iov_base;
     const unsigned char *limit = p + iv[i].iov_len;
     while (p < limit && cnt < (int)sbuflen) {
       data1[cnt++] = *p++;
@@ -430,7 +430,7 @@ int x_http2_server_PDF_transmit (steg_t* s, struct evbuffer *source, conn_t *con
 
 
 int
-x_http2_handle_client_PDF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
+http_handle_client_PDF_receive(steg_t *, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
   struct evbuffer_ptr s2;
   unsigned int response_len = 0, hdrLen;
   char outbuf[HTTP_MSG_BUF_SIZE];

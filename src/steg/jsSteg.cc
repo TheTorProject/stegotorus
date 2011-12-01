@@ -707,7 +707,7 @@ int testDecode2(char *inBuf, char *outBuf,
 
 
 int 
-x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, unsigned int content_type) {
+http_server_JS_transmit (steg_t*, struct evbuffer *source, conn_t *conn, unsigned int content_type) {
 
   struct evbuffer_iovec *iv;
   int nv;
@@ -734,7 +734,7 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, un
   // evbuffer_dump(source, stderr);
 
   nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
-  iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
+  iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
 
   if (evbuffer_peek(source, sbuflen, NULL, iv, nv) != nv) {
     free(iv);
@@ -761,7 +761,7 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, un
   // Convert data in 'source' to hexadecimal and write it to data
   cnt = 0;
   for (i = 0; i < nv; i++) {
-    const unsigned char *p = iv[i].iov_base;
+    const unsigned char *p = (const unsigned char *)iv[i].iov_base;
     const unsigned char *limit = p + iv[i].iov_len;
     char c;
 
@@ -809,11 +809,7 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, un
 
   hLen = hend+4-jsTemplate;
   cLen = jsLen - hLen;
-  outbuf = malloc(cLen);
-  if (outbuf == NULL) {
-    log_warn("malloc for outbuf fails");
-    return -1;
-  }
+  outbuf = (char *)xmalloc(cLen);
 
   r = encodeHTTPBody(data, hend+4, outbuf, datalen, cLen, cLen, mode);
 
@@ -826,11 +822,7 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, un
   if (gzipMode == 1) {
     // conservative estimate:
     // sizeof outbuf2 = cLen + 10-byte for gzip header + 8-byte for crc 
-    outbuf2 = malloc(cLen+18);  
-    if (outbuf2 == NULL) {
-      log_warn("malloc for outbuf2 fails");
-      return -1;
-    }
+    outbuf2 = (char *)xmalloc(cLen+18);  
 
     outbuf2len = gzDeflate(outbuf, cLen, outbuf2, cLen+18, time(NULL));
 
@@ -893,7 +885,7 @@ x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, un
 
 
 int
-x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
+http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
   struct evbuffer_ptr s2;
   unsigned int response_len = 0;
   unsigned int content_len = 0;

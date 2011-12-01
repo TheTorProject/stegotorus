@@ -113,7 +113,7 @@ case $TYPE in
     client)
 	IPS=""
 	for (( c=1; c<=$N; c++)) ; do 
-	    IPS="${IPS}${IP}:${PORT} x_http2 " ;
+	    IPS="${IPS}${IP}:${PORT} http " ;
 	done
 	./obfsproxy --log-min-severity=$LOG chop socks 127.0.0.1:1080 $IPS
 	;;

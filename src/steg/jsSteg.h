@@ -62,10 +62,10 @@ int testDecode2(char *inBuf, char *outBuf,
 
 
 int 
-x_http2_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, unsigned int content_type);
+http_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, unsigned int content_type);
 
 int
-x_http2_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
+http_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
 
 
 

@@ -32,8 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     See LICENSE for other credits and copying information
 */
 
-
-
 #include "util.h"
 #include "connections.h"
 #include "steg.h"
@@ -46,17 +44,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <event2/buffer.h>
 #include <stdio.h>
 
-
-
-
-
-
 #define MIN_COOKIE_SIZE 24
 #define MAX_COOKIE_SIZE 1024
 
-
-int 
-x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
+int
+http_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
 
 int
 lookup_peer_name_from_ip(char* p_ip, char* p_name);
@@ -65,57 +57,52 @@ lookup_peer_name_from_ip(char* p_ip, char* p_name);
 static int has_peer_name = 0;
 static char peername[512];
 
-
-struct x_http2_steg_t
+namespace {
+struct http : steg_t
 {
-  steg_t super;
-  
-  int have_transmitted;
-  int have_received;
+  bool have_transmitted : 1;
+  bool have_received : 1;
   int type;
+
+  STEG_DECLARE_METHODS(http);
 };
+}
 
-
-STEG_DEFINE_MODULE(x_http2,
+STEG_DEFINE_MODULE(http,
                    1024,  /* client-server max data rate - made up */
                    10240, /* server-client max data rate - ditto */
                    1,     /* max concurrent connections per IP */
                    1);     /* max concurrent IPs */
 
-
-
-
-
-
-int x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
-int x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
+int http_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
+int http_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
 
 void evbuffer_dump(struct evbuffer *buf, FILE *out);
 void buf_dump(unsigned char* buf, int len, FILE *out);
 int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen);
 
 
-void 
-evbuffer_dump(struct evbuffer *buf, FILE *out) 
+void
+evbuffer_dump(struct evbuffer *buf, FILE *out)
 {
   int nextent = evbuffer_peek(buf, SSIZE_MAX, 0, 0, 0);
   struct evbuffer_iovec v[nextent];
   int i;
   const unsigned char *p, *limit;
-  
+
   if (evbuffer_peek(buf, -1, 0, v, nextent) != nextent)
     abort();
-  
+
   for (i = 0; i < nextent; i++) {
-    p = v[i].iov_base;
+    p = (const unsigned char *)v[i].iov_base;
     limit = p + v[i].iov_len;
-    
+
     putc('|', out);
     while (p < limit) {
       if (*p < 0x20 || *p >= 0x7F || *p == '\\' || *p == '|')
-	fprintf(out, "\\x%02x", *p);
+        fprintf(out, "\\x%02x", *p);
       else
-	putc(*p, out);
+        putc(*p, out);
       p++;
     }
   }
@@ -126,8 +113,8 @@ evbuffer_dump(struct evbuffer *buf, FILE *out)
 
 
 
-void 
-buf_dump(unsigned char* buf, int len, FILE *out) 
+void
+buf_dump(unsigned char* buf, int len, FILE *out)
 {
   int i=0;
   putc('|', out);
@@ -143,15 +130,9 @@ buf_dump(unsigned char* buf, int len, FILE *out)
 }
 
 
-
-
-
-steg_t * 
-x_http2_new(rng_t *rng, unsigned int is_clientside)
+http::http()
+  : have_transmitted(false), have_received(false)
 {
-
-  STEG_NEW(x_http2, state, rng, is_clientside);
-
   if (is_clientside)
     load_payloads("traces/client.out");
   else {
@@ -162,34 +143,24 @@ x_http2_new(rng_t *rng, unsigned int is_clientside)
     init_PDF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE);
     init_SWF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
   }
-
-
-  /* if there were extra stuff to fill in, you would do it here */
-  return upcast_steg(state);
 }
 
-void
-x_http2_del(steg_t *s)
+http::~http()
 {
-  x_http2_steg_t *state = downcast_steg(s);
-
-  STEG_DEL(s);
-
-  /* if there were extra stuff to deallocate, you would do it here */
-  free(state);
 }
 
-
-// x_http2_detect determines if a packet should be processed by the http2 steg module 
-unsigned int
-x_http2_detect(conn_t *conn)
+/** Determine whether a connection should be processed by this
+    steganographer. */
+bool
+http::detect(conn_t *conn)
 {
   struct evbuffer *buf = conn_get_inbound(conn);
   unsigned char *data;
 
   //return 0;
 /*****
- Here is a list of HTTP response codes extracted from the server-portals.out trace
+ Here is a list of HTTP response codes extracted from the
+ server-portals.out trace
 
 7369 HTTP/1.1 200 OK
  470 HTTP/1.1 302 Found
@@ -224,7 +195,7 @@ x_http2_detect(conn_t *conn)
 
   if (evbuffer_get_length(buf) >= 12) {
     data = evbuffer_pullup(buf, 12);
-    
+
     if (data != NULL &&
          ((!memcmp(data, "HTTP/1.1 200", 12)) ||
           (!memcmp(data, "HTTP/1.1 302", 12)) ||
@@ -235,7 +206,7 @@ x_http2_detect(conn_t *conn)
           (!memcmp(data, "HTTP/1.1 301", 12)) ||
           (!memcmp(data, "HTTP/1.1 302", 12)) ||
           (!memcmp(data, "HTTP/1.1 404", 12)))) {
-      log_debug("x_http2_detect: valid response");
+      log_debug("http_detect: valid response");
       return 1;
     }
   }
@@ -258,42 +229,38 @@ x_http2_detect(conn_t *conn)
 
   if (evbuffer_get_length(buf) >= 9) {
     data = evbuffer_pullup(buf, 9);
-    if (data != NULL && (!memcmp(data, "GET /", 5) || !memcmp(data, "POST /", 5) || !memcmp(data, "Cookie", 6))) {
-      log_debug("x_http2_detect: valid request");
-      return 1;
+    if (data != NULL && (!memcmp(data, "GET /", 5) ||
+                         !memcmp(data, "POST /", 5) ||
+                         !memcmp(data, "Cookie", 6))) {
+      log_debug("http_detect: valid request");
+      return true;
     }
   }
- 
-  log_debug("x_http2_detect: didn't find either HTTP request or response");
+
+  log_debug("http_detect: didn't find either HTTP request or response");
   /* Didn't find either the client or the server pattern. */
-  return 0;
+  return false;
 }
 
 size_t
-x_http2_transmit_room(steg_t *s, conn_t *conn)
+http::transmit_room(conn_t *)
 {
   unsigned int mjc;
 
-  if (downcast_steg(s)->have_transmitted)
+  if (have_transmitted)
     /* can't send any more on this connection */
     return 0;
-  
 
-  if (s->is_clientside) {
-    /* per http://www.boutell.com/newfaq/misc/urllength.html,
-       IE<9 can handle no more than 2048 characters in the path
-       component of a URL; we're not talking to IE, but this limit
-       means longer paths look fishy; we hex-encode the path, so
-       we have to cut the number in half. */
+
+  if (is_clientside) {
     return (MIN_COOKIE_SIZE + rand() % (MAX_COOKIE_SIZE - MIN_COOKIE_SIZE)) / 4;
-    // return 1024;
-  } 
+  }
   else {
 
-    if (!downcast_steg(s)->have_received)
+    if (!have_received)
       return 0;
 
-    switch(downcast_steg(s)->type) {
+    switch (type) {
 
     case HTTP_CONTENT_SWF:
       return 1024;
@@ -301,10 +268,10 @@ x_http2_transmit_room(steg_t *s, conn_t *conn)
     case HTTP_CONTENT_JAVASCRIPT:
       mjc = get_max_JS_capacity() / 2;
       if (mjc > 1024) {
-	// it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
-	int rval = 512 + rand()%(mjc - 1024);  
-	//	fprintf(stderr, "returning rval %d, mjc  %d\n", rval, mjc);
-	return rval;
+        // it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
+        int rval = 512 + rand()%(mjc - 1024);
+        //	fprintf(stderr, "returning rval %d, mjc  %d\n", rval, mjc);
+        return rval;
       }
       log_warn("js capacity too small\n");
       exit(-1);
@@ -312,10 +279,10 @@ x_http2_transmit_room(steg_t *s, conn_t *conn)
     case HTTP_CONTENT_HTML:
       mjc = get_max_HTML_capacity() / 2;
       if (mjc > 1024) {
-	// it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
-	int rval = 512 + rand()%(mjc - 1024);  
-	//	fprintf(stderr, "returning rval %d, mjc  %d\n", rval, mjc);
-	return rval;
+        // it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
+        int rval = 512 + rand()%(mjc - 1024);
+        //	fprintf(stderr, "returning rval %d, mjc  %d\n", rval, mjc);
+        return rval;
       }
       log_warn("js capacity too small\n");
       exit(-1);
@@ -340,7 +307,7 @@ lookup_peer_name_from_ip(char* p_ip, char* p_name)  {
   struct addrinfo* aip;
   struct addrinfo hint;
   char buf[128];
-     
+
   hint.ai_flags = AI_CANONNAME;
   hint.ai_family = 0;
   hint.ai_socktype = 0;
@@ -349,16 +316,16 @@ lookup_peer_name_from_ip(char* p_ip, char* p_name)  {
   hint.ai_canonname = NULL;
   hint.ai_addr = NULL;
   hint.ai_next = NULL;
-  
+
   strcpy(buf, p_ip);
   buf[strchr(buf, ':') - buf] = 0;
 
-  
+
   if (getaddrinfo(buf, NULL, &hint, &ailist)) {
     fprintf(stderr, "error: getaddrinfo() %s\n", p_ip);
     exit(1);
   }
- 
+
   for (aip = ailist; aip != NULL; aip = aip->ai_next) {
     char buf[512];
     if (getnameinfo(aip->ai_addr, sizeof(struct sockaddr), buf, 512, NULL, 0, 0) == 0) {
@@ -366,7 +333,7 @@ lookup_peer_name_from_ip(char* p_ip, char* p_name)  {
       return 1;
     }
   }
-  
+
   return 0;
 }
 
@@ -377,8 +344,8 @@ lookup_peer_name_from_ip(char* p_ip, char* p_name)  {
 
 
 
-int 
-x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
+int
+http_client_cookie_transmit (http *s, struct evbuffer *source, conn_t *conn) {
 
   /* On the client side, we have to embed the data in a GET query somehow;
      the only plausible places to put it are the URL and cookies.  This
@@ -398,7 +365,7 @@ x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn
 
   //  size_t sofar = 0;
   size_t cookie_len;
-  
+
 
   /* Convert all the data in 'source' to hexadecimal and write it to
      'scratch'. Data is padded to a multiple of four characters with
@@ -410,12 +377,12 @@ x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn
 
 
 
-  datalen = 0;    
+  datalen = 0;
   cookie_len = 4 * sbuflen + rand() % 4;
-  
+
 
   nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
-  iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
+  iv = (evbuffer_iovec*)xzalloc(sizeof(struct evbuffer_iovec) * nv);
 
   if (evbuffer_peek(source, sbuflen, NULL, iv, nv) != nv) {
     free(iv);
@@ -436,13 +403,13 @@ x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn
   //   fprintf(stderr, "%s\n", buf);
   //   exit(-1);
   // }
-    
 
-  
+
+
   cnt = 0;
-  
+
   for (i = 0; i < nv; i++) {
-    const unsigned char *p = iv[i].iov_base;
+    const unsigned char *p = (const unsigned char *)iv[i].iov_base;
     const unsigned char *limit = p + iv[i].iov_len;
     char c;
     while (p < limit && cnt < sbuflen) {
@@ -453,7 +420,7 @@ x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn
       cnt++;
     }
   }
-  
+
   free(iv);
 
   if (cookie_len < 4) cookie_len = 4;
@@ -478,20 +445,20 @@ x_http2_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn
       log_debug("error ***********************");
       return -1;
     }
- 
+
   // debug
   // log_warn("CLIENT HTTP request header:");
   // buf_dump((unsigned char*)buf, len, stderr);
- 
+
   //  sofar += datalen/2;
   evbuffer_drain(source, datalen/2);
-  
+
   log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
-  
+
   conn_cease_transmission(conn);
 
-  downcast_steg(s)->type = find_uri_type(buf, sizeof(buf));
-  downcast_steg(s)->have_transmitted = 1;
+  s->type = find_uri_type(buf, sizeof(buf));
+  s->have_transmitted = true;
   return 0;
 }
 
@@ -510,10 +477,10 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 
     if (r == 1) {
       r = rand() % 46;
-      if (r < 20) 
-	uri[so_far++] = 'g' + r;      
-      else 
-	uri[so_far++] = 'A' + r - 20;
+      if (r < 20)
+        uri[so_far++] = 'g' + r;
+      else
+        uri[so_far++] = 'A' + r - 20;
     }
     else {
       uri[so_far++] = data[0];
@@ -562,16 +529,16 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 
 
 
-int 
-x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
+int
+http_client_uri_transmit (http *s, struct evbuffer *source, conn_t *conn) {
 
 
   struct evbuffer *dest = conn_get_outbound(conn);
 
-  
+
   struct evbuffer_iovec *iv;
   int i, nv;
-  
+
   /* Convert all the data in 'source' to hexadecimal and write it to
      'scratch'. Data is padded to a multiple of four characters with
      equals signs. */
@@ -579,26 +546,26 @@ x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
   size_t datalen = 0;
   int cnt = 0;
   char data[2*slen];
-  
+
   char outbuf[1024];
   int len =0;
   char buf[10000];
-  
-  
+
+
   if (has_peer_name == 0 && lookup_peer_name_from_ip((char*) conn->peername, peername))
     has_peer_name = 1;
-  
-  
+
+
 
   nv = evbuffer_peek(source, slen, NULL, NULL, 0);
-  iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
+  iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
   if (evbuffer_peek(source, slen, NULL, iv, nv) != nv) {
     free(iv);
     return -1;
   }
-  
+
   for (i = 0; i < nv; i++) {
-    const unsigned char *p = iv[i].iov_base;
+    const unsigned char *p = (const unsigned char *)iv[i].iov_base;
     const unsigned char *limit = p + iv[i].iov_len;
     char c;
     while (p < limit) {
@@ -608,13 +575,13 @@ x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
       }
   }
   free(iv);
-  
+
 
 
   do {
     datalen = gen_uri_field(outbuf, sizeof(outbuf), data, datalen);
   } while (datalen == 0);
-  
+
 
 
 
@@ -623,8 +590,8 @@ x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
     len = find_client_payload(buf, sizeof(buf), TYPE_HTTP_REQUEST);
     if (cnt++ == 10) return -1;
   }
-  
-  
+
+
   //  fprintf(stderr, "outbuf = %s\n", outbuf);
 
   if (evbuffer_add(dest, outbuf, datalen)  ||  // add uri field
@@ -640,10 +607,10 @@ x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
 
   evbuffer_drain(source, slen);
   conn_cease_transmission(conn);
-  downcast_steg(s)->type = find_uri_type(outbuf, sizeof(outbuf));
-  downcast_steg(s)->have_transmitted = 1;
+  s->type = find_uri_type(outbuf, sizeof(outbuf));
+  s->have_transmitted = 1;
   return 0;
- 
+
 }
 
 
@@ -666,45 +633,45 @@ x_http2_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn) {
 
 
 int
-x_http2_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
+http::transmit(struct evbuffer *source, conn_t *conn)
 {
   //  struct evbuffer *dest = conn_get_outbound(conn);
 
-  //  fprintf(stderr, "in x_http2_ transmit %d\n", downcast_steg(s)->type);
-    
+  //  fprintf(stderr, "in http_ transmit %d\n", downcast_steg(s)->type);
 
 
-  if (s->is_clientside) {
+
+  if (is_clientside) {
         /* On the client side, we have to embed the data in a GET query somehow;
        the only plausible places to put it are the URL and cookies.  This
        presently uses the URL. And it can't be binary. */
 
     if (evbuffer_get_length(source) < 72)
-      return x_http2_client_uri_transmit(s, source, conn); //@@
-    return x_http2_client_cookie_transmit(s, source, conn); //@@
-  } 
+      return http_client_uri_transmit(this, source, conn); //@@
+    return http_client_cookie_transmit(this, source, conn); //@@
+  }
   else {
     int rval = -1;
-    switch(downcast_steg(s)->type) {
-      
-    case HTTP_CONTENT_SWF: 
-      rval = x_http2_server_SWF_transmit(s, source, conn);
+    switch(type) {
+
+    case HTTP_CONTENT_SWF:
+      rval = http_server_SWF_transmit(this, source, conn);
       break;
 
     case HTTP_CONTENT_JAVASCRIPT:
-      rval = x_http2_server_JS_transmit(s, source, conn, HTTP_CONTENT_JAVASCRIPT);
+      rval = http_server_JS_transmit(this, source, conn, HTTP_CONTENT_JAVASCRIPT);
       break;
 
     case HTTP_CONTENT_HTML:
-      rval = x_http2_server_JS_transmit(s, source, conn, HTTP_CONTENT_HTML);
+      rval = http_server_JS_transmit(this, source, conn, HTTP_CONTENT_HTML);
       break;
 
     case HTTP_CONTENT_PDF:
-      rval = x_http2_server_PDF_transmit(s, source, conn);
+      rval = http_server_PDF_transmit(this, source, conn);
       break;
     }
 
-    if (rval == 0) downcast_steg(s)->have_transmitted = 1;
+    if (rval == 0) have_transmitted = 1;
     return rval;
   }
 }
@@ -714,8 +681,8 @@ x_http2_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
 
 
 
-int 
-x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
+int
+http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
 
   int cnt = 0;
   unsigned char* data;
@@ -760,24 +727,24 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
 
     secondhalf = 0;
     c = 0;
-   
+
 
     while (strncmp((char*) p, "\r\n", 2) != 0 && (cookie_mode != 0 || p[0] != '.')) {
-      if (!secondhalf) 
-	c = 0;
-      if ('0' <= *p && *p <= '9') 
-	h = *p - '0';
-      else if ('a' <= *p && *p <= 'f') 
-	h = *p - 'a' + 10;
+      if (!secondhalf)
+        c = 0;
+      if ('0' <= *p && *p <= '9')
+        h = *p - '0';
+      else if ('a' <= *p && *p <= 'f')
+        h = *p - 'a' + 10;
       else {
-	p++;
-	continue;
+        p++;
+        continue;
       }
 
       c = (c << 4) + h;
       if (secondhalf) {
-	outbuf[sofar++] = c;
-	cnt++;
+        outbuf[sofar++] = c;
+        cnt++;
       }
       secondhalf = !secondhalf;
       p++;
@@ -795,15 +762,15 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
     if (evbuffer_add(dest, outbuf, sofar)) {
       log_debug("Failed to transfer buffer");
       return RECV_BAD;
-    } 
+    }
     evbuffer_drain(source, s2.pos + sizeof("\r\n\r\n") - 1);
   } while (evbuffer_get_length(source));
-  
 
-  downcast_steg(s)->have_received = 1;
-  downcast_steg(s)->type = type;
+
+  s->have_received = 1;
+  s->type = type;
   //  fprintf(stderr, "SERVER RECEIVED payload %d %d\n", cnt, type);
-    
+
   conn_transmit_soon(conn, 100);
   return RECV_GOOD;
 }
@@ -818,40 +785,37 @@ x_http2_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct ev
 
 
 
-static int
-x_http2_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
+int
+http::receive(conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
   // unsigned int type;
   int rval = RECV_BAD;
 
 
-  if (s->is_clientside) {
+  if (is_clientside) {
+    switch(type) {
 
-    //    fprintf(stderr, "client type = %d\n", downcast_steg(s)->type);
-
-    switch(downcast_steg(s)->type) {
-      
-    case HTTP_CONTENT_SWF: 
-      rval = x_http2_handle_client_SWF_receive(s, conn, dest, source);
+    case HTTP_CONTENT_SWF:
+      rval = http_handle_client_SWF_receive(this, conn, dest, source);
       break;
 
     case HTTP_CONTENT_JAVASCRIPT:
     case HTTP_CONTENT_HTML:
-      rval = x_http2_handle_client_JS_receive(s, conn, dest, source);
+      rval = http_handle_client_JS_receive(this, conn, dest, source);
       break;
 
     case HTTP_CONTENT_PDF:
-      rval = x_http2_handle_client_PDF_receive(s, conn, dest, source);
+      rval = http_handle_client_PDF_receive(this, conn, dest, source);
       break;
     }
 
-    if (rval == RECV_GOOD) downcast_steg(s)->have_received = 1;
+    if (rval == RECV_GOOD) have_received = 1;
     return rval;
 
   } else {
-    return x_http2_server_receive(s, conn, dest, source);
+    return http_server_receive(this, conn, dest, source);
   }
 
-   
+
 }

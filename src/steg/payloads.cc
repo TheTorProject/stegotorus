@@ -272,11 +272,11 @@ void load_payloads(const char* fname) {
     // }
 
     if (r < 0) {
-      payloads[payload_count] = malloc(pentry.length + 1);
+      payloads[payload_count] = (char *)xmalloc(pentry.length + 1);
       memcpy(payloads[payload_count], buf, pentry.length);
     } else {
       pentry.length = r;
-      payloads[payload_count] = malloc(pentry.length + 1);
+      payloads[payload_count] = (char *)xmalloc(pentry.length + 1);
       memcpy(payloads[payload_count], buf2, pentry.length);
     }
     payload_hdrs[payload_count] = pentry;
@@ -443,7 +443,7 @@ find_uri_type(char* buf_orig, int buflen) {
   char* uri;
   char* ext;
 
-  char* buf = malloc(buflen+1);
+  char* buf = (char *)xmalloc(buflen+1);
   char* uri_end;
 
 
@@ -524,7 +524,7 @@ find_uri_type(char* buf) {
 
   buf = strchr(buf, ' ') + 1;
   uri_len = strchr(buf, ' ') - buf;
-  uri = malloc(uri_len + 1);
+  uri = xmalloc(uri_len + 1);
 
   strncpy(uri, buf, uri_len);
   uri[uri_len] = 0;
@@ -1396,7 +1396,7 @@ int  init_PDF_payload_pool(int len, int type, int minCapacity) {
 
 
 
-int  init_SWF_payload_pool(int len, int type, int minCapacity) {
+int  init_SWF_payload_pool(int len, int type, int /*unused */) {
 
   // stat for usable payload
   int minPayloadSize = 0, maxPayloadSize = 0; 
@@ -1534,7 +1534,7 @@ int get_payload (int contentType, int cap, char** buf, int* size) {
 
 
 int
-find_content_length (char *hdr, int hlen) {
+find_content_length (char *hdr, int /*hlen*/) {
   char *clStart;
   char* clEnd;
   char *clValStart;

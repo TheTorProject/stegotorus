@@ -31,11 +31,11 @@ unsigned int
 swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz);
 
 int 
-x_http2_server_SWF_transmit (steg_t* s, struct evbuffer *source, conn_t *conn);
+http_server_SWF_transmit (steg_t* s, struct evbuffer *source, conn_t *conn);
 
 
 int
-x_http2_handle_client_SWF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
+http_handle_client_SWF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
 
 #endif
 

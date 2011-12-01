@@ -57,22 +57,8 @@ swf_wrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
   }
 
 
-  tmp_buf = malloc(in_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN);
-
-  if (tmp_buf == NULL) {
-    log_warn("swfsteg: malloc failed\n");
-    return -1;
-  }
-
-
-  tmp_buf2 = malloc(in_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512);
-
-  if (tmp_buf2 == NULL) {
-    free(tmp_buf);
-    log_warn("swfsteg: malloc failed\n");
-    return -1;
-  }
-
+  tmp_buf = (char *)xmalloc(in_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN);
+  tmp_buf2 = (char *)xmalloc(in_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512);
 
   memcpy(tmp_buf, swf+8, SWF_SAVE_HEADER_LEN);
   memcpy(tmp_buf+SWF_SAVE_HEADER_LEN, inbuf, in_len);
@@ -111,7 +97,7 @@ swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
   char* tmp_buf;
   int inf_len;
 
-  tmp_buf = malloc(in_len * 8);
+  tmp_buf = (char *)xmalloc(in_len * 8);
 
   inf_len = inf(inbuf + 8, in_len - 8, tmp_buf, in_len * 8); 
 
@@ -137,7 +123,7 @@ swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
 
 
 int 
-x_http2_server_SWF_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
+http_server_SWF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
 
   struct evbuffer *dest = conn_get_outbound(conn);
   size_t sbuflen = evbuffer_get_length(source);
@@ -145,29 +131,15 @@ x_http2_server_SWF_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
   char* outbuf;
   int outlen;
 
+  inbuf = (char *)xmalloc(sbuflen);
 
-
-  inbuf = malloc(sbuflen);
-
-  if (inbuf == NULL) {
-    log_warn("malloc inbuf failed\n");
-    return -1;
-  }
-
-  
   if (evbuffer_remove(source, inbuf, sbuflen) == -1) {
-    log_debug("evbuffer_remove failed in x_http2_server_SWF_transmit");
+    log_debug("evbuffer_remove failed in http_server_SWF_transmit");
     return -1;
   }
 
-  outbuf = malloc(4*sbuflen + SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 512);
+  outbuf = (char *)xmalloc(4*sbuflen + SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 512);
 
-  if (outbuf == NULL) {
-    free(inbuf);
-    log_warn("malloc outbuf failed\n");
-    return -1;
-  }
-  
   //  fprintf(stderr, "server wrapping swf len %d\n", (int) sbuflen);
   outlen = swf_wrap(inbuf, sbuflen, outbuf, 4*sbuflen + SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 512);
 
@@ -181,7 +153,7 @@ x_http2_server_SWF_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
 
   
   if (evbuffer_add(dest, outbuf, outlen)) {
-    log_debug("SERVER ERROR: x_http2_server_transmit: evbuffer_add() fails for jsTemplate");
+    log_debug("SERVER ERROR: http_server_transmit: evbuffer_add() fails for jsTemplate");
     free(inbuf);
     free(outbuf);
     return -1;
@@ -201,7 +173,7 @@ x_http2_server_SWF_transmit (steg_t* s, struct evbuffer *source, conn_t *conn) {
 
 
 int
-x_http2_handle_client_SWF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
+http_handle_client_SWF_receive(steg_t *, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
   struct evbuffer_ptr s2;
   unsigned int response_len = 0, hdrLen;
   char outbuf[HTTP_MSG_BUF_SIZE];
