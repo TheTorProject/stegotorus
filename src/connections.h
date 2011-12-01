@@ -7,25 +7,64 @@
 
 #include <event2/bufferevent.h>
 
-/**
-   This struct defines the state of one downstream socket-level
-   connection.  Each protocol may extend this structure with
-   additional private data by embedding it as the first member of a
-   larger structure.  The protocol's conn_create() method is
-   responsible only for filling in the |cfg| field of this structure,
-   plus any private data of course.
+/** This struct defines the state of one downstream socket-level
+    connection.  Each protocol must define a subclass of this
+    structure; see protocol.h for helper macros.
 
-   Connections are associated with circuits (and thus with upstream
-   socket-level connections) as quickly as possible.
- */
+    Connections are associated with circuits (and thus with upstream
+    socket-level connections) as quickly as possible.  */
 struct conn_t {
   config_t           *cfg;
   circuit_t          *circuit;
   const char         *peername;
   struct bufferevent *buffer;
   unsigned int        serial;
-  unsigned int        connected : 1;
-  unsigned int        flushing : 1;
+  bool                connected : 1;
+  bool                flushing : 1;
+
+  conn_t() : connected(false), flushing(false) {}
+  virtual ~conn_t();
+
+  /** Create an upstream circuit for this connection, if it is
+      possible to do so without receiving data from the downstream
+      peer.  If data must be received first, this method should do
+      nothing (but return success), and the |recv| method is
+      responsible for creating the upstream circuit when appropriate.
+      Must return 0 on success, -1 on failure. */
+  virtual int maybe_open_upstream() = 0;
+
+  /** Perform a connection handshake. Not all protocols have a handshake. */
+  virtual int handshake() = 0;
+
+  /** Receive data from 'source' and pass it upstream (to the circuit). */
+  virtual int recv() = 0;
+
+  /** Take any actions necessary upon receipt of an end-of-transmission
+      indication from the remote peer.  Note that this is _not_
+      necessarily the same as "end of file" at the circuit level,
+      depending on the protocol.  */
+  virtual int recv_eof() = 0;
+
+  /* The next four methods are for the use of steganography modules.
+     If you don't use steganography modules, you can use protocol.h's
+     PROTO_STEG_STUBS to define stubs that crash if called.  */
+
+  /** It is an error if any further data is received from the remote
+      peer on this connection. */
+  virtual void expect_close() = 0;
+
+  /** It is an error to transmit any further data to the remote peer
+      on this connection.  However, the peer may still send data back. */
+  virtual void cease_transmission() = 0;
+
+  /** After all pending data is transmitted, close this connection.
+      (This is stronger than cease_transmission - no reply is expected.) */
+  virtual void close_after_transmit() = 0;
+
+  /** If TIMEOUT milliseconds elapse without anything having been
+      transmitted on this connection, you need to make up some data
+      and send it.  */
+  virtual void transmit_soon(unsigned long timeout) = 0;
 };
 
 /** When all currently-open connections and circuits are closed, stop

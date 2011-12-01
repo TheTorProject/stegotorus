@@ -72,14 +72,15 @@ static const uint8_t s2c_key[] =
 
 typedef unordered_map<uint64_t, circuit_t *> chop_circuit_table;
 
-typedef struct chop_conn_t
+struct chop_conn_t : conn_t
 {
-  conn_t super;
   steg_t *steg;
   struct evbuffer *recv_pending;
   struct event *must_transmit_timer;
   bool no_more_transmissions : 1;
-} chop_conn_t;
+
+  CONN_DECLARE_METHODS(chop);
+};
 
 typedef struct chop_circuit_t
 {
@@ -234,14 +235,13 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
      outbound connections' transmit rooms. */
   for (unordered_set<conn_t *>::iterator i = ckt->downstreams->begin();
        i != ckt->downstreams->end(); i++) {
-    conn_t *c = *i;
-    chop_conn_t *conn = downcast_conn(c);
+    chop_conn_t *conn = static_cast<chop_conn_t *>(*i);
     /* We can only use candidates that have a steg target already. */
     if (conn->steg) {
       /* Find the connections whose transmit rooms are closest to the
          desired transmission length from both directions. */
-      size_t room = conn->steg->transmit_room(c);
-      log_debug(c, "offers %lu bytes (%s)", (unsigned long)room,
+      size_t room = conn->steg->transmit_room(conn);
+      log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
                 conn->steg->name());
 
       if (room > CHOP_MAX_DATA)
@@ -250,16 +250,16 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
       if (room >= desired) {
         if (room < minabove) {
           minabove = room;
-          targabove = c;
+          targabove = conn;
         }
       } else {
         if (room > maxbelow) {
           maxbelow = room;
-          targbelow = c;
+          targbelow = conn;
         }
       }
     } else {
-      log_debug(c, "offers 0 bytes (no steg)");
+      log_debug(conn, "offers 0 bytes (no steg)");
     }
   }
 
@@ -286,7 +286,7 @@ chop_send_block(conn_t *d,
                 uint16_t length,
                 uint16_t flags)
 {
-  chop_conn_t *dest = downcast_conn(d);
+  chop_conn_t *dest = static_cast<chop_conn_t *>(d);
   chop_header hdr;
   struct evbuffer_iovec v;
   uint8_t *p;
@@ -323,12 +323,12 @@ chop_send_block(conn_t *d,
   if (evbuffer_commit_space(block, &v, 1))
     goto fail;
 
-  if (dest->steg->transmit(block, d))
+  if (dest->steg->transmit(block, dest))
     goto fail_committed;
 
   if (evbuffer_drain(source, length))
     /* this really should never happen, and we can't recover from it */
-    log_abort(d, "evbuffer_drain failed"); /* does not return */
+    log_abort(dest, "evbuffer_drain failed"); /* does not return */
 
   if (!(flags & CHOP_F_CHAFF))
     ckt->send_offset += length;
@@ -336,7 +336,7 @@ chop_send_block(conn_t *d,
     ckt->sent_syn = true;
   if (flags & CHOP_F_FIN)
     ckt->sent_fin = true;
-  log_debug(d, "sent %lu+%u byte block [flags %04hx]",
+  log_debug(dest, "sent %lu+%u byte block [flags %04hx]",
             (unsigned long)CHOP_WIRE_HDR_LEN, length, flags);
   if (dest->must_transmit_timer)
     evtimer_del(dest->must_transmit_timer);
@@ -347,7 +347,7 @@ chop_send_block(conn_t *d,
   evbuffer_commit_space(block, &v, 1);
  fail_committed:
   evbuffer_drain(block, evbuffer_get_length(block));
-  log_warn(d, "allocation or buffer copy failed");
+  log_warn(dest, "allocation or buffer copy failed");
   return -1;
 }
 
@@ -498,28 +498,27 @@ chop_send_chaff(circuit_t *c)
 static void
 must_transmit_timer_cb(evutil_socket_t, short, void *arg)
 {
-  conn_t *cn = (conn_t *)arg;
-  chop_conn_t *conn = downcast_conn(cn);
+  chop_conn_t *conn = static_cast<chop_conn_t*>(arg);
   size_t room;
 
-  if (!cn->circuit) {
-    log_debug(cn, "must transmit, but no circuit (stale connection)");
-    conn_do_flush(cn);
+  if (!conn->circuit) {
+    log_debug(conn, "must transmit, but no circuit (stale connection)");
+    conn_do_flush(conn);
     return;
   }
 
   if (!conn->steg) {
-    log_warn(cn, "must transmit, but no steg module available");
+    log_warn(conn, "must transmit, but no steg module available");
     return;
   }
-  room = conn->steg->transmit_room(cn);
+  room = conn->steg->transmit_room(conn);
   if (!room) {
-    log_warn(cn, "must transmit, but no transmit room");
+    log_warn(conn, "must transmit, but no transmit room");
     return;
   }
 
-  log_debug(cn, "must transmit");
-  chop_send_targeted(cn->circuit, cn, room);
+  log_debug(conn, "must transmit");
+  chop_send_targeted(conn->circuit, conn, room);
 }
 
 /* Receive subroutines. */
@@ -1015,9 +1014,8 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
 conn_t *
 chop_config_t::conn_create()
 {
-  chop_conn_t *conn = (chop_conn_t *)xzalloc(sizeof(chop_conn_t));
-  conn_t *cn = upcast_conn(conn);
-  cn->cfg = this;
+  chop_conn_t *conn = new chop_conn_t;
+  conn->cfg = this;
   if (this->mode != LSN_SIMPLE_SERVER) {
     /* XXX currently uses steg target 0 for all connections.
        Need protocol-specific listener state to fix this. */
@@ -1028,30 +1026,31 @@ chop_config_t::conn_create()
     }
   }
   conn->recv_pending = evbuffer_new();
-  return cn;
+  return conn;
 }
 
-static void
-chop_conn_free(conn_t *c)
+chop_conn_t::chop_conn_t()
 {
-  chop_conn_t *conn = downcast_conn(c);
-  if (conn->steg)
-    delete conn->steg;
-  if (conn->must_transmit_timer)
-    event_free(conn->must_transmit_timer);
-  evbuffer_free(conn->recv_pending);
-  free(conn);
 }
 
-static int
-chop_conn_maybe_open_upstream(conn_t *)
+chop_conn_t::~chop_conn_t()
+{
+  if (this->steg)
+    delete this->steg;
+  if (this->must_transmit_timer)
+    event_free(this->must_transmit_timer);
+  evbuffer_free(this->recv_pending);
+}
+
+int
+chop_conn_t::maybe_open_upstream()
 {
   /* We can't open the upstream until we have a circuit ID. */
   return 0;
 }
 
-static int
-chop_conn_handshake(conn_t *conn)
+int
+chop_conn_t::handshake()
 {
   /* Chop has no handshake as such, but like dsteg, we need to send
      _something_ from the client on at least one of the channels
@@ -1061,8 +1060,8 @@ chop_conn_handshake(conn_t *conn)
      instead of a 10ms timeout as in dsteg, because unlike there, the
      server can't even _connect to its upstream_ till it gets the
      first packet from the client. */
-  if (conn->cfg->mode != LSN_SIMPLE_SERVER)
-    circuit_arm_flush_timer(conn->circuit, 1);
+  if (this->cfg->mode != LSN_SIMPLE_SERVER)
+    circuit_arm_flush_timer(this->circuit, 1);
   return 0;
 }
 
@@ -1102,12 +1101,11 @@ chop_circuit_send(circuit_t *c)
   if (ckt->sent_fin && ckt->received_fin) {
     for (unordered_set<conn_t *>::iterator i = ckt->downstreams->begin();
          i != ckt->downstreams->end(); i++) {
-      conn_t *cn = *i;
-      chop_conn_t *conn = downcast_conn(cn);
+      chop_conn_t *conn = static_cast<chop_conn_t*>(*i);
       if (conn->must_transmit_timer &&
           evtimer_pending(conn->must_transmit_timer, NULL))
-        must_transmit_timer_cb(-1, 0, cn);
-      conn_send_eof(cn);
+        must_transmit_timer_cb(-1, 0, conn);
+      conn_send_eof(conn);
     }
   } else {
     if (c->cfg->mode != LSN_SIMPLE_SERVER)
@@ -1123,10 +1121,9 @@ chop_circuit_send_eof(circuit_t *c)
   return chop_circuit_send(c);
 }
 
-static int
-chop_conn_recv(conn_t *s)
+int
+chop_conn_t::recv()
 {
-  chop_conn_t *source = downcast_conn(s);
   circuit_t *c;
   chop_circuit_t *ckt;
   chop_header hdr;
@@ -1134,88 +1131,88 @@ chop_conn_recv(conn_t *s)
   size_t avail;
   uint8_t decodebuf[CHOP_MAX_DATA + CHOP_WIRE_HDR_LEN];
 
-  if (!source->steg) {
-    log_assert(s->cfg->mode == LSN_SIMPLE_SERVER);
-    if (evbuffer_get_length(conn_get_inbound(s)) == 0)
+  if (!this->steg) {
+    log_assert(this->cfg->mode == LSN_SIMPLE_SERVER);
+    if (evbuffer_get_length(conn_get_inbound(this)) == 0)
       return 0; /* need more data */
-    source->steg = steg_detect(s);
-    if (!source->steg) {
-      log_debug(s, "no recognized steg pattern detected");
+    this->steg = steg_detect(this);
+    if (!this->steg) {
+      log_debug(this, "no recognized steg pattern detected");
       return -1;
     } else {
-      log_debug(s, "detected steg pattern %s", source->steg->name());
+      log_debug(this, "detected steg pattern %s", this->steg->name());
     }
   }
 
-  if (source->steg->receive(s, source->recv_pending))
+  if (this->steg->receive(this, this->recv_pending))
     return -1;
 
-  if (!s->circuit) {
-    log_debug(s, "finding circuit");
-    if (chop_peek_circuit_id(source->recv_pending, &hdr)) {
-      log_debug(s, "not enough data to find circuit yet");
+  if (!this->circuit) {
+    log_debug(this, "finding circuit");
+    if (chop_peek_circuit_id(this->recv_pending, &hdr)) {
+      log_debug(this, "not enough data to find circuit yet");
       return 0;
     }
-    if (chop_find_or_make_circuit(s, hdr.ckt_id))
+    if (chop_find_or_make_circuit(this, hdr.ckt_id))
       return -1;
-    /* If we get here and s->circuit is not set, this is a connection
+    /* If we get here and this->circuit is not set, this is a connection
        for a stale circuit: that is, a new connection made by the
        client (to draw more data down from the server) that crossed
        with a server-to-client FIN.  We can't decrypt the packet, but
        it's either chaff or a protocol error; either way we can just
        discard it.  Since we will never reply, call conn_do_flush so
        the connection will be dropped as soon as we receive an EOF. */
-    if (!s->circuit) {
-      evbuffer_drain(source->recv_pending,
-                     evbuffer_get_length(source->recv_pending));
-      conn_do_flush(s);
+    if (!this->circuit) {
+      evbuffer_drain(this->recv_pending,
+                     evbuffer_get_length(this->recv_pending));
+      conn_do_flush(this);
       return 0;
     }
   }
 
-  c = s->circuit;
+  c = this->circuit;
   ckt = downcast_circuit(c);
-  log_debug(s, "circuit to %s", c->up_peer);
+  log_debug(this, "circuit to %s", c->up_peer);
 
   for (;;) {
-    avail = evbuffer_get_length(source->recv_pending);
+    avail = evbuffer_get_length(this->recv_pending);
     if (avail == 0)
       break;
 
-    log_debug(s, "%lu bytes available", (unsigned long)avail);
+    log_debug(this, "%lu bytes available", (unsigned long)avail);
     if (avail < CHOP_WIRE_HDR_LEN) {
-      log_debug(s, "incomplete block");
+      log_debug(this, "incomplete block");
       break;
     }
 
-    if (chop_decrypt_header(ckt, source->recv_pending, &hdr))
+    if (chop_decrypt_header(ckt, this->recv_pending, &hdr))
       return -1;
 
     if (avail < CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length) {
-      log_debug(s, "incomplete block (need %lu bytes)",
+      log_debug(this, "incomplete block (need %lu bytes)",
                 (unsigned long)(CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length));
       break;
     }
 
     if (ckt->circuit_id != hdr.ckt_id) {
-      log_warn(s, "protocol error: circuit id mismatch");
+      log_warn(this, "protocol error: circuit id mismatch");
       return -1;
     }
 
-    log_debug(s, "receiving block of %lu+%u bytes "
+    log_debug(this, "receiving block of %lu+%u bytes "
                  "[offset %u flags %04hx]",
                  (unsigned long)CHOP_WIRE_HDR_LEN + GCM_TAG_LEN,
                  hdr.length, hdr.offset, hdr.flags);
 
-    if (evbuffer_copyout(source->recv_pending, decodebuf,
+    if (evbuffer_copyout(this->recv_pending, decodebuf,
                          CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length)
         != (ssize_t)(CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length)) {
-      log_warn(s, "failed to copy block to decode buffer");
+      log_warn(this, "failed to copy block to decode buffer");
       return -1;
     }
     block = evbuffer_new();
     if (!block || evbuffer_expand(block, hdr.length)) {
-      log_warn(s, "allocation failure");
+      log_warn(this, "allocation failure");
       return -1;
     }
 
@@ -1223,20 +1220,20 @@ chop_conn_recv(conn_t *s)
         ->decrypt(decodebuf + 16, decodebuf + 16,
                   hdr.length + CHOP_WIRE_HDR_LEN + GCM_TAG_LEN - 16,
                   decodebuf, 16)) {
-      log_warn(s, "MAC verification failure");
+      log_warn(this, "MAC verification failure");
       evbuffer_free(block);
       return -1;
     }
 
     if (evbuffer_add(block, decodebuf + CHOP_WIRE_HDR_LEN, hdr.length)) {
-      log_warn(s, "failed to transfer block to reassembly queue");
+      log_warn(this, "failed to transfer block to reassembly queue");
       evbuffer_free(block);
       return -1;
     }
 
-    if (evbuffer_drain(source->recv_pending,
+    if (evbuffer_drain(this->recv_pending,
                        CHOP_WIRE_HDR_LEN + GCM_TAG_LEN + hdr.length)) {
-      log_warn(s, "failed to consume block from wire");
+      log_warn(this, "failed to consume block from wire");
       evbuffer_free(block);
       return -1;
     }
@@ -1257,10 +1254,10 @@ chop_conn_recv(conn_t *s)
   return 0;
 }
 
-static int
-chop_conn_recv_eof(conn_t *cn)
+int
+chop_conn_t::recv_eof()
 {
-  circuit_t *c = cn->circuit;
+  circuit_t *c = this->circuit;
 
   /* EOF on a _connection_ does not mean EOF on a _circuit_.
      EOF on a _circuit_ occurs when chop_push_to_upstream processes a FIN.
@@ -1268,47 +1265,49 @@ chop_conn_recv_eof(conn_t *cn)
      longer sending in the opposite direction.  Also, we should not
      drop the connection if its must-transmit timer is still pending.  */
   if (c) {
-    chop_conn_t *conn = downcast_conn(cn);
     chop_circuit_t *ckt = downcast_circuit(c);
 
-    if (evbuffer_get_length(conn_get_inbound(cn)) > 0)
-      if (chop_conn_recv(cn))
+    if (evbuffer_get_length(conn_get_inbound(this)) > 0)
+      if (this->recv())
         return -1;
 
-    if ((ckt->sent_fin || conn->no_more_transmissions) &&
-        (!conn->must_transmit_timer ||
-         !evtimer_pending(conn->must_transmit_timer, NULL)))
-      circuit_drop_downstream(c, cn);
+    if ((ckt->sent_fin || this->no_more_transmissions) &&
+        (!this->must_transmit_timer ||
+         !evtimer_pending(this->must_transmit_timer, NULL)))
+      circuit_drop_downstream(c, this);
   }
   return 0;
 }
 
-static void chop_conn_expect_close(conn_t *)
+void
+chop_conn_t::expect_close()
 {
   /* do we need to do something here? */
 }
 
-static void chop_conn_cease_transmission(conn_t *cn)
+void
+chop_conn_t::cease_transmission()
 {
-  downcast_conn(cn)->no_more_transmissions = true;
-  conn_do_flush(cn);
+  this->no_more_transmissions = true;
+  conn_do_flush(this);
 }
 
-static void chop_conn_close_after_transmit(conn_t *cn)
+void
+chop_conn_t::close_after_transmit()
 {
-  downcast_conn(cn)->no_more_transmissions = true;
-  conn_do_flush(cn);
+  this->no_more_transmissions = true;
+  conn_do_flush(this);
 }
 
-static void chop_conn_transmit_soon(conn_t *cn, unsigned long milliseconds)
+void
+chop_conn_t::transmit_soon(unsigned long milliseconds)
 {
-  chop_conn_t *conn = downcast_conn(cn);
   struct timeval tv;
   tv.tv_sec = 0;
   tv.tv_usec = milliseconds * 1000;
 
-  if (!conn->must_transmit_timer)
-    conn->must_transmit_timer = evtimer_new(cn->cfg->base,
-                                            must_transmit_timer_cb, cn);
-  evtimer_add(conn->must_transmit_timer, &tv);
+  if (!this->must_transmit_timer)
+    this->must_transmit_timer = evtimer_new(this->cfg->base,
+                                            must_transmit_timer_cb, this);
+  evtimer_add(this->must_transmit_timer, &tv);
 }

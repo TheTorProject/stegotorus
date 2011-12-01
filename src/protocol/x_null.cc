@@ -16,8 +16,8 @@ namespace {
     CONFIG_DECLARE_METHODS(x_null);
   };
 
-  struct x_null_conn_t {
-    conn_t super;
+  struct x_null_conn_t : conn_t {
+    CONN_DECLARE_METHODS(x_null);
   };
 
   struct x_null_circuit_t {
@@ -27,7 +27,6 @@ namespace {
 }
 
 PROTO_DEFINE_MODULE(x_null);
-PROTO_STEG_STUBS(x_null);
 
 x_null_config_t::x_null_config_t()
 {
@@ -190,57 +189,60 @@ x_null_circuit_send_eof(circuit_t *c)
 conn_t *
 x_null_config_t::conn_create()
 {
-  x_null_conn_t *conn = (x_null_conn_t *)xzalloc(sizeof(x_null_conn_t));
-  conn_t *c = upcast_conn(conn);
-  c->cfg = this;
-  return c;
+  x_null_conn_t *conn = new x_null_conn_t;
+  conn->cfg = this;
+  return conn;
 }
 
-static void
-x_null_conn_free(conn_t *c)
+x_null_conn_t::x_null_conn_t()
 {
-  free(downcast_conn(c));
+}
+
+x_null_conn_t::~x_null_conn_t()
+{
 }
 
 /** Null inbound-to-outbound connections are 1:1 */
-static int
-x_null_conn_maybe_open_upstream(conn_t *conn)
+int
+x_null_conn_t::maybe_open_upstream()
 {
-  circuit_t *ckt = circuit_create(conn->cfg);
+  circuit_t *ckt = circuit_create(this->cfg);
   if (!ckt)
     return -1;
 
-  circuit_add_downstream(ckt, conn);
+  circuit_add_downstream(ckt, this);
   circuit_open_upstream(ckt);
   return 0;
 }
 
 /** Null has no handshake */
-static int
-x_null_conn_handshake(conn_t *)
+int
+x_null_conn_t::handshake()
 {
   return 0;
 }
 
 /** Receive data from connection SOURCE */
-static int
-x_null_conn_recv(conn_t *source)
+int
+x_null_conn_t::recv()
 {
-  log_assert(source->circuit);
-  return evbuffer_add_buffer(bufferevent_get_output(source->circuit->up_buffer),
-                             conn_get_inbound(source));
+  log_assert(this->circuit);
+  return evbuffer_add_buffer(bufferevent_get_output(this->circuit->up_buffer),
+                             conn_get_inbound(this));
 }
 
 /** Receive EOF from connection SOURCE */
-static int
-x_null_conn_recv_eof(conn_t *source)
+int
+x_null_conn_t::recv_eof()
 {
-  if (source->circuit) {
-    if (evbuffer_get_length(conn_get_inbound(source)) > 0)
-      if (x_null_conn_recv(source))
+  if (this->circuit) {
+    if (evbuffer_get_length(conn_get_inbound(this)) > 0)
+      if (this->recv())
         return -1;
 
-    circuit_recv_eof(source->circuit);
+    circuit_recv_eof(this->circuit);
   }
   return 0;
 }
+
+CONN_STEG_STUBS(x_null);

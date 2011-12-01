@@ -78,8 +78,8 @@ struct proto_module
   /** The short name of this protocol. Must be a valid C identifier. */
   const char *name;
 
-  /** Create an appropriate config_t instance for this module from a
-      set of command line options. */
+  /** Create a config_t instance for this module from a set of command
+      line options. */
   config_t *(*config_create)(int n_options, const char *const *options);
 
   /** Destroy per-circuit, protocol-specific state. */
@@ -100,50 +100,6 @@ struct proto_module
       periodic "can we flush more data now?" callbacks, and conn_recv
       events won't do it, you have to set them up yourself. */
   int (*circuit_send_eof)(circuit_t *ckt);
-
-  /** Destroy per-connection, protocol-specific state.  */
-  void (*conn_free)(conn_t *conn);
-
-  /** Create an upstream circuit for this connection, if it is
-      possible to do so without receiving data from the downstream
-      peer.  If data must be received first, this method should do
-      nothing (but return success), and the |conn_recv| method is
-      responsible for creating the upstream circuit when appropriate.
-      Must return 0 on success, -1 on failure. */
-  int (*conn_maybe_open_upstream)(conn_t *conn);
-
-  /** Perform a connection handshake. Not all protocols have a handshake. */
-  int (*conn_handshake)(conn_t *conn);
-
-  /** Receive data from 'source' and pass it upstream (to the circuit). */
-  int (*conn_recv)(conn_t *source);
-
-  /** Take any actions necessary upon receipt of an end-of-transmission
-      indication from the remote peer.  Note that this is _not_
-      necessarily the same as "end of file" at the circuit level,
-      depending on the protocol.  */
-  int (*conn_recv_eof)(conn_t *source);
-
-  /* The remaining methods are only required if your protocol makes
-     use of steganography modules.  If you provide them, they must be
-     effective. */
-
-  /** It is an error if any further data is received from the remote
-      peer on this connection. */
-  void (*conn_expect_close)(conn_t *conn);
-
-  /** It is an error to transmit any further data to the remote peer
-      on this connection.  However, the peer may still send data back. */
-  void (*conn_cease_transmission)(conn_t *conn);
-
-  /** After all pending data is transmitted, close this connection.
-      (This is stronger than cease_transmission - no reply is expected.) */
-  void (*conn_close_after_transmit)(conn_t *conn);
-
-  /** If TIMEOUT milliseconds elapse without anything having been
-      transmitted on this connection, you need to make up some data
-      and send it.  */
-  void (*conn_transmit_soon)(conn_t *conn, unsigned long timeout);
 };
 
 extern const proto_module *const supported_protos[];
@@ -160,38 +116,16 @@ extern const proto_module *const supported_protos[];
     name##_circuit_add_downstream,              \
     name##_circuit_drop_downstream,             \
     name##_circuit_send,                        \
-    name##_circuit_send_eof,                    \
-    name##_conn_free,                           \
-    name##_conn_maybe_open_upstream,            \
-    name##_conn_handshake,                      \
-    name##_conn_recv,                           \
-    name##_conn_recv_eof,                       \
-    name##_conn_expect_close,                   \
-    name##_conn_cease_transmission,             \
-    name##_conn_close_after_transmit,           \
-    name##_conn_transmit_soon,
+    name##_circuit_send_eof,
 
 #define PROTO_FWD_DECLS(name)                                           \
   static void name##_circuit_free(circuit_t *);                         \
   static void name##_circuit_add_downstream(circuit_t *, conn_t *);     \
   static void name##_circuit_drop_downstream(circuit_t *, conn_t *);    \
   static int name##_circuit_send(circuit_t *);                          \
-  static int name##_circuit_send_eof(circuit_t *);                      \
-  static void name##_conn_free(conn_t *);                               \
-  static int name##_conn_maybe_open_upstream(conn_t *);                 \
-  static int name##_conn_handshake(conn_t *);                           \
-  static int name##_conn_recv(conn_t *);                                \
-  static int name##_conn_recv_eof(conn_t *);                            \
-  static void name##_conn_expect_close(conn_t *);                       \
-  static void name##_conn_cease_transmission(conn_t *);                 \
-  static void name##_conn_close_after_transmit(conn_t *);               \
-  static void name##_conn_transmit_soon(conn_t *, unsigned long);
+  static int name##_circuit_send_eof(circuit_t *);
 
 #define PROTO_CAST_HELPERS(name)                                \
-  static inline conn_t *upcast_conn(name##_conn_t *c)           \
-  { return &c->super; }                                         \
-  static inline name##_conn_t *downcast_conn(conn_t *c)         \
-  { return DOWNCAST(name##_conn_t, super, c); }                 \
   static inline circuit_t *upcast_circuit(name##_circuit_t *c)  \
   { return &c->super; }                                         \
   static inline name##_circuit_t *downcast_circuit(circuit_t *c)\
@@ -220,16 +154,6 @@ extern const proto_module *const supported_protos[];
     PROTO_VTABLE_CONTENTS(mod)                                  \
   } /* deliberate absence of semicolon */
 
-#define PROTO_STEG_STUBS(mod)                                   \
-  static void mod##_conn_expect_close(conn_t *)                 \
-  { log_abort("steg stub called"); }                            \
-  static void mod##_conn_cease_transmission(conn_t *)           \
-  { log_abort("steg stub called"); }                            \
-  static void mod##_conn_close_after_transmit(conn_t *)         \
-  { log_abort("steg stub called"); }                            \
-  static void mod##_conn_transmit_soon(conn_t *, unsigned long) \
-  { log_abort("steg stub called"); }
-
 #define CONFIG_DECLARE_METHODS(mod)                             \
   mod##_config_t();                                             \
   virtual ~mod##_config_t();                                    \
@@ -240,5 +164,28 @@ extern const proto_module *const supported_protos[];
   virtual circuit_t *circuit_create();                          \
   virtual conn_t *conn_create()                                 \
   /* deliberate absence of semicolon */
+
+#define CONN_DECLARE_METHODS(mod)                       \
+  mod##_conn_t();                                       \
+  virtual ~mod##_conn_t();                              \
+  virtual int  maybe_open_upstream();                   \
+  virtual int  handshake();                             \
+  virtual int  recv();                                  \
+  virtual int  recv_eof();                              \
+  virtual void expect_close();                          \
+  virtual void cease_transmission();                    \
+  virtual void close_after_transmit();                  \
+  virtual void transmit_soon(unsigned long timeout)     \
+  /* deliberate absence of semicolon */
+
+#define CONN_STEG_STUBS(mod)                            \
+  void mod##_conn_t::expect_close()                     \
+  { log_abort(this, "steg stub called"); }              \
+  void mod##_conn_t::cease_transmission()               \
+  { log_abort(this, "steg stub called"); }              \
+  void mod##_conn_t::close_after_transmit()             \
+  { log_abort(this, "steg stub called"); }              \
+  void mod##_conn_t::transmit_soon(unsigned long)       \
+  { log_abort(this, "steg stub called"); }
 
 #endif

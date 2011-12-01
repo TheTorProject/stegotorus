@@ -108,25 +108,28 @@ conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
 /**
    Deallocates conn_t 'conn'.
 */
+conn_t::~conn_t()
+{
+  connections.erase(this);
+  log_debug(this, "closing connection; %lu remaining",
+            (unsigned long) connections.size());
+
+  if (this->circuit) {
+    circuit_drop_downstream(this->circuit, this);
+  }
+
+  if (this->peername)
+    free((void *)this->peername);
+  if (this->buffer)
+    bufferevent_free(this->buffer);
+
+  maybe_finish_shutdown();
+}
+
 void
 conn_close(conn_t *conn)
 {
-  connections.erase(conn);
-  log_debug(conn, "closing connection; %lu remaining",
-            (unsigned long) connections.size());
-
-  if (conn->circuit) {
-    circuit_drop_downstream(conn->circuit, conn);
-  }
-
-  if (conn->peername)
-    free((void *)conn->peername);
-  if (conn->buffer)
-    bufferevent_free(conn->buffer);
-
-  conn->cfg->vtable()->conn_free(conn);
-
-  maybe_finish_shutdown();
+  delete conn;
 }
 
 /* Drain the transmit queue and send a TCP-level EOF indication to DEST. */
@@ -150,49 +153,49 @@ conn_send_eof(conn_t *dest)
 int
 conn_maybe_open_upstream(conn_t *conn)
 {
-  return conn->cfg->vtable()->conn_maybe_open_upstream(conn);
+  return conn->maybe_open_upstream();
 }
 
 int
 conn_handshake(conn_t *conn)
 {
-  return conn->cfg->vtable()->conn_handshake(conn);
+  return conn->handshake();
 }
 
 int
 conn_recv(conn_t *source)
 {
-  return source->cfg->vtable()->conn_recv(source);
+  return source->recv();
 }
 
 int
 conn_recv_eof(conn_t *source)
 {
-  return source->cfg->vtable()->conn_recv_eof(source);
+  return source->recv_eof();
 }
 
 void
 conn_expect_close(conn_t *conn)
 {
-  conn->cfg->vtable()->conn_expect_close(conn);
+  conn->expect_close();
 }
 
 void
 conn_cease_transmission(conn_t *conn)
 {
-  conn->cfg->vtable()->conn_cease_transmission(conn);
+  conn->cease_transmission();
 }
 
 void
 conn_close_after_transmit(conn_t *conn)
 {
-  conn->cfg->vtable()->conn_close_after_transmit(conn);
+  conn->close_after_transmit();
 }
 
 void
 conn_transmit_soon(conn_t *conn, unsigned long timeout)
 {
-  conn->cfg->vtable()->conn_transmit_soon(conn, timeout);
+  conn->transmit_soon(timeout);
 }
 
 /* Circuits. */
