@@ -241,7 +241,7 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
          desired transmission length from both directions. */
       size_t room = conn->steg->transmit_room(c);
       log_debug(c, "offers %lu bytes (%s)", (unsigned long)room,
-                conn->steg->name);
+                conn->steg->name());
 
       if (room > CHOP_MAX_DATA)
         room = CHOP_MAX_DATA;
@@ -1174,7 +1174,7 @@ chop_conn_recv(conn_t *s)
       log_debug(s, "no recognized steg pattern detected");
       return -1;
     } else {
-      log_debug(s, "detected steg pattern %s", source->steg->name);
+      log_debug(s, "detected steg pattern %s", source->steg->name());
     }
   }
 
