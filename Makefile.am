@@ -19,15 +19,14 @@ PROTOCOLS = \
 	src/protocol/x_null.cc
 
 STEGANOGRAPHERS = \
-	src/steg/x_http.cc \
-	src/steg/x_http2.c \
-	src/steg/payloads.c \
-	src/steg/cookies.c \
-	src/steg/jsSteg.c \
-	src/steg/swfSteg.c \
-	src/steg/zpack.c \
-	src/steg/crc32.c \
-	src/steg/pdfSteg.c
+	src/steg/http.cc \
+	src/steg/payloads.cc \
+	src/steg/cookies.cc \
+	src/steg/jsSteg.cc \
+	src/steg/swfSteg.cc \
+	src/steg/zpack.cc \
+	src/steg/crc32.cc \
+	src/steg/pdfSteg.cc
 
 libstegotorus_a_SOURCES = \
 	src/connections.cc \
