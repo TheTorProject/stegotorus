@@ -26,14 +26,14 @@ using std::vector;
 
 /* Header serialization and deserialization */
 
-typedef struct chop_header
+struct chop_header
 {
   uint64_t ckt_id;
   uint8_t  pkt_iv[8];
   uint32_t offset;
   uint16_t length;
   uint16_t flags;
-} chop_header;
+};
 
 #define CHOP_WIRE_HDR_LEN (sizeof(struct chop_header))
 #define CHOP_MAX_DATA 16384
@@ -49,7 +49,7 @@ typedef struct chop_header
    entries are sorted by offset.  Gaps in so-far-received data
    are "in between" entries in the list.  */
 
-typedef struct chop_reassembly_elt
+struct chop_reassembly_elt
 {
   struct chop_reassembly_elt *prev;
   struct chop_reassembly_elt *next;
@@ -57,7 +57,7 @@ typedef struct chop_reassembly_elt
   uint32_t offset;
   uint16_t length;
   uint16_t flags;
-} chop_reassembly_elt;
+};
 
 /* Horrifically crude "encryption".  Uses a compiled-in pair of
    encryption keys, no MAC, and recycles the circuit ID as a
@@ -72,43 +72,46 @@ static const uint8_t s2c_key[] =
 
 typedef unordered_map<uint64_t, circuit_t *> chop_circuit_table;
 
-struct chop_conn_t : conn_t
-{
-  steg_t *steg;
-  struct evbuffer *recv_pending;
-  struct event *must_transmit_timer;
-  bool no_more_transmissions : 1;
+namespace {
+  struct chop_conn_t : conn_t
+  {
+    steg_t *steg;
+    struct evbuffer *recv_pending;
+    struct event *must_transmit_timer;
+    bool no_more_transmissions : 1;
 
-  CONN_DECLARE_METHODS(chop);
-};
+    CONN_DECLARE_METHODS(chop);
+  };
 
-typedef struct chop_circuit_t
-{
-  circuit_t super;
-  chop_reassembly_elt reassembly_queue;
-  unordered_set<conn_t *> *downstreams;
-  encryptor *send_crypt;
-  decryptor *recv_crypt;
+  struct chop_circuit_t : circuit_t
+  {
+    chop_reassembly_elt reassembly_queue;
+    unordered_set<conn_t *> downstreams;
+    encryptor *send_crypt;
+    decryptor *recv_crypt;
 
-  uint64_t circuit_id;
-  uint32_t send_offset;
-  uint32_t recv_offset;
-  bool received_syn : 1;
-  bool received_fin : 1;
-  bool sent_syn : 1;
-  bool sent_fin : 1;
-  bool upstream_eof : 1;
-} chop_circuit_t;
+    uint64_t circuit_id;
+    uint32_t send_offset;
+    uint32_t recv_offset;
+    bool received_syn : 1;
+    bool received_fin : 1;
+    bool sent_syn : 1;
+    bool sent_fin : 1;
+    bool upstream_eof : 1;
 
-struct chop_config_t : config_t
-{
-  struct evutil_addrinfo *up_address;
-  vector<struct evutil_addrinfo *> down_addresses;
-  vector<const char *> steg_targets;
-  chop_circuit_table circuits;
+    CIRCUIT_DECLARE_METHODS(chop);
+  };
 
-  CONFIG_DECLARE_METHODS(chop);
-};
+  struct chop_config_t : config_t
+  {
+    struct evutil_addrinfo *up_address;
+    vector<struct evutil_addrinfo *> down_addresses;
+    vector<const char *> steg_targets;
+    chop_circuit_table circuits;
+
+    CONFIG_DECLARE_METHODS(chop);
+  };
+}
 
 PROTO_DEFINE_MODULE(chop);
 
@@ -233,8 +236,8 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
 
   /* Find the best fit for the desired transmission from all the
      outbound connections' transmit rooms. */
-  for (unordered_set<conn_t *>::iterator i = ckt->downstreams->begin();
-       i != ckt->downstreams->end(); i++) {
+  for (unordered_set<conn_t *>::iterator i = ckt->downstreams.begin();
+       i != ckt->downstreams.end(); i++) {
     chop_conn_t *conn = static_cast<chop_conn_t *>(*i);
     /* We can only use candidates that have a steg target already. */
     if (conn->steg) {
@@ -354,7 +357,7 @@ chop_send_block(conn_t *d,
 static int
 chop_send_blocks(circuit_t *c)
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
+  chop_circuit_t *ckt = static_cast<chop_circuit_t *>(c);
   struct evbuffer *xmit_pending = bufferevent_get_input(c->up_buffer);
   struct evbuffer *block;
   conn_t *target;
@@ -406,7 +409,7 @@ chop_send_blocks(circuit_t *c)
 static int
 chop_send_targeted(circuit_t *c, conn_t *target, size_t blocksize)
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
+  chop_circuit_t *ckt = static_cast<chop_circuit_t *>(c);
   struct evbuffer *xmit_pending = bufferevent_get_input(c->up_buffer);
   size_t avail = evbuffer_get_length(xmit_pending);
   struct evbuffer *block = evbuffer_new();
@@ -483,7 +486,7 @@ chop_send_targeted(circuit_t *c, conn_t *target, size_t blocksize)
 static int
 chop_send_chaff(circuit_t *c)
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
+  chop_circuit_t *ckt = static_cast<chop_circuit_t *>(c);
   size_t room;
 
   conn_t *target = chop_pick_connection(ckt, 1, &room);
@@ -544,7 +547,7 @@ mod32_le(uint32_t s, uint32_t t)
 static int
 chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
+  chop_circuit_t *ckt = static_cast<chop_circuit_t *>(c);
   chop_reassembly_elt *queue = &ckt->reassembly_queue;
   chop_reassembly_elt *p, *q;
 
@@ -703,7 +706,7 @@ chop_reassemble_block(circuit_t *c, struct evbuffer *block, chop_header *hdr)
 static int
 chop_push_to_upstream(circuit_t *c)
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
+  chop_circuit_t *ckt = static_cast<chop_circuit_t *>(c);
   /* Only the first reassembly queue entry, if any, can possibly be
      ready to flush (because chop_reassemble_block ensures that there
      are gaps between all queue elements).  */
@@ -780,7 +783,7 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
       return -1;
     }
     log_debug(conn, "created new circuit to %s", ck->up_peer);
-    downcast_circuit(ck)->circuit_id = circuit_id;
+    static_cast<chop_circuit_t *>(ck)->circuit_id = circuit_id;
     out.first->second = ck;
   }
 
@@ -907,12 +910,8 @@ chop_config_t::get_target_addrs(size_t n)
 circuit_t *
 chop_config_t::circuit_create()
 {
-  chop_circuit_t *ckt = (chop_circuit_t *)xzalloc(sizeof(chop_circuit_t));
-  circuit_t *c = upcast_circuit(ckt);
-  c->cfg = this;
-  ckt->reassembly_queue.next = &ckt->reassembly_queue;
-  ckt->reassembly_queue.prev = &ckt->reassembly_queue;
-  ckt->downstreams = new unordered_set<conn_t *>;
+  chop_circuit_t *ckt = new chop_circuit_t;
+  ckt->cfg = this;
 
   if (this->mode == LSN_SIMPLE_SERVER) {
     ckt->send_crypt = encryptor::create(s2c_key, 16);
@@ -923,18 +922,22 @@ chop_config_t::circuit_create()
     while (!ckt->circuit_id)
       rng_bytes((uint8_t *)&ckt->circuit_id, sizeof(uint64_t));
   }
-  return c;
+  return ckt;
 }
 
-static void
-chop_circuit_free(circuit_t *c)
+chop_circuit_t::chop_circuit_t()
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
+  this->reassembly_queue.next = &this->reassembly_queue;
+  this->reassembly_queue.prev = &this->reassembly_queue;
+}
+
+chop_circuit_t::~chop_circuit_t()
+{
   chop_reassembly_elt *p, *q, *queue;
   chop_circuit_table::iterator out;
 
-  for (unordered_set<conn_t *>::iterator i = ckt->downstreams->begin();
-       i != ckt->downstreams->end(); i++) {
+  for (unordered_set<conn_t *>::iterator i = this->downstreams.begin();
+       i != this->downstreams.end(); i++) {
     conn_t *conn = *i;
     conn->circuit = NULL;
     if (evbuffer_get_length(conn_get_outbound(conn)) > 0)
@@ -942,11 +945,11 @@ chop_circuit_free(circuit_t *c)
     else
       conn_close(conn);
   }
-  delete ckt->downstreams;
-  delete ckt->send_crypt;
-  delete ckt->recv_crypt;
 
-  queue = &ckt->reassembly_queue;
+  delete this->send_crypt;
+  delete this->recv_crypt;
+
+  queue = &this->reassembly_queue;
   for (q = p = queue->next; p != queue; p = q) {
     q = p->next;
     if (p->data)
@@ -954,40 +957,37 @@ chop_circuit_free(circuit_t *c)
     free(p);
   }
 
-  if (c->cfg->mode == LSN_SIMPLE_SERVER) {
+  if (this->cfg->mode == LSN_SIMPLE_SERVER) {
     /* The IDs for old circuits are preserved for a while (at present,
        indefinitely; FIXME: purge them on a timer) against the
        possibility that we'll get a junk connection for one of them
        right after we close it (same deal as the TIME_WAIT state in TCP). */
-    chop_config_t *cfg = static_cast<chop_config_t *>(c->cfg);
-    out = cfg->circuits.find(ckt->circuit_id);
+    chop_config_t *cfg = static_cast<chop_config_t *>(this->cfg);
+    out = cfg->circuits.find(this->circuit_id);
     log_assert(out != cfg->circuits.end());
-    log_assert(out->second == c);
+    log_assert(out->second == this);
     out->second = NULL;
   }
-  free(ckt);
 }
 
-static void
-chop_circuit_add_downstream(circuit_t *c, conn_t *conn)
+void
+chop_circuit_t::add_downstream(conn_t *conn)
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
-  ckt->downstreams->insert(conn);
-  log_debug(c, "added connection <%d.%d> to %s, now %lu",
-            c->serial, conn->serial, conn->peername,
-            (unsigned long)ckt->downstreams->size());
+  this->downstreams.insert(conn);
+  log_debug(this, "added connection <%d.%d> to %s, now %lu",
+            this->serial, conn->serial, conn->peername,
+            (unsigned long)this->downstreams.size());
 
-  circuit_disarm_axe_timer(c);
+  circuit_disarm_axe_timer(this);
 }
 
-static void
-chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
+void
+chop_circuit_t::drop_downstream(conn_t *conn)
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
-  ckt->downstreams->erase(conn);
-  log_debug(c, "dropped connection <%d.%d> to %s, now %lu",
-            c->serial, conn->serial, conn->peername,
-            (unsigned long)ckt->downstreams->size());
+  this->downstreams.erase(conn);
+  log_debug(this, "dropped connection <%d.%d> to %s, now %lu",
+            this->serial, conn->serial, conn->peername,
+            (unsigned long)this->downstreams.size());
   /* If that was the last connection on this circuit AND we've both
      received and sent a FIN, close the circuit.  Otherwise, if we're
      the server, arm a timer that will kill off this circuit in a
@@ -995,18 +995,18 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
      our connections to protocol errors, or because the steg modules
      wanted them closed); if we're the client, send chaff in a bit,
      to enable further transmissions from the server. */
-  if (ckt->downstreams->empty()) {
-    if (ckt->sent_fin && ckt->received_fin) {
-      if (evbuffer_get_length(bufferevent_get_output(c->up_buffer)) > 0)
+  if (this->downstreams.empty()) {
+    if (this->sent_fin && this->received_fin) {
+      if (evbuffer_get_length(bufferevent_get_output(this->up_buffer)) > 0)
         /* this may already have happened, but there's no harm in
            doing it again */
-        circuit_do_flush(c);
+        circuit_do_flush(this);
       else
-        circuit_close(c);
-    } else if (c->cfg->mode == LSN_SIMPLE_SERVER) {
-      circuit_arm_axe_timer(c, 5000);
+        circuit_close(this);
+    } else if (this->cfg->mode == LSN_SIMPLE_SERVER) {
+      circuit_arm_axe_timer(this, 5000);
     } else {
-      circuit_arm_flush_timer(c, 1);
+      circuit_arm_flush_timer(this, 1);
     }
   }
 }
@@ -1065,32 +1065,30 @@ chop_conn_t::handshake()
   return 0;
 }
 
-static int
-chop_circuit_send(circuit_t *c)
+int
+chop_circuit_t::send()
 {
-  chop_circuit_t *ckt = downcast_circuit(c);
+  circuit_disarm_flush_timer(this);
 
-  circuit_disarm_flush_timer(c);
-
-  if (ckt->downstreams->empty()) {
+  if (this->downstreams.empty()) {
     /* We have no connections, but we must send.  If we're the client,
        reopen our outbound connections; the on-connection event will
        bring us back here.  If we're the server, we have to just
        twiddle our thumbs and hope the client reconnects. */
-    log_debug(c, "no downstream connections");
-    if (c->cfg->mode != LSN_SIMPLE_SERVER)
-      circuit_reopen_downstreams(c);
+    log_debug(this, "no downstream connections");
+    if (this->cfg->mode != LSN_SIMPLE_SERVER)
+      circuit_reopen_downstreams(this);
     else
-      circuit_arm_axe_timer(c, 5000);
+      circuit_arm_axe_timer(this, 5000);
     return 0;
   }
 
-  if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)) == 0) {
+  if (evbuffer_get_length(bufferevent_get_input(this->up_buffer)) == 0) {
     /* must-send timer expired and we still have nothing to say; send chaff */
-    if (chop_send_chaff(c))
+    if (chop_send_chaff(this))
       return -1;
   } else {
-    if (chop_send_blocks(c))
+    if (chop_send_blocks(this))
       return -1;
   }
 
@@ -1098,9 +1096,9 @@ chop_circuit_send(circuit_t *c)
      necessary).  If we're the client we have to keep trying to talk
      as long as we haven't both sent and received a FIN, or we might
      deadlock. */
-  if (ckt->sent_fin && ckt->received_fin) {
-    for (unordered_set<conn_t *>::iterator i = ckt->downstreams->begin();
-         i != ckt->downstreams->end(); i++) {
+  if (this->sent_fin && this->received_fin) {
+    for (unordered_set<conn_t *>::iterator i = this->downstreams.begin();
+         i != this->downstreams.end(); i++) {
       chop_conn_t *conn = static_cast<chop_conn_t*>(*i);
       if (conn->must_transmit_timer &&
           evtimer_pending(conn->must_transmit_timer, NULL))
@@ -1108,17 +1106,17 @@ chop_circuit_send(circuit_t *c)
       conn_send_eof(conn);
     }
   } else {
-    if (c->cfg->mode != LSN_SIMPLE_SERVER)
-      circuit_arm_flush_timer(c, 5);
+    if (this->cfg->mode != LSN_SIMPLE_SERVER)
+      circuit_arm_flush_timer(this, 5);
   }
   return 0;
 }
 
-static int
-chop_circuit_send_eof(circuit_t *c)
+int
+chop_circuit_t::send_eof()
 {
-  downcast_circuit(c)->upstream_eof = true;
-  return chop_circuit_send(c);
+  this->upstream_eof = true;
+  return this->send();
 }
 
 int
@@ -1171,7 +1169,7 @@ chop_conn_t::recv()
   }
 
   c = this->circuit;
-  ckt = downcast_circuit(c);
+  ckt = static_cast<chop_circuit_t *>(c);
   log_debug(this, "circuit to %s", c->up_peer);
 
   for (;;) {
@@ -1249,7 +1247,7 @@ chop_conn_t::recv()
 
   /* It may have now become possible to send queued data. */
   if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)))
-    chop_circuit_send(c);
+    c->send();
 
   return 0;
 }
@@ -1265,7 +1263,7 @@ chop_conn_t::recv_eof()
      longer sending in the opposite direction.  Also, we should not
      drop the connection if its must-transmit timer is still pending.  */
   if (c) {
-    chop_circuit_t *ckt = downcast_circuit(c);
+    chop_circuit_t *ckt = static_cast<chop_circuit_t *>(c);
 
     if (evbuffer_get_length(conn_get_inbound(this)) > 0)
       if (this->recv())

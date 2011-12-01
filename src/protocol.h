@@ -81,61 +81,14 @@ struct proto_module
   /** Create a config_t instance for this module from a set of command
       line options. */
   config_t *(*config_create)(int n_options, const char *const *options);
-
-  /** Destroy per-circuit, protocol-specific state. */
-  void (*circuit_free)(circuit_t *ckt);
-
-  /** Add a downstream connection to this circuit. */
-  void (*circuit_add_downstream)(circuit_t *ckt, conn_t *conn);
-
-  /** Drop a downstream connection which is no longer usable. */
-  void (*circuit_drop_downstream)(circuit_t *ckt, conn_t *conn);
-
-  /** Transmit data from the upstream to the downstream peer. */
-  int (*circuit_send)(circuit_t *ckt);
-
-  /** Transmit any buffered data and an EOF indication to the downstream
-      peer.  This will only be called once per circuit, and circuit_send
-      will not be called again after this has been called; if you need
-      periodic "can we flush more data now?" callbacks, and conn_recv
-      events won't do it, you have to set them up yourself. */
-  int (*circuit_send_eof)(circuit_t *ckt);
 };
 
 extern const proto_module *const supported_protos[];
 
-/** Use these macros to define protocol modules; they ensure all the
-    methods are in the correct order in the vtable, enforce a
-    consistent naming convention on protocol implementations, and
-    provide type-safe up and down casts. */
-
-#define PROTO_VTABLE_CONTENTS(name)             \
-    #name,                                      \
-    name##_config_create,                       \
-    name##_circuit_free,                        \
-    name##_circuit_add_downstream,              \
-    name##_circuit_drop_downstream,             \
-    name##_circuit_send,                        \
-    name##_circuit_send_eof,
-
-#define PROTO_FWD_DECLS(name)                                           \
-  static void name##_circuit_free(circuit_t *);                         \
-  static void name##_circuit_add_downstream(circuit_t *, conn_t *);     \
-  static void name##_circuit_drop_downstream(circuit_t *, conn_t *);    \
-  static int name##_circuit_send(circuit_t *);                          \
-  static int name##_circuit_send_eof(circuit_t *);
-
-#define PROTO_CAST_HELPERS(name)                                \
-  static inline circuit_t *upcast_circuit(name##_circuit_t *c)  \
-  { return &c->super; }                                         \
-  static inline name##_circuit_t *downcast_circuit(circuit_t *c)\
-  { return DOWNCAST(name##_circuit_t, super, c); }
+/** Use these macros to define protocol modules. */
 
 #define PROTO_DEFINE_MODULE(mod)                                \
   extern const proto_module p_mod_##mod;                        \
-                                                                \
-  PROTO_CAST_HELPERS(mod)                                       \
-  PROTO_FWD_DECLS(mod)                                          \
                                                                 \
   /* canned methods */                                          \
   const proto_module *mod##_config_t::vtable()                  \
@@ -151,7 +104,7 @@ extern const proto_module *const supported_protos[];
   }                                                             \
                                                                 \
   extern const proto_module p_mod_##mod = {                     \
-    PROTO_VTABLE_CONTENTS(mod)                                  \
+    #mod, mod##_config_create,                                  \
   } /* deliberate absence of semicolon */
 
 #define CONFIG_DECLARE_METHODS(mod)                             \
@@ -187,5 +140,13 @@ extern const proto_module *const supported_protos[];
   { log_abort(this, "steg stub called"); }              \
   void mod##_conn_t::transmit_soon(unsigned long)       \
   { log_abort(this, "steg stub called"); }
+
+#define CIRCUIT_DECLARE_METHODS(mod)            \
+  mod##_circuit_t();                            \
+  virtual ~mod##_circuit_t();                   \
+  virtual void add_downstream(conn_t *);        \
+  virtual void drop_downstream(conn_t *);       \
+  virtual int  send();                          \
+  virtual int  send_eof();
 
 #endif

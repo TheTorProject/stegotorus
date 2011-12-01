@@ -248,6 +248,32 @@ circuit_create(config_t *cfg)
   return ckt;
 }
 
+circuit_t::~circuit_t()
+{
+  circuits.erase(this);
+  log_debug(this, "closing circuit; %lu remaining",
+            (unsigned long)circuits.size());
+
+  if (this->up_buffer)
+    bufferevent_free(this->up_buffer);
+  if (this->up_peer)
+    free((void *)this->up_peer);
+  if (this->socks_state)
+    socks_state_free(this->socks_state);
+  if (this->flush_timer)
+    event_free(this->flush_timer);
+  if (this->axe_timer)
+    event_free(this->axe_timer);
+
+  maybe_finish_shutdown();
+}
+
+void
+circuit_close(circuit_t *ckt)
+{
+  delete ckt;
+}
+
 void
 circuit_add_upstream(circuit_t *ckt, struct bufferevent *buf, const char *peer)
 {
@@ -265,7 +291,7 @@ circuit_add_downstream(circuit_t *ckt, conn_t *down)
 {
   log_assert(!down->circuit);
   down->circuit = ckt;
-  ckt->cfg->vtable()->circuit_add_downstream(ckt, down);
+  ckt->add_downstream(down);
 }
 
 void
@@ -273,36 +299,13 @@ circuit_drop_downstream(circuit_t *ckt, conn_t *down)
 {
   log_assert(down->circuit == ckt);
   down->circuit = NULL;
-  ckt->cfg->vtable()->circuit_drop_downstream(ckt, down);
-}
-
-void
-circuit_close(circuit_t *ckt)
-{
-  circuits.erase(ckt);
-  log_debug(ckt, "closing circuit; %lu remaining",
-            (unsigned long)circuits.size());
-
-  if (ckt->up_buffer)
-    bufferevent_free(ckt->up_buffer);
-  if (ckt->up_peer)
-    free((void *)ckt->up_peer);
-  if (ckt->socks_state)
-    socks_state_free(ckt->socks_state);
-  if (ckt->flush_timer)
-    event_free(ckt->flush_timer);
-  if (ckt->axe_timer)
-    event_free(ckt->axe_timer);
-
-  ckt->cfg->vtable()->circuit_free(ckt);
-
-  maybe_finish_shutdown();
+  ckt->drop_downstream(down);
 }
 
 static int
 circuit_send_raw(circuit_t *ckt)
 {
-  return ckt->cfg->vtable()->circuit_send(ckt);
+  return ckt->send();
 }
 
 void
@@ -317,7 +320,7 @@ circuit_send(circuit_t *ckt)
 static int
 circuit_send_eof_raw(circuit_t *ckt)
 {
-  return ckt->cfg->vtable()->circuit_send_eof(ckt);
+  return ckt->send_eof();
 }
 
 void

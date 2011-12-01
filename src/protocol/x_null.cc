@@ -20,9 +20,10 @@ namespace {
     CONN_DECLARE_METHODS(x_null);
   };
 
-  struct x_null_circuit_t {
-    circuit_t super;
+  struct x_null_circuit_t : circuit_t {
     conn_t *downstream;
+
+    CIRCUIT_DECLARE_METHODS(x_null);
   };
 }
 
@@ -111,73 +112,67 @@ x_null_config_t::get_target_addrs(size_t n)
 circuit_t *
 x_null_config_t::circuit_create()
 {
-  circuit_t *ckt = upcast_circuit((x_null_circuit_t *)
-                                  xzalloc(sizeof(x_null_circuit_t)));
+  circuit_t *ckt = new x_null_circuit_t;
   ckt->cfg = this;
   return ckt;
 }
 
-/* Destroy a circuit object. */
-static void
-x_null_circuit_free(circuit_t *c)
+x_null_circuit_t::x_null_circuit_t()
 {
-  x_null_circuit_t *ckt = downcast_circuit(c);
-  if (ckt->downstream) {
+}
+
+x_null_circuit_t::~x_null_circuit_t()
+{
+  if (downstream) {
     /* break the circular reference before deallocating the
        downstream connection */
-    ckt->downstream->circuit = NULL;
-    conn_close(ckt->downstream);
+    downstream->circuit = NULL;
+    delete downstream;
   }
-
-  free(ckt);
 }
 
 /* Add a connection to this circuit. */
-static void
-x_null_circuit_add_downstream(circuit_t *c, conn_t *conn)
+void
+x_null_circuit_t::add_downstream(conn_t *conn)
 {
-  x_null_circuit_t *ckt = downcast_circuit(c);
-  log_assert(!ckt->downstream);
-  ckt->downstream = conn;
-  log_debug(c, "added connection <%d.%d> to %s",
-            c->serial, conn->serial, conn->peername);
+  log_assert(!this->downstream);
+  this->downstream = conn;
+  log_debug(this, "added connection <%d.%d> to %s",
+            this->serial, conn->serial, conn->peername);
 }
 
 /* Drop a connection from this circuit.  If this happens in this
    protocol, it is because of a network error, and the whole circuit
    should be closed.  */
-static void
-x_null_circuit_drop_downstream(circuit_t *c, conn_t *conn)
+void
+x_null_circuit_t::drop_downstream(conn_t *conn)
 {
-  x_null_circuit_t *ckt = downcast_circuit(c);
-  log_assert(ckt->downstream == conn);
-  log_debug(c, "dropped connection <%d.%d> to %s",
-            c->serial, conn->serial, conn->peername);
-  ckt->downstream = NULL;
-  if (evbuffer_get_length(bufferevent_get_output(c->up_buffer)) > 0)
+  log_assert(this->downstream == conn);
+  log_debug(this, "dropped connection <%d.%d> to %s",
+            this->serial, conn->serial, conn->peername);
+  this->downstream = NULL;
+  if (evbuffer_get_length(bufferevent_get_output(this->up_buffer)) > 0)
     /* this may already have happened, but there's no harm in
        doing it again */
-    circuit_do_flush(c);
+    circuit_do_flush(this);
   else
-    circuit_close(c);
+    circuit_close(this);
 }
 
-/* Send data from circuit C. */
-static int
-x_null_circuit_send(circuit_t *c)
+/* Send data from the upstream buffer. */
+int
+x_null_circuit_t::send()
 {
-  x_null_circuit_t *ckt = downcast_circuit(c);
-  return evbuffer_add_buffer(conn_get_outbound(ckt->downstream),
-                             bufferevent_get_input(c->up_buffer));
+  return evbuffer_add_buffer(conn_get_outbound(this->downstream),
+                             bufferevent_get_input(this->up_buffer));
 }
 
-/* Send an EOF on circuit C. */
-static int
-x_null_circuit_send_eof(circuit_t *c)
+/* Send an EOF on this circuit. */
+int
+x_null_circuit_t::send_eof()
 {
-  x_null_circuit_t *ckt = downcast_circuit(c);
-  if (ckt->downstream)
-    conn_send_eof(ckt->downstream);
+  if (this->downstream)
+    conn_send_eof(this->downstream);
   return 0;
 }
 

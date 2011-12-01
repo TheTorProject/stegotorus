@@ -151,9 +151,29 @@ struct circuit_t {
   socks_state_t      *socks_state;
   unsigned int        serial;
 
-  unsigned int        connected : 1;
-  unsigned int        flushing : 1;
-  unsigned int        pending_eof : 1;
+  bool                connected : 1;
+  bool                flushing : 1;
+  bool                pending_eof : 1;
+
+  circuit_t() : connected(false), flushing(false), pending_eof(false) {}
+  virtual ~circuit_t();
+
+  /** Add a downstream connection to this circuit. */
+  virtual void add_downstream(conn_t *conn) = 0;
+
+  /** Drop a downstream connection which is no longer usable. */
+  virtual void drop_downstream(conn_t *conn) = 0;
+
+  /** Transmit data from the upstream to the downstream peer.
+      Returns 0 on success, -1 on failure. */
+  virtual int send() = 0;
+
+  /** Transmit any buffered data and an EOF indication to the downstream
+      peer.  This will only be called once per circuit, and |send|
+      will not be called again after this has been called; if you need
+      periodic "can we flush more data now?" callbacks, and |conn_t::recv|
+      events won't do it, you have to set them up yourself. */
+  virtual int send_eof() = 0;
 };
 
 circuit_t *circuit_create(config_t *cfg);
