@@ -22,11 +22,12 @@ using std::vector;
 /**
   This struct defines the state of a listener on a particular address.
  */
-typedef struct listener_t {
+struct listener_t
+{
   config_t *cfg;
   struct evconnlistener *listener;
   char *address;
-} listener_t;
+};
 
 /** All our listeners. */
 static vector<listener_t *> listeners;

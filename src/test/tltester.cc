@@ -77,7 +77,7 @@
    reason, it is skipped but copied to the transcript, with a ! at the
    beginning of the line.  (These will all be at the very beginning.) */
 
-typedef struct tstate
+struct tstate
 {
   struct bufferevent *near;
   struct bufferevent *far;
@@ -100,7 +100,7 @@ typedef struct tstate
   bool sent_eof_far  : 1;
   bool script_eof    : 1;
   bool saw_error     : 1;
-} tstate;
+};
 
 static void script_next_action(tstate *st);
 
