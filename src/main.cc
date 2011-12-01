@@ -384,7 +384,7 @@ main(int, const char *const *argv)
 
   for (vector<config_t *>::iterator i = configs.begin(); i != configs.end();
        i++)
-    config_free(*i);
+    delete *i;
 
   evdns_base_free(get_evdns_base(), 0);
   event_free(sig_int);

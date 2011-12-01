@@ -74,8 +74,8 @@ cleanup_proto_test_state(const struct testcase_t *, void *state)
   conn_close(s->conn_client);
   conn_close(s->conn_server);
 
-  config_free(s->cfg_client);
-  config_free(s->cfg_server);
+  delete s->cfg_client;
+  delete s->cfg_server;
 
   bufferevent_free(s->buf_client);
   bufferevent_free(s->buf_server);

@@ -99,14 +99,15 @@ typedef struct chop_circuit_t
   bool upstream_eof : 1;
 } chop_circuit_t;
 
-typedef struct chop_config_t
+struct chop_config_t : config_t
 {
-  config_t super;
   struct evutil_addrinfo *up_address;
-  vector<struct evutil_addrinfo *> *down_addresses;
-  vector<const char *> *steg_targets;
-  chop_circuit_table *circuits;
-} chop_config_t;
+  vector<struct evutil_addrinfo *> down_addresses;
+  vector<const char *> steg_targets;
+  chop_circuit_table circuits;
+
+  CONFIG_DECLARE_METHODS(chop);
+};
 
 PROTO_DEFINE_MODULE(chop, STEG);
 
@@ -756,10 +757,9 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
 {
   log_assert(conn->cfg->mode == LSN_SIMPLE_SERVER);
 
-  config_t *c = conn->cfg;
-  chop_config_t *cfg = downcast_config(c);
+  chop_config_t *cfg = static_cast<chop_config_t *>(conn->cfg);
   chop_circuit_table::value_type in(circuit_id, 0);
-  std::pair<chop_circuit_table::iterator, bool> out = cfg->circuits->insert(in);
+  std::pair<chop_circuit_table::iterator, bool> out = cfg->circuits.insert(in);
   circuit_t *ck;
 
   if (!out.second) { // element already exists
@@ -770,7 +770,7 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
     ck = out.first->second;
     log_debug(conn, "found circuit to %s", ck->up_peer);
   } else {
-    ck = circuit_create(c);
+    ck = cfg->circuit_create();
     if (!ck) {
       log_warn(conn, "failed to create new circuit");
       return -1;
@@ -791,41 +791,55 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
 
 /* Protocol methods */
 
-/**
-   Helper: Parses 'options' and fills 'cfg'.
-*/
-static int
-parse_and_set_options(int n_options, const char *const *options,
-                      config_t *c)
+chop_config_t::chop_config_t()
+{
+  ignore_socks_destination = true;
+}
+
+chop_config_t::~chop_config_t()
+{
+  if (up_address)
+    evutil_freeaddrinfo(up_address);
+  for (vector<struct evutil_addrinfo *>::iterator i = down_addresses.begin();
+       i != down_addresses.end(); i++)
+    evutil_freeaddrinfo(*i);
+
+  /* The strings in steg_targets are not on the heap. */
+
+  for (chop_circuit_table::iterator i = circuits.begin();
+       i != circuits.end(); i++)
+    if (i->second)
+      circuit_close(i->second);
+}
+
+bool
+chop_config_t::init(int n_options, const char *const *options)
 {
   const char* defport;
-  chop_config_t *cfg = downcast_config(c);
   int listen_up;
   int i;
 
   if (n_options < 3)
-    return -1;
+    goto usage;
 
   if (!strcmp(options[0], "client")) {
     defport = "48988"; /* bf5c */
-    c->mode = LSN_SIMPLE_CLIENT;
-    cfg->steg_targets = new vector<const char *>;
+    this->mode = LSN_SIMPLE_CLIENT;
     listen_up = 1;
   } else if (!strcmp(options[0], "socks")) {
     defport = "23548"; /* 5bf5 */
-    c->mode = LSN_SOCKS_CLIENT;
-    cfg->steg_targets = new vector<const char *>;
+    this->mode = LSN_SOCKS_CLIENT;
     listen_up = 1;
   } else if (!strcmp(options[0], "server")) {
     defport = "11253"; /* 2bf5 */
-    c->mode = LSN_SIMPLE_SERVER;
+    this->mode = LSN_SIMPLE_SERVER;
     listen_up = 0;
   } else
-    return -1;
+    goto usage;
 
-  cfg->up_address = resolve_address_port(options[1], 1, listen_up, defport);
-  if (!cfg->up_address)
-    return -1;
+  this->up_address = resolve_address_port(options[1], 1, listen_up, defport);
+  if (!this->up_address)
+    goto usage;
 
   /* From here on out, arguments alternate between downstream
      addresses and steg targets, if we're the client.  If we're not
@@ -834,64 +848,22 @@ parse_and_set_options(int n_options, const char *const *options,
     struct evutil_addrinfo *addr =
       resolve_address_port(options[i], 1, !listen_up, NULL);
     if (!addr)
-      return -1;
-    cfg->down_addresses->push_back(addr);
+      goto usage;
+    this->down_addresses.push_back(addr);
 
-    if (c->mode == LSN_SIMPLE_SERVER)
+    if (this->mode == LSN_SIMPLE_SERVER)
       continue;
     i++;
-    if (i == n_options) return -1;
+    if (i == n_options)
+      goto usage;
 
     if (!steg_is_supported(options[i]))
-      return -1;
-    cfg->steg_targets->push_back(options[i]);
+      goto usage;
+    this->steg_targets.push_back(options[i]);
   }
-  return 0;
-}
+  return true;
 
-static void
-chop_config_free(config_t *c)
-{
-  chop_config_t *cfg = downcast_config(c);
-
-  if (cfg->up_address)
-    evutil_freeaddrinfo(cfg->up_address);
-  if (cfg->down_addresses) {
-    for (vector<struct evutil_addrinfo *>::iterator i =
-           cfg->down_addresses->begin();
-         i != cfg->down_addresses->end(); i++)
-      evutil_freeaddrinfo(*i);
-    delete cfg->down_addresses;
-  }
-
-  /* The strings in cfg->steg_targets are not on the heap. */
-  if (cfg->steg_targets)
-    delete cfg->steg_targets;
-
-  for (chop_circuit_table::iterator i = cfg->circuits->begin();
-       i != cfg->circuits->end(); i++)
-    if (i->second)
-      circuit_close(i->second);
-
-  cfg->circuits->clear();
-  delete cfg->circuits;
-  free(cfg);
-}
-
-static config_t *
-chop_config_create(int n_options, const char *const *options)
-{
-  chop_config_t *cfg = (chop_config_t *)xzalloc(sizeof(chop_config_t));
-  config_t *c = upcast_config(cfg);
-  c->vtable = &p_mod_chop;
-  c->ignore_socks_destination = 1;
-  cfg->circuits = new chop_circuit_table;
-  cfg->down_addresses = new vector<struct evutil_addrinfo *>;
-
-  if (parse_and_set_options(n_options, options, c) == 0)
-    return c;
-
-  chop_config_free(c);
+ usage:
   log_warn("chop syntax:\n"
            "\tchop <mode> <up_address> (<down_address> [<steg>])...\n"
            "\t\tmode ~ server|client|socks\n"
@@ -904,48 +876,46 @@ chop_config_create(int n_options, const char *const *options)
            "192.168.1.99:11253 http 192.168.1.99:11254 skype\n"
            "\tstegotorus chop server 127.0.0.1:9005 "
            "192.168.1.99:11253 192.168.1.99:11254");
-  return NULL;
+  return false;
 }
 
-static struct evutil_addrinfo *
-chop_config_get_listen_addrs(config_t *c, size_t n)
+struct evutil_addrinfo *
+chop_config_t::get_listen_addrs(size_t n)
 {
-  chop_config_t *cfg = downcast_config(c);
-  if (c->mode == LSN_SIMPLE_SERVER) {
-    if (n < cfg->down_addresses->size())
-      return cfg->down_addresses->at(n);
+  if (this->mode == LSN_SIMPLE_SERVER) {
+    if (n < this->down_addresses.size())
+      return this->down_addresses[n];
   } else {
     if (n == 0)
-      return cfg->up_address;
+      return this->up_address;
+  }
+  return 0;
+}
+
+struct evutil_addrinfo *
+chop_config_t::get_target_addrs(size_t n)
+{
+  if (this->mode == LSN_SIMPLE_SERVER) {
+    if (n == 0)
+      return this->up_address;
+  } else {
+    if (n < this->down_addresses.size())
+      return this->down_addresses[n];
   }
   return NULL;
 }
 
-static struct evutil_addrinfo *
-chop_config_get_target_addrs(config_t *c, size_t n)
-{
-  chop_config_t *cfg = downcast_config(c);
-  if (c->mode == LSN_SIMPLE_SERVER) {
-    if (n == 0)
-      return cfg->up_address;
-  } else {
-    if (n < cfg->down_addresses->size())
-      return cfg->down_addresses->at(n);
-  }
-  return NULL;
-}
-
-static circuit_t *
-chop_circuit_create(config_t *cfg)
+circuit_t *
+chop_config_t::circuit_create()
 {
   chop_circuit_t *ckt = (chop_circuit_t *)xzalloc(sizeof(chop_circuit_t));
   circuit_t *c = upcast_circuit(ckt);
-  c->cfg = cfg;
+  c->cfg = this;
   ckt->reassembly_queue.next = &ckt->reassembly_queue;
   ckt->reassembly_queue.prev = &ckt->reassembly_queue;
   ckt->downstreams = new unordered_set<conn_t *>;
 
-  if (cfg->mode == LSN_SIMPLE_SERVER) {
+  if (this->mode == LSN_SIMPLE_SERVER) {
     ckt->send_crypt = encryptor::create(s2c_key, 16);
     ckt->recv_crypt = decryptor::create(c2s_key, 16);
   } else {
@@ -990,9 +960,9 @@ chop_circuit_free(circuit_t *c)
        indefinitely; FIXME: purge them on a timer) against the
        possibility that we'll get a junk connection for one of them
        right after we close it (same deal as the TIME_WAIT state in TCP). */
-    chop_config_t *cfg = downcast_config(c->cfg);
-    out = cfg->circuits->find(ckt->circuit_id);
-    log_assert(out != cfg->circuits->end());
+    chop_config_t *cfg = static_cast<chop_config_t *>(c->cfg);
+    out = cfg->circuits.find(ckt->circuit_id);
+    log_assert(out != cfg->circuits.end());
     log_assert(out->second == c);
     out->second = NULL;
   }
@@ -1042,17 +1012,16 @@ chop_circuit_drop_downstream(circuit_t *c, conn_t *conn)
   }
 }
 
-static conn_t *
-chop_conn_create(config_t *c)
+conn_t *
+chop_config_t::conn_create()
 {
-  chop_config_t *cfg = downcast_config(c);
   chop_conn_t *conn = (chop_conn_t *)xzalloc(sizeof(chop_conn_t));
   conn_t *cn = upcast_conn(conn);
-  cn->cfg = c;
-  if (c->mode != LSN_SIMPLE_SERVER) {
+  cn->cfg = this;
+  if (this->mode != LSN_SIMPLE_SERVER) {
     /* XXX currently uses steg target 0 for all connections.
        Need protocol-specific listener state to fix this. */
-    conn->steg = steg_new(cfg->steg_targets->at(0));
+    conn->steg = steg_new(this->steg_targets[0]);
     if (!conn->steg) {
       free(conn);
       return 0;

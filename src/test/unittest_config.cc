@@ -44,7 +44,7 @@ cleanup_test_config(const struct testcase_t *, void *state)
   struct option_parsing_case *c;
   for (c = (struct option_parsing_case *)state; c->n_opts; c++)
     if (c->result)
-      config_free(c->result);
+      delete c->result;
 
   /* Reactivate logging */
   log_set_method(LOG_METHOD_STDERR, NULL);

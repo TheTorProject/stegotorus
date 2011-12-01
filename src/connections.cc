@@ -96,7 +96,7 @@ conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
 
   log_assert(!shutting_down);
 
-  conn = cfg->vtable->conn_create(cfg);
+  conn = cfg->conn_create();
   conn->buffer = buf;
   conn->peername = peername;
   conn->serial = ++last_conn_serial;
@@ -124,7 +124,7 @@ conn_close(conn_t *conn)
   if (conn->buffer)
     bufferevent_free(conn->buffer);
 
-  conn->cfg->vtable->conn_free(conn);
+  conn->cfg->vtable()->conn_free(conn);
 
   maybe_finish_shutdown();
 }
@@ -150,49 +150,49 @@ conn_send_eof(conn_t *dest)
 int
 conn_maybe_open_upstream(conn_t *conn)
 {
-  return conn->cfg->vtable->conn_maybe_open_upstream(conn);
+  return conn->cfg->vtable()->conn_maybe_open_upstream(conn);
 }
 
 int
 conn_handshake(conn_t *conn)
 {
-  return conn->cfg->vtable->conn_handshake(conn);
+  return conn->cfg->vtable()->conn_handshake(conn);
 }
 
 int
 conn_recv(conn_t *source)
 {
-  return source->cfg->vtable->conn_recv(source);
+  return source->cfg->vtable()->conn_recv(source);
 }
 
 int
 conn_recv_eof(conn_t *source)
 {
-  return source->cfg->vtable->conn_recv_eof(source);
+  return source->cfg->vtable()->conn_recv_eof(source);
 }
 
 void
 conn_expect_close(conn_t *conn)
 {
-  conn->cfg->vtable->conn_expect_close(conn);
+  conn->cfg->vtable()->conn_expect_close(conn);
 }
 
 void
 conn_cease_transmission(conn_t *conn)
 {
-  conn->cfg->vtable->conn_cease_transmission(conn);
+  conn->cfg->vtable()->conn_cease_transmission(conn);
 }
 
 void
 conn_close_after_transmit(conn_t *conn)
 {
-  conn->cfg->vtable->conn_close_after_transmit(conn);
+  conn->cfg->vtable()->conn_close_after_transmit(conn);
 }
 
 void
 conn_transmit_soon(conn_t *conn, unsigned long timeout)
 {
-  conn->cfg->vtable->conn_transmit_soon(conn, timeout);
+  conn->cfg->vtable()->conn_transmit_soon(conn, timeout);
 }
 
 /* Circuits. */
@@ -234,7 +234,7 @@ circuit_create(config_t *cfg)
 
   log_assert(!shutting_down);
 
-  ckt = cfg->vtable->circuit_create(cfg);
+  ckt = cfg->circuit_create();
   ckt->serial = ++last_ckt_serial;
 
   if (cfg->mode == LSN_SOCKS_CLIENT)
@@ -262,7 +262,7 @@ circuit_add_downstream(circuit_t *ckt, conn_t *down)
 {
   log_assert(!down->circuit);
   down->circuit = ckt;
-  ckt->cfg->vtable->circuit_add_downstream(ckt, down);
+  ckt->cfg->vtable()->circuit_add_downstream(ckt, down);
 }
 
 void
@@ -270,7 +270,7 @@ circuit_drop_downstream(circuit_t *ckt, conn_t *down)
 {
   log_assert(down->circuit == ckt);
   down->circuit = NULL;
-  ckt->cfg->vtable->circuit_drop_downstream(ckt, down);
+  ckt->cfg->vtable()->circuit_drop_downstream(ckt, down);
 }
 
 void
@@ -291,7 +291,7 @@ circuit_close(circuit_t *ckt)
   if (ckt->axe_timer)
     event_free(ckt->axe_timer);
 
-  ckt->cfg->vtable->circuit_free(ckt);
+  ckt->cfg->vtable()->circuit_free(ckt);
 
   maybe_finish_shutdown();
 }
@@ -299,7 +299,7 @@ circuit_close(circuit_t *ckt)
 static int
 circuit_send_raw(circuit_t *ckt)
 {
-  return ckt->cfg->vtable->circuit_send(ckt);
+  return ckt->cfg->vtable()->circuit_send(ckt);
 }
 
 void
@@ -314,7 +314,7 @@ circuit_send(circuit_t *ckt)
 static int
 circuit_send_eof_raw(circuit_t *ckt)
 {
-  return ckt->cfg->vtable->circuit_send_eof(ckt);
+  return ckt->cfg->vtable()->circuit_send_eof(ckt);
 }
 
 void

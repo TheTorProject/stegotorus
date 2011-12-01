@@ -75,7 +75,7 @@ listener_open(struct event_base *base, config_t *cfg)
 
   /* Open listeners for every address in the configuration. */
   for (i = 0; ; i++) {
-    addrs = config_get_listen_addrs(cfg, i);
+    addrs = cfg->get_listen_addrs(i);
     if (!addrs) break;
     do {
       lsn = (listener_t *)xzalloc(sizeof(listener_t));
@@ -95,7 +95,7 @@ listener_open(struct event_base *base, config_t *cfg)
 
       listeners.push_back(lsn);
       log_debug("now listening on %s for protocol %s",
-                lsn->address, cfg->vtable->name);
+                lsn->address, cfg->vtable()->name);
 
       addrs = addrs->ai_next;
     } while (addrs);
@@ -635,7 +635,7 @@ circuit_open_upstream(circuit_t *ckt)
   struct bufferevent *buf;
   char *peername;
 
-  addr = config_get_target_addrs(ckt->cfg, 0);
+  addr = ckt->cfg->get_target_addrs(0);
 
   if (!addr) {
     log_warn(ckt, "no target addresses available");
@@ -722,7 +722,7 @@ create_outbound_connections(circuit_t *ckt, int really_socks)
   size_t n = 0;
   int any_successes = 0;
 
-  while ((addr = config_get_target_addrs(ckt->cfg, n))) {
+  while ((addr = ckt->cfg->get_target_addrs(n))) {
     any_successes |= create_one_outbound_connection(ckt, addr, really_socks);
     n++;
   }

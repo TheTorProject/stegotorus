@@ -8,91 +8,74 @@
 
 #include <event2/buffer.h>
 
-typedef struct x_null_config_t {
-  config_t super;
-  struct evutil_addrinfo *listen_addr;
-  struct evutil_addrinfo *target_addr;
-} x_null_config_t;
+namespace {
+  struct x_null_config_t : config_t {
+    struct evutil_addrinfo *listen_addr;
+    struct evutil_addrinfo *target_addr;
 
-typedef struct x_null_conn_t {
-  conn_t super;
-} x_null_conn_t;
+    CONFIG_DECLARE_METHODS(x_null);
+  };
 
-typedef struct x_null_circuit_t {
-  circuit_t super;
-  conn_t *downstream;
-} x_null_circuit_t;
+  struct x_null_conn_t {
+    conn_t super;
+  };
+
+  struct x_null_circuit_t {
+    circuit_t super;
+    conn_t *downstream;
+  };
+}
 
 PROTO_DEFINE_MODULE(x_null, NOSTEG);
 
-/**
-   Helper: Parses 'options' and fills 'cfg'.
-*/
-static int
-parse_and_set_options(int n_options, const char *const *options,
-                      config_t *c)
+x_null_config_t::x_null_config_t()
+{
+}
+
+x_null_config_t::~x_null_config_t()
+{
+  if (this->listen_addr)
+    evutil_freeaddrinfo(this->listen_addr);
+  if (this->target_addr)
+    evutil_freeaddrinfo(this->target_addr);
+}
+
+bool
+x_null_config_t::init(int n_options, const char *const *options)
 {
   const char* defport;
-  x_null_config_t *cfg = downcast_config(c);
 
   if (n_options < 1)
-    return -1;
+    goto usage;
 
   if (!strcmp(options[0], "client")) {
     defport = "48988"; /* bf5c */
-    c->mode = LSN_SIMPLE_CLIENT;
+    this->mode = LSN_SIMPLE_CLIENT;
   } else if (!strcmp(options[0], "socks")) {
     defport = "23548"; /* 5bf5 */
-    c->mode = LSN_SOCKS_CLIENT;
+    this->mode = LSN_SOCKS_CLIENT;
   } else if (!strcmp(options[0], "server")) {
     defport = "11253"; /* 2bf5 */
-    c->mode = LSN_SIMPLE_SERVER;
+    this->mode = LSN_SIMPLE_SERVER;
   } else
-    return -1;
+    goto usage;
 
-  if (n_options != (c->mode == LSN_SOCKS_CLIENT ? 2 : 3))
-      return -1;
+  if (n_options != (this->mode == LSN_SOCKS_CLIENT ? 2 : 3))
+    goto usage;
 
-  cfg->listen_addr = resolve_address_port(options[1], 1, 1, defport);
-  if (!cfg->listen_addr)
-    return -1;
+  this->listen_addr = resolve_address_port(options[1], 1, 1, defport);
+  if (!this->listen_addr)
+    goto usage;
 
-  if (c->mode != LSN_SOCKS_CLIENT) {
-    cfg->target_addr = resolve_address_port(options[2], 1, 0, NULL);
-    if (!cfg->target_addr)
-      return -1;
+  if (this->mode != LSN_SOCKS_CLIENT) {
+    this->target_addr = resolve_address_port(options[2], 1, 0, NULL);
+    if (!this->target_addr)
+      goto usage;
   }
 
-  return 0;
-}
+  return true;
 
-/* Deallocate 'cfg'. */
-static void
-x_null_config_free(config_t *c)
-{
-  x_null_config_t *cfg = downcast_config(c);
-  if (cfg->listen_addr)
-    evutil_freeaddrinfo(cfg->listen_addr);
-  if (cfg->target_addr)
-    evutil_freeaddrinfo(cfg->target_addr);
-  free(cfg);
-}
-
-/**
-   Populate 'cfg' according to 'options', which is an array like this:
-   {"socks","127.0.0.1:6666"}
-*/
-static config_t *
-x_null_config_create(int n_options, const char *const *options)
-{
-  x_null_config_t *cfg = (x_null_config_t *)xzalloc(sizeof(x_null_config_t));
-  config_t *c = upcast_config(cfg);
-  c->vtable = &p_mod_x_null;
-
-  if (parse_and_set_options(n_options, options, c) == 0)
-    return c;
-
-  x_null_config_free(c);
+ usage:
   log_warn("x_null syntax:\n"
            "\tx_null <mode> <listen_address> [<target_address>]\n"
            "\t\tmode ~ server|client|socks\n"
@@ -103,34 +86,34 @@ x_null_config_create(int n_options, const char *const *options)
            "\tstegotorus x_null socks 127.0.0.1:5000\n"
            "\tstegotorus x_null client 127.0.0.1:5000 192.168.1.99:11253\n"
            "\tstegotorus x_null server 192.168.1.99:11253 127.0.0.1:9005");
-  return NULL;
+  return false;
 }
 
 /** Retrieve the 'n'th set of listen addresses for this configuration. */
-static struct evutil_addrinfo *
-x_null_config_get_listen_addrs(config_t *cfg, size_t n)
+struct evutil_addrinfo *
+x_null_config_t::get_listen_addrs(size_t n)
 {
   if (n > 0)
     return 0;
-  return downcast_config(cfg)->listen_addr;
+  return this->listen_addr;
 }
 
 /* Retrieve the target address for this configuration. */
-static struct evutil_addrinfo *
-x_null_config_get_target_addrs(config_t *cfg, size_t n)
+struct evutil_addrinfo *
+x_null_config_t::get_target_addrs(size_t n)
 {
   if (n > 0)
     return 0;
-  return downcast_config(cfg)->target_addr;
+  return this->target_addr;
 }
 
 /* Create a circuit object. */
-static circuit_t *
-x_null_circuit_create(config_t *c)
+circuit_t *
+x_null_config_t::circuit_create()
 {
   circuit_t *ckt = upcast_circuit((x_null_circuit_t *)
                                   xzalloc(sizeof(x_null_circuit_t)));
-  ckt->cfg = c;
+  ckt->cfg = this;
   return ckt;
 }
 
@@ -203,12 +186,12 @@ x_null_circuit_send_eof(circuit_t *c)
   protocol.
 */
 
-static conn_t *
-x_null_conn_create(config_t *cfg)
+conn_t *
+x_null_config_t::conn_create()
 {
   x_null_conn_t *conn = (x_null_conn_t *)xzalloc(sizeof(x_null_conn_t));
   conn_t *c = upcast_conn(conn);
-  c->cfg = cfg;
+  c->cfg = this;
   return c;
 }
 
