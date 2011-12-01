@@ -96,7 +96,7 @@ listener_open(struct event_base *base, config_t *cfg)
 
       listeners.push_back(lsn);
       log_debug("now listening on %s for protocol %s",
-                lsn->address, cfg->vtable()->name);
+                lsn->address, cfg->name());
 
       addrs = addrs->ai_next;
     } while (addrs);

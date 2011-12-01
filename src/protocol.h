@@ -25,10 +25,10 @@ struct config_t
   config_t() : base(0), mode((enum listen_mode)-1) {}
   virtual ~config_t();
 
-  /** Return the protocol module object associated with this
+  /** Return the name of the protocol associated with this
       configuration.  You do not have to define this method in your
       subclass, PROTO_DEFINE_MODULE does it for you. */
-  virtual const proto_module *vtable() = 0;
+  virtual const char *name() = 0;
 
   /** Initialize yourself from a set of command line options.  This is
       separate from the subclass constructor so that it can fail:
@@ -88,11 +88,9 @@ extern const proto_module *const supported_protos[];
 /** Use these macros to define protocol modules. */
 
 #define PROTO_DEFINE_MODULE(mod)                                \
-  extern const proto_module p_mod_##mod;                        \
-                                                                \
   /* canned methods */                                          \
-  const proto_module *mod##_config_t::vtable()                  \
-  { return &p_mod_##mod; }                                      \
+  const char *mod##_config_t::name()                            \
+  { return #mod; }                                              \
                                                                 \
   static config_t *                                             \
   mod##_config_create(int n_opts, const char *const *opts)      \
@@ -110,7 +108,7 @@ extern const proto_module *const supported_protos[];
 #define CONFIG_DECLARE_METHODS(mod)                             \
   mod##_config_t();                                             \
   virtual ~mod##_config_t();                                    \
-  virtual const proto_module *vtable();                         \
+  virtual const char *name();                                   \
   virtual bool init(int n_opts, const char *const *opts);       \
   virtual evutil_addrinfo *get_listen_addrs(size_t n);          \
   virtual evutil_addrinfo *get_target_addrs(size_t n);          \
