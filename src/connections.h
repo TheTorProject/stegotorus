@@ -76,7 +76,7 @@ void conn_start_shutdown(int barbaric);
 
 /** Create a new inbound connection from a configuration and a
     bufferevent wrapping a socket. */
-conn_t *conn_create(config_t *cfg, struct bufferevent *buf,
+conn_t *conn_create(config_t *cfg, size_t index, struct bufferevent *buf,
                     const char *peername);
 
 /** Close and deallocate a connection.  If the connection is part of a
@@ -176,7 +176,7 @@ struct circuit_t {
   virtual int send_eof() = 0;
 };
 
-circuit_t *circuit_create(config_t *cfg);
+circuit_t *circuit_create(config_t *cfg, size_t index);
 
 void circuit_add_upstream(circuit_t *ckt,
                           struct bufferevent *buf, const char *peer);

@@ -39,16 +39,16 @@ setup_proto_test_state(const struct testcase_t *tcase)
   s->cfg_client->base = s->base;
   s->cfg_server->base = s->base;
 
-  s->conn_client = conn_create(s->cfg_client, pairs[0][0],
+  s->conn_client = conn_create(s->cfg_client, 0, pairs[0][0],
                                xstrdup("to-server"));
-  s->conn_server = conn_create(s->cfg_server, pairs[0][1],
+  s->conn_server = conn_create(s->cfg_server, 0, pairs[0][1],
                                xstrdup("to-client"));
 
   s->buf_client = pairs[1][0];
   s->buf_server = pairs[2][0];
 
-  s->ckt_client = circuit_create(s->cfg_client);
-  s->ckt_server = circuit_create(s->cfg_server);
+  s->ckt_client = circuit_create(s->cfg_client, 0);
+  s->ckt_server = circuit_create(s->cfg_server, 0);
 
   circuit_add_upstream(s->ckt_client, pairs[1][1],
                        xstrdup("to-harness-client"));

@@ -27,6 +27,7 @@ struct listener_t
   config_t *cfg;
   struct evconnlistener *listener;
   char *address;
+  size_t index;
 };
 
 /** All our listeners. */
@@ -52,7 +53,7 @@ static void downstream_flush_cb(struct bufferevent *bev, void *arg);
 static void upstream_event_cb(struct bufferevent *bev, short what, void *arg);
 static void downstream_event_cb(struct bufferevent *bev, short what, void *arg);
 
-static void create_outbound_connections(circuit_t *ckt, int really_socks);
+static void create_outbound_connections(circuit_t *ckt, bool is_socks);
 static void create_outbound_connections_socks(circuit_t *ckt);
 
 /**
@@ -82,6 +83,7 @@ listener_open(struct event_base *base, config_t *cfg)
       lsn = (listener_t *)xzalloc(sizeof(listener_t));
       lsn->cfg = cfg;
       lsn->address = printable_address(addrs->ai_addr, addrs->ai_addrlen);
+      lsn->index = i;
       lsn->listener =
         evconnlistener_new_bind(base, callback, lsn, flags, -1,
                                 addrs->ai_addr, addrs->ai_addrlen);
@@ -160,7 +162,7 @@ client_listener_cb(struct evconnlistener *, evutil_socket_t fd,
     return;
   }
 
-  ckt = circuit_create(lsn->cfg);
+  ckt = circuit_create(lsn->cfg, lsn->index);
   if (!ckt) {
     log_warn("%s: failed to create circuit for new connection from %s",
              lsn->address, peername);
@@ -179,7 +181,7 @@ client_listener_cb(struct evconnlistener *, evutil_socket_t fd,
   } else {
     bufferevent_setcb(buf, upstream_read_cb, upstream_flush_cb,
                       upstream_event_cb, ckt);
-    create_outbound_connections(ckt, 0);
+    create_outbound_connections(ckt, false);
     /* Don't enable reading or writing till the outbound connection(s) are
        established. */
   }
@@ -210,7 +212,7 @@ server_listener_cb(struct evconnlistener *, evutil_socket_t fd,
     return;
   }
 
-  conn = conn_create(lsn->cfg, buf, peername);
+  conn = conn_create(lsn->cfg, lsn->index, buf, peername);
   conn->connected = 1;
   if (!conn) {
     log_warn("%s: failed to create connection structure for %s",
@@ -674,9 +676,9 @@ circuit_open_upstream(circuit_t *ckt)
   return 0;
 }
 
-static int
+static bool
 create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
-                               int is_socks)
+                               size_t index, bool is_socks)
 {
   config_t *cfg = ckt->cfg;
   char *peername;
@@ -686,7 +688,7 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
   buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
     log_warn(ckt, "unable to create outbound socket buffer");
-    return 0;
+    return false;
   }
 
   do {
@@ -704,27 +706,27 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
   } while (addr);
 
   bufferevent_free(buf);
-  return 0;
+  return false;
 
  success:
-  conn = conn_create(cfg, buf, peername);
+  conn = conn_create(cfg, index, buf, peername);
   circuit_add_downstream(ckt, conn);
   bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
                     is_socks ? downstream_socks_connect_cb
                     : downstream_connect_cb, conn);
   bufferevent_enable(buf, EV_READ|EV_WRITE);
-  return 1;
+  return true;
 }
 
 static void
-create_outbound_connections(circuit_t *ckt, int really_socks)
+create_outbound_connections(circuit_t *ckt, bool is_socks)
 {
   struct evutil_addrinfo *addr;
   size_t n = 0;
-  int any_successes = 0;
+  bool any_successes = false;
 
   while ((addr = ckt->cfg->get_target_addrs(n))) {
-    any_successes |= create_one_outbound_connection(ckt, addr, really_socks);
+    any_successes |= create_one_outbound_connection(ckt, addr, n, is_socks);
     n++;
   }
 
@@ -741,7 +743,7 @@ create_outbound_connections(circuit_t *ckt, int really_socks)
 void
 circuit_reopen_downstreams(circuit_t *ckt)
 {
-  create_outbound_connections(ckt, 0);
+  create_outbound_connections(ckt, false);
 }
 
 static void
@@ -763,7 +765,7 @@ create_outbound_connections_socks(circuit_t *ckt)
   /* XXXX Feed socks state through the protocol and get a connection set.
      This is a stopgap. */
   if (ckt->cfg->ignore_socks_destination) {
-    create_outbound_connections(ckt, 1);
+    create_outbound_connections(ckt, true);
     return;
   }
 
@@ -781,7 +783,7 @@ create_outbound_connections_socks(circuit_t *ckt)
   }
 
   /* we don't know the peername yet */
-  conn = conn_create(cfg, buf, NULL);
+  conn = conn_create(cfg, 0, buf, NULL);
   circuit_add_downstream(ckt, conn);
   bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
                     downstream_socks_connect_cb, conn);

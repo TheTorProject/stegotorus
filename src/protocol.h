@@ -52,14 +52,18 @@ struct config_t
   virtual evutil_addrinfo *get_target_addrs(size_t n) = 0;
 
   /** Return an extended 'circuit_t' object for a new socket using
-      this configuration.  Must fill in the 'cfg' field of the generic
-      structure.  */
-  virtual circuit_t *circuit_create() = 0;
+      this configuration.  The 'index' argument is equal to the 'N'
+      argument to get_listen_addrs or get_target_addrs that retrieved
+      the address to which the socket is bound.  Must fill in the
+      'cfg' field of the generic structure.  */
+  virtual circuit_t *circuit_create(size_t index) = 0;
 
   /** Return an extended 'conn_t' object for a new socket using this
-      configuration.  Must fill in the 'cfg' field of the generic
-      structure.  */
-  virtual conn_t *conn_create() = 0;
+      configuration.  The 'index' argument is equal to the 'N'
+      argument to get_listen_addrs or get_target_addrs that retrieved
+      the address to which the socket is bound.  Must fill in the
+      'cfg' field of the generic structure.  */
+  virtual conn_t *conn_create(size_t index) = 0;
 };
 
 int config_is_supported(const char *name);
@@ -112,8 +116,8 @@ extern const proto_module *const supported_protos[];
   virtual bool init(int n_opts, const char *const *opts);       \
   virtual evutil_addrinfo *get_listen_addrs(size_t n);          \
   virtual evutil_addrinfo *get_target_addrs(size_t n);          \
-  virtual circuit_t *circuit_create();                          \
-  virtual conn_t *conn_create()                                 \
+  virtual circuit_t *circuit_create(size_t index);              \
+  virtual conn_t *conn_create(size_t index)                     \
   /* deliberate absence of semicolon */
 
 #define CONN_DECLARE_METHODS(mod)                       \

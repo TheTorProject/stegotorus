@@ -772,7 +772,7 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
     ck = out.first->second;
     log_debug(conn, "found circuit to %s", ck->up_peer);
   } else {
-    ck = cfg->circuit_create();
+    ck = cfg->circuit_create(0);
     if (!ck) {
       log_warn(conn, "failed to create new circuit");
       return -1;
@@ -908,7 +908,7 @@ chop_config_t::get_target_addrs(size_t n)
 }
 
 circuit_t *
-chop_config_t::circuit_create()
+chop_config_t::circuit_create(size_t)
 {
   chop_circuit_t *ckt = new chop_circuit_t;
   ckt->cfg = this;
@@ -1012,14 +1012,12 @@ chop_circuit_t::drop_downstream(conn_t *conn)
 }
 
 conn_t *
-chop_config_t::conn_create()
+chop_config_t::conn_create(size_t index)
 {
   chop_conn_t *conn = new chop_conn_t;
   conn->cfg = this;
   if (this->mode != LSN_SIMPLE_SERVER) {
-    /* XXX currently uses steg target 0 for all connections.
-       Need protocol-specific listener state to fix this. */
-    conn->steg = steg_new(this->steg_targets[0]);
+    conn->steg = steg_new(this->steg_targets.at(index));
     if (!conn->steg) {
       free(conn);
       return 0;

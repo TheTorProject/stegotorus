@@ -110,7 +110,7 @@ x_null_config_t::get_target_addrs(size_t n)
 
 /* Create a circuit object. */
 circuit_t *
-x_null_config_t::circuit_create()
+x_null_config_t::circuit_create(size_t)
 {
   circuit_t *ckt = new x_null_circuit_t;
   ckt->cfg = this;
@@ -182,7 +182,7 @@ x_null_circuit_t::send_eof()
 */
 
 conn_t *
-x_null_config_t::conn_create()
+x_null_config_t::conn_create(size_t)
 {
   x_null_conn_t *conn = new x_null_conn_t;
   conn->cfg = this;
@@ -201,7 +201,7 @@ x_null_conn_t::~x_null_conn_t()
 int
 x_null_conn_t::maybe_open_upstream()
 {
-  circuit_t *ckt = circuit_create(this->cfg);
+  circuit_t *ckt = circuit_create(this->cfg, 0);
   if (!ckt)
     return -1;
 

@@ -90,13 +90,14 @@ circuit_count(void)
    Creates a new conn_t from a config_t and a socket.
 */
 conn_t *
-conn_create(config_t *cfg, struct bufferevent *buf, const char *peername)
+conn_create(config_t *cfg, size_t index,
+            struct bufferevent *buf, const char *peername)
 {
   conn_t *conn;
 
   log_assert(!shutting_down);
 
-  conn = cfg->conn_create();
+  conn = cfg->conn_create(index);
   conn->buffer = buf;
   conn->peername = peername;
   conn->serial = ++last_conn_serial;
@@ -231,13 +232,13 @@ axe_timer_cb(evutil_socket_t, short, void *arg)
 }
 
 circuit_t *
-circuit_create(config_t *cfg)
+circuit_create(config_t *cfg, size_t index)
 {
   circuit_t *ckt;
 
   log_assert(!shutting_down);
 
-  ckt = cfg->circuit_create();
+  ckt = cfg->circuit_create(index);
   ckt->serial = ++last_ckt_serial;
 
   if (cfg->mode == LSN_SOCKS_CLIENT)
