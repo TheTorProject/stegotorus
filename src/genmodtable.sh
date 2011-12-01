@@ -8,7 +8,7 @@ vtag="$(echo $1 | cut -c1)"
 shift
 
 modules=$(sed -ne \
-    's/[A-Z][A-Z]*_DEFINE_MODULE(\([a-zA-Z_][a-zA-Z0-9_]*\),.*$/\1/p' \
+    's/[A-Z][A-Z]*_DEFINE_MODULE(\([a-zA-Z_][a-zA-Z0-9_]*\)[,)].*$/\1/p' \
     "$@")
 
 trap "rm -f '$output.$$'" 0

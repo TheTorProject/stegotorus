@@ -26,7 +26,8 @@ namespace {
   };
 }
 
-PROTO_DEFINE_MODULE(x_null, NOSTEG);
+PROTO_DEFINE_MODULE(x_null);
+PROTO_STEG_STUBS(x_null);
 
 x_null_config_t::x_null_config_t()
 {

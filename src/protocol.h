@@ -153,7 +153,7 @@ extern const proto_module *const supported_protos[];
     consistent naming convention on protocol implementations, and
     provide type-safe up and down casts. */
 
-#define PROTO_VTABLE_COMMON(name)               \
+#define PROTO_VTABLE_CONTENTS(name)             \
     #name,                                      \
     name##_config_create,                       \
     name##_circuit_free,                        \
@@ -165,18 +165,13 @@ extern const proto_module *const supported_protos[];
     name##_conn_maybe_open_upstream,            \
     name##_conn_handshake,                      \
     name##_conn_recv,                           \
-    name##_conn_recv_eof,
-
-#define PROTO_VTABLE_NOSTEG(name)               \
-    NULL, NULL, NULL, NULL,
-
-#define PROTO_VTABLE_STEG(name)                 \
+    name##_conn_recv_eof,                       \
     name##_conn_expect_close,                   \
     name##_conn_cease_transmission,             \
     name##_conn_close_after_transmit,           \
     name##_conn_transmit_soon,
 
-#define PROTO_FWD_COMMON(name)                                          \
+#define PROTO_FWD_DECLS(name)                                           \
   static void name##_circuit_free(circuit_t *);                         \
   static void name##_circuit_add_downstream(circuit_t *, conn_t *);     \
   static void name##_circuit_drop_downstream(circuit_t *, conn_t *);    \
@@ -186,11 +181,7 @@ extern const proto_module *const supported_protos[];
   static int name##_conn_maybe_open_upstream(conn_t *);                 \
   static int name##_conn_handshake(conn_t *);                           \
   static int name##_conn_recv(conn_t *);                                \
-  static int name##_conn_recv_eof(conn_t *);
-
-#define PROTO_FWD_NOSTEG(name) /* nothing required */
-
-#define PROTO_FWD_STEG(name)                                            \
+  static int name##_conn_recv_eof(conn_t *);                            \
   static void name##_conn_expect_close(conn_t *);                       \
   static void name##_conn_cease_transmission(conn_t *);                 \
   static void name##_conn_close_after_transmit(conn_t *);               \
@@ -206,12 +197,11 @@ extern const proto_module *const supported_protos[];
   static inline name##_circuit_t *downcast_circuit(circuit_t *c)\
   { return DOWNCAST(name##_circuit_t, super, c); }
 
-#define PROTO_DEFINE_MODULE(mod, stegp)                         \
+#define PROTO_DEFINE_MODULE(mod)                                \
   extern const proto_module p_mod_##mod;                        \
                                                                 \
   PROTO_CAST_HELPERS(mod)                                       \
-  PROTO_FWD_COMMON(mod)                                         \
-  PROTO_FWD_##stegp(mod)                                        \
+  PROTO_FWD_DECLS(mod)                                          \
                                                                 \
   /* canned methods */                                          \
   const proto_module *mod##_config_t::vtable()                  \
@@ -227,9 +217,18 @@ extern const proto_module *const supported_protos[];
   }                                                             \
                                                                 \
   extern const proto_module p_mod_##mod = {                     \
-    PROTO_VTABLE_COMMON(mod)                                    \
-    PROTO_VTABLE_##stegp(mod)                                   \
+    PROTO_VTABLE_CONTENTS(mod)                                  \
   } /* deliberate absence of semicolon */
+
+#define PROTO_STEG_STUBS(mod)                                   \
+  static void mod##_conn_expect_close(conn_t *)                 \
+  { log_abort("steg stub called"); }                            \
+  static void mod##_conn_cease_transmission(conn_t *)           \
+  { log_abort("steg stub called"); }                            \
+  static void mod##_conn_close_after_transmit(conn_t *)         \
+  { log_abort("steg stub called"); }                            \
+  static void mod##_conn_transmit_soon(conn_t *, unsigned long) \
+  { log_abort("steg stub called"); }
 
 #define CONFIG_DECLARE_METHODS(mod)                             \
   mod##_config_t();                                             \

@@ -109,7 +109,7 @@ struct chop_config_t : config_t
   CONFIG_DECLARE_METHODS(chop);
 };
 
-PROTO_DEFINE_MODULE(chop, STEG);
+PROTO_DEFINE_MODULE(chop);
 
 /* Header serialization and deserialization */
 
