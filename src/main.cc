@@ -6,18 +6,16 @@
 #include "main.h"
 
 #include "connections.h"
-#include "container.h"
 #include "crypt.h"
 #include "listener.h"
 #include "protocol.h"
 
+#include <vector>
+#include <string>
+
 #include <errno.h>
 #include <signal.h>
 #include <sys/stat.h>
-
-#include <event2/event.h>
-#include <event2/dns.h>
-
 #ifdef _WIN32
 #include <process.h>
 #include <io.h>
@@ -28,10 +26,16 @@
 #endif
 #endif
 
+#include <event2/event.h>
+#include <event2/dns.h>
+
+using std::vector;
+using std::string;
+
 static struct event_base *the_event_base;
 
 /**
-   Puts obfsproxy's networking subsystem on "closing time" mode. This
+   Puts stegotorus's networking subsystem on "closing time" mode. This
    means that we stop accepting new connections and we shutdown when
    the last connection is closed.
 
@@ -46,15 +50,15 @@ start_shutdown(int barbaric, const char *label)
   log_info("%s shutdown triggered by %s "
            "(%lu connection%s, %lu circuit%s %s)",
            barbaric ? "barbaric" : "normal", label,
-           conn_count(), conn_count() == 1 ? "" : "s",
-           circuit_count(), circuit_count() == 1 ? "" : "s",
+           (unsigned long)conn_count(), conn_count() == 1 ? "" : "s",
+           (unsigned long)circuit_count(), circuit_count() == 1 ? "" : "s",
            barbaric ? "will be broken" : "remain");
 
   listener_close_all();          /* prevent further connections */
   conn_start_shutdown(barbaric); /* possibly break existing connections */
 }
 
-/** Stop obfsproxy's event loop. Final cleanup happens in main().
+/** Stop stegotorus's event loop. Final cleanup happens in main().
     Called by conn_start_shutdown and/or conn_free (see connections.c). */
 void
 finish_shutdown(void)
@@ -72,10 +76,10 @@ finish_shutdown(void)
            keep the already existing connections open,
            and terminate when they all close.
            On a second SIGINT we shut down immediately but cleanly.
-   SIGTERM: Shut down obfsproxy immediately but cleanly.
+   SIGTERM: Shut down immediately but cleanly.
 */
 static void
-handle_signal_cb(evutil_socket_t fd, short what, void *arg)
+handle_signal_cb(evutil_socket_t fd, short, void *)
 {
   static int got_sigint = 0;
   int signum = (int) fd;
@@ -98,7 +102,7 @@ handle_signal_cb(evutil_socket_t fd, short what, void *arg)
 */
 #ifndef _WIN32
 static void
-lethal_signal(int signum, siginfo_t *si, void *uc)
+lethal_signal(int signum, siginfo_t *si, void *)
 {
   char faultmsg[80];
   int n;
@@ -107,11 +111,11 @@ lethal_signal(int signum, siginfo_t *si, void *uc)
 #endif
 
   /* Print a basic diagnostic first. */
-  obfs_snprintf(faultmsg, sizeof faultmsg,
-                sizeof(unsigned long) == 4
-                ? "\n[error] %s at %08lx\n"
-                : "\n[error] %s at %016lx\n",
-                strsignal(signum), (unsigned long)si->si_addr);
+  xsnprintf(faultmsg, sizeof faultmsg,
+            sizeof(unsigned long) == 4
+            ? "\n[error] %s at %08lx\n"
+            : "\n[error] %s at %016lx\n",
+            strsignal(signum), (unsigned long)si->si_addr);
   /* we really, truly don't care about a short write here */
   if(write(2, faultmsg, strlen(faultmsg))) {}
 
@@ -134,10 +138,10 @@ lethal_signal(int signum, siginfo_t *si, void *uc)
    that channel receives an EOF.
 */
 static void
-stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
+stdin_detect_eof_cb(evutil_socket_t fd, short, void *arg)
 {
   size_t nread = 0;
-  ev_ssize_t r;
+  ssize_t r;
   char buf[4096];
   for (;;) {
     r = read(fd, buf, sizeof buf);
@@ -147,21 +151,21 @@ stdin_detect_eof_cb(evutil_socket_t fd, short what, void *arg)
 
   log_debug("read %lu bytes from stdin", (unsigned long)nread);
   if (nread == 0) {
-    struct event *ev = arg;
+    struct event *ev = (struct event *)arg;
     event_del(ev);
     start_shutdown(0, "stdin closing");
   }
 }
 
 /**
-   Prints the obfsproxy usage instructions then exits.
+   Prints usage instructions then exits.
 */
 static void ATTR_NORETURN
 usage(void)
 {
-  const proto_vtable *const *p;
+  const proto_module *const *p;
 
-  fputs("usage: obfsproxy protocol_name [protocol_args] protocol_options "
+  fputs("usage: stegotorus protocol_name [protocol_args] protocol_options "
         "protocol_name ...\n"
         "* Available protocols:\n", stderr);
   /* this is awful. */
@@ -176,15 +180,15 @@ usage(void)
 }
 
 /**
-   Receives 'argv' and scans for any obfsproxy optional arguments and
-   tries to set them in effect.
+   Receives 'argv' and scans for any non-protocol-specific optional
+   arguments and tries to set them in effect.
 
    If it succeeds it returns the number of argv arguments its caller
    should skip to get past the optional arguments we already handled.
-   If it fails, it exits obfsproxy.
+   If it fails, it exits the program.
 */
 static int
-handle_obfsproxy_args(const char *const *argv)
+handle_generic_args(const char *const *argv)
 {
   int logmethod_set=0;
   int logsev_set=0;
@@ -224,7 +228,7 @@ handle_obfsproxy_args(const char *const *argv)
         }
         logsev_set=1;
     } else {
-      log_warn("unrecognizable obfsproxy argument '%s'", argv[i]);
+      log_warn("unrecognizable argument '%s'", argv[i]);
       exit(1);
     }
     i++;
@@ -234,12 +238,12 @@ handle_obfsproxy_args(const char *const *argv)
 }
 
 int
-main(int argc, const char *const *argv)
+main(int, const char *const *argv)
 {
   struct event *sig_int;
   struct event *sig_term;
   struct event *stdin_eof;
-  smartlist_t *configs = smartlist_create();
+  vector<config_t *> configs;
   const char *const *begin;
   const char *const *end;
   struct stat st;
@@ -249,8 +253,8 @@ main(int argc, const char *const *argv)
      variable to stderr. */
   log_set_method(LOG_METHOD_STDERR, NULL);
 
-  /* Handle optional obfsproxy arguments. */
-  begin = argv + handle_obfsproxy_args(argv);
+  /* Handle optional non-protocol-specific arguments. */
+  begin = argv + handle_generic_args(argv);
 
   /* Find the subsets of argv that define each configuration.
      Each configuration's subset consists of the entries in argv from
@@ -264,31 +268,30 @@ main(int argc, const char *const *argv)
     while (*end && !config_is_supported(*end))
       end++;
     if (log_do_debug()) {
-      smartlist_t *s = smartlist_create();
-      char *joined;
+      string joined = *begin;
       const char *const *p;
-      for (p = begin; p < end; p++)
-        smartlist_add(s, (void *)*p);
-      joined = smartlist_join_strings(s, " ", 0, NULL);
-      log_debug("configuration %d: %s", smartlist_len(configs)+1, joined);
-      free(joined);
-      smartlist_free(s);
+      for (p = begin+1; p < end; p++) {
+        joined += " ";
+        joined += *p;
+      }
+      log_debug("configuration %lu: %s",
+                (unsigned long)configs.size()+1, joined.c_str());
     }
     if (end == begin+1) {
-      log_warn("no arguments for configuration %d", smartlist_len(configs)+1);
+      log_warn("no arguments for configuration %lu",
+               (unsigned long)configs.size()+1);
       usage();
     } else {
       config_t *cfg = config_create(end - begin, begin);
       if (!cfg)
         return 2; /* diagnostic already issued */
-      smartlist_add(configs, cfg);
+      configs.push_back(cfg);
     }
     begin = end;
   } while (*begin);
-  log_assert(smartlist_len(configs) > 0);
+  log_assert(configs.size() > 0);
 
   /* Configurations have been established; proceed with initialization. */
-  conn_initialize();
 
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
@@ -298,10 +301,6 @@ main(int argc, const char *const *argv)
     WSAStartup(0x101, &wsaData);
   }
 #endif
-
-  /* Initialize crypto */
-  if (initialize_crypto() < 0)
-    log_abort("failed to initialize cryptography");
 
   /* Initialize libevent */
   the_event_base = event_base_new();
@@ -352,7 +351,7 @@ main(int argc, const char *const *argv)
        (S_ISCHR(st.st_mode) && isatty(STDIN_FILENO)))) {
     /* We do this this way because we want to make the event itself the
        callback argument. */
-    stdin_eof = xmalloc(event_get_struct_event_size());
+    stdin_eof = (struct event *)xmalloc(event_get_struct_event_size());
     evutil_make_socket_nonblocking(STDIN_FILENO);
     event_assign(stdin_eof, the_event_base,
                  STDIN_FILENO, EV_READ|EV_PERSIST,
@@ -364,15 +363,15 @@ main(int argc, const char *const *argv)
   }
 
   /* Open listeners for each configuration. */
-  SMARTLIST_FOREACH(configs, config_t *, cfg, {
-    if (!listener_open(the_event_base, cfg))
-      log_abort("failed to open listeners for configuration %d", cfg_sl_idx+1);
-  });
+  for (vector<config_t *>::iterator i = configs.begin(); i != configs.end();
+       i++)
+    if (!listener_open(the_event_base, *i))
+      log_abort("failed to open listeners for configuration %lu",
+                (unsigned long)(i - configs.begin()) + 1);
 
   /* We are go for launch. As a signal to any monitoring process that may
      be running, close stdout now. */
-  log_info("obfsproxy process %lu now initialized",
-           (unsigned long)getpid());
+  log_info("%s process %lu now initialized", argv[0], (unsigned long)getpid());
   fclose(stdout);
 
   event_base_dispatch(the_event_base);
@@ -383,8 +382,9 @@ main(int argc, const char *const *argv)
   /* By the time we get to this point, all listeners and connections
      have already been freed. */
 
-  SMARTLIST_FOREACH(configs, config_t *, cfg, config_free(cfg));
-  smartlist_free(configs);
+  for (vector<config_t *>::iterator i = configs.begin(); i != configs.end();
+       i++)
+    delete *i;
 
   evdns_base_free(get_evdns_base(), 0);
   event_free(sig_int);
@@ -392,8 +392,7 @@ main(int argc, const char *const *argv)
   free(stdin_eof);
   event_base_free(the_event_base);
 
-  cleanup_crypto();
-  close_obfsproxy_logfile();
+  log_close();
 
   return 0;
 }

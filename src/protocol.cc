@@ -11,7 +11,7 @@
 int
 config_is_supported(const char *name)
 {
-  const proto_vtable *const *p;
+  const proto_module *const *p;
   for (p = supported_protos; *p; p++)
     if (!strcmp(name, (*p)->name))
       return 1;
@@ -26,7 +26,7 @@ config_is_supported(const char *name)
 config_t *
 config_create(int n_options, const char *const *options)
 {
-  const proto_vtable *const *p;
+  const proto_module *const *p;
   for (p = supported_protos; *p; p++)
     if (!strcmp(options[0], (*p)->name))
       /* Remove the first element of 'options' (which is always the
@@ -36,23 +36,6 @@ config_create(int n_options, const char *const *options)
   return NULL;
 }
 
-/**
-   This function destroys the protocol-specific part of a listener object.
-*/
-void
-config_free(config_t *cfg)
-{
-  cfg->vtable->config_free(cfg);
-}
-
-struct evutil_addrinfo *
-config_get_listen_addrs(config_t *cfg, size_t n)
-{
-  return cfg->vtable->config_get_listen_addrs(cfg, n);
-}
-
-struct evutil_addrinfo *
-config_get_target_addrs(config_t *cfg, size_t n)
-{
-  return cfg->vtable->config_get_target_addrs(cfg, n);
-}
+/* Define this here rather than in the class definition so that the
+   vtable will be emitted in only one place. */
+config_t::~config_t() {}

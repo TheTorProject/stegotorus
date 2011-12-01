@@ -1,40 +1,40 @@
 Immediate priority:
 
-  - Design + code a serious 1:N protocol with crypto and optional steg
+  - Finish designing and coding a serious 1:N protocol with crypto and
+    optional steg
+    - Get more eyes on chopper crypto
 
-  - Unit tests for x_rr
-  - Redo x_rr with the same packet headers as the real chopper?
-  - SOCKS support for x_rr (and the real chopper)
+  - SOCKS support for chop.c
 
-  - downstream can be disconnected and connected many times (for HTTP steg)
   - HTTP steg should honor query-response pattern
 
   - More steg modules
 
-Protocol design:
+Documentation:
 
-  - Get more eyes on obfs2 and chopper crypto
+  - Document the current threat model
+  - Document the chopper protocol, the steg modules, and the
+    current APIs in detail
+  - Write end-user documentation
 
 Cleanup:
 
+  - C++ conversion
   - real booleans
-  - consistent use of [u]intN_t throughout
   - do something about the size_t-to-unsigned long casts all over the place
-  - obfsproxy / test_obfsproxy binary split
+  - stegotorus / test_stegotorus binary split
   - make socks a protocol or something,
     rather than a special case in the generic code
 
 Testing:
 
   - more tl_* test patterns
-  - better timeout handling in obfstestlib?
+  - unit tests for the chopper and the steg layer
+  - better timeout handling in itestlib?
   - make the Python tests work on Windows
 
 Misc:
 
-  - configuration is way too duplicated
-    - split config/conn/circuit vtables?
-    - genericize configuration?
-
-  - Drop the openssl dependency (?)
+  - configuration file support
+  - genericize configuration?
   - Make it obey the xxx-pluggable-transport spec in Tor.

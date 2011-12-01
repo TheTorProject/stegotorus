@@ -14,12 +14,14 @@
    server->client traffic as HTTP responses, but makes no actual attempt
    to obscure the data proper. */
 
-struct x_http_steg_t
-{
-  steg_t super;
-  int have_transmitted;
-  int have_received;
-};
+namespace {
+  struct x_http : steg_t
+  {
+    bool have_transmitted : 1;
+    bool have_received : 1;
+    STEG_DECLARE_METHODS(x_http);
+  };
+}
 
 STEG_DEFINE_MODULE(x_http,
                    1024,  /* client-server max data rate - made up */
@@ -44,40 +46,27 @@ static const char http_response_1[] =
   "Connection: close\r\n"
   "Content-Type: application/octet-stream\r\n"
   "Content-Length: ";
-static const char http_response_2[] =
-  "%lu\r\n"
-  "\r\n";
 
 
-static steg_t *
-x_http_new(rng_t *rng, unsigned int is_clientside)
-{
-  STEG_NEW(x_http, state, rng, is_clientside);
-  /* if there were extra stuff to fill in, you would do it here */
-  return upcast_steg(state);
-}
+x_http::x_http()
+  : have_transmitted(false), have_received(false)
+{}
 
-static void
-x_http_del(steg_t *s)
-{
-  x_http_steg_t *state = downcast_steg(s);
-  STEG_DEL(s);
-  /* if there were extra stuff to deallocate, you would do it here */
-  free(state);
-}
+x_http::~x_http()
+{}
 
-static unsigned int
-x_http_detect(conn_t *conn)
+bool
+x_http::detect(conn_t *conn)
 {
   struct evbuffer *buf = conn_get_inbound(conn);
-  unsigned char *data;
+  uint8_t *data;
   return 0;
 
   /* Look for the text of http_response_1. */
   if (evbuffer_get_length(buf) >= sizeof http_response_1 - 1) {
     data = evbuffer_pullup(buf, sizeof http_response_1 - 1);
     if (!memcmp(data, http_response_1, sizeof http_response_1 - 1))
-      return 1;
+      return true;
   }
 
   /* The client always transmits "GET /" followed by at least four
@@ -90,21 +79,21 @@ x_http_detect(conn_t *conn)
         (ascii_isxdigit(data[6]) || data[6] == '=') &&
         (ascii_isxdigit(data[7]) || data[7] == '=') &&
         (ascii_isxdigit(data[8]) || data[8] == '='))
-      return 1;
+      return true;
   }
 
   /* Didn't find either the client or the server pattern. */
-  return 0;
+  return false;
 }
 
-static size_t
-x_http_transmit_room(steg_t *s, conn_t *conn)
+size_t
+x_http::transmit_room(conn_t *)
 {
-  if (downcast_steg(s)->have_transmitted)
+  if (this->have_transmitted)
     /* can't send any more on this connection */
     return 0;
 
-  if (s->is_clientside)
+  if (this->is_clientside)
     /* per http://www.boutell.com/newfaq/misc/urllength.html,
        IE<9 can handle no more than 2048 characters in the path
        component of a URL; we're not talking to IE, but this limit
@@ -112,19 +101,19 @@ x_http_transmit_room(steg_t *s, conn_t *conn)
        we have to cut the number in half. */
     return 1024;
   else {
-    if (!downcast_steg(s)->have_received)
+    if (!this->have_received)
       return 0;
     /* no practical limit applies */
     return SIZE_MAX;
   }
 }
 
-static int
-x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
+int
+x_http::transmit(struct evbuffer *source, conn_t *conn)
 {
   struct evbuffer *dest = conn_get_outbound(conn);
 
-  if (s->is_clientside) {
+  if (this->is_clientside) {
     /* On the client side, we have to embed the data in a GET query somehow;
        the only plausible places to put it are the URL and cookies.  This
        presently uses the URL. And it can't be binary. */
@@ -149,7 +138,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     }
 
     nv = evbuffer_peek(source, slen, NULL, NULL, 0);
-    iv = xzalloc(sizeof(struct evbuffer_iovec) * nv);
+    iv = (struct evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
     if (evbuffer_peek(source, slen, NULL, iv, nv) != nv) {
       evbuffer_free(scratch);
       free(iv);
@@ -157,8 +146,8 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     }
 
     for (i = 0; i < nv; i++) {
-      const unsigned char *p = iv[i].iov_base;
-      const unsigned char *limit = p + iv[i].iov_len;
+      const uint8_t *p = (const uint8_t *)iv[i].iov_base;
+      const uint8_t *limit = p + iv[i].iov_len;
       char hex[2], c;
       while (p < limit) {
         c = *p++;
@@ -184,7 +173,7 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
     evbuffer_free(scratch);
     evbuffer_drain(source, slen);
     conn_cease_transmission(conn);
-    downcast_steg(s)->have_transmitted = 1;
+    this->have_transmitted = true;
     return 0;
 
   } else {
@@ -192,23 +181,23 @@ x_http_transmit(steg_t *s, struct evbuffer *source, conn_t *conn)
        and then splat the data we were given. Binary is OK.  */
     if (evbuffer_add(dest, http_response_1, sizeof http_response_1-1))
         return -1;
-    if (evbuffer_add_printf(dest, http_response_2,
+    if (evbuffer_add_printf(dest, "%lu\r\n\r\n",
                             (unsigned long)evbuffer_get_length(source)) == -1)
       return -1;
     if (evbuffer_add_buffer(dest, source))
       return -1;
 
     conn_close_after_transmit(conn);
-    downcast_steg(s)->have_transmitted = 1;
+    this->have_transmitted = true;
     return 0;
   }
 }
 
-static int
-x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
+int
+x_http::receive(conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
-  if (s->is_clientside) {
+  if (this->is_clientside) {
     /* Linearize the buffer out past the longest possible
        Content-Length header and subsequent blank line.  2**64 fits in
        20 characters, and then we have two CRLFs; minus one for the
@@ -216,14 +205,14 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
        guarantee that that much data is available. */
 
     size_t hlen = evbuffer_get_length(source);
-    unsigned char *data, *p, *limit;
+    uint8_t *data, *p, *limit;
     uint64_t clen;
 
     log_debug("x_http: %lu byte response stream available%s",
               (unsigned long)hlen,
               hlen >= sizeof http_response_1 - 1 ? "" : " (incomplete)");
 
-    if (downcast_steg(s)->have_received) {
+    if (this->have_received) {
       log_warn("x_http: protocol error: multiple responses");
       return -1;
     }
@@ -275,7 +264,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       return -1;
     }
 
-    downcast_steg(s)->have_received = 1;
+    this->have_received = 1;
     conn_expect_close(conn);
     return 0;
   } else {
@@ -283,13 +272,13 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
        we hit a decode error we *don't* write anything to 'dest'. */
     struct evbuffer *scratch;
     struct evbuffer_ptr s2, s3;
-    unsigned char *data, *p, *limit;
-    unsigned char c, h, secondhalf;
+    uint8_t *data, *p, *limit;
+    uint8_t c, h, secondhalf;
 
     log_debug("x_http: %lu byte query stream available",
               (unsigned long)evbuffer_get_length(source));
 
-    if (downcast_steg(s)->have_received) {
+    if (this->have_received) {
       log_warn("x_http: protocol error: multiple queries");
       return -1;
     }
@@ -364,7 +353,7 @@ x_http_receive(steg_t *s, conn_t *conn, struct evbuffer *dest)
       return -1;
     }
 
-    downcast_steg(s)->have_received = 1;
+    this->have_received = 1;
     conn_transmit_soon(conn, 2);
     return 0;
   }

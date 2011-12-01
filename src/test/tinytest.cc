@@ -52,7 +52,7 @@ static int opt_verbosity = 1; /**< -==quiet,0==terse,1==normal,2==verbose */
 const char *verbosity_flag = "";
 
 enum outcome { SKIP=2, OK=1, FAIL=0 };
-static enum outcome cur_test_outcome = 0;
+static enum outcome cur_test_outcome = FAIL;
 const char *cur_test_prefix = NULL; /**< prefix of the current test group */
 /** Name of the current test, if we haven't logged is yet. Used for --quiet */
 const char *cur_test_name = NULL;
@@ -69,7 +69,7 @@ static enum outcome
 _testcase_run_bare(const struct testcase_t *testcase)
 {
 	void *env = NULL;
-	int outcome;
+	enum outcome outcome;
 	if (testcase->setup) {
 		env = testcase->setup->setup_fn(testcase);
 		if (!env)
@@ -177,7 +177,7 @@ _testcase_run_forked(const struct testgroup_t *group,
 		r = (int)read(outcome_pipe[0], b, 1);
 		if (r == 0) {
 			printf("[Lost connection!] ");
-			return 0;
+			return FAIL;
 		} else if (r != 1) {
 			perror("read outcome from pipe");
 		}
@@ -354,7 +354,7 @@ _tinytest_set_test_failed(void)
 		printf("%s%s: ", cur_test_prefix, cur_test_name);
 		cur_test_name = NULL;
 	}
-	cur_test_outcome = 0;
+	cur_test_outcome = FAIL;
 }
 
 void
@@ -368,7 +368,7 @@ char *
 tt_base16_encode(const char *value, size_t vlen)
 {
   static const char hex[] = "0123456789abcdef";
-  char *print = malloc(vlen * 2 + 1);
+  char *print = (char *)malloc(vlen * 2 + 1);
   char *p = print;
   const char *v = value, *vl = value + vlen;
 

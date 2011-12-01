@@ -9,9 +9,6 @@
 #include <event2/listener.h>
 
 #include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
 
 #ifdef _WIN32
 # undef near
@@ -80,7 +77,7 @@
    reason, it is skipped but copied to the transcript, with a ! at the
    beginning of the line.  (These will all be at the very beginning.) */
 
-typedef struct tstate
+struct tstate
 {
   struct bufferevent *near;
   struct bufferevent *far;
@@ -103,7 +100,7 @@ typedef struct tstate
   bool sent_eof_far  : 1;
   bool script_eof    : 1;
   bool saw_error     : 1;
-} tstate;
+};
 
 static void script_next_action(tstate *st);
 
@@ -133,13 +130,13 @@ flush_text(tstate *st, bool near)
     return;
 
   nseg = evbuffer_peek(frombuf, avail, NULL, NULL, 0);
-  v = xzalloc(nseg * sizeof(struct evbuffer_iovec));
+  v = (struct evbuffer_iovec *) xzalloc(nseg * sizeof(struct evbuffer_iovec));
   ll = 0;
   evbuffer_peek(frombuf, avail, NULL, v, nseg);
   evbuffer_expand(tobuf, avail + ((avail/64)+1)*3);
 
   for (i = 0; i < nseg; i++) {
-    const char *p = v[i].iov_base;
+    const char *p = (const char *)v[i].iov_base;
     const char *limit = p + v[i].iov_len;
     for (; p < limit; p++) {
       if (ll == 0)
@@ -149,7 +146,7 @@ flush_text(tstate *st, bool near)
         evbuffer_add(tobuf, p, 1);
         ll++;
       } else {
-        evbuffer_add_printf(tobuf, "\\x%02x", (unsigned char)*p);
+        evbuffer_add_printf(tobuf, "\\x%02x", (uint8_t)*p);
         ll += 4;
       }
       if (ll >= 64) {
@@ -203,7 +200,7 @@ send_squelch(tstate *st, struct bufferevent *bev)
 static void
 socket_read_cb(struct bufferevent *bev, void *arg)
 {
-  tstate *st = arg;
+  tstate *st = (tstate *)arg;
   evbuffer_add_buffer(bev == st->near ? st->neartext : st->fartext,
                       bufferevent_get_input(bev));
   script_next_action(st);
@@ -212,7 +209,7 @@ socket_read_cb(struct bufferevent *bev, void *arg)
 static void
 socket_drain_cb(struct bufferevent *bev, void *arg)
 {
-  tstate *st = arg;
+  tstate *st = (tstate *)arg;
 
   if (evbuffer_get_length(bufferevent_get_output(bev)) > 0)
     return;
@@ -228,7 +225,7 @@ socket_drain_cb(struct bufferevent *bev, void *arg)
 static void
 socket_event_cb(struct bufferevent *bev, short what, void *arg)
 {
-  tstate *st = arg;
+  tstate *st = (tstate *)arg;
   bool near = bev == st->near;
   bool reading = (what & BEV_EVENT_READING);
   struct evbuffer *log = near ? st->neartrans : st->fartrans;
@@ -290,9 +287,9 @@ socket_event_cb(struct bufferevent *bev, short what, void *arg)
 }
 
 static void
-pause_expired_cb(evutil_socket_t fd, short what, void *arg)
+pause_expired_cb(evutil_socket_t, short, void *arg)
 {
-  tstate *st = arg;
+  tstate *st = (tstate *)arg;
   script_next_action(st);
 }
 
@@ -385,7 +382,7 @@ script_next_action(tstate *st)
   }
 
   for (;;) {
-    n = obfs_getline(&st->lbuf, &st->lbufsize, st->script);
+    n = xgetline(&st->lbuf, &st->lbufsize, st->script);
     line = st->lbuf;
 
     if (n == 0) {

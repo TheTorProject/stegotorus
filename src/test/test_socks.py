@@ -1,20 +1,20 @@
-# Integration tests for obfsproxy - socks mode.
+# Integration tests for stegotorus - socks mode.
 
 import re
 import socket
 from errno import ECONNRESET
-from obfstestlib import Obfsproxy
+from itestlib import Stegotorus
 from unittest import TestCase
 
 class SocksTest(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.obfs_client = Obfsproxy("dummy", "socks", "127.0.0.1:4999")
+        cls.client = Stegotorus("x_null", "socks", "127.0.0.1:4999")
 
     @classmethod
     def tearDownClass(cls):
-        dmsg = cls.obfs_client.check_completion("socks client")
+        dmsg = cls.client.check_completion("socks client")
         # We may have gotten a stderr report with [warn]s in it because
         # of intentional connections to ports with nobody listening.
         # Prune those and check again for genuine errors.
@@ -25,7 +25,7 @@ class SocksTest(TestCase):
                 raise AssertionError(dmsg)
 
             pruned = re.sub(r"\n[^\n]+Connection refused\n", "\n", dmsg)
-            if Obfsproxy.severe_error_re.search(pruned):
+            if Stegotorus.severe_error_re.search(pruned):
                 raise AssertionError(dmsg)
 
     def setUp(self):

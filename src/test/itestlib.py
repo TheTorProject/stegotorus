@@ -1,4 +1,4 @@
-# Integration tests for obfsproxy - library routines.
+# Integration tests for stegotorus - library routines.
 
 import difflib
 import errno
@@ -31,7 +31,7 @@ def diff(label, expected, received):
                                                    lineterm=""))
                 + "\n")
 
-# Helper: Run obfsproxy instances and confirm that they have
+# Helper: Run stegotorus instances and confirm that they have
 # completed without any errors.
 
 # set MALLOC_CHECK_ in subprocess environment; this gets us
@@ -39,20 +39,20 @@ def diff(label, expected, received):
 # elsewhere.  Mode 2 is "abort immediately, without flooding
 # /dev/tty with useless diagnostics" (the documentation SAYS
 # they go to stderr, but they don't).
-obfsproxy_env = {}
-obfsproxy_env.update(os.environ)
-obfsproxy_env['MALLOC_CHECK_'] = '2'
+stegotorus_env = {}
+stegotorus_env.update(os.environ)
+stegotorus_env['MALLOC_CHECK_'] = '2'
 
 # check for a grinder
-if 'GRINDER' in obfsproxy_env:
-    obfsproxy_grindv = shlex.split(obfsproxy_env['GRINDER'])
+if 'GRINDER' in stegotorus_env:
+    stegotorus_grindv = shlex.split(stegotorus_env['GRINDER'])
 else:
-    obfsproxy_grindv = []
+    stegotorus_grindv = []
 
-class Obfsproxy(subprocess.Popen):
+class Stegotorus(subprocess.Popen):
     def __init__(self, *args, **kwargs):
-        argv = obfsproxy_grindv[:]
-        argv.extend(("./obfsproxy", "--log-min-severity=debug"))
+        argv = stegotorus_grindv[:]
+        argv.extend(("./stegotorus", "--log-min-severity=debug"))
 
         if len(args) == 1 and (isinstance(args[0], list) or
                                isinstance(args[0], tuple)):
@@ -64,7 +64,7 @@ class Obfsproxy(subprocess.Popen):
                                   stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
-                                  env=obfsproxy_env,
+                                  env=stegotorus_env,
                                   close_fds=True,
                                   **kwargs)
         # wait for startup completion, which is signaled by
@@ -116,7 +116,7 @@ class Obfsproxy(subprocess.Popen):
             self.terminate()
 
 # As above, but for the 'tltester' test helper rather than for
-# obfsproxy itself.
+# stegotorus itself.
 class Tltester(subprocess.Popen):
     def __init__(self, timeline, extra_args=(), **kwargs):
         argv = ["./tltester"]
@@ -126,7 +126,7 @@ class Tltester(subprocess.Popen):
                                   stdin=open(timeline, "rU"),
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
-                                  env=obfsproxy_env,
+                                  env=stegotorus_env,
                                   close_fds=True,
                                   **kwargs)
 

@@ -5,20 +5,51 @@
 #ifndef STEG_H
 #define STEG_H
 
-/** A steganography instance stores all its state in one of these
-    structures.  Most of the state is private to the module. */
+/** A steganography instance must define a private subclass of this
+    type, that implements all of the methods below, plus a descendant
+    constructor and a static 'detect' method (see steg_module).  The
+    subclass must have exactly the same name that you use for the
+    module name in STEG_DEFINE_MODULE, and should be declared inside an
+    anonymous namespace.  Use STEG_DECLARE_METHODS in the declaration. */
 struct steg_t
 {
-  const steg_vtable *vtable;
-  rng_t *rng;
-  unsigned int is_clientside : 1;
-  /* module may extend as necessary using embedding-as-inheritance */
+  bool is_clientside : 1;
+
+  steg_t() {}
+  virtual ~steg_t();
+
+  /** Report the name of this steg module.  You do not have to define
+      this method in your subclass, STEG_DEFINE_MODULE does it for you. */
+  virtual const char *name() = 0;
+
+  /** Report the maximum number of bytes that could be transmitted on
+      connection CONN at this time.  You must be prepared to handle a
+      subsequent request to transmit any _smaller_ number of bytes on
+      this connection.  */
+  virtual size_t transmit_room(conn_t *conn) = 0;
+
+  /** Consume all of the data in SOURCE, disguise it, and write it to
+      the outbound buffer for CONN. Return 0 on success, -1 on failure. */
+  virtual int transmit(struct evbuffer *source, conn_t *conn) = 0;
+
+  /** The data in CONN's inbound buffer should have been disguised by
+      the peer instance to STATE.  Unmask it and write it to DEST.
+      Return 0 on success, -1 on failure.  If more data needs to come
+      over the wire before anything can be unmasked, that is *not* a
+      failure condition; return 0, but do not consume any data or
+      write anything to DEST.  It is *preferable*, but not currently
+      *required*, for this method to not consume any data or write
+      anything to DEST in a failure situation. */
+  virtual int receive(conn_t *conn, struct evbuffer *dest) = 0;
 };
 
-/** A steganography module must define all of the fields of this
-    pseudo-vtable structure.  Note that they are not all object methods
-    in the C++ sense. */
-struct steg_vtable
+/** STEG_DEFINE_MODULE defines an object with this type, plus the two
+    functions that it points to.  You don't ever manipulate this object
+    directly; however, read its documentation to understand the
+    arguments to STEG_DEFINE_MODULE and the requirements on the
+    'detect' method. */
+
+struct steg_module
 {
   /** Name of the steganography module. Must be a valid C identifier. */
   const char *name;
@@ -47,84 +78,50 @@ struct steg_vtable
   /** Detect whether the inbound traffic from CONN is disguised using
       the steganography this module implements.  Do not consume any
       data from CONN's inbound buffer, regardless of success or
-      failure.  Return 1 if your brand of steg is detected,
-      0 otherwise.  */
-  unsigned int (*detect)(conn_t *conn);
+      failure.  Return true if your brand of steg is detected,
+      false if not.  */
+  bool (*detect)(conn_t *conn);
 
-  /** Prepare to handle new connections.
-      More arguments may be added to this method later. */
-  steg_t *(*new)(rng_t *rng, unsigned int is_clientside);
-
-  /** Destroy a steg_t object created by this module. */
-  void (*del)(steg_t *state);
-
-  /** Report the maximum number of bytes that could be transmitted on
-      connection CONN at this time.  You must be prepared to handle a
-      subsequent request to transmit any _smaller_ number of bytes on
-      this connection.  */
-  size_t (*transmit_room)(steg_t *state, conn_t *conn);
-
-  /** Consume all of the data in SOURCE, disguise it, and write it to
-      the outbound buffer for CONN. Return 0 on success, -1 on failure. */
-  int (*transmit)(steg_t *state, struct evbuffer *source, conn_t *conn);
-
-  /** The data in CONN's inbound buffer should have been disguised by
-      the peer instance to STATE.  Unmask it and write it to DEST.
-      Return 0 on success, -1 on failure.  If more data needs to come
-      over the wire before anything can be unmasked, that is *not* a
-      failure condition; return 0, but do not consume any data or
-      write anything to DEST.  It is *preferable*, but not currently
-      *required*, for this method to not consume any data or write
-      anything to DEST in a failure situation. */
-  int (*receive)(steg_t *state, conn_t *conn, struct evbuffer *dest);
+  /** Create an appropriate steg_t subclass for this module.
+      More arguments may be added later.  */
+  steg_t *(*new_)(bool is_clientside);
 };
 
-extern const steg_vtable *const supported_stegs[];
+extern const steg_module *const supported_stegs[];
 
 int steg_is_supported(const char *name);
-
 steg_t *steg_new(const char *name);
 steg_t *steg_detect(conn_t *conn);
-void steg_del(steg_t *state);
-size_t steg_transmit_room(steg_t *state, conn_t *conn);
-int steg_transmit(steg_t *state, struct evbuffer *source, conn_t *conn);
-int steg_receive(steg_t *state, conn_t *conn, struct evbuffer *dest);
 
 /* Macros for use in defining steg modules. */
 
-#define STEG_DEFINE_MODULE(name, csm, scm, mcci, mci)                   \
-  typedef struct name##_steg_t name##_steg_t;                           \
-                                                                        \
-  /* helpers */                                                         \
-  static inline steg_t *upcast_steg(name##_steg_t *s)                   \
-  { return &s->super; }                                                 \
-  static inline name##_steg_t *downcast_steg(steg_t *s)                 \
-  { return DOWNCAST(name##_steg_t, super, s); }                         \
-                                                                        \
-  /* method forward decls */                                            \
-  static unsigned int name##_detect(conn_t *);                          \
-  static steg_t *name##_new(rng_t *, unsigned int);                     \
-  static void name##_del(steg_t *);                                     \
-  static size_t name##_transmit_room(steg_t *, conn_t *);               \
-  static int name##_transmit(steg_t *, struct evbuffer *, conn_t *);    \
-  static int name##_receive(steg_t *, conn_t *, struct evbuffer *);     \
-                                                                        \
-  /* vtable */                                                          \
-  const steg_vtable s_##name##_vtable = {                               \
-    #name, csm, scm, mcci, mci,                                         \
-    name##_detect, name##_new, name##_del,                              \
-    name##_transmit_room, name##_transmit,                              \
-    name##_receive                                                      \
+#define STEG_DEFINE_MODULE(mod, csm, scm, mcci, mci)    \
+  /* detect and new_ dispatchers */                     \
+  static bool mod##_detect(conn_t *conn)                \
+  { return mod::detect(conn); }                         \
+  static steg_t *mod##_new(bool is_clientside)          \
+  { steg_t *s = new mod;                                \
+    s->is_clientside = is_clientside;                   \
+    return s;                                           \
+  }                                                     \
+                                                        \
+  /* canned methods */                                  \
+  const char *mod::name() { return #mod; }              \
+                                                        \
+  /* module object */                                   \
+  extern const steg_module s_mod_##mod = {              \
+    #mod, csm, scm, mcci, mci,                          \
+    mod##_detect, mod##_new                             \
   } /* deliberate absence of semicolon */
 
-#define STEG_NEW(name, var_, rng_, is_clientside_)      \
-  name##_steg_t *var_ = xzalloc(sizeof(name##_steg_t)); \
-  var_->super.vtable = &s_##name##_vtable;              \
-  var_->super.rng = rng_;                               \
-  var_->super.is_clientside = is_clientside_;           \
-  do { } while (0)
-
-#define STEG_DEL(var_)                                  \
-  do { } while (0)
+#define STEG_DECLARE_METHODS(mod)                               \
+  static bool detect(conn_t *conn);                             \
+  mod();                                                        \
+  virtual ~mod();                                               \
+  virtual const char *name();                                   \
+  virtual size_t transmit_room(conn_t *conn);                   \
+  virtual int transmit(struct evbuffer *source, conn_t *conn);  \
+  virtual int receive(conn_t *conn, struct evbuffer *dest)      \
+  /* deliberate absence of semicolon */
 
 #endif

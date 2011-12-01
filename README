@@ -1,16 +1,10 @@
 This doesn't work yet.
 
-It requires OpenSSL 0.9.7 or later. (I would require 0.9.8, but that would
-break OSX 10.5.)
+It requires Crypto++ 5.6.0 or later.
 
 It requires Libevent 2.0 or later.
 
-See doc/protocol-spec.txt for the protocol design.  It is based on brl's
-obfuscated openssh protocol.
-
 See doc/TODO for open tasks.
-
-This project might get renamed to "twobfuscate", depending.
 
 Happy hacking!
 

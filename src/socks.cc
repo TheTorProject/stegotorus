@@ -32,16 +32,13 @@
    "Server reply" is done by: socks5_send_reply()
 */
 
-
-typedef unsigned char uchar;
-
 /**
    Creates a new 'socks_state_t' object.
 */
 socks_state_t *
 socks_state_new(void)
 {
-  socks_state_t *state = xzalloc(sizeof(socks_state_t));
+  socks_state_t *state = (socks_state_t *)xzalloc(sizeof(socks_state_t));
   state->state = ST_WAITING;
   return state;
 }
@@ -116,7 +113,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
   /* #define MAXFQDN */
   char destaddr[255+1]; /* Dest address */
   uint16_t destport;    /* Dest port */
-  uchar p[SIZEOF_SOCKS5_STATIC_REQ+1];
+  uint8_t p[SIZEOF_SOCKS5_STATIC_REQ+1];
   unsigned int addrlen,af,extralen=0,minsize;
   unsigned int buflength = evbuffer_get_length(source);
 
@@ -181,7 +178,7 @@ socks5_handle_request(struct evbuffer *source, struct parsereq *parsereq)
     if (evbuffer_drain(source, 1) == -1)
       goto err;
 
-  if (evbuffer_remove(source, destaddr, addrlen) != (ev_ssize_t)addrlen)
+  if (evbuffer_remove(source, destaddr, addrlen) != (ssize_t)addrlen)
     goto err;
 
   if (evbuffer_remove(source, (char *)&destport, 2) != 2)
@@ -222,8 +219,8 @@ void
 socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
                   int status)
 {
-  uchar p[4];
-  uchar addr[16];
+  uint8_t p[4];
+  uint8_t addr[16];
   const char *extra = NULL;
   int addrlen;
   uint16_t port;
@@ -281,7 +278,7 @@ socks5_send_reply(struct evbuffer *reply_dest, socks_state_t *state,
 static enum socks_ret
 socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
 {
-  uchar reply[2];
+  uint8_t reply[2];
   reply[0] = SOCKS5_VERSION;
 
   reply[1] = neg_was_success ? SOCKS5_METHOD_NOAUTH : SOCKS5_METHOD_FAIL;
@@ -306,11 +303,12 @@ socks5_do_negotiation(struct evbuffer *dest, unsigned int neg_was_success)
 */
 enum socks_ret
 socks5_handle_negotiation(struct evbuffer *source,
-                          struct evbuffer *dest, socks_state_t *state)
+                          struct evbuffer *dest,
+                          socks_state_t *)
 {
   unsigned int found_noauth, i;
-  uchar nmethods;
-  uchar methods[0xFF];
+  uint8_t nmethods;
+  uint8_t methods[0xFF];
 
   evbuffer_copyout(source, &nmethods, 1);
 
@@ -353,7 +351,7 @@ socks4_read_request(struct evbuffer *source, socks_state_t *state)
        4 bytes: IPv4 address
        X bytes: userID, terminated with NUL
        Optional: X bytes: domain, terminated with NUL */
-  uchar header[7];
+  uint8_t header[7];
   int is_v4a;
   uint16_t portnum;
   uint32_t ipaddr;
@@ -426,7 +424,7 @@ socks4_send_reply(struct evbuffer *dest, socks_state_t *state, int status)
 {
   uint16_t portnum;
   struct in_addr in;
-  uchar msg[8];
+  uint8_t msg[8];
   portnum = htons(state->parsereq.port);
   if (evutil_inet_pton(AF_INET, state->parsereq.addr, &in)!=1)
     in.s_addr = 0;

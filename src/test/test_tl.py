@@ -1,4 +1,4 @@
-# Integration tests for obfsproxy - "timeline" tests.
+# Integration tests for stegotorus - "timeline" tests.
 #
 # These tests use the 'tltester' utility to script a sequence of
 # messages sent in both directions across the obfuscated channel.
@@ -10,7 +10,7 @@ import os
 import os.path
 
 from unittest import TestCase, TestSuite
-from obfstestlib import Obfsproxy, Tltester, diff
+from itestlib import Stegotorus, Tltester, diff
 
 class TimelineTest(object):
 
@@ -21,8 +21,8 @@ class TimelineTest(object):
         # goes wrong, and the whole set will then be skipped.
         cls.reftl = Tltester(cls.scriptFile).check_completion(cls.__name__)
 
-    def doTest(self, label, obfs_args):
-        obfs = Obfsproxy(obfs_args)
+    def doTest(self, label, st_args):
+        st = Stegotorus(st_args)
         tester = Tltester(self.scriptFile,
                           ("127.0.0.1:4999", "127.0.0.1:5001"))
         errors = ""
@@ -36,33 +36,15 @@ class TimelineTest(object):
         except Exception, e:
             errors += repr(e)
 
-        errors += obfs.check_completion(label + " proxy", errors != "")
+        errors += st.check_completion(label + " proxy", errors != "")
 
         if errors != "":
             self.fail("\n" + errors)
 
-    # def test_dummy(self):
-    #     self.doTest("dummy",
-    #        ("dummy", "server", "127.0.0.1:5000", "127.0.0.1:5001",
-    #         "dummy", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
-
-    # def test_obfs(self):
-    #     self.doTest("obfs2",
-    #        ("obfs2", "--dest=127.0.0.1:5001", "server", "127.0.0.1:5000",
-    #         "obfs2", "--dest=127.0.0.1:5000", "client", "127.0.0.1:4999"))
-
-    #def test_xhttp(self):
-    #    self.doTest("xhttp",
-    #       ("x_dsteg", "server", "127.0.0.1:5000", "127.0.0.1:5001",
-    #        "x_dsteg", "client", "127.0.0.1:4999", "127.0.0.1:5000", "x_http"))
-
-    # def test_rr(self):
-    #     self.doTest("rr",
-    #        ("x_rr", "server", "127.0.0.1:5001",
-    #         "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013",
-    #         "x_rr", "client", "127.0.0.1:4999",
-    #         "127.0.0.1:5010","127.0.0.1:5011","127.0.0.1:5012","127.0.0.1:5013"
-    #         ))
+    def test_xnull(self):
+        self.doTest("x_null",
+           ("x_null", "server", "127.0.0.1:5000", "127.0.0.1:5001",
+            "x_null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
     def test_chop(self):
         self.doTest("chop",
