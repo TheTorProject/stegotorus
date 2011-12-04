@@ -105,7 +105,8 @@ embed::embed() {
 embed::~embed() { }
 
 bool embed::detect(conn_t * /* conn */) {
-  return 1;
+  // TODO: no good way to detect right now
+  return 0; /* change to 1 when testing */
 }
 
 size_t embed::transmit_room(conn_t * /* conn */) {
