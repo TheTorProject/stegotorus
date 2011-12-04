@@ -21,6 +21,7 @@ PROTOCOLS = \
 STEGANOGRAPHERS = \
 	src/steg/cookies.cc \
 	src/steg/crc32.cc \
+	src/steg/embed.cc \
 	src/steg/http.cc \
 	src/steg/jsSteg.cc \
 	src/steg/payloads.cc \
