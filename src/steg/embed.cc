@@ -22,6 +22,12 @@ namespace {
     struct timeval last_pkt;  // time at which last packet was sent/received
 
     STEG_DECLARE_METHODS(embed);
+
+    bool advance_packet();
+    short get_pkt_size();
+    bool is_outgoing();
+    int get_pkt_time();
+    bool is_finished();
   };
 }
 
@@ -68,26 +74,26 @@ int get_random_trace() {
   return rand() % embed_num_traces;
 }
 
-bool advance_packet(embed *state) {
-  state->cur_pkt++;
-  return state->cur_pkt == state->cur->num_pkt;
+bool embed::advance_packet() {
+  cur_pkt++;
+  return cur_pkt == cur->num_pkt;
 }
 
-short get_pkt_size(embed *state) {
-  return abs(state->cur->pkt_sizes[state->cur_pkt]);
+short embed::get_pkt_size() {
+  return abs(cur->pkt_sizes[cur_pkt]);
 }
 
-bool is_outgoing(embed *state) {
-  return (state->cur->pkt_sizes[state->cur_pkt] < 0) ^ (state->is_clientside);
+bool embed::is_outgoing() {
+  return (cur->pkt_sizes[cur_pkt] < 0) ^ is_clientside;
 }
 
-int get_pkt_time(embed *state) {
-  return state->cur->pkt_times[state->cur_pkt];
+int embed::get_pkt_time() {
+  return cur->pkt_times[cur_pkt];
 }
 
-bool is_finished(embed *state) {
-  if (state->cur_idx == -1) return true;
-  return state->cur_pkt >= state->cur->num_pkt;
+bool embed::is_finished() {
+  if (cur_idx == -1) return true;
+  return cur_pkt >= cur->num_pkt;
 }
 
 embed::embed() {
@@ -112,12 +118,12 @@ size_t embed::transmit_room(conn_t * /* conn */) {
   int time_diff = millis_since(&last_pkt);
   size_t room;
 
-  if (is_finished(this) || !is_outgoing(this)) return 0;
-  if (get_pkt_time(this) > time_diff+10) return 0;
+  if (is_finished() || !is_outgoing()) return 0;
+  if (get_pkt_time() > time_diff+10) return 0;
 
   // 24 bytes for chop header, 2 bytes for data length
   // 4 bytes for the index of a new trace
-  room = get_pkt_size(this) - 26;
+  room = get_pkt_size() - 26;
   if (cur_pkt == 0) {
     room -= 4;
   }
@@ -127,7 +133,7 @@ size_t embed::transmit_room(conn_t * /* conn */) {
 int embed::transmit(struct evbuffer *source, conn_t *conn) {
   struct evbuffer *dest = conn_get_outbound(conn);
   short src_len = evbuffer_get_length(source);
-  short pkt_size = get_pkt_size(this);
+  short pkt_size = get_pkt_size();
   short used = src_len + 2;
 
   // starting a new trace, send the index
@@ -153,12 +159,12 @@ int embed::transmit(struct evbuffer *source, conn_t *conn) {
   }
 
   // check if this trace is finished and whether we need to send again
-  if (advance_packet(this)) {
+  if (advance_packet()) {
     log_debug("send finished trace");
     conn_close_after_transmit(conn);
-  } else if (is_outgoing(this)) {
-    log_debug("sending again in %d ms", get_pkt_time(this));
-    conn_transmit_soon(conn, get_pkt_time(this));
+  } else if (is_outgoing()) {
+    log_debug("sending again in %d ms", get_pkt_time());
+    conn_transmit_soon(conn, get_pkt_time());
   }
 
   // update last time
@@ -187,7 +193,7 @@ int embed::receive(conn_t *conn, struct evbuffer *dest) {
   // in the trace when we have read enough bytes
   while (1) {
     // the next full packet is not in the source buffer yet
-    int exp_pkt_size = get_pkt_size(this);
+    int exp_pkt_size = get_pkt_size();
     if (src_len < exp_pkt_size) break;
 
     // read data
@@ -213,7 +219,7 @@ int embed::receive(conn_t *conn, struct evbuffer *dest) {
 	      cur_pkt, cur_idx);
     
     // advance packet; if done with trace, sender should close connection
-    if (advance_packet(this)) {
+    if (advance_packet()) {
       conn_cease_transmission(conn);
       conn_expect_close(conn);
       log_debug("received last packet in trace");
@@ -221,9 +227,9 @@ int embed::receive(conn_t *conn, struct evbuffer *dest) {
     }
   }
 
-  if (is_outgoing(this)) {
-    log_debug("preparing to send in %d ms", get_pkt_time(this));
-    conn_transmit_soon(conn, get_pkt_time(this));
+  if (is_outgoing()) {
+    log_debug("preparing to send in %d ms", get_pkt_time());
+    conn_transmit_soon(conn, get_pkt_time());
   }
 
   log_debug("remaining source length: %d", src_len);
