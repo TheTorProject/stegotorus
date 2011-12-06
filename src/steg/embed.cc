@@ -104,9 +104,29 @@ embed::embed() {
 
 embed::~embed() { }
 
-bool embed::detect(conn_t * /* conn */) {
-  // TODO: no good way to detect right now
-  return 0; /* change to 1 when testing */
+bool embed::detect(conn_t *conn) {
+  if (!embed_init) init_embed_traces();
+
+  struct evbuffer *source = conn_get_inbound(conn);
+  size_t src_len = evbuffer_get_length(source);
+  
+  log_debug("detecting buffer of length %d", src_len);
+
+  int cur_idx;
+  if (evbuffer_copyout(source, &cur_idx, 4) != 4) return 0;
+  if (cur_idx < 0 || cur_idx >= embed_num_traces) return 0;
+
+  trace_t *cur = &embed_traces[cur_idx];
+  size_t tot_len = 0;
+  int idx = 0;
+  while (idx < cur->num_pkt && cur->pkt_sizes[idx] >= 0) {
+    tot_len += cur->pkt_sizes[idx++];
+    if (src_len == tot_len) {
+      log_debug("detected embed trace %d", cur_idx);
+      return 1;
+    }
+  }
+  return 0;
 }
 
 size_t embed::transmit_room(conn_t * /* conn */) {
@@ -122,9 +142,9 @@ size_t embed::transmit_room(conn_t * /* conn */) {
   if (is_finished() || !is_outgoing()) return 0;
   if (get_pkt_time() > time_diff+10) return 0;
 
-  // 24 bytes for chop header, 2 bytes for data length
+  // 24 bytes for chop header, 16 bytes for GCM tag, 2 bytes for data length
   // 4 bytes for the index of a new trace
-  room = get_pkt_size() - 26;
+  room = get_pkt_size() - 42;
   if (cur_pkt == 0) {
     room -= 4;
   }
@@ -187,7 +207,7 @@ int embed::receive(conn_t *conn, struct evbuffer *dest) {
     cur_pkt = 0;
     pkt_size += 4;
 
-    log_debug("detected trace %d", cur_idx);
+    log_debug("received first packet of trace %d", cur_idx);
   }
 
   // keep reading data and padding from the source, advancing the packet
