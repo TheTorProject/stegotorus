@@ -109,8 +109,9 @@ bool embed::detect(conn_t *conn) {
 
   struct evbuffer *source = conn_get_inbound(conn);
   size_t src_len = evbuffer_get_length(source);
-  
-  log_debug("detecting buffer of length %d", src_len);
+
+  log_debug("detecting buffer of length %lu",
+            (unsigned long)src_len);
 
   int cur_idx;
   if (evbuffer_copyout(source, &cur_idx, 4) != 4) return 0;
