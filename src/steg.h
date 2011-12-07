@@ -100,10 +100,7 @@ steg_t *steg_detect(conn_t *conn);
   static bool mod##_detect(conn_t *conn)                \
   { return mod::detect(conn); }                         \
   static steg_t *mod##_new(bool is_clientside)          \
-  { steg_t *s = new mod;                                \
-    s->is_clientside = is_clientside;                   \
-    return s;                                           \
-  }                                                     \
+  { return new mod(is_clientside); }			\
                                                         \
   /* canned methods */                                  \
   const char *mod::name() { return #mod; }              \
@@ -116,7 +113,7 @@ steg_t *steg_detect(conn_t *conn);
 
 #define STEG_DECLARE_METHODS(mod)                               \
   static bool detect(conn_t *conn);                             \
-  mod();                                                        \
+  mod(bool is_clientside);                                      \
   virtual ~mod();                                               \
   virtual const char *name();                                   \
   virtual size_t transmit_room(conn_t *conn);                   \

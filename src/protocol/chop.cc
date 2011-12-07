@@ -38,6 +38,7 @@ struct chop_header
 #define CHOP_WIRE_HDR_LEN (sizeof(struct chop_header))
 #define CHOP_MAX_DATA 16384
 #define CHOP_MAX_CHAFF 2048
+#define CHOP_BLOCK_OVERHD (CHOP_WIRE_HDR_LEN + GCM_TAG_LEN)
 
 #define CHOP_F_SYN   0x0001
 #define CHOP_F_FIN   0x0002
@@ -247,6 +248,11 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
       log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
                 conn->steg->name());
 
+      if (room <= CHOP_BLOCK_OVERHD)
+	room = 0;
+      else
+	room -= CHOP_BLOCK_OVERHD;
+      
       if (room > CHOP_MAX_DATA)
         room = CHOP_MAX_DATA;
 
@@ -326,6 +332,11 @@ chop_send_block(conn_t *d,
   if (evbuffer_commit_space(block, &v, 1))
     goto fail;
 
+  // TODO: this should be moved after the steg transmit, but currently that
+  // prevents conn_transmit_soon calls inside steg transmit
+  if (dest->must_transmit_timer)
+    evtimer_del(dest->must_transmit_timer);
+
   if (dest->steg->transmit(block, dest))
     goto fail_committed;
 
@@ -341,8 +352,6 @@ chop_send_block(conn_t *d,
     ckt->sent_fin = true;
   log_debug(dest, "sent %lu+%u byte block [flags %04hx]",
             (unsigned long)CHOP_WIRE_HDR_LEN, length, flags);
-  if (dest->must_transmit_timer)
-    evtimer_del(dest->must_transmit_timer);
   return 0;
 
  fail:
@@ -451,7 +460,7 @@ chop_send_targeted(circuit_t *c, conn_t *target, size_t blocksize)
     if (blocksize > CHOP_MAX_CHAFF)
       blocksize = CHOP_MAX_CHAFF;
 
-    blocksize = rng_range(1, blocksize);
+    blocksize = rng_range(1, blocksize + 1);
     log_debug(target, "generating %lu bytes chaff", (unsigned long)blocksize);
 
     chaff = evbuffer_new();

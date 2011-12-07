@@ -130,9 +130,10 @@ buf_dump(unsigned char* buf, int len, FILE *out)
 }
 
 
-http::http()
+http::http(bool is_clientside)
   : have_transmitted(false), have_received(false)
 {
+  this->is_clientside = is_clientside;
   if (is_clientside)
     load_payloads("traces/client.out");
   else {

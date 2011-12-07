@@ -1,6 +1,7 @@
 #include "util.h"
 #include "connections.h"
 #include "steg.h"
+#include "rng.h"
 
 #include <event2/buffer.h>
 #include <event2/event.h>
@@ -66,12 +67,11 @@ void init_embed_traces() {
   }
   log_debug("read %d traces to use", embed_num_traces);
 
-  srand(time(NULL));
   embed_init = 1;
 }
 
 int get_random_trace() {
-  return rand() % embed_num_traces;
+  return rng_int(embed_num_traces);
 }
 
 bool embed::advance_packet() {
@@ -96,9 +96,16 @@ bool embed::is_finished() {
   return cur_pkt >= cur->num_pkt;
 }
 
-embed::embed() {
+embed::embed(bool is_clientside) {
   if (!embed_init) init_embed_traces();
+
+  this->is_clientside = is_clientside;
   cur_idx = -1;
+  if (is_clientside) {
+    cur_idx = get_random_trace();
+    cur = &embed_traces[cur_idx];
+    cur_pkt = 0;
+  }
   gettimeofday(&last_pkt, NULL);
 }
 
@@ -110,8 +117,7 @@ bool embed::detect(conn_t *conn) {
   struct evbuffer *source = conn_get_inbound(conn);
   size_t src_len = evbuffer_get_length(source);
 
-  log_debug("detecting buffer of length %lu",
-            (unsigned long)src_len);
+  log_debug("detecting buffer of length %lu", (unsigned long)src_len);
 
   int cur_idx;
   if (evbuffer_copyout(source, &cur_idx, 4) != 4) return 0;
@@ -131,24 +137,14 @@ bool embed::detect(conn_t *conn) {
 }
 
 size_t embed::transmit_room(conn_t * /* conn */) {
-  if (cur_idx == -1 && is_clientside) {
-    cur_idx = get_random_trace();
-    cur = &embed_traces[cur_idx];
-    cur_pkt = 0;
-  }
+  if (is_finished() || !is_outgoing()) return 0;
 
   int time_diff = millis_since(&last_pkt);
-  size_t room;
-
-  if (is_finished() || !is_outgoing()) return 0;
   if (get_pkt_time() > time_diff+10) return 0;
 
-  // 24 bytes for chop header, 16 bytes for GCM tag, 2 bytes for data length
-  // 4 bytes for the index of a new trace
-  room = get_pkt_size() - 42;
-  if (cur_pkt == 0) {
-    room -= 4;
-  }
+  // 2 bytes for data length, 4 bytes for the index of a new trace
+  size_t room = get_pkt_size() - 2;
+  if (cur_pkt == 0) room -= 4;
   return room;
 }
 
