@@ -299,6 +299,7 @@ chop_send_block(conn_t *d,
   chop_header hdr;
   struct evbuffer_iovec v;
   uint8_t *p;
+  struct timeval *exp_time = NULL;
 
   log_assert(evbuffer_get_length(block) == 0);
   log_assert(evbuffer_get_length(source) >= length);
@@ -332,10 +333,17 @@ chop_send_block(conn_t *d,
   if (evbuffer_commit_space(block, &v, 1))
     goto fail;
 
-  // TODO: this should be moved after the steg transmit, but currently that
-  // prevents conn_transmit_soon calls inside steg transmit
-  if (dest->must_transmit_timer)
+  /* save the expiration time of the must_transmit_timer in case of failure */
+  if (dest->must_transmit_timer) {
+    exp_time = new struct timeval;
+    if (evtimer_pending(dest->must_transmit_timer, exp_time)) {
+      log_debug("saved must_transmit_timer value in case of failure");
+    } else {
+      delete exp_time;
+      exp_time = NULL;
+    }
     evtimer_del(dest->must_transmit_timer);
+  }
 
   if (dest->steg->transmit(block, dest))
     goto fail_committed;
@@ -352,6 +360,10 @@ chop_send_block(conn_t *d,
     ckt->sent_fin = true;
   log_debug(dest, "sent %lu+%u byte block [flags %04hx]",
             (unsigned long)CHOP_WIRE_HDR_LEN, length, flags);
+
+  if (exp_time != NULL)
+    delete exp_time;
+
   return 0;
 
  fail:
@@ -360,6 +372,18 @@ chop_send_block(conn_t *d,
  fail_committed:
   evbuffer_drain(block, evbuffer_get_length(block));
   log_warn(dest, "allocation or buffer copy failed");
+
+  /* restore timer if necessary */
+  if (exp_time != NULL) {
+    if (!evtimer_pending(dest->must_transmit_timer, NULL)) {
+      struct timeval cur_time, timeout;
+      gettimeofday(&cur_time, NULL);
+      timeval_subtract(exp_time, &cur_time, &timeout);
+      evtimer_add(dest->must_transmit_timer, &timeout);
+    }
+    delete exp_time;
+  }
+
   return -1;
 }
 
@@ -524,13 +548,13 @@ must_transmit_timer_cb(evutil_socket_t, short, void *arg)
     return;
   }
   room = conn->steg->transmit_room(conn);
-  if (!room) {
+  if (room <= CHOP_BLOCK_OVERHD) {
     log_warn(conn, "must transmit, but no transmit room");
     return;
   }
 
   log_debug(conn, "must transmit");
-  chop_send_targeted(conn->circuit, conn, room);
+  chop_send_targeted(conn->circuit, conn, room - CHOP_BLOCK_OVERHD);
 }
 
 /* Receive subroutines. */

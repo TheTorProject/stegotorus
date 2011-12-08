@@ -273,4 +273,11 @@ void log_debug(conn_t *conn,const char *format, ...)
                 __FILE__, __LINE__, #expr);             \
   } while (0)
 
+/***** Time. *****/
+
+/** Compute x - y and store the value result. Returns 1 if the difference is
+    negative, and 0 otherwise. **/
+int timeval_subtract(struct timeval *x, struct timeval *y,
+		     struct timeval *result);
+
 #endif
