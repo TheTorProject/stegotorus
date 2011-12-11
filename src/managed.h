@@ -2,6 +2,11 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file managed.h
+ * \brief Headers for managed.c.
+ **/
+
 #ifndef MANAGED_H
 #define MANAGED_H
 

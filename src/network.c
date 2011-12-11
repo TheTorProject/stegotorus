@@ -2,6 +2,14 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file network.c
+ * \headerfile network.h
+ * \brief Networking side of obfspoxy. Creates listeners, accepts
+ * connections, reads/writes data, and calls transport callbacks when
+ * applicable.
+ **/
+
 #include "util.h"
 
 #define NETWORK_PRIVATE

@@ -2,6 +2,12 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file main.h
+ * \brief Headers for main.c.
+ **/
+
+
 #ifndef MAIN_H
 #define MAIN_H
 

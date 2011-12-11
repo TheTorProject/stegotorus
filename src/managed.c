@@ -2,6 +2,12 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file managed.c
+ * \headerfile managed.h
+ * \brief Implements the 'managed proxy' mode of obfsproxy.
+ **/
+
 #include "util.h"
 
 #define MANAGED_PRIVATE

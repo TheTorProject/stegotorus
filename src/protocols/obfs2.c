@@ -2,6 +2,13 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file obfs2.c
+ * \headerfile obfs2.h
+ * \brief Implements the 'obfs2' pluggable transport.
+ **/
+
+
 #include "util.h"
 
 #define PROTOCOL_OBFS2_PRIVATE

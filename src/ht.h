@@ -3,6 +3,11 @@
  * Copyright (c) 2007-2011, The Tor Project, Inc. */
 /* See license at end. */
 
+/**
+ * \file ht.h
+ * \brief Hash table functions.
+ **/
+
 /* Based on ideas by Christopher Clark and interfaces from Niels Provos. */
 
 #ifndef HT_H

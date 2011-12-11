@@ -1,11 +1,13 @@
 #! @PYTHON@
 
-# Integration tests for obfsproxy.
-#
-# The obfsproxy binary is assumed to exist in the current working
-# directory, and you need to have Python 2.6 or better (but not 3).
-# You need to be able to make connections to arbitrary high-numbered
-# TCP ports on the loopback interface.
+"""@package tester.py.in
+Integration tests for obfsproxy.
+
+The obfsproxy binary is assumed to exist in the current working
+directory, and you need to have Python 2.6 or better (but not 3).
+You need to be able to make connections to arbitrary high-numbered
+TCP ports on the loopback interface.
+"""
 
 import difflib
 import errno

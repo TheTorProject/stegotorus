@@ -3,6 +3,11 @@
  * Copyright (c) 2007-2011, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
+/**
+ * \file container.h
+ * \brief Headers for container.c.
+ **/
+
 #ifndef CONTAINER_H
 #define CONTAINER_H
 

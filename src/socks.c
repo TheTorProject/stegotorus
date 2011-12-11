@@ -2,6 +2,12 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file socks.c
+ * \headerfile socks.h
+ * \brief SOCKS{5,4,4a} server.
+ **/
+
 #include "util.h"
 
 #define SOCKS_PRIVATE

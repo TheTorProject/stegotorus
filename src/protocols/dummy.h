@@ -1,6 +1,12 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
    See LICENSE for other credits and copying information
 */
+
+/**
+ * \file dummy.h
+ * \brief Headers for dummy.c.
+ **/
+
 #ifndef PROTOCOL_DUMMY_H
 #define PROTOCOL_DUMMY_H
 

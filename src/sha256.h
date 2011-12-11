@@ -1,4 +1,10 @@
-/* Header file for the fallback (libtomcrypt) implementation of SHA256. */
+/* See the LICENSE file for licensing information */
+
+/**
+ * \file sha256.h
+ * \brief Headers for sha256.c.
+ **/
+
 #ifndef SHA256_H
 #define SHA256_H
 

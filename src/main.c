@@ -2,6 +2,17 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file main.c
+ * \headerfile main.h
+ * \brief Entry point of obfsproxy. Does command-line parsing, and
+ * switches into 'external' or 'managed' proxy mode.
+ *
+ * (Practically, obfs_main.c is the actual entry point of obfsproxy,
+ * but all it does is call obfs_main().)
+ **/
+
+
 #include "util.h"
 
 #include "container.h"

@@ -2,6 +2,12 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file util.c
+ * \headerfile util.h
+ * \brief Utility functions.
+ **/
+
 #include "util.h"
 
 #include <errno.h>

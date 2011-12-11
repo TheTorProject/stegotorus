@@ -2,6 +2,12 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file obfs_main.c
+ * \brief Real entry point of obfsproxy. Immediately calls
+ * main.c:obfs_main().
+ **/
+
 int obfs_main(int argc, char *argv[]);
 
 /**

@@ -2,6 +2,11 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file network.h
+ * \brief Headers for network.c.
+ **/
+
 #ifndef NETWORK_H
 #define NETWORK_H
 

@@ -2,6 +2,11 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file protocol.h
+ * \brief Headers for protocol.c.
+ **/
+
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 

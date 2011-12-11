@@ -2,6 +2,11 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file util.h
+ * \brief Headers for util.c.
+ **/
+
 #ifndef UTIL_H
 #define UTIL_H
 

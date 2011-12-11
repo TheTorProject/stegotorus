@@ -2,6 +2,12 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file crypt.c
+ * \headerfile crypt.h
+ * \brief Cryptographic functions.
+ **/
+
 #include "util.h"
 
 #define CRYPT_PRIVATE

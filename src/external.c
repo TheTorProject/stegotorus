@@ -2,6 +2,12 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file external.c
+ * \headerfile external.h
+ * \brief Implements the 'external proxy' mode of obfsproxy.
+ **/
+
 #include "util.h"
 
 #include "container.h"

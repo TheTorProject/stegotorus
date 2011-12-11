@@ -2,6 +2,11 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file crypt.h
+ * \brief Headers for crypt.c.
+ **/
+
 #ifndef CRYPT_H
 #define CRYPT_H
 

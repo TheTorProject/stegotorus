@@ -2,6 +2,15 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file protocol.c
+ * \headerfile protocol.h
+ * \brief Pluggable transports-related functions. Acts as a wrapper on
+ * top of transport callbacks and transport-specific option parsing.
+ *
+ * 'Protocol' is a synonym to 'pluggable transport' in obfsproxy code.
+ **/
+
 #include "util.h"
 #include "network.h"
 #include "protocol.h"

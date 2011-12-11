@@ -2,6 +2,13 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file dummy.c
+ * \headerfile dummy.h
+ * \brief Implements the 'dummy' pluggable transport. A testing-only
+ * pluggable transport that leaves traffic intact
+ **/
+
 #include "util.h"
 
 #define PROTOCOL_DUMMY_PRIVATE

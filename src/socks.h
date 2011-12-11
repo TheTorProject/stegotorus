@@ -2,6 +2,11 @@
    See LICENSE for other credits and copying information
 */
 
+/**
+ * \file socks.h
+ * \brief Headers for socks.c.
+ **/
+
 #ifndef SOCKS_H
 #define SOCKS_H
 
