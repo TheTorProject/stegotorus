@@ -26,3 +26,5 @@ Makefile.in
 /unittests
 /tester.py
 
+# /doc/
+/doc/doxygen

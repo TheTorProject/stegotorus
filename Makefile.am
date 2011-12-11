@@ -58,6 +58,9 @@ EXTRA_DIST = doc/protocol-spec.txt
 
 TESTS = unittests
 
+doxygen:
+	doxygen && cd doc/doxygen/latex && make
+
 if HAVE_PYTHON
 TESTS += tester.py
 noinst_PROGRAMS += tester.py
