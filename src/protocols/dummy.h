@@ -28,6 +28,7 @@ extern const protocol_vtable dummy_vtable;
    also because, if you're using dummy as a template, you probably
    will want to extend the generic structures. */
 
+/** \private \extends config_t */
 typedef struct dummy_config_t {
   config_t super;
   struct evutil_addrinfo *listen_addr;
@@ -35,10 +36,12 @@ typedef struct dummy_config_t {
   enum listen_mode mode;
 } dummy_config_t;
 
+/** \private \extends conn_t */
 typedef struct dummy_conn_t {
   conn_t super;
 } dummy_conn_t;
 
+/** \private \extends circuit_t */
 typedef struct dummy_circuit_t {
   circuit_t super;
 } dummy_circuit_t;

@@ -6,6 +6,12 @@
  * \file util.c
  * \headerfile util.h
  * \brief Utility functions.
+ *
+ * \details Contains:
+ *      - wrappers of malloc() et al.
+ *      - network functions
+ *      - string functions
+ *      - functions used by obfsproxy's logging subsystem
  **/
 
 #include "util.h"

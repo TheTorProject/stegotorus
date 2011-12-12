@@ -6,6 +6,14 @@
  * \file managed.c
  * \headerfile managed.h
  * \brief Implements the 'managed proxy' mode of obfsproxy.
+ *
+ * \details This is an implementation of managed proxies according to
+ * the 180-pluggable-transport.txt specification. The entry point is
+ * launch_managed_proxy() where a managed_proxy_t instance is created
+ * to represent our managed proxy. We read and validate the
+ * environment variables that tor should have prepared for us, launch
+ * the appropriate listeners, and finally kickstart libevent to start
+ * accepting connections.
  **/
 
 #include "util.h"

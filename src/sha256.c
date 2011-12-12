@@ -6,9 +6,9 @@
  * \headerfile sha256.h
  * \brief SHA256 implementation by Tom St Denis.
  *
- * This SHA256 implementation is adapted from the public domain one in
- * LibTomCrypt, version 1.6.  Tor uses it on platforms where OpenSSL
- * doesn't have a SHA256.
+ * \details This SHA256 implementation is adapted from the public
+ * domain one in LibTomCrypt, version 1.6.  Tor uses it on platforms
+ * where OpenSSL doesn't have a SHA256.
  **/
 
 #include "util.h"

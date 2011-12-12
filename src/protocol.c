@@ -5,10 +5,14 @@
 /**
  * \file protocol.c
  * \headerfile protocol.h
- * \brief Pluggable transports-related functions. Acts as a wrapper on
- * top of transport callbacks and transport-specific option parsing.
+ * \brief Pluggable transports-related functions.
  *
- * 'Protocol' is a synonym to 'pluggable transport' in obfsproxy code.
+ * \details Acts as an intermediary between generic obfsproxy code,
+ * and pluggable transports code. Provides wrappers for
+ * transport-specific configuration, and callbacks.
+ *
+ * Note that in obfsproxy code, 'protocol' is a synonym to 'pluggable
+ * transport'.
  **/
 
 #include "util.h"

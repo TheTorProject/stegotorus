@@ -8,6 +8,61 @@
  * \brief Networking side of obfspoxy. Creates listeners, accepts
  * connections, reads/writes data, and calls transport callbacks when
  * applicable.
+ *
+ * \details Terminology:
+ *
+ * A <em>connection</em> is a bidirectional communications channel,
+ * usually backed by a network socket, and represented in this layer
+ * by a conn_t, wrapping a libevent bufferevent.
+ *
+ * A <em>circuit</em> is a <b>pair</b> of connections, referred to as the
+ * <em>upstream</em> and <em>downstream</em> connections.  A circuit
+ * is represented by a circuit_t.  The upstream connection of a
+ * circuit communicates in cleartext with the higher-level program
+ * that wishes to make use of our obfuscation service.  The
+ * downstream connection commmunicates in an obfuscated fashion with
+ * the remote peer that the higher-level client wishes to contact.
+ *
+ * A <em>listener</em> is a listening socket bound to a particular
+ * obfuscation protocol, represented in this layer by a listener_t
+ * and its config_t.  Connecting to a listener creates one
+ * connection of a circuit, and causes this program to initiate the
+ * other connection (possibly after receiving in-band instructions
+ * about where to connect to).  A listener is said to be a
+ * <em>client</em> listener if connecting to it creates the
+ * <b>upstream</b> connection, and a <em>server</em> listener if
+ * connecting to it creates the <b>downstream</b> connection.
+ *
+ * There are two kinds of client listeners: a <em>simple</em> client
+ * listener always connects to the same remote peer every time it
+ * needs to initiate a downstream connection; a <em>socks</em>
+ * client listener can be told to connect to an arbitrary remote
+ * peer using the SOCKS protocol (version 4 or 5).
+ *
+ * The diagram below might help demonstrate the relationship between
+ * connections and circuits:
+ *
+ *\verbatim
+                                      downstream
+
+         'circuit_t C'        'conn_t CD'      'conn_t SD'        'circuit_t S'
+                        +-----------+             +-----------+
+ upstream           ----|obfsproxy c|-------------|obfsproxy s|----    upstream
+                    |   +-----------+             +-----------+   |
+         'conn_t CU'|                                             |'conn_t SU'
+              +------------+                              +--------------+
+              | Tor Client |                              |  Tor Bridge  |
+              +------------+                              +--------------+
+
+ \endverbatim
+ *
+ * In the above diagram, <b>obfsproxy c</b> is the client-side
+ * obfsproxy, and <b>obfsproxy s</b> is the server-side
+ * obfsproxy. <b>conn_t CU</b> is the Client's Upstream connection,
+ * the communication channel between tor and obfsproxy.  <b>conn_t
+ * CD</b> is the Client's Downstream connection, the communication
+ * channel between obfsproxy and the remote peer. These two
+ * connections form <b>circuit_t C</b>.
  **/
 
 #include "util.h"

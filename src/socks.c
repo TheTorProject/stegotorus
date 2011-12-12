@@ -6,6 +6,43 @@
  * \file socks.c
  * \headerfile socks.h
  * \brief SOCKS{5,4,4a} server.
+ *
+ * \details
+ * Every <b>circuit_t</b> has a <b>socks_state_t</b> attached
+ * to it, representing the state of the SOCKS protocol on that
+ * circuit.
+ *
+ * If we are a client using SOCKS, and we haven't completed the SOCKS
+ * handshake, socks_read_cb() passes all incoming data to
+ * handle_socks().  On a valid 'Client request' packet, we parse the
+ * requested address into <b>struct parsereq</b> of
+ * <b>socks_state_t</b>, and toggle SOCKS' state to ST_HAVE_ADDR. When
+ * socks_read_cb() notices that we are in ST_HAVE_ADDR, it connects to
+ * the requested address to set up the proxying tunnel. Upon a
+ * successful connection, pending_socks_cb() sends back a 'Server
+ * reply' and sets up the proxying tunnel.
+ *
+ * <em>SOCKS5 protocol handshake:</em>
+ *
+ * Client ------------------------> Server\n
+ * Method Negotiation Packet (socks5_handle_negotiation())
+ *
+ * Client <------------------------ Server\n
+ * Method Negotiation Reply (socks5_do_negotiation())
+ *
+ * Client ------------------------> Server\n
+ * Client request (socks5_handle_request())
+ *
+ * Client <------------------------ Server\n
+ * Server reply (socks5_send_reply())
+ *
+ * <em>SOCKS{4,4a} protocol handshake:</em>
+ *
+ * Client ------------------------> Server\n
+ * Client Request (socks4_read_request())
+ *
+ * Client <------------------------ Server\n
+ * Server reply (socks4_send_reply())
  **/
 
 #include "util.h"
@@ -16,27 +53,6 @@
 #include <errno.h>
 
 #include <event2/buffer.h>
-
-/**
-   General SOCKS5 idea:
-
-   Client ------------------------> Server
-          Method Negotiation Packet
-
-   Client <------------------------ Server
-          Method Negotiation Reply
-
-   Client ------------------------> Server
-               Client request
-
-   Client <------------------------ Server
-               Server reply
-
-   "Method Negotiation Packet" is handled by: socks5_handle_negotiation()
-   "Method Negotiation Reply" is done by: socks5_do_negotiation()
-   "Client request" is handled by: socks5_handle_request()
-   "Server reply" is done by: socks5_send_reply()
-*/
 
 
 typedef unsigned char uchar;

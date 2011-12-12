@@ -8,10 +8,9 @@
  * \brief Entry point of obfsproxy. Does command-line parsing, and
  * switches into 'external' or 'managed' proxy mode.
  *
- * (Practically, obfs_main.c is the actual entry point of obfsproxy,
- * but all it does is call obfs_main().)
+ * \details Practically, obfs_main.c is the actual entry point of
+ * obfsproxy, but all it really does is call obfs_main().
  **/
-
 
 #include "util.h"
 

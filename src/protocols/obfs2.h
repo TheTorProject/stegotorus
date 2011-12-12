@@ -74,20 +74,37 @@ typedef struct obfs2_state_t {
   int padding_left_to_read;
 } obfs2_state_t;
 
+/** config_t for obfs2.
+ * \private \extends config_t
+ */
 typedef struct obfs2_config_t {
+  /** Base <b>config_t</b>. */
   config_t super;
+  /** Address to listen on. */
   struct evutil_addrinfo *listen_addr;
+  /** Address to connect to. */
   struct evutil_addrinfo *target_addr;
+  /** Listener mode. */
   enum listen_mode mode;
+  /** obfs2 shared secret. */
   uchar shared_secret[SHARED_SECRET_LENGTH];
 } obfs2_config_t;
 
+/** conn_t for obfs2.
+ * \private \extends conn_t
+ */
 typedef struct obfs2_conn_t {
+  /** Base <b>conn_t</b>. */
   conn_t super;
 } obfs2_conn_t;
 
+/** circuit_t for obfs2.
+ * \private \extends circuit_t
+ */
 typedef struct obfs2_circuit_t {
+  /** Base <b>circuit_t</b>. */
   circuit_t super;
+  /** State of obfs2 for this circuit. */
   obfs2_state_t *state;
 } obfs2_circuit_t;
 

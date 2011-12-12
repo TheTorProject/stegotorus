@@ -6,6 +6,8 @@
  * \file crypt.c
  * \headerfile crypt.h
  * \brief Cryptographic functions.
+ *
+ * \details Most functions here are wrappers of OpenSSL functions.
  **/
 
 #include "util.h"

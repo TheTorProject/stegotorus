@@ -6,8 +6,25 @@
  * \file obfs2.c
  * \headerfile obfs2.h
  * \brief Implements the 'obfs2' pluggable transport.
+ *
+ * \details We track the state of the obfs2 protocol in the
+ * <b>state</b> member of <b>obfs2_state_t</b>.
+ *
+ * The first step of the obfs2 protocol, is to send the handshake
+ * message (obfs2_handshake()) and move to the initial state which is
+ * <em>ST_WAIT_FOR_KEY</em>.
+ *
+ * During <em>ST_WAIT_FOR_KEY</em>, we are waiting for the key of our
+ * peer. obfs2_recv() is responsible for picking up the key from our
+ * peer's handshake message, deriving additional keys out of it
+ * (init_crypto()), and progressing to the <em>ST_WAIT_FOR_PADDING</em> state.
+ *
+ * During <em>ST_WAIT_FOR_PADDING</em>, we are waiting for the amount
+ * of padding that our peer promised in his handshake message. When we
+ * receive the padding, we move to the final state <em>ST_OPEN</em>
+ * and start exchanging data messages with our peer using the derived
+ * keys.
  **/
-
 
 #include "util.h"
 
