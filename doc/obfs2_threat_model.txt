@@ -1,0 +1,50 @@
+threat model:
+
+       Adversary capabilities:
+
+The adversary controls the infrastructure of the network within her
+jurisdiction, and she can potentially monitor, block, alter, and
+inject trafﬁc anywhere within this region.
+
+The censor also holds a blacklist of network protocols, which she is
+interested in blocking.
+
+      Adversary attacks:
+
+The censor passively monitors traffic and looks for content
+signatures, in an attempt to distinguish network protocols. Upon
+detecting a blacklisted protocol, the censor blocks the connection.
+
+     Goals of obfs2:
+
+obfs2 attempts to counter the above attack by removing content
+signatures from network traffic. obfs2 encrypts the traffic stream
+with a stream cipher, which results in the traffic looking uniformly
+random.
+
+     Discussion:
+
+obfs2 shortcomings:
+
+obfs2 was designed as a pluggable transports proof-of-concept: it is
+simple, useable and easily implementable. It does _not_ try to protect
+against sophisticated adversaries:
+
+obfs2 does not try to protect against Tor protocol fingerprints, like
+the packet size or packet timing.
+
+obfs2 does not try to protect against attackers capable of measuring
+traffic entropy.
+
+obfs2 does not try to protect against Deep Packet Inspection machines
+that expect the obfs2 protocol. Such machines can trivially retrieve
+the decryption key off the traffic stream and use it to decrypt obfs2
+and detect the Tor protocol.
+
+In other words, obfs2 does not try to protect against anything other
+than fingerprintable TLS content patterns.
+
+That said, obfs2 is not useless. It protects against many real-life
+Tor traffic detection methods currentl deployed, since most of them
+use static SSL handshake strings as signatures.
+
