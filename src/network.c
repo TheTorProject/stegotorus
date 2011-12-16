@@ -614,10 +614,11 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
                  bufferevent_get_output(down->buffer))) {
     log_debug("%s: error during transmit.", up->peername);
     conn_free(up);
+  } else {
+    log_debug("%s: transmitted %lu bytes", down->peername,
+              (unsigned long)
+              evbuffer_get_length(bufferevent_get_output(down->buffer)));
   }
-  log_debug("%s: transmitted %lu bytes", down->peername,
-            (unsigned long)
-            evbuffer_get_length(bufferevent_get_output(down->buffer)));
 }
 
 /**
@@ -663,10 +664,11 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
                      bufferevent_get_output(down->buffer)) < 0) {
         log_debug("%s: error during reply.", down->peername);
         conn_free(down);
+      } else {
+        log_debug("%s: transmitted %lu bytes", down->peername,
+                  (unsigned long)
+                  evbuffer_get_length(bufferevent_get_output(down->buffer)));
       }
-      log_debug("%s: transmitted %lu bytes", down->peername,
-                (unsigned long)
-                evbuffer_get_length(bufferevent_get_output(down->buffer)));
     }
   }
 }
