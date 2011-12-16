@@ -29,7 +29,7 @@ int unwrap_cookie(unsigned char* inbuf, unsigned char* outbuf, int buflen) {
 int gen_one_cookie(unsigned char* outbuf, int cookielen, unsigned char* data, int datalen) {
   int sofar = 0;
   unsigned char c;
-  int namelen, vlen;
+  int namelen;
   int data_consumed = 0;
 
   if (cookielen < 4)
@@ -42,7 +42,6 @@ int gen_one_cookie(unsigned char* outbuf, int cookielen, unsigned char* data, in
   else 
     namelen = rand() % (cookielen - 3) + 1;
 
-  vlen = cookielen - namelen;
 
 
 

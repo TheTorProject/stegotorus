@@ -887,7 +887,7 @@ http_server_JS_transmit (steg_t*, struct evbuffer *source, conn_t *conn, unsigne
 int
 http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
   struct evbuffer_ptr s2;
-  unsigned int response_len = 0;
+  int response_len = 0;
   unsigned int content_len = 0;
   unsigned int hdrLen;
   char buf[10];
@@ -949,7 +949,7 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   
   response_len += content_len;
 
-  if (response_len > evbuffer_get_length(source))
+  if (response_len > (int) evbuffer_get_length(source))
     return RECV_INCOMPLETE;
  
   // read the entire HTTP resp
@@ -1060,7 +1060,7 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   evbuffer_free(scratch);
   
   
-  if (response_len <= evbuffer_get_length(source)) {
+  if (response_len <= (int) evbuffer_get_length(source)) {
     if (evbuffer_drain(source, response_len) == -1) {
       log_warn("CLIENT ERROR: Failed to drain source");
       return RECV_BAD;

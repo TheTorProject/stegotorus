@@ -51,18 +51,27 @@ int millis_since(struct timeval *last) {
 void init_embed_traces() {
   // read in traces to use for connections
   FILE *trace_file = fopen("traces/embed.txt", "r");
-  fscanf(trace_file, "%d", &embed_num_traces);
+  if (fscanf(trace_file, "%d", &embed_num_traces) < 1) {
+    log_abort("couldn't read number of traces to use -- exiting");
+    exit(1);
+  }    
   embed_traces = (trace_t *)xmalloc(sizeof(trace_t) * embed_num_traces);
   for (int i = 0; i < embed_num_traces; i++) {
     int num_pkt;
-    fscanf(trace_file, "%d", &num_pkt);
+    if (fscanf(trace_file, "%d", &num_pkt) < 1) {
+      log_abort("couldn't read number of packets to use -- exiting");
+      exit(1);
+    }
     embed_traces[i].num_pkt = num_pkt;
     embed_traces[i].pkt_sizes = (short *)xmalloc(sizeof(short) * num_pkt);
     embed_traces[i].pkt_times = (int *)xmalloc(sizeof(int) * num_pkt);
     for (int j = 0; j < embed_traces[i].num_pkt; j++) {
-      fscanf(trace_file, "%hd %d",
-	     &embed_traces[i].pkt_sizes[j],
-	     &embed_traces[i].pkt_times[j]);
+      if (fscanf(trace_file, "%hd %d",
+		 &embed_traces[i].pkt_sizes[j],
+		 &embed_traces[i].pkt_times[j]) < 1) {
+	log_abort("couldn't read numbers of packet size and times to use -- exiting");
+	exit(1);
+      }
     }
   }
   log_debug("read %d traces to use", embed_num_traces);

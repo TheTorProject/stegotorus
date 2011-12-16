@@ -916,7 +916,7 @@ strInBinary (const char *pattern, unsigned int patternLen,
   char *cp = (char *)blob;
 
   while (1) {
-    if (blob+blobLen-cp < patternLen) break;
+    if (blob+blobLen-cp < (int) patternLen) break;
     if (*cp == pattern[0]) {
       if (memcmp(cp, pattern, patternLen) == 0) {
         found = 1;
@@ -955,7 +955,7 @@ strInBinary (const char *pattern, unsigned int patternLen,
 int has_eligible_HTTP_content (char* buf, int len, int type) {
   char* ptr = buf;
   char* matchptr;
-  int tjFlag=0, thFlag=0, ceFlag=0, teFlag=0, http304Flag=0, clZeroFlag=0, pdfFlag=0, swfFlag=0, gzipFlag=0;
+  int tjFlag=0, thFlag=0, ceFlag=0, teFlag=0, http304Flag=0, clZeroFlag=0, pdfFlag=0, swfFlag=0; //, gzipFlag=0; // compiler under Ubuntu complains about unused vars, so commenting out until we need it
   char* end, *cp;
 
 #ifdef DEBUG
@@ -997,7 +997,7 @@ int has_eligible_HTTP_content (char* buf, int len, int type) {
       }
 
     } else if (!strncmp(ptr, "Content-Encoding: gzip", 22)) {
-      gzipFlag = 1;
+      //      gzipFlag = 1; // commented out as variable is set but never read and Ubuntu compiler complains
     } else if (!strncmp(ptr, "Content-Encoding:", 17)) { // Content-Encoding that is not gzip
       ceFlag = 1;
     } else if (!strncmp(ptr, "Transfer-Encoding:", 18)) {
