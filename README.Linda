@@ -1,0 +1,117 @@
+compiling stegotorus on Mac OS X 10.6
+=====================================
+
+0) prelims
+
+Install Mac Ports from http://www.macports.org (here v2.0.3).
+$> sudo port selfupdate  [for good measure]
+
+ a) autoconf 2.68
+
+$> sudo port install autoconf
+$> autoconf --version
+autoconf (GNU Autoconf) 2.68
+
+ b) automake 1.11
+
+$> sudo port install automake
+$> automake --version
+automake (GNU automake) 1.11.1
+
+ c) pkgconfig
+
+$> sudo port install pkgconfig
+
+ d) libcrypto++, libevent-2, 
+
+$> sudo port install libcryptopp
+$> sudo port install libevent
+
+ e) tor
+
+$> sudo port install tor
+$> tor --version
+[...]
+Tor version 0.2.2.34 (git-c4eae752f0d157ce).
+
+
+1) StegoTorus
+
+$> cd ~/src/DEFIANCE/stegotorus/sri
+$> autoreconf -i
+$> ./configure --disable-integration-tests --enable-silent-rules
+[...]
+configure: error: Package requirements (libcrypto++ >= 5.6.0) were not met:
+
+No package 'libcrypto++' found
+[...]
+$> sudo cp Desktop/libcrypto++.pc /usr/lib/pkgconfig/
+$> ./configure --disable-integration-tests --enable-silent-rules
+$> make
+
+
+compiling stegotorus under Ubuntu 11.10
+=======================================
+
+$> sudo apt-get install pkg-config libevent-2.0-5 libevent-dev
+
+Tor:
+----
+
+$> sudo cat >> /etc/apt/sources.list <<EOF
+> deb http://deb.torproject.org/torproject.org oneiric main
+> EOF
+$> gpg --keyserver keys.gnupg.net --recv 886DDD89
+$> gpg --export A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89 | sudo apt-key add -
+$> sudo apt-get install tor tor-geoipdb
+$> tor --version
+[É]
+Tor version 0.2.2.35 (git-73ff13ab3cc9570d).
+
+StegoTorus:
+-----------
+
+$> autoreconf -i
+$> ./configure --disable-integration-tests --enable-silent-rules
+[...]
+configure: error: Package requirements (libcrypto++ >= 5.6.0) were not met:
+
+No package 'libcrypto++' found
+[...]
+$> sudo apt-get install libcrypto++9 libcrypto++9-dbg libcrypto++-dev
+$> ./configure --disable-integration-tests --enable-silent-rules
+[...]
+configure: error: Package requirements (zlib >= 1.2.3.4) were not met:
+
+No package 'zlib' found
+[...]
+$> sudo apt-get install zlib1g-dbg zlib1g-dev
+$> ./configure --disable-integration-tests --enable-silent-rules
+[...]
+configure: error: Package requirements (zlib >= 1.2.3.4) were not met:
+
+No package 'zlib' found
+[...]
+$> sudo find /usr -name zlib.pc
+/usr/lib/i386-linux-gnu/pkgconfig/zlib.pc
+$> echo $PKG_CONFIG_PATH
+
+$> export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
+$> ./configure --disable-integration-tests --enable-silent-rules
+$> make
+
+
+compiling obfsproxy under Ubuntu 10.04 (DETERlab)
+=================================================
+
+create local disk space:
+
+$> sudo /usr/local/etc/emulab/mkextrafs.pl /mnt
+
+copy source code there to compile:
+
+$> sudo mkdir /mnt/local/alice
+$> sudo chown linda:SAF-DEFIANCE /mnt/local/alice
+$> cd /mnt/local/alice
+$> tar -xzvf ~/src/stegotorus.tar.gz
+etc.
