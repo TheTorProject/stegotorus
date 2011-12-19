@@ -1,4 +1,4 @@
-The Twobfuscator
+        obfs2 (The Twobfuscator)
 
 0. Protocol overview
 
@@ -17,9 +17,9 @@ The Twobfuscator
 1. Primitives, notation, and constants.
 
     H(x) is SHA256 of x.
-    H^n(x) is H(x) called iteratively n times. 
+    H^n(x) is H(x) called iteratively n times.
 
-    E_K(s) is the AES-CTR-128 encryption of s using K as key.
+    E(K,s) is the AES-CTR-128 encryption of s using K as key.
 
     x | y is the concatenation of x and y.
     UINT32(n) is the 4 byte value of n in big-endian (network) order.
@@ -34,8 +34,8 @@ The Twobfuscator
     MAX_PADDING      is  8192
     HASH_ITERATIONS  is  100000
 
-    KEYLEN is the length of the key used by E_K(s) -- that is, 16.
-    IVLEN is the length of the IV used by E_K(s) -- that is, 16
+    KEYLEN is the length of the key used by E(K,s) -- that is, 16.
+    IVLEN is the length of the IV used by E(K,s) -- that is, 16.
 
     HASHLEN is the length of the output of H() -- that is, 32.
 
@@ -64,18 +64,17 @@ The Twobfuscator
 
    The initiator then sends:
 
-    SEED | INIT_PAD_KEY( UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN) )
+    INIT_SEED | E(INIT_PAD_KEY, UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN))
 
    and the responder replies with:
 
-    SEED | RESP_PAD_KEY( UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN) )
+    RESP_SEED | E(RESP_PAD_KEY, UINT32(MAGIC_VALUE) | UINT32(PADLEN) | WR(PADLEN))
 
    Upon receiving the SEED from the other party, each party derives
    the other party's padding key value as above, and decrypts the next
    8 bytes of the key establishment message.  If the MAGIC_VALUE does
    not match, or the PADLEN value is greater than MAX_PADDING, the
-   party receiving it should wait for a random amount of time (with
-   maximum wait time being 4 seconds) then close the connection.
+   party receiving it should close the connection immediately.
    Otherwise, it should read the remaining PADLEN bytes of padding data
    and discard them.
 
@@ -99,6 +98,6 @@ The Twobfuscator
    Optionally, if the client and server share a secret value SECRET,
    they can replace the MAC function with:
 
-      MAC(s,x) = H^n(s | x | SECRET | s)
+      MAC(s,x) = H^n(s | x | H(SECRET) | s)
 
    where n = HASH_ITERATIONS.
