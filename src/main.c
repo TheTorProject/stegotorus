@@ -33,13 +33,13 @@ void ATTR_NORETURN
 usage(void)
 {
   int i;
-  fputs("Usage: obfsproxy protocol_name [protocol_args] protocol_options "
-        "protocol_name ...\n"
+  fputs("Usage: obfsproxy [obfsproxy_args] protocol_name [protocol_args] "
+        "protocol_options protocol_name ...\n"
         "* Available protocols:\n", stderr);
   /* this is awful. */
   for (i=0;i<n_supported_protocols;i++)
     fprintf(stderr,"[%s] ", supported_protocols[i]->name);
-  fprintf(stderr, "\n* Available arguments:\n"
+  fprintf(stderr, "\n* obfsproxy_args:\n"
           "--log-file=<file> ~ set logfile\n"
           "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
           "--no-log ~ disable logging\n");
