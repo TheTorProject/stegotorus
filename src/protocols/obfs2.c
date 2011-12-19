@@ -109,17 +109,17 @@ obfs2_config_create(int n_options, const char *const *options)
 
   obfs2_config_free(&cfg->super);
   log_warn("You failed at creating a correct obfs2 line.\n"
-         "obfs2 syntax:\n"
-         "\tobfs2 [obfs2_args] obfs2_opts\n"
-         "\t'obfs2_opts':\n"
-         "\t\tmode ~ server|client|socks\n"
-         "\t\tlisten address ~ host:port\n"
-         "\t'obfs2_args':\n"
-         "\t\tDestination Address ~ --dest=host:port\n"
-         "\t\tShared Secret ~ --shared-secret=<secret>\n"
-         "\tExample:\n"
-         "\tobfsproxy --dest=127.0.0.1:666 --shared-secret=himitsu "
-         "\tobfs2 server 127.0.0.1:1026");
+           "obfs2 syntax:\n"
+           "\tobfs2 [obfs2_args] obfs2_opts\n"
+           "\t'obfs2_opts':\n"
+           "\t\tmode ~ server|client|socks\n"
+           "\t\tlisten address ~ host:port\n"
+           "\t'obfs2_args':\n"
+           "\t\tDestination Address ~ --dest=host:port\n"
+           "\t\tShared Secret ~ --shared-secret=<secret>\n"
+           "\tExample:\n"
+           "\tobfsproxy obfs2 --dest=127.0.0.1:666 --shared-secret=himitsu "
+           "server 127.0.0.1:1026");
   return NULL;
 }
 
@@ -198,7 +198,7 @@ parse_and_set_options(int n_options, const char *const *options,
 
         got_ss=1;
       } else {
-        log_warn("obfs2: Unknown argument.");
+        log_warn("obfs2: Unknown argument '%s'.", *options);
         return -1;
       }
       options++;
