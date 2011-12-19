@@ -1,7 +1,5 @@
 #!/bin/bash
 
-ODIR=~/src/DEFIANCE/stegotorus
-
 ################################################################################
 # helper functions:
 
@@ -13,8 +11,7 @@ cat << EOF
 
 usage: $0 <OPTIONS> [server|client] [install-dir]
 
-Start obfsproxy server or client with given options. If the optional install-dir
-is given, override the value set in the script.
+Start StegoTorus server or client from given installation directory with given options.
 
 OPTIONS:
    -h             Show this message
@@ -90,31 +87,32 @@ case $TYPE in
 esac
 
 # check optional install location given as an argument
-if [ $# -gt 1 ]; then
-    if [[ ! -d $2 ]]; then
-	usage "argument $2 is not a directory"; exit 1
-    fi
-    if [[ ! -x $2/obfsproxy ]]; then
-	usage "directory $2 does not contain executable of 'obfsproxy'"; exit 1
-    fi
-    ODIR=$2
+if [ $# -lt 2 ]; then
+    usage "need stegotorus installation directory as argument"; exit 1
+fi
+ODIR=$2
+if [[ ! -d $ODIR ]]; then
+    usage "$ODIR is not a directory"; exit 1
+fi
+if [[ ! -x $ODIR/stegotorus ]]; then
+    usage "directory $ODIR does not contain executable of 'stegotorus'"; exit 1
 fi
 
 ################################################################################
-# start obfsproxy
+# start stegotorus
 
-echo "Using obfsproxy in \"$ODIR\""
+echo "Using stegotorus in \"$ODIR\""
 cd $ODIR
 export EVENT_NOKQUEUE=yes
 case $TYPE in
     server)
-	./obfsproxy --log-min-severity=$LOG chop server $BRIDGE_IP:$BRIDGE_PORT $IP:$PORT
+	./stegotorus --log-min-severity=$LOG chop server $BRIDGE_IP:$BRIDGE_PORT $IP:$PORT
 	;;
     client)
 	IPS=""
 	for (( c=1; c<=$N; c++)) ; do 
 	    IPS="${IPS}${IP}:${PORT} http " ;
 	done
-	./obfsproxy --log-min-severity=$LOG chop socks 127.0.0.1:1080 $IPS
+	./stegotorus --log-min-severity=$LOG chop socks 127.0.0.1:1080 $IPS
 	;;
 esac
