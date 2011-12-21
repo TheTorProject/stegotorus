@@ -730,7 +730,7 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
     c = 0;
 
 
-    while (strncmp((char*) p, "\r\n", 2) != 0 && (cookie_mode != 0 || p[0] != '.')) {
+    while (strncmp((char*) p, "\r\n", 2) != 0 && (cookie_mode != 0 || p[0] != '.') && sofar < MAX_COOKIE_SIZE) {
       if (!secondhalf)
         c = 0;
       if ('0' <= *p && *p <= '9')
@@ -749,6 +749,12 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
       }
       secondhalf = !secondhalf;
       p++;
+    }
+
+
+    if (sofar >= MAX_COOKIE_SIZE) {
+       fprintf(stderr, "cookie buffer overflow\n"); 
+       exit(-1);
     }
 
     outbuf[sofar] = 0;
