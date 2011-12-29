@@ -13,51 +13,69 @@
    and is documented in the 'doc/protocol-spec.txt' file in the obfsproxy
    distribution.
 
-1. Adversary capabilities and goals
+1. Adversary capabilities and non-capabilities
+
+   We assume a censor with limited per-connection resources.
 
    The adversary controls the infrastructure of the network within and
    at the edges of her jurisdiction, and she can potentially monitor,
    block, alter, and inject trafﬁc anywhere within this region.
 
-   The censor also holds a blacklist of network protocols, which she is
-   interested in blocking.
+   However, the adversary's computational resources are limited.
+   Specifically, the adversary does not have the resources in her
+   censorship infrastructure to store very much long-term information
+   about any given IP or connection.
 
-2. Adversary attacks:
+   The adversary also holds a blacklist of network protocols, which she
+   is interested in blocking. We assume that the adversary does not have
+   a complete list of specific IPs running that protocol, though
+   preventing this is out-of-scope.
 
-   The censor passively monitors traffic and looks for content
-   signatures, in an attempt to distinguish network protocols. Upon
-   detecting a blacklisted protocol, the censor blocks the connection.
+2. The adversary's goals
+
+   The censor wants to ban particular encrypted protocols or
+   applications, and is willing to tolerate some collateral damage, but
+   is not willing to ban all encrypted traffic entirely.
 
 3. Goals of obfs2
+
+   Currently, most attackers in the category described above implement
+   their censorship by one or more firewalls that looking for protocol
+   signatures and block protocols matching those signatures. These
+   signatures are typically in the form of static strings to be matched
+   or regular expressions to be evaluated, over a packet or TCP flow.
 
    obfs2 attempts to counter the above attack by removing content
    signatures from network traffic. obfs2 encrypts the traffic stream
    with a stream cipher, which results in the traffic looking uniformly
    random.
 
-4. Discussion
+4. Non-goals of obfs2
 
-4.1. obfs2 shortcomings
+   obfs2 was designed as a proof-of-concept for Tor's pluggable
+   transport system: it is simple, useable and easily implementable. It
+   does _not_ try to protect against more sophisticated adversaries.
 
-   obfs2 was designed as a pluggable transports proof-of-concept: it is
-   simple, useable and easily implementable. It does _not_ try to protect
-   against sophisticated adversaries:
-
-   obfs2 does not try to protect against Tor protocol fingerprints, like
-   the packet size or packet timing.
+   obfs2 does not try to protect against non-content protocol
+   fingerprints, like the packet size or timing.
 
    obfs2 does not try to protect against attackers capable of measuring
    traffic entropy.
 
-   obfs2 does not try to protect against Deep Packet Inspection machines
-   that expect the obfs2 protocol. Such machines can trivially retrieve
+   obfs2 (in its default configuration) does not try to protect against
+   Deep Packet Inspection machines that expect the obfs2 protocol and
+   have the resources to run it. Such machines can trivially retrieve
    the decryption key off the traffic stream and use it to decrypt obfs2
    and detect the Tor protocol.
+
+   obfs2 assumes that the underlying protocol provides (or does not
+   need!) integrity, confidentiality, and authentication; it provides
+   none of those on its own.
 
    In other words, obfs2 does not try to protect against anything other
    than fingerprintable TLS content patterns.
 
    That said, obfs2 is not useless. It protects against many real-life
    Tor traffic detection methods currentl deployed, since most of them
-   use static SSL handshake strings as signatures.
+   currently use static SSL handshake strings as signatures.
 
