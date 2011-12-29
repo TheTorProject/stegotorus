@@ -1,26 +1,42 @@
-                           Obfsproxy Architecture
+                         Obfsproxy Architecture
+
+                           George Kadianakis
+                             Nick Mathewson
 
 
 1. Top Level View
 
    obfsproxy is a pluggable transports proxy written in C. It's
-   compliant to the pluggable transports specification [0], and its
+   compliant to the Tor pluggable transports specification [0], and its
    modular architecture allows it to support multiple pluggable
    transports.
 
-   # It supports two modes of operation, the 'external proxy' mode and
-   # the 'managed proxy' mode. When used as an 'external proxy', the
-   # user configures obfsproxy using the command-line. When used as a
-   # 'managed proxy', obfsproxy can be configured by another application
-   # using the managed proxy configuration protocol defined in the
-   # pluggable transports specification [0].
+   It supports two modes of operation, the 'external proxy' mode and
+   the 'managed proxy' mode. When used as an 'external proxy', the
+   user configures obfsproxy using the command-line. When used as a
+   'managed proxy', obfsproxy can be configured by another application
+   using the managed proxy configuration protocol defined in the
+   pluggable transports specification [0].
+
+   While designed for use with Tor, it should be suitable for
+   integration with other protocols as well.
+
+   Note also that although obfsproxy is designed to support multiple
+   protocols and obfuscation mechanisms, it is NOT required (or
+   intended) that every pluggable transport for Tor be implemented as a
+   module for obfsproxy.  The point of pluggable transports [0] after
+   all, is that not every obfuscation mechanism should or can be part of
+   the same program.
 
 2. Modularity
 
-   obfsproxy uses callbacks and object-oriented programming principles
-   to achieve modularity. This way, a developer who is interested in
-   writing a pluggable transport doesn't need to know obfsproxy's code
-   inside out.
+   obfsproxy tries to isolate its modules using callbacks and
+   vtable-based object-oriented programming principles.  This way, a
+   developer who is interested in writing a pluggable transport doesn't
+   need to know obfsproxy's code inside out.
+
+   obfsproxy outsources its networking and cryptography functionality to
+   Libevent 2.x and OpenSSL respectively.
 
 2.1. Callbacks
 
@@ -47,6 +63,11 @@
    Developers that make good use of obfsproxy's callbacks and OOP,
    should be able to implement most pluggable transports.
 
+   The implementation uses the standard OOP-in-C trick of having a
+   subclass's type be a structure that includes the parent class's
+   structure as its first member, and having polymorphic functions be
+   implemented as an explicit vtable structure of function pointers.
+
 3. Codebase tour
 
    This section does a short introduction into some areas of obfsproxy's
@@ -65,22 +86,22 @@
    and 'downstream' connections. The upstream connection of a circuit
    communicates in cleartext with the higher-level program that wishes
    to make use of our obfuscation service. The downstream connection
-   commmunicates in an obfuscated fashion with the remote peer that the
+   communicates in an obfuscated fashion with the remote peer that the
    higher-level client wishes to contact.
 
    The diagram below might help demonstrate the relationship between
    connections and circuits:
 
-                                      downstream
+                                   downstream
 
-         'circuit_t C'        'conn_t CD'      'conn_t SD'        'circuit_t S'
-                        +-----------+             +-----------+
- upstream           ----|obfsproxy c|-------------|obfsproxy s|----             upstream
-                    |   +-----------+             +-----------+   |
-         'conn_t CU'|                                             |'conn_t SU'
-              +------------+                              +--------------+
-              | Tor Client |                              |  Tor Bridge  |
-              +------------+                              +--------------+
+       'circuit_t C'        'conn_t CD'      'conn_t SD'      'circuit_t S'
+                     +-----------+          +-----------+
+     upstream    ----|obfsproxy c|----------|obfsproxy s|----    upstream
+                 |   +-----------+    ^      +-----------+   |
+      'conn_t CU'|                    |                     |'conn_t SU'
+           +------------+           Sent over       +--------------+
+           | Tor Client |           the net         |  Tor Bridge  |
+           +------------+                           +--------------+
 
    In the above diagram, "obfsproxy c" is the client-side obfsproxy, and
    "obfsproxy s" is the server-side obfsproxy. "conn_t CU" is the
