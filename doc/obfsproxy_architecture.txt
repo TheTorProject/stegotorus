@@ -1,73 +1,75 @@
-architecture
+                           Obfsproxy Architecture
 
-  : Top Level View
 
-obfsproxy is a pluggable transports proxy written in C. It's compliant
-to the pluggable transports specification [0], and its modular
-architecture allows it to support multiple pluggable transports.
+1. Top Level View
 
-# It supports two modes of operation, the 'external proxy' mode and the
-# 'managed proxy' mode. When used as an 'external proxy', the user
-# configures obfsproxy using the command-line. When used as a 'managed
-# proxy', obfsproxy can be configured by another application using the
-# managed proxy configuration protocol defined in the pluggable
-# transports specification [0].
+   obfsproxy is a pluggable transports proxy written in C. It's
+   compliant to the pluggable transports specification [0], and its
+   modular architecture allows it to support multiple pluggable
+   transports.
 
-  : Modularity
+   # It supports two modes of operation, the 'external proxy' mode and
+   # the 'managed proxy' mode. When used as an 'external proxy', the
+   # user configures obfsproxy using the command-line. When used as a
+   # 'managed proxy', obfsproxy can be configured by another application
+   # using the managed proxy configuration protocol defined in the
+   # pluggable transports specification [0].
 
-obfsproxy uses callbacks and object-oriented programming principles to
-achieve modularity. This way, a developer who is interested in writing
-a pluggable transport doesn't need to know obfsproxy's code inside
-out.
+2. Modularity
 
-- Callbacks
+   obfsproxy uses callbacks and object-oriented programming principles
+   to achieve modularity. This way, a developer who is interested in
+   writing a pluggable transport doesn't need to know obfsproxy's code
+   inside out.
 
-  obfsproxy provides a set of callbacks that the plugin writer can use
-  to execute his transport's code, in an event-driven programming
-  fashion.
+2.1. Callbacks
 
-  As a basic example, there is a callback triggering when obfsproxy
-  receives network data. The plugin writer uses that callback to
-  retrieve and process data according to his pluggable transport
-  protocol.
+   obfsproxy provides a set of callbacks that the plugin writer can use
+   to execute his transport's code, in an event-driven programming
+   fashion.
 
-- OOP
+   As a basic example, there is a callback triggering when obfsproxy
+   receives network data. The plugin writer uses that callback to
+   retrieve and process data according to his pluggable transport
+   protocol.
 
-  obfsproxy provides a set of base classes, representing networking
-  concepts, that the developer can inherit and populate with his
-  transport's data.
+2.2. OOP
 
-  As an example, the 'conn_t' structure represents a bidirectional
-  network connection between two peers. The pluggable transport writer
-  can inherit 'conn_t' and save his transport's state for that
-  connection to the new struct.
+   obfsproxy provides a set of base classes, representing networking
+   concepts, that the developer can inherit and populate with his
+   transport's data.
 
-Developers that make good use of obfsproxy's callbacks and OOP, should
-be able to implement most pluggable transports.
+   As an example, the 'conn_t' structure represents a bidirectional
+   network connection between two peers. The pluggable transport writer
+   can inherit 'conn_t' and save his transport's state for that
+   connection to the new struct.
 
-   : Codebase tour
+   Developers that make good use of obfsproxy's callbacks and OOP,
+   should be able to implement most pluggable transports.
 
-This section does a short introduction into some areas of obfsproxy's
-code.
+3. Codebase tour
 
-- Networking subsystem
+   This section does a short introduction into some areas of obfsproxy's
+   code.
 
-This section explains the networking concepts and terminology of
-obfsproxy. The relevant code can be found in src/network.c.
+3.1. Networking subsystem
 
-A 'connection' is a bidirectional communications channel, usually
-backed by a network socket. For example, the communication channel
-between tor and obfsproxy is a 'connection'.
+   This section explains the networking concepts and terminology of
+   obfsproxy. The relevant code can be found in src/network.c.
 
-A 'circuit' is a pair of connections, referred to as the 'upstream'
-and 'downstream' connections. The upstream connection of a circuit
-communicates in cleartext with the higher-level program that wishes to
-make use of our obfuscation service. The downstream connection
-commmunicates in an obfuscated fashion with the remote peer that the
-higher-level client wishes to contact.
+   A 'connection' is a bidirectional communications channel, usually
+   backed by a network socket. For example, the communication channel
+   between tor and obfsproxy is a 'connection'.
 
-The diagram below might help demonstrate the relationship between
-connections and circuits:
+   A 'circuit' is a pair of connections, referred to as the 'upstream'
+   and 'downstream' connections. The upstream connection of a circuit
+   communicates in cleartext with the higher-level program that wishes
+   to make use of our obfuscation service. The downstream connection
+   commmunicates in an obfuscated fashion with the remote peer that the
+   higher-level client wishes to contact.
+
+   The diagram below might help demonstrate the relationship between
+   connections and circuits:
 
                                       downstream
 
@@ -80,107 +82,108 @@ connections and circuits:
               | Tor Client |                              |  Tor Bridge  |
               +------------+                              +--------------+
 
-In the above diagram, "obfsproxy c" is the client-side obfsproxy, and
-"obfsproxy s" is the server-side obfsproxy. "conn_t CU" is the
-Client's Upstream connection, the communication channel between tor
-and obfsproxy.  "conn_t CD" is the Client's Downstream connection, the
-communication channel between obfsproxy and the remote peer. These two
-connections form "circuit_t C".
+   In the above diagram, "obfsproxy c" is the client-side obfsproxy, and
+   "obfsproxy s" is the server-side obfsproxy. "conn_t CU" is the
+   Client's Upstream connection, the communication channel between tor
+   and obfsproxy.  "conn_t CD" is the Client's Downstream connection,
+   the communication channel between obfsproxy and the remote
+   peer. These two connections form "circuit_t C".
 
-A 'listener' is a listening socket bound to a particular obfuscation
-protocol. Connecting to a listener creates one connection of a
-circuit, and causes this program to initiate the other connection
-(possibly after receiving in-band instructions about where to connect
-to). A listener is said to be a 'client' listener if connecting to it
-creates the upstream connection, and a 'server' listener if connecting
-to it creates the downstream connection.
+   A 'listener' is a listening socket bound to a particular obfuscation
+   protocol. Connecting to a listener creates one connection of a
+   circuit, and causes this program to initiate the other connection
+   (possibly after receiving in-band instructions about where to connect
+   to). A listener is said to be a 'client' listener if connecting to it
+   creates the upstream connection, and a 'server' listener if
+   connecting to it creates the downstream connection.
 
-There are two kinds of client listeners: a 'simple' client listener
-always connects to the same remote peer every time it needs to
-initiate a downstream connection; a 'socks' client listener can be
-told to connect to an arbitrary remote peer using the SOCKS protocol
-(version 4 or 5).
+   There are two kinds of client listeners: a 'simple' client listener
+   always connects to the same remote peer every time it needs to
+   initiate a downstream connection; a 'socks' client listener can be
+   told to connect to an arbitrary remote peer using the SOCKS protocol
+   (version 4 or 5).
 
-- Protocol subsystem
+3.2. Protocol subsystem
 
-Pluggable transports are called 'protocols' in obfsproxy
-code. Protocol-specific code can be found in src/protocols/.
+   Pluggable transports are called 'protocols' in obfsproxy
+   code. Protocol-specific code can be found in src/protocols/.
 
-src/protocol.c acts as an intermediary between generic obfsproxy code
-and protocol-specific code. It wraps protocol-specific functions for
-use by the rest of obfsproxy, and provides various protocol-related
-functions.
+   src/protocol.c acts as an intermediary between generic obfsproxy code
+   and protocol-specific code. It wraps protocol-specific functions for
+   use by the rest of obfsproxy, and provides various protocol-related
+   functions.
 
-All supported protocols are registered to obfsproxy by adding them to
-the supported_protocols[] array in src/protocol.c.
+   All supported protocols are registered to obfsproxy by adding them to
+   the supported_protocols[] array in src/protocol.c.
 
-- Cryptography subsystem
+3.3. Cryptography subsystem
 
-The primary goal of pluggable transports is to obfuscate network
-traffic. This means that most transports will need to use
-cryptography.
+   The primary goal of pluggable transports is to obfuscate network
+   traffic. This means that most transports will need to use
+   cryptography.
 
-obfsproxy provides a cryptography subsystem for transports that need
-it; the code can be found in src/crypt.c. It supports various
-cryptographic operations, like hashing, symmetric encryption and
-random-number generation.
+   obfsproxy provides a cryptography subsystem for transports that need
+   it; the code can be found in src/crypt.c. It supports various
+   cryptographic operations, like hashing, symmetric encryption and
+   random-number generation.
 
-   : Extending obfsproxy
+4. Extending obfsproxy
 
-- Adding pluggable transports
+4.1. Adding pluggable transports
 
-Ideally, this is the only thing you will ever want to add to
-obfsproxy: your pluggable transport. A low-level guide on how to add
-your own pluggable transport can be found in doc/HACKING. This is a
-high level overview:
+   Ideally, this is the only thing you will ever want to add to
+   obfsproxy: your pluggable transport. A low-level guide on how to add
+   your own pluggable transport can be found in doc/HACKING. This is a
+   high level overview:
 
-  * Write your pluggable transport, by writing code for the callback
-  events in protocol.c:protocol_vtable and by subclassing the base
-  classes of network.h and protocol.h. Look at doc/HACKING and at the
-  code of existing transports in src/protocols/.
+     * Write your pluggable transport, by writing code for the callback
+       events in protocol.c:protocol_vtable and by subclassing the base
+       classes of network.h and protocol.h. Look at doc/HACKING and at
+       the code of existing transports in src/protocols/.
 
-  * Register your transport to the protocol subsystem by adding it to
-  the supported_protocols list in src/protocol.c.
+    * Register your transport to the protocol subsystem by adding it to
+      the supported_protocols list in src/protocol.c.
 
-  * Add all new files to the Makefile.
+    * Add all new files to the Makefile.
 
-- Extending callbacks
+4.2. Extending callbacks
 
-obfsproxy's modularity is based on callbacks, and even though the
-defaults should satisfy the needs of many plugin writers, it's
-possible that some plugin writers will need to extend obfsproxy to
-write their own callbacks.
+   obfsproxy's modularity is based on callbacks, and even though the
+   defaults should satisfy the needs of many plugin writers, it's
+   possible that some plugin writers will need to extend obfsproxy to
+   write their own callbacks.
 
-As an example, think of a plugin that needs to send fake data in the
-absense of network activity: the current obfsproxy doesn't have a
-callback for this scenario. The plugin writer would have to dive into
-the networking subsystem of obfsproxy, write the callback triggering
-code, register the new callback and finally write the code that
-executes when the callback triggers.
+   As an example, think of a plugin that needs to send fake data in the
+   absence of network activity: the current obfsproxy doesn't have a
+   callback for this scenario. The plugin writer would have to dive into
+   the networking subsystem of obfsproxy, write the callback triggering
+   code, register the new callback and finally write the code that
+   executes when the callback triggers.
 
-Depending on the scenario's complexity this might be a difficult task,
-but there is not much that obfsproxy can do, since it's not possible
-to have callbacks for any potentially useful scenario.
+   Depending on the scenario's complexity this might be a difficult
+   task, but there is not much that obfsproxy can do, since it's not
+   possible to have callbacks for any potentially useful scenario.
 
-- Extending crypto
+4.3. Extending crypto
 
-The current cryptography subsystem is made to order for the current
-transports, and might not be sufficient for all transports. If a
-transport needs more crypto, the plugin writer can add his own
-cryptography functions to src/crypt.c.
+   The current cryptography subsystem is made to order for the current
+   transports, and might not be sufficient for all transports. If a
+   transport needs more crypto, the plugin writer can add his own
+   cryptography functions to src/crypt.c.
 
-- Extending architecture logic
+4.4. Extending architecture logic
 
-obfsproxy tries to keep obfsproxy code and protocol-specific code as
-disconnected as possible. This means that protocol-specific code
-should know as little as possible about generic code internals, and
-generic code should know nothing about protocol-specific code except
-from what's exported through the protocol subsystem (src/protocol.[ch]).
+   obfsproxy tries to keep obfsproxy code and protocol-specific code as
+   disconnected as possible. This means that protocol-specific code
+   should know as little as possible about generic code internals, and
+   generic code should know nothing about protocol-specific code except
+   from what's exported through the protocol subsystem
+   (src/protocol.[ch]).
 
-Plugin writers should not use their protocol-specific functions in
-generic code, and should find a way to complete their task in the most
-protocol-agnostic way possible. This helps keep both parts of the code
-clean.
+   Plugin writers should not use their protocol-specific functions in
+   generic code, and should find a way to complete their task in the
+   most protocol-agnostic way possible. This helps keep both parts of
+   the code clean.
 
 [0]:
 https://gitweb.torproject.org/torspec.git/blob/HEAD:/proposals/180-pluggable-transport.txt
