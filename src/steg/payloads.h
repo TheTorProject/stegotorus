@@ -14,8 +14,6 @@
    server_data, client data, protocol data
 */
 
-
-
 #define RECV_GOOD 0
 #define RECV_INCOMPLETE 0
 #define RECV_BAD -1
@@ -35,7 +33,7 @@
 #define JS_DELIMITER '?'
 // a JavaScript delimiter is used to signal the end of encoding
 // to facilitate the decoding process
-#define JS_DELIMITER_REPLACEMENT '.'
+#define JS_DELIMITER_REPLACEMENT '!'
 // JS_DELIMITER that exists in the JavaScript before the end of
 // data encoding will be replaced by JS_DELIMITER_REPLACEMENT
 #define JS_DELIMITER_SIZE 1
@@ -121,6 +119,7 @@ typedef struct service_state {
 
 
 #define HTTP_MSG_BUF_SIZE 100000
+
 void load_payloads(const char* fname);
 unsigned int find_client_payload(char* buf, int len, int type);
 unsigned int find_server_payload(char** buf, int len, int type, int contentType);

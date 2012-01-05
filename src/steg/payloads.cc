@@ -651,7 +651,7 @@ int skipJSPattern(char *cp, int len) {
       if (cp[j] != word[j])
 	goto next_word;
     }
-    if (!isalnum(cp[j]))
+    if (!isalnum(cp[j]) && cp[j] != JS_DELIMITER && cp[j] != JS_DELIMITER_REPLACEMENT)
       return strlen(word)+1;
       
   next_word:
