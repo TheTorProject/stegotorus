@@ -72,7 +72,6 @@ dummy::detect(conn_t *conn)
   struct config_t* cfg = conn->cfg;
   struct evutil_addrinfo *addrs = cfg->get_listen_addrs(0);
 
-  fprintf(stderr, "in detect\n");
   
   if (!addrs) {
     log_warn("no listen addrs\n");
@@ -107,7 +106,7 @@ dummy::transmit(struct evbuffer *source, conn_t *conn)
 {
   struct evbuffer *dest = conn_get_outbound(conn);
 
-  fprintf(stderr, "transmitting %d\n", (int) evbuffer_get_length(source));
+ //  fprintf(stderr, "transmitting %d\n", (int) evbuffer_get_length(source));
 
   if (evbuffer_add_buffer(dest, source)) {
     fprintf(stderr, "failed to transfer buffer\n");
@@ -127,7 +126,7 @@ dummy::receive(conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
 
-  fprintf(stderr, "receiving %d\n", (int) evbuffer_get_length(source));
+ // fprintf(stderr, "receiving %d\n", (int) evbuffer_get_length(source));
 
   if (evbuffer_add_buffer(dest, source)) {
     fprintf(stderr, "failed to transfer buffer\n");
