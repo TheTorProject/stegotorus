@@ -69,7 +69,7 @@ done
 
 # test if $LOG is valid
 case $LOG in
-    debug|warn|error)
+    debug|warn|error|info)
 	;;
     *) 
 	usage "Unknown log level given: $LOG"; exit 1
