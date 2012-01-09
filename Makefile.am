@@ -27,7 +27,8 @@ STEGANOGRAPHERS = \
 	src/steg/payloads.cc \
 	src/steg/pdfSteg.cc \
 	src/steg/swfSteg.cc \
-	src/steg/zpack.cc
+	src/steg/zpack.cc \
+	src/steg/dummy.cc
 
 libstegotorus_a_SOURCES = \
 	src/connections.cc \
