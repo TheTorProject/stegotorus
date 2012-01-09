@@ -1,6 +1,15 @@
 #!/bin/bash
 
 ################################################################################
+# variables with default values
+declare IP=127.0.0.1
+declare -i PORT=8080
+declare -i N=1
+declare LOG=info
+declare BRIDGE_IP=87.73.82.145
+declare -i BRIDGE_PORT=8080
+
+################################################################################
 # helper functions:
 
 usage () {
@@ -15,13 +24,13 @@ Start StegoTorus server or client from given installation directory with given o
 
 OPTIONS:
    -h             Show this message
-   -i <addr>      IP address (default: 127.0.0.1)
-   -p <n>         port number (default: 8080)
-   -l <severity>  Log severity: warn, error, debug (default: error)
+   -i <addr>      IP address (default: ${IP})
+   -p <n>         port number (default: ${PORT})
+   -l <severity>  Log severity: warn, error, info, debug (default: ${LOG})
    -b <host>      Host name (or IP address) of Tor Bridge
                   with port number attached via ':' or omitted
-                  (default: 87.73.82.145:8080)
-   -n <n>         Multiply the number of IP addresses on the client
+                  (default: ${BRIDGE_IP}:${BRIDGE_PORT})
+   -n <n>         Multiply the number of IP addresses on the client (default: ${N})
 EOF
 }
 
@@ -29,12 +38,6 @@ EOF
 # parse command line:
 
 # default values:
-IP=127.0.0.1
-PORT=8080
-N=1
-LOG=error
-BRIDGE_IP=87.73.82.145
-BRIDGE_PORT=8080
 while getopts "hi:p:l:b:n:" OPTION
 do
     case $OPTION in
