@@ -44,6 +44,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace {
 struct dummy : steg_t
 {
+  bool have_transmitted : 1;
+  bool have_received : 1;
   STEG_DECLARE_METHODS(dummy);
 };
 }
@@ -56,6 +58,7 @@ STEG_DEFINE_MODULE(dummy,
 
 
 dummy::dummy(bool is_clientside)
+  : have_transmitted(false), have_received(false)
 {
   this->is_clientside = is_clientside;
 }
@@ -69,21 +72,16 @@ dummy::~dummy()
 bool
 dummy::detect(conn_t *conn)
 {
-  struct config_t* cfg = conn->cfg;
-  struct evutil_addrinfo *addrs = cfg->get_listen_addrs(0);
-
-  
+  struct evutil_addrinfo *addrs = conn->cfg->get_listen_addrs(0);
   if (!addrs) {
-    log_warn("no listen addrs\n");
+    log_debug("no listen addrs\n");
     return 0;
   }
 
   struct sockaddr_in* sin = (struct sockaddr_in*) addrs->ai_addr;
 
-  if (sin->sin_port == htons(DUMMY_PORT)) {
-
+  if (sin->sin_port == htons(DUMMY_PORT))
     return 1;
-  }
 
   return 0;
 
@@ -92,7 +90,17 @@ dummy::detect(conn_t *conn)
 size_t
 dummy::transmit_room(conn_t *)
 {
-  return 1024;
+
+  if (have_transmitted)
+    return 0;
+
+  if (is_clientside)
+    return SIZE_MAX;
+
+  if (!have_received)
+    return 0;
+
+  return SIZE_MAX;
 }
 
 
@@ -106,12 +114,17 @@ dummy::transmit(struct evbuffer *source, conn_t *conn)
 {
   struct evbuffer *dest = conn_get_outbound(conn);
 
- //  fprintf(stderr, "transmitting %d\n", (int) evbuffer_get_length(source));
+  fprintf(stderr, "transmitting %d\n", (int) evbuffer_get_length(source));;
+
 
   if (evbuffer_add_buffer(dest, source)) {
     fprintf(stderr, "failed to transfer buffer\n");
   }
+
+
   
+  conn_cease_transmission(conn);
+  this->have_transmitted = 1;
   return 0;
 
 }
@@ -126,11 +139,18 @@ dummy::receive(conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
 
- // fprintf(stderr, "receiving %d\n", (int) evbuffer_get_length(source));
+
+  fprintf(stderr, "receiving %d\n", (int) evbuffer_get_length(source));
 
   if (evbuffer_add_buffer(dest, source)) {
     fprintf(stderr, "failed to transfer buffer\n");
   }
 
+ 
+
+
+
+  this->have_received = 1;
+  conn_transmit_soon(conn, 100);
   return 0;
 }
