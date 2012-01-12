@@ -1,5 +1,5 @@
-How to Set up a Tor Client with obfsproxy
-=========================================
+How to Set up a Tor Client with obfsproxy (managed proxy mode)
+==============================================================
 
 [1] You will need:
 

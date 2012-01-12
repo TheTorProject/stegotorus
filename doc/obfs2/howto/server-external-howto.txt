@@ -1,5 +1,5 @@
-How to Set up a Tor Bridge with obfsproxy
-=========================================
+How to Set up a Tor Bridge with obfsproxy (external proxy mode)
+===============================================================
 
 [1] You will need:
 
