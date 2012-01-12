@@ -1,17 +1,11 @@
-This doesn't work yet.
+obfsproxy: a pluggable transports proxy
 
-It requires OpenSSL 0.9.7 or later. (I would require 0.9.8, but that would
-break OSX 10.5.)
+obfsproxy is a pluggable transports proxy written in C. It's compliant
+to the Tor pluggable transports specification, and its modular
+architecture allows it to support multiple pluggable transports.
 
-It requires Libevent 2.0 or later.
+To build obfsproxy from source:
+   ./autogen.sh && ./configure && make
 
-See doc/protocol-spec.txt for the protocol design.  It is based on brl's
-obfuscated openssh protocol.
+See doc/ for more obfsproxy information.
 
-See doc/TODO for open tasks.
-
-This project might get renamed to "twobfuscate", depending.
-
-Happy hacking!
-
-  -- nickm
