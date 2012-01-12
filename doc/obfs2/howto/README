@@ -1,0 +1,7 @@
+If you are wondering which howto guide you should follow:
+
+Generally, the guides named '*-managed-*.txt" are easier to follow,
+and they require a tor version newer than 0.2.3.11.
+
+If you have an older version of tor, you can use the guides named
+"*-external-*.txt".

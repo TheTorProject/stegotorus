@@ -1,0 +1,37 @@
+How to set up Tor Client with obfsproxy
+=======================================
+
+[1] You will need:
+
+* a copy of obfsproxy:
+  git clone git://git.torproject.org/obfsproxy.git
+  Build it with: "./autogen.sh && ./configure && make".
+  You will need libevent-2 to build it.
+
+* a copy of Tor that supports the ClientTransportPlugin option.
+  Any Tor version newer than 0.2.3.2 will do the trick.
+
+[2] Set up obfsproxy:
+
+This command will setup an obfsproxy client speaking the obfs2
+protocol:
+
+./obfsproxy obfs2 socks 127.0.0.1:1050
+
+[3] Set up tor:
+
+You should put the following lines in your torrc file:
+---
+SocksPort 5000
+UseBridges 1
+Bridge obfs2 <bridge address>:1051 # This is provided by the bridge operator.
+ClientTransportPlugin obfs2 socks5 127.0.0.1:1050
+---
+substituting <bridge address> with the IP address of your bridge
+relay.
+
+[4] Done!
+
+Now to test it, launch Firefox and set it up to use a Socks server on
+127.0.0.1:5000. Now browse the web.
+

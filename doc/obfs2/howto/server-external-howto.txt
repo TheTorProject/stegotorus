@@ -1,0 +1,42 @@
+How to Set up a Tor Bridge with obfsproxy
+=========================================
+
+[1] You will need:
+
+* a copy of obfsproxy:
+  git clone git://git.torproject.org/obfsproxy.git
+  Build it with: "./autogen.sh && ./configure && make".
+  You will need libevent-2 to build it.
+
+* a copy of Tor that can be configured as a bridge.
+
+[2] Set up obfsproxy:
+
+This command will setup an obfsproxy server speaking the obfs2
+protocol:
+
+./obfsproxy obfs2 --dest=127.0.0.1:5001 server 0.0.0.0:1051
+
+Be sure to pass the value of ORPort of your bridge relay to the --dest
+argument (see next section). In this example, we assumed it was '5001'.
+
+[3] Set up tor:
+
+You should put the following lines in your torrc file:
+---
+ORPort 5001
+BridgeRelay 1
+ExitPolicy reject *:*
+---
+
+[4] Done!
+
+Now, instruct censored people to connect to your IP on port 1051. So,
+for example, if your bridge's address is 192.0.2.42, bridge users
+should connect to 192.0.2.42:1051.
+
+During the above process, you can use any port numbers you want, but
+make sure to adjust the torrc and obfsproxy commands accordingly.
+
+Finally, don't forget that you might also need to set up port
+forwarding.
