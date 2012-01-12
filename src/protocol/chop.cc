@@ -94,6 +94,7 @@ namespace {
     uint64_t circuit_id;
     uint32_t send_offset;
     uint32_t recv_offset;
+    uint32_t dead_cycles;
     bool received_syn : 1;
     bool received_fin : 1;
     bool sent_syn : 1;
@@ -101,6 +102,19 @@ namespace {
     bool upstream_eof : 1;
 
     CIRCUIT_DECLARE_METHODS(chop);
+
+    uint32_t axe_interval() {
+      return rng_range_geom(30 * 60 * 1000,
+                            std::min((1 << dead_cycles) * 1000,
+                                     20 * 60 * 1000))
+        + 5 * 1000;
+    }
+    uint32_t flush_interval() {
+      return rng_range_geom(20 * 60 * 1000,
+                            std::min((1 << dead_cycles) * 500,
+                                     10 * 60 * 1000))
+        + 1000;
+    }
   };
 
   struct chop_config_t : config_t
@@ -252,7 +266,7 @@ chop_pick_connection(chop_circuit_t *ckt, size_t desired, size_t *blocksize)
 	room = 0;
       else
 	room -= CHOP_BLOCK_OVERHD;
-      
+
       if (room > CHOP_MAX_DATA)
         room = CHOP_MAX_DATA;
 
@@ -299,7 +313,6 @@ chop_send_block(conn_t *d,
   chop_header hdr;
   struct evbuffer_iovec v;
   uint8_t *p;
-  struct timeval *exp_time = NULL;
 
   log_assert(evbuffer_get_length(block) == 0);
   log_assert(evbuffer_get_length(source) >= length);
@@ -333,24 +346,16 @@ chop_send_block(conn_t *d,
   if (evbuffer_commit_space(block, &v, 1))
     goto fail;
 
-  /* save the expiration time of the must_transmit_timer in case of failure */
-  if (dest->must_transmit_timer) {
-    exp_time = new struct timeval;
-    if (evtimer_pending(dest->must_transmit_timer, exp_time)) {
-      log_debug("saved must_transmit_timer value in case of failure");
-    } else {
-      delete exp_time;
-      exp_time = NULL;
-    }
-    evtimer_del(dest->must_transmit_timer);
-  }
-
   if (dest->steg->transmit(block, dest))
     goto fail_committed;
 
   if (evbuffer_drain(source, length))
     /* this really should never happen, and we can't recover from it */
     log_abort(dest, "evbuffer_drain failed"); /* does not return */
+
+  /* Cancel the must-transmit timer if it's pending; we have transmitted. */
+  if (dest->must_transmit_timer)
+    evtimer_del(dest->must_transmit_timer);
 
   if (!(flags & CHOP_F_CHAFF))
     ckt->send_offset += length;
@@ -361,9 +366,6 @@ chop_send_block(conn_t *d,
   log_debug(dest, "sent %lu+%u byte block [flags %04hx]",
             (unsigned long)CHOP_WIRE_HDR_LEN, length, flags);
 
-  if (exp_time != NULL)
-    delete exp_time;
-
   return 0;
 
  fail:
@@ -372,17 +374,6 @@ chop_send_block(conn_t *d,
  fail_committed:
   evbuffer_drain(block, evbuffer_get_length(block));
   log_warn(dest, "allocation or buffer copy failed");
-
-  /* restore timer if necessary */
-  if (exp_time != NULL) {
-    if (!evtimer_pending(dest->must_transmit_timer, NULL)) {
-      struct timeval cur_time, timeout;
-      gettimeofday(&cur_time, NULL);
-      timeval_subtract(exp_time, &cur_time, &timeout);
-      evtimer_add(dest->must_transmit_timer, &timeout);
-    }
-    delete exp_time;
-  }
 
   return -1;
 }
@@ -746,12 +737,14 @@ chop_push_to_upstream(circuit_t *c)
   chop_reassembly_elt *ready = ckt->reassembly_queue.next;
   if (!ready->data || ckt->recv_offset != ready->offset) {
     log_debug(c, "no data pushable to upstream yet");
+    ckt->dead_cycles++;
     return 0;
   }
 
   if (!ckt->received_syn) {
     if (!(ready->flags & CHOP_F_SYN)) {
       log_debug(c, "waiting for SYN");
+      ckt->dead_cycles++;
       return 0;
     }
     log_debug(c, "processed SYN");
@@ -765,6 +758,7 @@ chop_push_to_upstream(circuit_t *c)
     return -1;
   }
 
+  ckt->dead_cycles = 0;
   ckt->recv_offset += ready->length;
 
   if (ready->flags & CHOP_F_FIN) {
@@ -1110,7 +1104,7 @@ chop_circuit_t::send()
     if (this->cfg->mode != LSN_SIMPLE_SERVER)
       circuit_reopen_downstreams(this);
     else
-      circuit_arm_axe_timer(this, 5000);
+      circuit_arm_axe_timer(this, this->axe_interval());
     return 0;
   }
 
@@ -1118,9 +1112,11 @@ chop_circuit_t::send()
     /* must-send timer expired and we still have nothing to say; send chaff */
     if (chop_send_chaff(this))
       return -1;
+    this->dead_cycles++;
   } else {
     if (chop_send_blocks(this))
       return -1;
+    this->dead_cycles = 0;
   }
 
   /* If we're at EOF, close all connections (sending first if
@@ -1138,7 +1134,7 @@ chop_circuit_t::send()
     }
   } else {
     if (this->cfg->mode != LSN_SIMPLE_SERVER)
-      circuit_arm_flush_timer(this, 5);
+      circuit_arm_flush_timer(this, this->flush_interval());
   }
   return 0;
 }
@@ -1332,8 +1328,11 @@ void
 chop_conn_t::transmit_soon(unsigned long milliseconds)
 {
   struct timeval tv;
-  tv.tv_sec = 0;
-  tv.tv_usec = milliseconds * 1000;
+
+  log_debug(this, "must transmit within %lu milliseconds", milliseconds);
+
+  tv.tv_sec = milliseconds / 1000;
+  tv.tv_usec = (milliseconds % 1000) * 1000;
 
   if (!this->must_transmit_timer)
     this->must_transmit_timer = evtimer_new(this->cfg->base,

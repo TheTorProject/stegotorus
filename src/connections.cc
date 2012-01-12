@@ -362,9 +362,11 @@ circuit_recv_eof(circuit_t *ckt)
 void
 circuit_arm_flush_timer(circuit_t *ckt, unsigned int milliseconds)
 {
+  log_debug(ckt, "flush within %u milliseconds", milliseconds);
+
   struct timeval tv;
-  tv.tv_sec = 0;
-  tv.tv_usec = milliseconds * 1000;
+  tv.tv_sec = milliseconds / 1000;
+  tv.tv_usec = (milliseconds % 1000) * 1000;
 
   if (!ckt->flush_timer)
     ckt->flush_timer = evtimer_new(ckt->cfg->base, flush_timer_cb, ckt);
@@ -382,9 +384,11 @@ circuit_disarm_flush_timer(circuit_t *ckt)
 void
 circuit_arm_axe_timer(circuit_t *ckt, unsigned int milliseconds)
 {
+  log_debug(ckt, "axe after %u milliseconds", milliseconds);
+
   struct timeval tv;
-  tv.tv_sec = 0;
-  tv.tv_usec = milliseconds * 1000;
+  tv.tv_sec = milliseconds / 1000;
+  tv.tv_usec = (milliseconds % 1000) * 1000;
 
   if (!ckt->axe_timer)
     ckt->axe_timer = evtimer_new(ckt->cfg->base, axe_timer_cb, ckt);

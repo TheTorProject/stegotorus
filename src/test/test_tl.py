@@ -51,7 +51,7 @@ class TimelineTest(object):
            ("chop", "server", "127.0.0.1:5001",
             "127.0.0.1:5010","127.0.0.1:5011",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","x_http","127.0.0.1:5011","x_http",
+            "127.0.0.1:5010","http","127.0.0.1:5011","http",
             ))
 
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
