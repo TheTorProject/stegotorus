@@ -104,16 +104,16 @@ namespace {
     CIRCUIT_DECLARE_METHODS(chop);
 
     uint32_t axe_interval() {
-      return rng_range_geom(30 * 60 * 1000,
-                            std::min((1 << dead_cycles) * 1000,
-                                     20 * 60 * 1000))
-        + 5 * 1000;
+      // 20*60*1000 lies between 2^20 and 2^21.
+      uint32_t shift = std::max(1u, std::min(20u, dead_cycles));
+      uint32_t xv = std::max(1u, std::min(20u * 60 * 1000, 1u << shift));
+      return rng_range_geom(30 * 60 * 1000, xv) + 5 * 1000;
     }
     uint32_t flush_interval() {
-      return rng_range_geom(20 * 60 * 1000,
-                            std::min((1 << dead_cycles) * 500,
-                                     10 * 60 * 1000))
-        + 1000;
+      // 10*60*1000 lies between 2^19 and 2^20.
+      uint32_t shift = std::max(1u, std::min(19u, dead_cycles));
+      uint32_t xv = std::max(1u, std::min(10u * 60 * 1000, 1u << shift));
+      return rng_range_geom(20 * 60 * 1000, xv) + 1000;
     }
   };
 
@@ -1031,9 +1031,9 @@ chop_circuit_t::drop_downstream(conn_t *conn)
       else
         circuit_close(this);
     } else if (this->cfg->mode == LSN_SIMPLE_SERVER) {
-      circuit_arm_axe_timer(this, 5000);
+      circuit_arm_axe_timer(this, this->axe_interval());
     } else {
-      circuit_arm_flush_timer(this, 1);
+      circuit_arm_flush_timer(this, this->flush_interval());
     }
   }
 }

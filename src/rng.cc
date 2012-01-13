@@ -216,7 +216,7 @@ rng_range_geom(unsigned int hi, unsigned int xv)
      ( e^{-hi/xe}, 1 ]. Doing this with arithmetic introduces
      a slight nonuniformity, but we really want to avoid rejection
      sampling here. */
-  double ulo = exp(-hi/xe);
+  double ulo = exp(-double(hi)/xe);
   U = ulo + U * (1-ulo);
 
   /* Inverse transform sampling gives us a value for the exponential
