@@ -403,7 +403,8 @@ conn_free(conn_t *conn)
     if (connections) {
       smartlist_remove(connections, conn);
       log_debug("Closing connection with %s; %d remaining",
-                conn->peername, smartlist_len(connections));
+                conn->peername ? conn->peername : "'unknown'",
+                smartlist_len(connections));
     }
     if (conn->peername)
       free(conn->peername);
