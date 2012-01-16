@@ -38,7 +38,7 @@ enum socks_status_t socks_state_get_status(const socks_state_t *state);
 int socks_state_get_address(const socks_state_t *state,
                             int *af_out,
                             const char **addr_out,
-                            int *port_out);
+                            uint16_t *port_out);
 int socks_state_set_address(socks_state_t *state, const struct sockaddr *sa);
 void socks_send_reply(socks_state_t *state, struct evbuffer *dest, int error);
 void socks5_send_reply(struct evbuffer *reply_dest,
@@ -91,7 +91,7 @@ void socks5_send_reply(struct evbuffer *reply_dest,
 struct parsereq {
   int af; /* Address family */
   char addr[255+1]; /* Address as string */
-  int port;
+  uint16_t port;
 };
 struct socks_state_t {
   enum socks_status_t state;

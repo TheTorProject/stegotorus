@@ -569,7 +569,7 @@ int
 socks_state_get_address(const socks_state_t *state,
                         int *af_out,
                         const char **addr_out,
-                        int *port_out)
+                        uint16_t *port_out)
 {
   if (state->state != ST_HAVE_ADDR && state->state != ST_SENT_REPLY)
     return -1;
@@ -586,9 +586,10 @@ socks_state_get_address(const socks_state_t *state,
 int
 socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
 {
-  int port;
+  uint16_t port;
   if (sa->sa_family == AF_INET) {
     const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
+    obfs_assert((sin->sin_port >= 0) && (sin->sin_port <= 65535));
     port = sin->sin_port;
     if (evutil_inet_ntop(AF_INET, &sin->sin_addr, state->parsereq.addr,
                          sizeof(state->parsereq.addr)) == NULL)

@@ -559,7 +559,7 @@ open_outbound(conn_t *conn, bufferevent_data_cb readcb)
    rather than bufferevent_socket_connect.
 */
 static conn_t *
-open_outbound_hostname(conn_t *conn, int af, const char *addr, int port)
+open_outbound_hostname(conn_t *conn, int af, const char *addr, uint16_t port)
 {
   struct event_base *base = bufferevent_get_base(conn->buffer);
   struct bufferevent *buf;
@@ -604,7 +604,7 @@ open_outbound_hostname(conn_t *conn, int af, const char *addr, int port)
   bufferevent_setcb(buf, downstream_read_cb, NULL, pending_socks_cb, newconn);
   if (bufferevent_socket_connect_hostname(buf, get_evdns_base(),
                                           af, addr, port) < 0) {
-    log_warn("%s: outbound connection to %s:%d failed: %s",
+    log_warn("%s: outbound connection to %s:%u failed: %s",
              conn->peername, addr, port,
              evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     conn_free(newconn);
@@ -638,7 +638,8 @@ socks_read_cb(struct bufferevent *bev, void *arg)
       /* We shouldn't be here. */
       obfs_abort();
     } else if (status == ST_HAVE_ADDR) {
-      int af, r, port;
+      int af, r;
+      uint16_t port;
       const char *addr=NULL;
       r = socks_state_get_address(socks, &af, &addr, &port);
       obfs_assert(r==0);
