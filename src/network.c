@@ -941,7 +941,7 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
   if (what & BEV_EVENT_CONNECTED) {
     struct sockaddr_storage ss;
     struct sockaddr *sa = (struct sockaddr*)&ss;
-    socklen_t slen = sizeof(&ss);
+    socklen_t slen = sizeof(ss);
 
     obfs_assert(!circ->is_flushing);
 
