@@ -516,7 +516,7 @@ open_outbound(conn_t *conn, bufferevent_data_cb readcb)
   }
 
   newconn = proto_conn_create(conn->cfg);
-  if (!conn) {
+  if (!newconn) {
     log_warn("%s: failed to allocate state for outbound connection",
              conn->peername);
     bufferevent_free(buf);
@@ -570,7 +570,7 @@ open_outbound_hostname(conn_t *conn, int af, const char *addr, int port)
     return NULL;
   }
   newconn = proto_conn_create(conn->cfg);
-  if (!conn) {
+  if (!newconn) {
     log_warn("%s: failed to allocate state for outbound connection",
              conn->peername);
     bufferevent_free(buf);
