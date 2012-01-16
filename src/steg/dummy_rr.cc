@@ -38,30 +38,32 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "steg.h"
 #include <event2/buffer.h>
 
-#define DUMMY_PORT 3333
+#define DUMMY_RR_PORT 3334
 
 namespace {
-struct dummy : steg_t
+struct dummy_rr : steg_t
 {
-  STEG_DECLARE_METHODS(dummy);
+  bool can_transmit : 1;
+  STEG_DECLARE_METHODS(dummy_rr);
 };
 }
 
-STEG_DEFINE_MODULE(dummy);
+STEG_DEFINE_MODULE(dummy_rr);
 
-dummy::dummy(bool is_clientside)
+dummy_rr::dummy_rr(bool is_clientside)
 {
   this->is_clientside = is_clientside;
+  this->can_transmit = is_clientside;
 }
 
-dummy::~dummy()
+dummy_rr::~dummy_rr()
 {
 }
 
 /** Determine whether a connection should be processed by this
     steganographer. */
 bool
-dummy::detect(conn_t *conn)
+dummy_rr::detect(conn_t *conn)
 {
   struct evutil_addrinfo *addrs = conn->cfg->get_listen_addrs(0);
   if (!addrs) {
@@ -70,21 +72,23 @@ dummy::detect(conn_t *conn)
   }
 
   struct sockaddr_in* sin = (struct sockaddr_in*) addrs->ai_addr;
-  if (sin->sin_port == htons(DUMMY_PORT))
+  if (sin->sin_port == htons(DUMMY_RR_PORT))
     return 1;
 
   return 0;
 }
 
 size_t
-dummy::transmit_room(conn_t *)
+dummy_rr::transmit_room(conn_t *)
 {
-  return SIZE_MAX;
+  return can_transmit ? SIZE_MAX : 0;
 }
 
 int
-dummy::transmit(struct evbuffer *source, conn_t *conn)
+dummy_rr::transmit(struct evbuffer *source, conn_t *conn)
 {
+  log_assert(can_transmit);
+
   struct evbuffer *dest = conn_get_outbound(conn);
 
   log_debug(conn, "transmitting %lu bytes",
@@ -95,11 +99,18 @@ dummy::transmit(struct evbuffer *source, conn_t *conn)
     return -1;
   }
 
+  can_transmit = false;
+  if (is_clientside) {
+    conn_cease_transmission(conn);
+  } else {
+    conn_close_after_transmit(conn);
+  }
+
   return 0;
 }
 
 int
-dummy::receive(conn_t *conn, struct evbuffer *dest)
+dummy_rr::receive(conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
 
@@ -109,6 +120,13 @@ dummy::receive(conn_t *conn, struct evbuffer *dest)
   if (evbuffer_add_buffer(dest, source)) {
     log_warn(conn, "failed to transfer buffer");
     return -1;
+  }
+
+  if (is_clientside) {
+    conn_expect_close(conn);
+  } else {
+    can_transmit = true;
+    conn_transmit_soon(conn, 100);
   }
 
   return 0;

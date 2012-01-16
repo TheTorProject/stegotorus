@@ -54,27 +54,6 @@ struct steg_module
   /** Name of the steganography module. Must be a valid C identifier. */
   const char *name;
 
-  /** Maximum data rate, in bytes per second, that this module can
-      reasonably absorb when transmitting client-to-server. */
-  size_t max_c2s_rate;
-
-  /** Maximum data rate server-to-client. */
-  size_t max_s2c_rate;
-
-  /** Maximum number of concurrent connections to any single IP address
-      that should be made using one instance of this module.
-      If this value is greater than one, the module proposes to
-      generate _correlated_ traffic across all concurrent connections.
-      Only relevant for client-to-server traffic. */
-  unsigned int max_corr_conns_per_ip;
-
-  /** Maximum number of IP addresses that should be simultaneously
-      connected to using one instance of this module. Again,
-      if this value is greater than one, the module proposes to
-      generate correlated traffic across all concurrent connections.
-      Only relevant for client-to-server traffic. */
-  unsigned int max_corr_ips;
-
   /** Detect whether the inbound traffic from CONN is disguised using
       the steganography this module implements.  Do not consume any
       data from CONN's inbound buffer, regardless of success or
@@ -95,20 +74,19 @@ steg_t *steg_detect(conn_t *conn);
 
 /* Macros for use in defining steg modules. */
 
-#define STEG_DEFINE_MODULE(mod, csm, scm, mcci, mci)    \
-  /* detect and new_ dispatchers */                     \
-  static bool mod##_detect(conn_t *conn)                \
-  { return mod::detect(conn); }                         \
-  static steg_t *mod##_new(bool is_clientside)          \
-  { return new mod(is_clientside); }			\
-                                                        \
-  /* canned methods */                                  \
-  const char *mod::name() { return #mod; }              \
-                                                        \
-  /* module object */                                   \
-  extern const steg_module s_mod_##mod = {              \
-    #mod, csm, scm, mcci, mci,                          \
-    mod##_detect, mod##_new                             \
+#define STEG_DEFINE_MODULE(mod)                 \
+  /* detect and new_ dispatchers */             \
+  static bool mod##_detect(conn_t *conn)        \
+  { return mod::detect(conn); }                 \
+  static steg_t *mod##_new(bool is_clientside)  \
+  { return new mod(is_clientside); }            \
+                                                \
+  /* canned methods */                          \
+  const char *mod::name() { return #mod; }      \
+                                                \
+  /* module object */                           \
+  extern const steg_module s_mod_##mod = {      \
+    #mod, mod##_detect, mod##_new               \
   } /* deliberate absence of semicolon */
 
 #define STEG_DECLARE_METHODS(mod)                               \

@@ -68,11 +68,7 @@ struct http : steg_t
 };
 }
 
-STEG_DEFINE_MODULE(http,
-                   1024,  /* client-server max data rate - made up */
-                   10240, /* server-client max data rate - ditto */
-                   1,     /* max concurrent connections per IP */
-                   1);     /* max concurrent IPs */
+STEG_DEFINE_MODULE(http);
 
 int http_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
 int http_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);

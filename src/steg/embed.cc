@@ -36,7 +36,7 @@ static int embed_init = 0;      // whether traces are initialized
 static int embed_num_traces;    // number of traces
 static trace_t *embed_traces;   // global array of all traces
 
-STEG_DEFINE_MODULE(embed, 1024, 1024, 1, 1);
+STEG_DEFINE_MODULE(embed);
 
 int millis_since(struct timeval *last) {
   struct timeval cur;

@@ -36,9 +36,9 @@ struct chop_header
 };
 
 #define CHOP_WIRE_HDR_LEN (sizeof(struct chop_header))
-#define CHOP_MAX_DATA 16384
-#define CHOP_MAX_CHAFF 2048
 #define CHOP_BLOCK_OVERHD (CHOP_WIRE_HDR_LEN + GCM_TAG_LEN)
+#define CHOP_MAX_DATA (65535 - CHOP_BLOCK_OVERHD)
+#define CHOP_MAX_CHAFF 2048
 
 #define CHOP_F_SYN   0x0001
 #define CHOP_F_FIN   0x0002
@@ -104,16 +104,18 @@ namespace {
     CIRCUIT_DECLARE_METHODS(chop);
 
     uint32_t axe_interval() {
-      // 20*60*1000 lies between 2^20 and 2^21.
-      uint32_t shift = std::max(1u, std::min(20u, dead_cycles));
-      uint32_t xv = std::max(1u, std::min(20u * 60 * 1000, 1u << shift));
-      return rng_range_geom(30 * 60 * 1000, xv) + 5 * 1000;
+      // This function must always return a number which is larger than
+      // the maximum possible number that *our peer's* flush_interval()
+      // could have returned; otherwise, we might axe the connection when
+      // it was just that there was nothing to say for a while.
+      // For simplicity's sake, right now we hardwire this to be 30 minutes.
+      return 30 * 60 * 1000;
     }
     uint32_t flush_interval() {
       // 10*60*1000 lies between 2^19 and 2^20.
       uint32_t shift = std::max(1u, std::min(19u, dead_cycles));
       uint32_t xv = std::max(1u, std::min(10u * 60 * 1000, 1u << shift));
-      return rng_range_geom(20 * 60 * 1000, xv) + 1000;
+      return rng_range_geom(20 * 60 * 1000, xv) + 100;
     }
   };
 
@@ -737,14 +739,12 @@ chop_push_to_upstream(circuit_t *c)
   chop_reassembly_elt *ready = ckt->reassembly_queue.next;
   if (!ready->data || ckt->recv_offset != ready->offset) {
     log_debug(c, "no data pushable to upstream yet");
-    ckt->dead_cycles++;
     return 0;
   }
 
   if (!ckt->received_syn) {
     if (!(ready->flags & CHOP_F_SYN)) {
       log_debug(c, "waiting for SYN");
-      ckt->dead_cycles++;
       return 0;
     }
     log_debug(c, "processed SYN");
@@ -1113,6 +1113,7 @@ chop_circuit_t::send()
     if (chop_send_chaff(this))
       return -1;
     this->dead_cycles++;
+    log_debug(this, "%u dead cycles", this->dead_cycles);
   } else {
     if (chop_send_blocks(this))
       return -1;
