@@ -589,7 +589,6 @@ socks_state_set_address(socks_state_t *state, const struct sockaddr *sa)
   uint16_t port;
   if (sa->sa_family == AF_INET) {
     const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
-    obfs_assert((sin->sin_port >= 0) && (sin->sin_port <= 65535));
     port = sin->sin_port;
     if (evutil_inet_ntop(AF_INET, &sin->sin_addr, state->parsereq.addr,
                          sizeof(state->parsereq.addr)) == NULL)

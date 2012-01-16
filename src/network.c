@@ -564,7 +564,6 @@ open_outbound_hostname(conn_t *conn, int af, const char *addr, uint16_t port)
   struct event_base *base = bufferevent_get_base(conn->buffer);
   struct bufferevent *buf;
   conn_t *newconn;
-  obfs_assert((port >= 0) && (port <= 65535));
 
   buf = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
