@@ -945,15 +945,18 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
 
     obfs_assert(!circ->is_flushing);
 
-    /* Figure out where we actually connected to, and tell the socks client */
-    if (getpeername(bufferevent_getfd(bev), sa, &slen) == 0) {
-      char *peername = printable_address(sa, slen);
-      socks_state_set_address(socks, sa);
+    if (getpeername(bufferevent_getfd(bev), sa, &slen) < 0) {
+      log_warn("%s: getpeername() failed.", __func__);
+      conn_free(down);
+      return;
+    }
 
-      /* We have to update our connection's peername. If it was an
-         FQDN SOCKS request, the current peername contains the FQDN
-         string, and we want to replace it with the actual IP address
-         we connected to. */
+    { /* We have to update our connection's peername.  If it was an
+      FQDN SOCKS request, the current peername contains the FQDN
+      string, and we want to replace it with the actual IP address we
+      connected to. */
+
+      char *peername = printable_address(sa, slen);
       if (down->peername) {
         log_debug("We connected to our SOCKS destination! "
                   "Replacing peername '%s' with '%s'",
@@ -962,6 +965,13 @@ pending_socks_cb(struct bufferevent *bev, short what, void *arg)
       }
       down->peername = peername;
     }
+
+    if (socks_state_set_address(socks, sa) < 0) {
+      log_warn("%s: socks_state_set_address() failed.", __func__);
+      conn_free(down);
+      return;
+    }
+
     socks_send_reply(socks, bufferevent_get_output(up->buffer), 0);
 
     /* Switch to regular upstream behavior. */
