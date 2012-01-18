@@ -133,14 +133,14 @@ is_supported_protocol(const char *name)
 static int
 handle_obfsproxy_args(const char *const *argv)
 {
-  int logmethod_set=0;
+  int logfile_set=0;
   int logsev_set=0;
   int i=1;
 
   while (argv[i] &&
          !strncmp(argv[i],"--",2)) {
     if (!strncmp(argv[i], "--log-file=", 11)) {
-      if (logmethod_set) {
+      if (logfile_set) {
         log_warn("You've already set a log file!");
         exit(1);
       }
@@ -149,7 +149,7 @@ handle_obfsproxy_args(const char *const *argv)
         log_warn("Failed creating logfile.");
         exit(1);
       }
-      logmethod_set=1;
+      logfile_set=1;
     } else if (!strncmp(argv[i], "--log-min-severity=", 19)) {
       if (logsev_set) {
         log_warn("You've already set a min. log severity!");
@@ -171,21 +171,23 @@ handle_obfsproxy_args(const char *const *argv)
         }
         logsev_set=1;
     } else if (!strncmp(argv[i], "--managed", 10)) {
-      if (logsev_set) {
-        printf("You can't combine --managed with other log options.\n");
-        exit(1);
-      }
-      if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
-        printf("Error at setting logging severity.\n");
-        exit(1);
-      }
-      logsev_set=1;
       is_external_proxy=0;
     } else {
       log_warn("Unrecognizable obfsproxy argument '%s'", argv[i]);
       exit(1);
     }
     i++;
+  }
+
+  if (!is_external_proxy && !logfile_set && logsev_set) {
+    printf("obfsproxy in managed proxy mode can only log to a file.\n");
+    exit(1);
+  } else if (!is_external_proxy && !logfile_set) { /* && !logsev_set */
+    /* managed proxies without a log file must not log at all. */
+    if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
+      printf("Error at setting logging severity.\n");
+      exit(1);
+    }
   }
 
   return i;
