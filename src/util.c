@@ -595,3 +595,9 @@ log_debug(const char *format, ...)
 
   va_end(ap);
 }
+
+void
+log_debug_raw(const char *format, va_list ap)
+{
+  logv(LOG_SEV_DEBUG, format, ap);
+}

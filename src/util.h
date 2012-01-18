@@ -171,6 +171,8 @@ void log_info(const char *format, ...)
 void log_debug(const char *format, ...)
   ATTR_PRINTF_1;
 
+void log_debug_raw(const char *format, va_list ap);
+
 /** Assertion checking.  We don't ever compile assertions out, and we
     want precise control over the error messages, so we use our own
     assertion macros. */
