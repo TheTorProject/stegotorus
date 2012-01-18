@@ -551,6 +551,7 @@ logv(int severity, const char *format, va_list ap)
 
 /**** Public logging API. ****/
 
+/** Public function for logging an error and then exiting. */
 void
 log_error(const char *format, ...)
 {
@@ -563,6 +564,7 @@ log_error(const char *format, ...)
   exit(1);
 }
 
+/** Public function for logging a warning. */
 void
 log_warn(const char *format, ...)
 {
@@ -574,6 +576,7 @@ log_warn(const char *format, ...)
   va_end(ap);
 }
 
+/** Public function for logging an informative message. */
 void
 log_info(const char *format, ...)
 {
@@ -585,6 +588,7 @@ log_info(const char *format, ...)
   va_end(ap);
 }
 
+/** Public function for logging a debugging message. */
 void
 log_debug(const char *format, ...)
 {
@@ -594,4 +598,12 @@ log_debug(const char *format, ...)
   logv(LOG_SEV_DEBUG, format, ap);
 
   va_end(ap);
+}
+
+/** Public function for logging a debugging message, given a format
+    string in <b>format</b>, and a va_list <b>ap</b>. */
+void
+log_debug_raw(const char *format, va_list ap)
+{
+  logv(LOG_SEV_DEBUG, format, ap);
 }

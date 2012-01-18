@@ -112,6 +112,27 @@ assert_proxy_env(managed_proxy_t *proxy)
   }
 }
 
+/** Log the environment variables that tor prepared for <b>proxy</b>. */
+static inline void
+log_proxy_env(managed_proxy_t *proxy)
+{
+  obfs_assert(proxy);
+
+  log_debug("Proxy environment:\n"
+            "state_loc: '%s'\nconf_proto_version: '%s'\ntransports: '%s'",
+            proxy->vars.state_loc,
+            proxy->vars.conf_proto_version,
+            proxy->vars.transports);
+
+  if (proxy->is_server) {
+    log_debug("Proxy environment (cont):\n"
+              "extended_port: '%s'\nor_port: '%s'\nbindaddrs: '%s'",
+              proxy->vars.extended_port,
+              proxy->vars.or_port,
+              proxy->vars.bindaddrs);
+  }
+}
+
 /**
    This function is used for obfsproxy to communicate with tor.
    Practically a wrapper of printf, it prints 'format' and the
@@ -125,6 +146,11 @@ print_protocol_line(const char *format, ...)
   va_start(ap,format);
   vprintf(format, ap);
   fflush(stdout);
+
+  /* log the protocol message */
+  log_debug("We sent:");
+  log_debug_raw(format, ap);
+
   va_end(ap);
 }
 
@@ -245,6 +271,8 @@ validate_environment(managed_proxy_t *proxy)
   enum env_parsing_status status;
 
   assert_proxy_env(proxy);
+
+  if (log_do_debug()) log_proxy_env(proxy);
 
   if (proxy->is_server) {
     if (validate_bindaddrs(proxy->vars.bindaddrs, proxy->vars.transports) < 0) {
