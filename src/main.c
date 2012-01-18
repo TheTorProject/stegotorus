@@ -140,42 +140,36 @@ handle_obfsproxy_args(const char *const *argv)
   while (argv[i] &&
          !strncmp(argv[i],"--",2)) {
     if (!strncmp(argv[i], "--log-file=", 11)) {
-      if (logfile_set) {
-        log_warn("You've already set a log file!");
-        exit(1);
-      }
-      if (log_set_method(LOG_METHOD_FILE,
-                         (char *)argv[i]+11) < 0) {
-        log_warn("Failed creating logfile.");
-        exit(1);
-      }
+      if (logfile_set)
+        log_error("You've already set a log file!");
+      if (log_set_method(LOG_METHOD_FILE, (char *)argv[i]+11) < 0)
+        log_error("Failed creating logfile.");
+
       logfile_set=1;
     } else if (!strncmp(argv[i], "--log-min-severity=", 19)) {
-      if (logsev_set) {
-        log_warn("You've already set a min. log severity!");
-        exit(1);
-      }
-      if (log_set_min_severity((char *)argv[i]+19) < 0) {
-        log_warn("Error at setting logging severity");
-        exit(1);
-      }
+      if (logsev_set)
+        log_error("You've already set a min. log severity!");
+      if (log_set_min_severity((char *)argv[i]+19) < 0)
+        log_error("Error at setting logging severity");
+
       logsev_set=1;
     } else if (!strncmp(argv[i], "--no-log", 9)) {
-        if (logsev_set) {
-          printf("You've already set a min. log severity!\n");
-          exit(1);
-        }
-        if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
-          printf("Error at setting logging severity.\n");
-          exit(1);
-        }
-        logsev_set=1;
+      if (logsev_set) {
+        printf("You've already set a min. log severity!\n");
+        exit(1);
+      }
+      if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
+        printf("Error at setting logging severity.\n");
+        exit(1);
+      }
+
+      logsev_set=1;
     } else if (!strncmp(argv[i], "--managed", 10)) {
       is_external_proxy=0;
     } else {
-      log_warn("Unrecognizable obfsproxy argument '%s'", argv[i]);
-      exit(1);
+      log_error("Unrecognizable obfsproxy argument '%s'", argv[i]);
     }
+
     i++;
   }
 
