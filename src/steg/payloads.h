@@ -28,6 +28,9 @@
 #define MAX_PAYLOADS 10000
 #define MAX_RESP_HDR_SIZE 512
 
+// max number of payloads that have enough capacity from which
+// we choose the best fit 
+#define MAX_CANDIDATE_PAYLOADS 10
 
 // jsSteg-specific defines
 #define JS_DELIMITER '?'

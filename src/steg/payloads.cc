@@ -1496,13 +1496,10 @@ int get_next_payload (int contentType, char** buf, int* size, int* cap) {
 
 
 int get_payload (int contentType, int cap, char** buf, int* size) {
-  int r;
-  unsigned int i = 0;
-  unsigned int cnt = 0;
+  int r, i, cnt, found = 0, numCandidate = 0, first, best, current;
 
   log_debug("get_payload: contentType = %d, initTypePayload = %d, typePayloadCount = %d",
       contentType, initTypePayload[contentType], typePayloadCount[contentType]);
-
 
   if (contentType <= 0 ||
       contentType >= MAX_CONTENT_TYPE ||
@@ -1512,22 +1509,43 @@ int get_payload (int contentType, int cap, char** buf, int* size) {
 
 
   cnt = typePayloadCount[contentType];
-   r = rand() % cnt;
+  r = rand() % cnt;
+  best = r;
+  first = r;
 
-  for (i=0; i < cnt; i++) {
+  i = -1;
+  // we look at MAX_CANDIDATE_PAYLOADS payloads that have enough capacity
+  // and select the best fit
+  while (i < (cnt-1) && numCandidate < MAX_CANDIDATE_PAYLOADS) {
+    i++;
+    current = (r+i)%cnt;
 
-    if (typePayloadCap[contentType][(r+i) % cnt] <= cap)
+    if (typePayloadCap[contentType][current] <= cap)
       continue;
 
-    *buf = payloads[typePayload[contentType][(r+i)%cnt]];
-    *size = payload_hdrs[typePayload[contentType][(r+i)%cnt]].length;
-    return 1;
+    if (found) {
+      if (payload_hdrs[typePayload[contentType][best]].length >
+          payload_hdrs[typePayload[contentType][current]].length)
+        best = current;
+    } else {
+      first = current;
+      best = current;
+      found = 1;
+    }
+    numCandidate++;
   }
 
-
-
-  return 0;
-
+  if (found) {
+    log_debug("first payload size=%d, best payload size=%d, num candidate=%d\n",
+      payload_hdrs[typePayload[contentType][first]].length,
+      payload_hdrs[typePayload[contentType][best]].length,
+      numCandidate);
+    *buf = payloads[typePayload[contentType][best]];
+    *size = payload_hdrs[typePayload[contentType][best]].length;
+    return 1;
+  } else {
+    return 0;
+  }
 }
 
 
