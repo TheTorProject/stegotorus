@@ -69,8 +69,8 @@ test_transfer(void *state)
  end:;
 }
 
-#define enc1_x_null msg1
-#define enc2_x_null msg2
+#define enc1_null msg1
+#define enc2_null msg2
 
 #if 0 /* temporarily disabled - causes crashes */
 static const char enc1_s_x_http[] =
@@ -89,11 +89,11 @@ static const char enc2_s_x_http[] =
     "this is a 55-byte message passed from server to client!\x00";
 #endif
 
-static const char *const o_client_x_null[] =
-  {"x_null", "socks", "127.0.0.1:1800"};
+static const char *const o_client_null[] =
+  {"null", "socks", "127.0.0.1:1800"};
 
-static const char *const o_server_x_null[] =
-  {"x_null", "server", "127.0.0.1:1800", "127.0.0.1:1801"};
+static const char *const o_server_null[] =
+  {"null", "server", "127.0.0.1:1800", "127.0.0.1:1801"};
 
 #define TA(name)                                                \
   static const struct proto_test_args tr_##name##_args =        \
@@ -102,12 +102,12 @@ static const char *const o_server_x_null[] =
       SLEN(enc1_##name), SLEN(enc2_##name),                     \
       enc1_##name, enc2_##name }
 
-TA(x_null);
+TA(null);
 
 #define T(name) \
   { #name, test_transfer, 0, &proto_test_fixture, (void *)&tr_##name##_args }
 
 struct testcase_t transfer_tests[] = {
-  T(x_null),
+  T(null),
   END_OF_TESTCASES
 };

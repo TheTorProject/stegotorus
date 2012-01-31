@@ -9,31 +9,31 @@
 #include <event2/buffer.h>
 
 namespace {
-  struct x_null_config_t : config_t {
+  struct null_config_t : config_t {
     struct evutil_addrinfo *listen_addr;
     struct evutil_addrinfo *target_addr;
 
-    CONFIG_DECLARE_METHODS(x_null);
+    CONFIG_DECLARE_METHODS(null);
   };
 
-  struct x_null_conn_t : conn_t {
-    CONN_DECLARE_METHODS(x_null);
+  struct null_conn_t : conn_t {
+    CONN_DECLARE_METHODS(null);
   };
 
-  struct x_null_circuit_t : circuit_t {
+  struct null_circuit_t : circuit_t {
     conn_t *downstream;
 
-    CIRCUIT_DECLARE_METHODS(x_null);
+    CIRCUIT_DECLARE_METHODS(null);
   };
 }
 
-PROTO_DEFINE_MODULE(x_null);
+PROTO_DEFINE_MODULE(null);
 
-x_null_config_t::x_null_config_t()
+null_config_t::null_config_t()
 {
 }
 
-x_null_config_t::~x_null_config_t()
+null_config_t::~null_config_t()
 {
   if (this->listen_addr)
     evutil_freeaddrinfo(this->listen_addr);
@@ -42,7 +42,7 @@ x_null_config_t::~x_null_config_t()
 }
 
 bool
-x_null_config_t::init(int n_options, const char *const *options)
+null_config_t::init(int n_options, const char *const *options)
 {
   const char* defport;
 
@@ -77,22 +77,22 @@ x_null_config_t::init(int n_options, const char *const *options)
   return true;
 
  usage:
-  log_warn("x_null syntax:\n"
-           "\tx_null <mode> <listen_address> [<target_address>]\n"
+  log_warn("null syntax:\n"
+           "\tnull <mode> <listen_address> [<target_address>]\n"
            "\t\tmode ~ server|client|socks\n"
            "\t\tlisten_address, target_address ~ host:port\n"
            "\ttarget_address is required for server and client mode,\n"
            "\tand forbidden for socks mode.\n"
            "Examples:\n"
-           "\tstegotorus x_null socks 127.0.0.1:5000\n"
-           "\tstegotorus x_null client 127.0.0.1:5000 192.168.1.99:11253\n"
-           "\tstegotorus x_null server 192.168.1.99:11253 127.0.0.1:9005");
+           "\tstegotorus null socks 127.0.0.1:5000\n"
+           "\tstegotorus null client 127.0.0.1:5000 192.168.1.99:11253\n"
+           "\tstegotorus null server 192.168.1.99:11253 127.0.0.1:9005");
   return false;
 }
 
 /** Retrieve the 'n'th set of listen addresses for this configuration. */
 struct evutil_addrinfo *
-x_null_config_t::get_listen_addrs(size_t n)
+null_config_t::get_listen_addrs(size_t n)
 {
   if (n > 0)
     return 0;
@@ -101,7 +101,7 @@ x_null_config_t::get_listen_addrs(size_t n)
 
 /* Retrieve the target address for this configuration. */
 struct evutil_addrinfo *
-x_null_config_t::get_target_addrs(size_t n)
+null_config_t::get_target_addrs(size_t n)
 {
   if (n > 0)
     return 0;
@@ -110,18 +110,18 @@ x_null_config_t::get_target_addrs(size_t n)
 
 /* Create a circuit object. */
 circuit_t *
-x_null_config_t::circuit_create(size_t)
+null_config_t::circuit_create(size_t)
 {
-  circuit_t *ckt = new x_null_circuit_t;
+  circuit_t *ckt = new null_circuit_t;
   ckt->cfg = this;
   return ckt;
 }
 
-x_null_circuit_t::x_null_circuit_t()
+null_circuit_t::null_circuit_t()
 {
 }
 
-x_null_circuit_t::~x_null_circuit_t()
+null_circuit_t::~null_circuit_t()
 {
   if (downstream) {
     /* break the circular reference before deallocating the
@@ -133,7 +133,7 @@ x_null_circuit_t::~x_null_circuit_t()
 
 /* Add a connection to this circuit. */
 void
-x_null_circuit_t::add_downstream(conn_t *conn)
+null_circuit_t::add_downstream(conn_t *conn)
 {
   log_assert(!this->downstream);
   this->downstream = conn;
@@ -145,7 +145,7 @@ x_null_circuit_t::add_downstream(conn_t *conn)
    protocol, it is because of a network error, and the whole circuit
    should be closed.  */
 void
-x_null_circuit_t::drop_downstream(conn_t *conn)
+null_circuit_t::drop_downstream(conn_t *conn)
 {
   log_assert(this->downstream == conn);
   log_debug(this, "dropped connection <%d.%d> to %s",
@@ -161,7 +161,7 @@ x_null_circuit_t::drop_downstream(conn_t *conn)
 
 /* Send data from the upstream buffer. */
 int
-x_null_circuit_t::send()
+null_circuit_t::send()
 {
   return evbuffer_add_buffer(conn_get_outbound(this->downstream),
                              bufferevent_get_input(this->up_buffer));
@@ -169,7 +169,7 @@ x_null_circuit_t::send()
 
 /* Send an EOF on this circuit. */
 int
-x_null_circuit_t::send_eof()
+null_circuit_t::send_eof()
 {
   if (this->downstream)
     conn_send_eof(this->downstream);
@@ -177,29 +177,29 @@ x_null_circuit_t::send_eof()
 }
 
 /*
-  This is called everytime we get a connection for the x_null
+  This is called everytime we get a connection for the null
   protocol.
 */
 
 conn_t *
-x_null_config_t::conn_create(size_t)
+null_config_t::conn_create(size_t)
 {
-  x_null_conn_t *conn = new x_null_conn_t;
+  null_conn_t *conn = new null_conn_t;
   conn->cfg = this;
   return conn;
 }
 
-x_null_conn_t::x_null_conn_t()
+null_conn_t::null_conn_t()
 {
 }
 
-x_null_conn_t::~x_null_conn_t()
+null_conn_t::~null_conn_t()
 {
 }
 
 /** Null inbound-to-outbound connections are 1:1 */
 int
-x_null_conn_t::maybe_open_upstream()
+null_conn_t::maybe_open_upstream()
 {
   circuit_t *ckt = circuit_create(this->cfg, 0);
   if (!ckt)
@@ -212,14 +212,14 @@ x_null_conn_t::maybe_open_upstream()
 
 /** Null has no handshake */
 int
-x_null_conn_t::handshake()
+null_conn_t::handshake()
 {
   return 0;
 }
 
 /** Receive data from connection SOURCE */
 int
-x_null_conn_t::recv()
+null_conn_t::recv()
 {
   log_assert(this->circuit);
   return evbuffer_add_buffer(bufferevent_get_output(this->circuit->up_buffer),
@@ -228,7 +228,7 @@ x_null_conn_t::recv()
 
 /** Receive EOF from connection SOURCE */
 int
-x_null_conn_t::recv_eof()
+null_conn_t::recv_eof()
 {
   if (this->circuit) {
     if (evbuffer_get_length(conn_get_inbound(this)) > 0)
@@ -240,4 +240,4 @@ x_null_conn_t::recv_eof()
   return 0;
 }
 
-CONN_STEG_STUBS(x_null);
+CONN_STEG_STUBS(null);

@@ -16,7 +16,7 @@ bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \
 	src/protocol/chop.cc \
-	src/protocol/x_null.cc
+	src/protocol/null.cc
 
 STEGANOGRAPHERS = \
 	src/steg/cookies.cc \
@@ -24,12 +24,12 @@ STEGANOGRAPHERS = \
 	src/steg/embed.cc \
 	src/steg/http.cc \
 	src/steg/jsSteg.cc \
+	src/steg/null.cc \
+	src/steg/null_rr.cc \
 	src/steg/payloads.cc \
 	src/steg/pdfSteg.cc \
 	src/steg/swfSteg.cc \
-	src/steg/zpack.cc \
-	src/steg/dummy.cc \
-	src/steg/dummy_rr.cc
+	src/steg/zpack.cc
 
 libstegotorus_a_SOURCES = \
 	src/connections.cc \

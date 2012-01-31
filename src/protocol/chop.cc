@@ -4,7 +4,7 @@
    The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.tex.  Note that it is still
    being implemented, and many things that are *intended* to change
-   from the toy "roundrobin" (aka "x_rr") protocol have not yet changed.  */
+   from the toy "roundrobin" protocol have not yet changed.  */
 
 #include "util.h"
 #include "connections.h"

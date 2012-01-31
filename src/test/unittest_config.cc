@@ -54,25 +54,25 @@ cleanup_test_config(const struct testcase_t *, void *state)
 static const struct testcase_setup_t config_fixture =
   { setup_test_config, cleanup_test_config };
 
-static struct option_parsing_case oc_x_null[] = {
+static struct option_parsing_case oc_null[] = {
   /* wrong number of options */
-  { 0, 0, 1, {"x_null"} },
-  { 0, 0, 2, {"x_null", "client"} },
-  { 0, 0, 3, {"x_null", "client", "127.0.0.1:5552"} },
-  { 0, 0, 3, {"x_null", "server", "127.0.0.1:5552"} },
-  { 0, 0, 4, {"x_null", "socks", "127.0.0.1:5552", "192.168.1.99:11253"} },
+  { 0, 0, 1, {"null"} },
+  { 0, 0, 2, {"null", "client"} },
+  { 0, 0, 3, {"null", "client", "127.0.0.1:5552"} },
+  { 0, 0, 3, {"null", "server", "127.0.0.1:5552"} },
+  { 0, 0, 4, {"null", "socks", "127.0.0.1:5552", "192.168.1.99:11253"} },
   /* unrecognized mode */
-  { 0, 0, 3, {"x_null", "floodcontrol", "127.0.0.1:5552" } },
-  { 0, 0, 4, {"x_null", "--frobozz", "client", "127.0.0.1:5552"} },
-  { 0, 0, 4, {"x_null", "client", "--frobozz", "127.0.0.1:5552"} },
+  { 0, 0, 3, {"null", "floodcontrol", "127.0.0.1:5552" } },
+  { 0, 0, 4, {"null", "--frobozz", "client", "127.0.0.1:5552"} },
+  { 0, 0, 4, {"null", "client", "--frobozz", "127.0.0.1:5552"} },
   /* bad address */
-  { 0, 0, 3, {"x_null", "socks", "@:5552"} },
-  { 0, 0, 3, {"x_null", "socks", "127.0.0.1:notanumber"} },
+  { 0, 0, 3, {"null", "socks", "@:5552"} },
+  { 0, 0, 3, {"null", "socks", "127.0.0.1:notanumber"} },
   /* should succeed */
-  { 0, 1, 4, {"x_null", "client", "127.0.0.1:5552", "192.168.1.99:11253" } },
-  { 0, 1, 4, {"x_null", "client", "127.0.0.1", "192.168.1.99:11253" } },
-  { 0, 1, 4, {"x_null", "server", "127.0.0.1:5552", "192.168.1.99:11253" } },
-  { 0, 1, 3, {"x_null", "socks", "127.0.0.1:5552" } },
+  { 0, 1, 4, {"null", "client", "127.0.0.1:5552", "192.168.1.99:11253" } },
+  { 0, 1, 4, {"null", "client", "127.0.0.1", "192.168.1.99:11253" } },
+  { 0, 1, 4, {"null", "server", "127.0.0.1:5552", "192.168.1.99:11253" } },
+  { 0, 1, 3, {"null", "socks", "127.0.0.1:5552" } },
 
   { 0, 0, 0, {0} }
 };
@@ -81,6 +81,6 @@ static struct option_parsing_case oc_x_null[] = {
   { #name, test_config, 0, &config_fixture, oc_##name }
 
 struct testcase_t config_tests[] = {
-  T(x_null),
+  T(null),
   END_OF_TESTCASES
 };

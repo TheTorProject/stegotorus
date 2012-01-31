@@ -39,31 +39,31 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <event2/buffer.h>
 
 namespace {
-struct dummy : steg_t
+struct null : steg_t
 {
-  STEG_DECLARE_METHODS(dummy);
+  STEG_DECLARE_METHODS(null);
 };
 }
 
-STEG_DEFINE_MODULE(dummy);
+STEG_DEFINE_MODULE(null);
 
-dummy::dummy(bool is_clientside)
+null::null(bool is_clientside)
   : steg_t(is_clientside)
 {
 }
 
-dummy::~dummy()
+null::~null()
 {
 }
 
 size_t
-dummy::transmit_room(conn_t *)
+null::transmit_room(conn_t *)
 {
   return SIZE_MAX;
 }
 
 int
-dummy::transmit(struct evbuffer *source, conn_t *conn)
+null::transmit(struct evbuffer *source, conn_t *conn)
 {
   struct evbuffer *dest = conn_get_outbound(conn);
 
@@ -79,7 +79,7 @@ dummy::transmit(struct evbuffer *source, conn_t *conn)
 }
 
 int
-dummy::receive(conn_t *conn, struct evbuffer *dest)
+null::receive(conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
 

@@ -39,33 +39,33 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <event2/buffer.h>
 
 namespace {
-struct dummy_rr : steg_t
+struct null_rr : steg_t
 {
   bool can_transmit : 1;
-  STEG_DECLARE_METHODS(dummy_rr);
+  STEG_DECLARE_METHODS(null_rr);
 };
 }
 
-STEG_DEFINE_MODULE(dummy_rr);
+STEG_DEFINE_MODULE(null_rr);
 
-dummy_rr::dummy_rr(bool is_clientside)
+null_rr::null_rr(bool is_clientside)
   : steg_t(is_clientside),
     can_transmit(is_clientside)
 {
 }
 
-dummy_rr::~dummy_rr()
+null_rr::~null_rr()
 {
 }
 
 size_t
-dummy_rr::transmit_room(conn_t *)
+null_rr::transmit_room(conn_t *)
 {
   return can_transmit ? SIZE_MAX : 0;
 }
 
 int
-dummy_rr::transmit(struct evbuffer *source, conn_t *conn)
+null_rr::transmit(struct evbuffer *source, conn_t *conn)
 {
   log_assert(can_transmit);
 
@@ -90,7 +90,7 @@ dummy_rr::transmit(struct evbuffer *source, conn_t *conn)
 }
 
 int
-dummy_rr::receive(conn_t *conn, struct evbuffer *dest)
+null_rr::receive(conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
 

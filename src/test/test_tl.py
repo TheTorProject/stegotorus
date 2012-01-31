@@ -41,18 +41,50 @@ class TimelineTest(object):
         if errors != "":
             self.fail("\n" + errors)
 
-    def test_xnull(self):
-        self.doTest("x_null",
-           ("x_null", "server", "127.0.0.1:5000", "127.0.0.1:5001",
-            "x_null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
+    def test_null(self):
+        self.doTest("null",
+           ("null", "server", "127.0.0.1:5000", "127.0.0.1:5001",
+            "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
-    def test_chop(self):
+    def test_chop_null(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","http","127.0.0.1:5011","http",
+            "127.0.0.1:5010","null",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","http","127.0.0.1:5011","http",
+            "127.0.0.1:5010","null",
             ))
+
+    def test_chop_null2(self):
+        self.doTest("chop",
+           ("chop", "server", "127.0.0.1:5001",
+            "127.0.0.1:5010","null","127.0.0.1:5011","null",
+            "chop", "client", "127.0.0.1:4999",
+            "127.0.0.1:5010","null","127.0.0.1:5011","null",
+            ))
+
+    def test_chop_null_rr(self):
+        self.doTest("chop",
+           ("chop", "server", "127.0.0.1:5001",
+            "127.0.0.1:5010","null_rr",
+            "chop", "client", "127.0.0.1:4999",
+            "127.0.0.1:5010","null_rr",
+            ))
+
+    def test_chop_null_rr2(self):
+        self.doTest("chop",
+           ("chop", "server", "127.0.0.1:5001",
+            "127.0.0.1:5010","null_rr","127.0.0.1:5011","null_rr",
+            "chop", "client", "127.0.0.1:4999",
+            "127.0.0.1:5010","null_rr","127.0.0.1:5011","null_rr",
+            ))
+
+#    def test_chop_http(self):
+#        self.doTest("chop",
+#           ("chop", "server", "127.0.0.1:5001",
+#            "127.0.0.1:5010","http","127.0.0.1:5011","http",
+#            "chop", "client", "127.0.0.1:4999",
+#            "127.0.0.1:5010","http","127.0.0.1:5011","http",
+#            ))
 
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
 # the test directory.
