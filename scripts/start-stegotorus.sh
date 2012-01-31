@@ -109,7 +109,7 @@ cd $ODIR
 export EVENT_NOKQUEUE=yes
 case $TYPE in
     server)
-	./stegotorus --log-min-severity=$LOG chop server $BRIDGE_IP:$BRIDGE_PORT $IP:$PORT
+	./stegotorus --log-min-severity=$LOG chop server $BRIDGE_IP:$BRIDGE_PORT $IP:$PORT http
 	;;
     client)
 	IPS=""

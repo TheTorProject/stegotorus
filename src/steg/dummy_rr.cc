@@ -38,8 +38,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "steg.h"
 #include <event2/buffer.h>
 
-#define DUMMY_RR_PORT 3334
-
 namespace {
 struct dummy_rr : steg_t
 {
@@ -51,31 +49,13 @@ struct dummy_rr : steg_t
 STEG_DEFINE_MODULE(dummy_rr);
 
 dummy_rr::dummy_rr(bool is_clientside)
+  : steg_t(is_clientside),
+    can_transmit(is_clientside)
 {
-  this->is_clientside = is_clientside;
-  this->can_transmit = is_clientside;
 }
 
 dummy_rr::~dummy_rr()
 {
-}
-
-/** Determine whether a connection should be processed by this
-    steganographer. */
-bool
-dummy_rr::detect(conn_t *conn)
-{
-  struct evutil_addrinfo *addrs = conn->cfg->get_listen_addrs(0);
-  if (!addrs) {
-    log_debug("no listen addrs\n");
-    return 0;
-  }
-
-  struct sockaddr_in* sin = (struct sockaddr_in*) addrs->ai_addr;
-  if (sin->sin_port == htons(DUMMY_RR_PORT))
-    return 1;
-
-  return 0;
 }
 
 size_t

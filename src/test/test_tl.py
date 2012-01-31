@@ -49,7 +49,7 @@ class TimelineTest(object):
     def test_chop(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","127.0.0.1:5011",
+            "127.0.0.1:5010","http","127.0.0.1:5011","http",
             "chop", "client", "127.0.0.1:4999",
             "127.0.0.1:5010","http","127.0.0.1:5011","http",
             ))

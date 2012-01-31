@@ -127,9 +127,9 @@ buf_dump(unsigned char* buf, int len, FILE *out)
 
 
 http::http(bool is_clientside)
-  : have_transmitted(false), have_received(false)
+  : steg_t(is_clientside),
+    have_transmitted(false), have_received(false)
 {
-  this->is_clientside = is_clientside;
   if (is_clientside)
     load_payloads("traces/client.out");
   else {
@@ -144,99 +144,6 @@ http::http(bool is_clientside)
 
 http::~http()
 {
-}
-
-/** Determine whether a connection should be processed by this
-    steganographer. */
-bool
-http::detect(conn_t *conn)
-{
-  struct evbuffer *buf = conn_get_inbound(conn);
-  unsigned char *data;
-
-  //return 0;
-/*****
- Here is a list of HTTP response codes extracted from the
- server-portals.out trace
-
-7369 HTTP/1.1 200 OK
- 470 HTTP/1.1 302 Found
- 350 HTTP/1.1 304 Not Modified
- 212 HTTP/1.1 302 Moved Temporarily
- 184 HTTP/1.1 204 No Content
- 451 HTTP/1.0 200 OK
-  36 HTTP/1.0 204 No Content
-  21 HTTP/1.1 301 Moved Permanently
-  19 HTTP/1.1 302 Object moved
-  15 HTTP/1.1 404 Not Found
-
-   7 HTTP/1.0 304 Not Modified
-   6 HTTP/1.1 302 Redirect
-   3 HTTP/1.0 200 Ok
-   2 HTTP/1.1 303 Object Moved
-   2 HTTP/1.0 301 Moved Permanently
-   2 HTTP/1.0 302 Moved Temporarily
-   2 HTTP/1.0 400 Bad request
-   2 HTTP/1.0 403 Forbidden
-   1 HTTP/1.0 404 Not Found
-   1 HTTP/1.1 200
-   1 HTTP/1.1 302 FOUND
-   1 HTTP/1.1 304
-   1 HTTP/1.1 400 Bad Request
-   1 HTTP/1.1 403 Forbidden
-   1 HTTP/1.1 503 Service Unavailable.
- *****/
-
-  // The first part of a valid HTTP response should be of the form
-  // HTTP/1.x nnn
-
-  if (evbuffer_get_length(buf) >= 12) {
-    data = evbuffer_pullup(buf, 12);
-
-    if (data != NULL &&
-         ((!memcmp(data, "HTTP/1.1 200", 12)) ||
-          (!memcmp(data, "HTTP/1.1 302", 12)) ||
-          (!memcmp(data, "HTTP/1.1 304", 12)) ||
-          (!memcmp(data, "HTTP/1.1 204", 12)) ||
-          (!memcmp(data, "HTTP/1.0 200", 12)) ||
-          (!memcmp(data, "HTTP/1.0 204", 12)) ||
-          (!memcmp(data, "HTTP/1.1 301", 12)) ||
-          (!memcmp(data, "HTTP/1.1 302", 12)) ||
-          (!memcmp(data, "HTTP/1.1 404", 12)))) {
-      log_debug("http_detect: valid response");
-      return 1;
-    }
-  }
-
-
-
-
-
-  // SC: if we are only interested in jsSteg, we may want to
-  // consider HTTP/1.1 and HTTP/1.0 responses whose code is 200 only
-
-  // check to see if this is a valid HTTP request
-  //
-  // the following is for HTTP requests used by the http2 steg module
-  // The client always transmits "GET /" followed by at least four
-  // characters that are either lowercase hex digits or equals
-  // signs, so we need nine bytes of incoming data.
-
-
-
-  if (evbuffer_get_length(buf) >= 9) {
-    data = evbuffer_pullup(buf, 9);
-    if (data != NULL && (!memcmp(data, "GET /", 5) ||
-                         !memcmp(data, "POST /", 5) ||
-                         !memcmp(data, "Cookie", 6))) {
-      log_debug("http_detect: valid request");
-      return true;
-    }
-  }
-
-  log_debug("http_detect: didn't find either HTTP request or response");
-  /* Didn't find either the client or the server pattern. */
-  return false;
 }
 
 size_t

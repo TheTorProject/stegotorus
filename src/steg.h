@@ -7,15 +7,15 @@
 
 /** A steganography instance must define a private subclass of this
     type, that implements all of the methods below, plus a descendant
-    constructor and a static 'detect' method (see steg_module).  The
-    subclass must have exactly the same name that you use for the
-    module name in STEG_DEFINE_MODULE, and should be declared inside an
-    anonymous namespace.  Use STEG_DECLARE_METHODS in the declaration. */
+    constructor.  The subclass must have exactly the same name that
+    you use for the module name in STEG_DEFINE_MODULE, and should be
+    declared inside an anonymous namespace.  Use STEG_DECLARE_METHODS
+    in the declaration. */
 struct steg_t
 {
   bool is_clientside : 1;
 
-  steg_t() {}
+  steg_t(bool is_clientside) : is_clientside(is_clientside) {}
   virtual ~steg_t();
 
   /** Report the name of this steg module.  You do not have to define
@@ -43,23 +43,15 @@ struct steg_t
   virtual int receive(conn_t *conn, struct evbuffer *dest) = 0;
 };
 
-/** STEG_DEFINE_MODULE defines an object with this type, plus the two
-    functions that it points to.  You don't ever manipulate this object
+/** STEG_DEFINE_MODULE defines an object with this type, plus the
+    function that it points to.  You don't ever manipulate this object
     directly; however, read its documentation to understand the
-    arguments to STEG_DEFINE_MODULE and the requirements on the
-    'detect' method. */
+    arguments to STEG_DEFINE_MODULE. */
 
 struct steg_module
 {
   /** Name of the steganography module. Must be a valid C identifier. */
   const char *name;
-
-  /** Detect whether the inbound traffic from CONN is disguised using
-      the steganography this module implements.  Do not consume any
-      data from CONN's inbound buffer, regardless of success or
-      failure.  Return true if your brand of steg is detected,
-      false if not.  */
-  bool (*detect)(conn_t *conn);
 
   /** Create an appropriate steg_t subclass for this module.
       More arguments may be added later.  */
@@ -70,14 +62,11 @@ extern const steg_module *const supported_stegs[];
 
 int steg_is_supported(const char *name);
 steg_t *steg_new(const char *name);
-steg_t *steg_detect(conn_t *conn);
 
 /* Macros for use in defining steg modules. */
 
 #define STEG_DEFINE_MODULE(mod)                 \
-  /* detect and new_ dispatchers */             \
-  static bool mod##_detect(conn_t *conn)        \
-  { return mod::detect(conn); }                 \
+  /* new_ dispatchers */                        \
   static steg_t *mod##_new(bool is_clientside)  \
   { return new mod(is_clientside); }            \
                                                 \
@@ -86,11 +75,10 @@ steg_t *steg_detect(conn_t *conn);
                                                 \
   /* module object */                           \
   extern const steg_module s_mod_##mod = {      \
-    #mod, mod##_detect, mod##_new               \
+    #mod, mod##_new                             \
   } /* deliberate absence of semicolon */
 
 #define STEG_DECLARE_METHODS(mod)                               \
-  static bool detect(conn_t *conn);                             \
   mod(bool is_clientside);                                      \
   virtual ~mod();                                               \
   virtual const char *name();                                   \

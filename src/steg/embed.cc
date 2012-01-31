@@ -105,10 +105,11 @@ bool embed::is_finished() {
   return cur_pkt >= cur->num_pkt;
 }
 
-embed::embed(bool is_clientside) {
+embed::embed(bool is_clientside)
+  : steg_t(is_clientside)
+{
   if (!embed_init) init_embed_traces();
 
-  this->is_clientside = is_clientside;
   cur_idx = -1;
   if (is_clientside) {
     cur_idx = get_random_trace();
@@ -118,31 +119,8 @@ embed::embed(bool is_clientside) {
   gettimeofday(&last_pkt, NULL);
 }
 
-embed::~embed() { }
-
-bool embed::detect(conn_t *conn) {
-  if (!embed_init) init_embed_traces();
-
-  struct evbuffer *source = conn_get_inbound(conn);
-  size_t src_len = evbuffer_get_length(source);
-
-  log_debug("detecting buffer of length %lu", (unsigned long)src_len);
-
-  int cur_idx;
-  if (evbuffer_copyout(source, &cur_idx, 4) != 4) return 0;
-  if (cur_idx < 0 || cur_idx >= embed_num_traces) return 0;
-
-  trace_t *cur = &embed_traces[cur_idx];
-  size_t tot_len = 0;
-  int idx = 0;
-  while (idx < cur->num_pkt && cur->pkt_sizes[idx] >= 0) {
-    tot_len += cur->pkt_sizes[idx++];
-    if (src_len == tot_len) {
-      log_debug("detected embed trace %d", cur_idx);
-      return 1;
-    }
-  }
-  return 0;
+embed::~embed()
+{
 }
 
 size_t embed::transmit_room(conn_t * /* conn */) {

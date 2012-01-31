@@ -871,8 +871,7 @@ chop_config_t::init(int n_options, const char *const *options)
     goto usage;
 
   /* From here on out, arguments alternate between downstream
-     addresses and steg targets, if we're the client.  If we're not
-     the client, the arguments are just downstream addresses. */
+     addresses and steg targets. */
   for (i = 2; i < n_options; i++) {
     struct evutil_addrinfo *addr =
       resolve_address_port(options[i], 1, !listen_up, NULL);
@@ -880,8 +879,6 @@ chop_config_t::init(int n_options, const char *const *options)
       goto usage;
     this->down_addresses.push_back(addr);
 
-    if (this->mode == LSN_SIMPLE_SERVER)
-      continue;
     i++;
     if (i == n_options)
       goto usage;
@@ -897,14 +894,13 @@ chop_config_t::init(int n_options, const char *const *options)
            "\tchop <mode> <up_address> (<down_address> [<steg>])...\n"
            "\t\tmode ~ server|client|socks\n"
            "\t\tup_address, down_address ~ host:port\n"
-           "\t\ta steg target is required for each down_address,\n"
-           "\t\tin client and socks mode, and forbidden otherwise.\n"
+           "\t\tA steg target is required for each down_address.\n"
            "\t\tThe down_address list is still required in socks mode.\n"
            "Examples:\n"
            "\tstegotorus chop client 127.0.0.1:5000 "
            "192.168.1.99:11253 http 192.168.1.99:11254 skype\n"
            "\tstegotorus chop server 127.0.0.1:9005 "
-           "192.168.1.99:11253 192.168.1.99:11254");
+           "192.168.1.99:11253 http 192.168.1.99:11254 skype");
   return false;
 }
 
@@ -1043,13 +1039,12 @@ chop_config_t::conn_create(size_t index)
 {
   chop_conn_t *conn = new chop_conn_t;
   conn->cfg = this;
-  if (this->mode != LSN_SIMPLE_SERVER) {
-    conn->steg = steg_new(this->steg_targets.at(index));
-    if (!conn->steg) {
-      free(conn);
-      return 0;
-    }
+  conn->steg = steg_new(this->steg_targets.at(index));
+  if (!conn->steg) {
+    free(conn);
+    return 0;
   }
+
   conn->recv_pending = evbuffer_new();
   return conn;
 }
@@ -1156,19 +1151,6 @@ chop_conn_t::recv()
   struct evbuffer *block;
   size_t avail;
   uint8_t decodebuf[CHOP_MAX_DATA + CHOP_WIRE_HDR_LEN];
-
-  if (!this->steg) {
-    log_assert(this->cfg->mode == LSN_SIMPLE_SERVER);
-    if (evbuffer_get_length(conn_get_inbound(this)) == 0)
-      return 0; /* need more data */
-    this->steg = steg_detect(this);
-    if (!this->steg) {
-      log_debug(this, "no recognized steg pattern detected");
-      return -1;
-    } else {
-      log_debug(this, "detected steg pattern %s", this->steg->name());
-    }
-  }
 
   if (this->steg->receive(this, this->recv_pending))
     return -1;

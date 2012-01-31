@@ -28,17 +28,6 @@ steg_new(const char *name)
   return NULL;
 }
 
-/* Instantiate a steg module by detection. */
-steg_t *
-steg_detect(conn_t *conn)
-{
-  const steg_module *const *s;
-  for (s = supported_stegs; *s; s++)
-    if ((**s).detect(conn))
-      return (**s).new_(/*is_clientside=*/false);
-  return NULL;
-}
-
 /* Define this here rather than in the class definition so that the
    vtable will be emitted in only one place. */
 steg_t::~steg_t() {}
