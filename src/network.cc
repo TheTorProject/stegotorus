@@ -423,7 +423,8 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
             ckt->connected ? "" : " (not connected)",
             ckt->flushing ? "" : " (not flushing)");
 
-  if (remain == 0 && ckt->flushing && ckt->connected) {
+  if (remain == 0 && ckt->flushing && ckt->connected
+      && (!ckt->flush_timer || !evtimer_pending(ckt->flush_timer, NULL))) {
     bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev) ||
         evbuffer_get_length(bufferevent_get_input(bev)) > 0) {

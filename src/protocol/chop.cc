@@ -784,8 +784,6 @@ chop_push_to_upstream(circuit_t *c)
 static int
 chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
 {
-  log_assert(conn->cfg->mode == LSN_SIMPLE_SERVER);
-
   chop_config_t *cfg = static_cast<chop_config_t *>(conn->cfg);
   chop_circuit_table::value_type in(circuit_id, 0);
   std::pair<chop_circuit_table::iterator, bool> out = cfg->circuits.insert(in);
@@ -954,6 +952,11 @@ chop_config_t::circuit_create(size_t)
     ckt->recv_crypt = decryptor::create(s2c_key, 16);
     while (!ckt->circuit_id)
       rng_bytes((uint8_t *)&ckt->circuit_id, sizeof(uint64_t));
+
+    chop_circuit_table::value_type in(ckt->circuit_id, 0);
+    std::pair<chop_circuit_table::iterator, bool> out = circuits.insert(in);
+    log_assert(out.second);
+    out.first->second = ckt;
   }
   return ckt;
 }
@@ -996,17 +999,20 @@ chop_circuit_t::~chop_circuit_t()
     free(p);
   }
 
-  if (this->cfg->mode == LSN_SIMPLE_SERVER) {
-    /* The IDs for old circuits are preserved for a while (at present,
-       indefinitely; FIXME: purge them on a timer) against the
-       possibility that we'll get a junk connection for one of them
-       right after we close it (same deal as the TIME_WAIT state in TCP). */
-    chop_config_t *cfg = static_cast<chop_config_t *>(this->cfg);
-    out = cfg->circuits.find(this->circuit_id);
-    log_assert(out != cfg->circuits.end());
-    log_assert(out->second == this);
-    out->second = NULL;
-  }
+  /* The IDs for old circuits are preserved for a while (at present,
+     indefinitely; FIXME: purge them on a timer) against the
+     possibility that we'll get a junk connection for one of them
+     right after we close it (same deal as the TIME_WAIT state in
+     TCP).  Note that we can hit this case for the *client* if the
+     cover protocol includes a mandatory reply to every client
+     message and the hidden channel closed s->c before c->s: the
+     circuit will get destroyed on the client side after the c->s FIN,
+     and the mandatory reply will be to a stale circuit. */
+  chop_config_t *cfg = static_cast<chop_config_t *>(this->cfg);
+  out = cfg->circuits.find(this->circuit_id);
+  log_assert(out != cfg->circuits.end());
+  log_assert(out->second == this);
+  out->second = NULL;
 }
 
 void
