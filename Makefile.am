@@ -24,8 +24,8 @@ STEGANOGRAPHERS = \
 	src/steg/embed.cc \
 	src/steg/http.cc \
 	src/steg/jsSteg.cc \
-	src/steg/null.cc \
-	src/steg/null_rr.cc \
+	src/steg/nosteg.cc \
+	src/steg/nosteg_rr.cc \
 	src/steg/payloads.cc \
 	src/steg/pdfSteg.cc \
 	src/steg/swfSteg.cc \

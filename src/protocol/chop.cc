@@ -848,8 +848,10 @@ chop_config_t::init(int n_options, const char *const *options)
   int listen_up;
   int i;
 
-  if (n_options < 3)
+  if (n_options < 3) {
+    log_warn("chop: not enough parameters");
     goto usage;
+  }
 
   if (!strcmp(options[0], "client")) {
     defport = "48988"; /* bf5c */
@@ -867,24 +869,32 @@ chop_config_t::init(int n_options, const char *const *options)
     goto usage;
 
   this->up_address = resolve_address_port(options[1], 1, listen_up, defport);
-  if (!this->up_address)
+  if (!this->up_address) {
+    log_warn("chop: invalid up address: %s", options[1]);
     goto usage;
+  }
 
   /* From here on out, arguments alternate between downstream
      addresses and steg targets. */
   for (i = 2; i < n_options; i++) {
     struct evutil_addrinfo *addr =
       resolve_address_port(options[i], 1, !listen_up, NULL);
-    if (!addr)
+    if (!addr) {
+      log_warn("chop: invalid down address: %s", options[i]);
       goto usage;
+    }
     this->down_addresses.push_back(addr);
 
     i++;
-    if (i == n_options)
+    if (i == n_options) {
+      log_warn("chop: missing steganographer for %s", options[i-1]);
       goto usage;
+    }
 
-    if (!steg_is_supported(options[i]))
+    if (!steg_is_supported(options[i])) {
+      log_warn("chop: steganographer '%s' not supported", options[i]);
       goto usage;
+    }
     this->steg_targets.push_back(options[i]);
   }
   return true;
@@ -894,7 +904,7 @@ chop_config_t::init(int n_options, const char *const *options)
            "\tchop <mode> <up_address> (<down_address> [<steg>])...\n"
            "\t\tmode ~ server|client|socks\n"
            "\t\tup_address, down_address ~ host:port\n"
-           "\t\tA steg target is required for each down_address.\n"
+           "\t\tA steganographer is required for each down_address.\n"
            "\t\tThe down_address list is still required in socks mode.\n"
            "Examples:\n"
            "\tstegotorus chop client 127.0.0.1:5000 "

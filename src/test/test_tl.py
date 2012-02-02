@@ -46,45 +46,45 @@ class TimelineTest(object):
            ("null", "server", "127.0.0.1:5000", "127.0.0.1:5001",
             "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
-    def test_chop_null(self):
+    def test_chop_nosteg(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","null",
+            "127.0.0.1:5010","nosteg",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","null",
+            "127.0.0.1:5010","nosteg",
             ))
 
     def test_chop_null2(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","null","127.0.0.1:5011","null",
+            "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","null","127.0.0.1:5011","null",
+            "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
             ))
 
-    def test_chop_null_rr(self):
+    def test_chop_nosteg_rr(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","null_rr",
+            "127.0.0.1:5010","nosteg_rr",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","null_rr",
+            "127.0.0.1:5010","nosteg_rr",
             ))
 
-    def test_chop_null_rr2(self):
-        self.doTest("chop",
-           ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","null_rr","127.0.0.1:5011","null_rr",
-            "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","null_rr","127.0.0.1:5011","null_rr",
-            ))
+    # def test_chop_nosteg_rr2(self):
+    #     self.doTest("chop",
+    #        ("chop", "server", "127.0.0.1:5001",
+    #         "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
+    #         "chop", "client", "127.0.0.1:4999",
+    #         "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
+    #         ))
 
-#    def test_chop_http(self):
-#        self.doTest("chop",
-#           ("chop", "server", "127.0.0.1:5001",
-#            "127.0.0.1:5010","http","127.0.0.1:5011","http",
-#            "chop", "client", "127.0.0.1:4999",
-#            "127.0.0.1:5010","http","127.0.0.1:5011","http",
-#            ))
+    # def test_chop_http(self):
+    #     self.doTest("chop",
+    #        ("chop", "server", "127.0.0.1:5001",
+    #         "127.0.0.1:5010","http","127.0.0.1:5011","http",
+    #         "chop", "client", "127.0.0.1:4999",
+    #         "127.0.0.1:5010","http","127.0.0.1:5011","http",
+    #         ))
 
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
 # the test directory.

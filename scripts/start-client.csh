@@ -5,5 +5,5 @@ setenv EVENT_NOKQUEUE yes
 #./stegotorus --log-min-severity=debug chop socks 127.0.0.1:1080 127.0.0.1:8080 http 127.0.0.1:8081 http
 # ./stegotorus --log-min-severity=warn chop socks 127.0.0.1:1080 127.0.0.1:8080 http 127.0.0.1:8081 http
 #./stegotorus --log-min-severity=error chop socks 127.0.0.1:1080 127.0.0.1:8080 http 127.0.0.1:8081 http
-./stegotorus --log-min-severity=error chop socks 127.0.0.1:1080 127.0.0.1:3333 null # 127.0.0.1:3333 null
+./stegotorus --log-min-severity=error chop socks 127.0.0.1:1080 127.0.0.1:3333 nosteg # 127.0.0.1:3333 nosteg
 
