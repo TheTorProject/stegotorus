@@ -94,7 +94,8 @@ nosteg_rr::receive(conn_t *conn, struct evbuffer *dest)
 {
   struct evbuffer *source = conn_get_inbound(conn);
 
-  log_debug(conn, "receiving %lu bytes",
+  log_debug(conn, "%s-side receiving %lu bytes",
+            is_clientside ? "client" : "server",
             (unsigned long)evbuffer_get_length(source));
 
   if (evbuffer_add_buffer(dest, source)) {

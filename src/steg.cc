@@ -19,12 +19,12 @@ steg_is_supported(const char *name)
 
 /* Instantiate a steg module by name. */
 steg_t *
-steg_new(const char *name)
+steg_new(const char *name, bool is_clientside)
 {
   const steg_module *const *s;
   for (s = supported_stegs; *s; s++)
     if (!strcmp(name, (**s).name))
-      return (**s).new_(/*is_clientside=*/true);
+      return (**s).new_(is_clientside);
   return NULL;
 }
 

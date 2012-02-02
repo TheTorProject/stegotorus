@@ -61,7 +61,7 @@ struct steg_module
 extern const steg_module *const supported_stegs[];
 
 int steg_is_supported(const char *name);
-steg_t *steg_new(const char *name);
+steg_t *steg_new(const char *name, bool is_clientside);
 
 /* Macros for use in defining steg modules. */
 

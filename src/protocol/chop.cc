@@ -799,7 +799,7 @@ chop_find_or_make_circuit(conn_t *conn, uint64_t circuit_id)
     ck = out.first->second;
     log_debug(conn, "found circuit to %s", ck->up_peer);
   } else {
-    ck = cfg->circuit_create(0);
+    ck = circuit_create(cfg, 0);
     if (!ck) {
       log_warn(conn, "failed to create new circuit");
       return -1;
@@ -969,6 +969,12 @@ chop_circuit_t::~chop_circuit_t()
   chop_reassembly_elt *p, *q, *queue;
   chop_circuit_table::iterator out;
 
+  log_debug(this, "syn%c%c fin%c%c eof%c ds=%lu",
+            sent_syn ? '+' : '-', received_syn ? '+' : '-',
+            sent_fin ? '+' : '-', received_fin ? '+' : '-',
+            upstream_eof ? '+' : '-',
+            (unsigned long)downstreams.size());
+
   for (unordered_set<conn_t *>::iterator i = this->downstreams.begin();
        i != this->downstreams.end(); i++) {
     conn_t *conn = *i;
@@ -1049,7 +1055,8 @@ chop_config_t::conn_create(size_t index)
 {
   chop_conn_t *conn = new chop_conn_t;
   conn->cfg = this;
-  conn->steg = steg_new(this->steg_targets.at(index));
+  conn->steg = steg_new(this->steg_targets.at(index),
+                        this->mode != LSN_SIMPLE_SERVER);
   if (!conn->steg) {
     free(conn);
     return 0;
@@ -1275,15 +1282,13 @@ chop_conn_t::recv()
 int
 chop_conn_t::recv_eof()
 {
-  circuit_t *c = this->circuit;
-
   /* EOF on a _connection_ does not mean EOF on a _circuit_.
      EOF on a _circuit_ occurs when chop_push_to_upstream processes a FIN.
      We should only drop the connection from the circuit if we're no
      longer sending in the opposite direction.  Also, we should not
      drop the connection if its must-transmit timer is still pending.  */
-  if (c) {
-    chop_circuit_t *ckt = static_cast<chop_circuit_t *>(c);
+  if (this->circuit) {
+    chop_circuit_t *ckt = static_cast<chop_circuit_t *>(this->circuit);
 
     if (evbuffer_get_length(conn_get_inbound(this)) > 0)
       if (this->recv())
@@ -1292,7 +1297,7 @@ chop_conn_t::recv_eof()
     if ((ckt->sent_fin || this->no_more_transmissions) &&
         (!this->must_transmit_timer ||
          !evtimer_pending(this->must_transmit_timer, NULL)))
-      circuit_drop_downstream(c, this);
+      circuit_drop_downstream(ckt, this);
   }
   return 0;
 }
