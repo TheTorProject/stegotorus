@@ -1282,6 +1282,25 @@ chop_conn_t::recv()
   if (evbuffer_get_length(bufferevent_get_input(c->up_buffer)))
     c->send();
 
+  /* If we're at EOF, close all connections (sending first if
+     necessary).  If we're the client we have to keep trying to talk
+     as long as we haven't both sent and received a FIN, or we might
+     deadlock. */
+  else if (ckt->sent_fin && ckt->received_fin) {
+    circuit_disarm_flush_timer(ckt);
+    for (unordered_set<conn_t *>::iterator i = ckt->downstreams.begin();
+         i != ckt->downstreams.end(); i++) {
+      chop_conn_t *conn = static_cast<chop_conn_t*>(*i);
+      if (conn->must_transmit_timer &&
+          evtimer_pending(conn->must_transmit_timer, NULL))
+        must_transmit_timer_cb(-1, 0, conn);
+      conn_send_eof(conn);
+    }
+  } else {
+    if (ckt->cfg->mode != LSN_SIMPLE_SERVER)
+      circuit_arm_flush_timer(ckt, ckt->flush_interval());
+  }
+
   return 0;
 }
 
