@@ -105,8 +105,8 @@ static void
 lethal_signal(int signum, siginfo_t *si, void *)
 {
   char faultmsg[80];
-  int n;
 #ifdef HAVE_EXECINFO_H
+  int n;
   void *backtracebuf[256];
 #endif
 
