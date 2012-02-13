@@ -10,9 +10,9 @@
 #include <unistd.h>
 
 #include <event2/dns.h>
-#ifndef _WIN32
+
+#include <netinet/in.h>
 #include <arpa/inet.h>
-#endif
 #ifdef AF_LOCAL
 #include <sys/un.h>
 #endif

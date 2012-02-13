@@ -8,6 +8,7 @@
 #include "socks.h"
 
 #include <errno.h>
+#include <netinet/in.h>
 
 #include <event2/buffer.h>
 
