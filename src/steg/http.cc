@@ -40,6 +40,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "swfSteg.h"
 #include "pdfSteg.h"
 #include "jsSteg.h"
+#include "b64cookies.h"
 
 #include <event2/buffer.h>
 #include <stdio.h>
@@ -254,116 +255,135 @@ http_client_cookie_transmit (http *s, struct evbuffer *source, conn_t *conn) {
   /* On the client side, we have to embed the data in a GET query somehow;
      the only plausible places to put it are the URL and cookies.  This
      presently uses the URL. And it can't be binary. */
-  // struct evbuffer *scratch;
-  struct evbuffer_iovec *iv;
-  int i, nv;
+
+
   struct evbuffer *dest = conn_get_outbound(conn);
   size_t sbuflen = evbuffer_get_length(source);
-  char buf[10000];
-  unsigned char data[(int) sbuflen*2];
-  //  unsigned char outbuf[MAX_COOKIE_SIZE];
+  int bufsize = 10000;
+  char* buf = (char*) xmalloc(bufsize);
 
-  unsigned char outbuf[(int) sbuflen*8];
-  int datalen;
-
-
-  //  size_t sofar = 0;
-  size_t cookie_len;
-
-
-  /* Convert all the data in 'source' to hexadecimal and write it to
-     'scratch'. Data is padded to a multiple of four characters with
-     equals signs. */
-
-
-  unsigned int len = 0;
-  unsigned int cnt = 0;
+  char* data;
+  char* data2 = (char*) xmalloc (sbuflen*4);
+  char* cookiebuf = (char*) xmalloc (sbuflen*8);
+  int payload_len = 0;
+  int cnt = 0;
+  int cookie_len = 0;
+  int rval;
+  int len = 0;
+  base64::encoder E;
 
 
 
-  datalen = 0;
-  cookie_len = 4 * sbuflen + rand() % 4;
+  data = (char*) evbuffer_pullup(source, sbuflen);
 
-
-  nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
-  iv = (evbuffer_iovec*)xzalloc(sizeof(struct evbuffer_iovec) * nv);
-
-  if (evbuffer_peek(source, sbuflen, NULL, iv, nv) != nv) {
-    free(iv);
-    return -1;
+  if (data == NULL) {
+    log_debug("evbuffer_pullup failed");
+    goto err;
   }
+
+
 
   // retry up to 10 times
-  while (!len) {
-    len = find_client_payload(buf, sizeof(buf), TYPE_HTTP_REQUEST);
-    if (cnt++ == 10) return -1;
+  while (!payload_len) {
+    payload_len = find_client_payload(buf, bufsize, TYPE_HTTP_REQUEST);
+    if (cnt++ == 10) {
+      goto err;
+    }
   }
-
+  buf[payload_len] = 0;
 
   if (has_peer_name == 0 && lookup_peer_name_from_ip((char*) conn->peername, peername))
     has_peer_name = 1;
 
-  // if (find_uri_type(buf) != HTTP_CONTENT_SWF) {
-  //   fprintf(stderr, "%s\n", buf);
-  //   exit(-1);
-  // }
+
+  bzero(data2, sbuflen*4);
+  E.encode((char*) data, sbuflen, (char*) data2);
+  E.encode_end(data2+strlen((char*) data2));
+
+  len = (int) strlen(data2) - 1;
+    // remove trailing newline
+  data2[len] = 0;
+  
+  // substitute / with _, + with ., = with - that maybe inserted anywhere in the middle 
+  sanitize_b64(data2, len);
+
+  
+  cookie_len = gen_b64_cookie_field(cookiebuf, data2, len);
+  cookiebuf[cookie_len] = 0;
 
 
 
-  cnt = 0;
-
-  for (i = 0; i < nv; i++) {
-    const unsigned char *p = (const unsigned char *)iv[i].iov_base;
-    const unsigned char *limit = p + iv[i].iov_len;
-    char c;
-    while (p < limit && cnt < sbuflen) {
-      c = *p++;
-      data[datalen] = "0123456789abcdef"[(c & 0xF0) >> 4];
-      data[datalen+1] = "0123456789abcdef"[(c & 0x0F) >> 0];
-      datalen += 2;
-      cnt++;
-    }
-  }
-
-  free(iv);
-
-  if (cookie_len < 4) cookie_len = 4;
-
-  datalen = gen_cookie_field(outbuf, cookie_len, data, datalen);
-  log_debug("CLIENT: sending cookie of length = %d %d\n", datalen, (int) cookie_len);
-  //  fprintf(stderr, "CLIENT: sending cookie of length = %d %d\n", datalen, (int) cookie_len);
-
-  if (datalen < 0) {
+  if (cookie_len < 0) {
     log_debug("cookie generation failed\n");
     return -1;
   }
+  
+
+  // add uri field
+  rval = evbuffer_add(dest, buf, strstr(buf, "\r\n") - buf + 2);
+  if (rval) {
+    log_warn("error adding uri field\n");
+    goto err;
+  }
+
+  rval = evbuffer_add(dest, "Host: ", 6);
+  if (rval) {
+    log_warn("error adding host field\n");
+    goto err;
+  }
+
+  rval = evbuffer_add(dest, peername, strlen(peername));
+  if (rval) { 
+    log_warn("error adding peername field\n");
+    goto err;
+  }
 
 
-  if (evbuffer_add(dest, buf, strstr(buf, "\r\n") - buf + 2)  ||  // add uri field
-      evbuffer_add(dest, "Host: ", 6) ||
-      evbuffer_add(dest, peername, strlen(peername)) ||
-      evbuffer_add(dest, strstr(buf, "\r\n"), len - (unsigned int) (strstr(buf, "\r\n") - buf))  ||  // add everything but first line
-      evbuffer_add(dest, "Cookie: ", 8) ||
-      evbuffer_add(dest, outbuf, cookie_len) ||
-      evbuffer_add(dest, "\r\n\r\n", 4)) {
-      log_debug("error ***********************");
-      return -1;
-    }
+  rval = evbuffer_add(dest, strstr(buf, "\r\n"), payload_len - (unsigned int) (strstr(buf, "\r\n") - buf));
+  if (rval) {
+    log_warn("error adding HTTP fields\n");
+    goto err;
+  }
 
-  // debug
-  // log_warn("CLIENT HTTP request header:");
-  // buf_dump((unsigned char*)buf, len, stderr);
+  rval =   evbuffer_add(dest, "Cookie: ", 8);
+  if (rval) {
+    log_warn("error adding cookie fields\n");
+    goto err;
+  }
+  rval = evbuffer_add(dest, cookiebuf, cookie_len);
 
-  //  sofar += datalen/2;
-  evbuffer_drain(source, datalen/2);
+  if (rval) {
+    log_warn("error adding cookie buf\n");
+    goto err;
+  }
 
+
+  rval = evbuffer_add(dest, "\r\n\r\n", 4);
+							     
+  if (rval) {
+    log_warn("error adding terminators \n");
+    goto err;
+  }
+
+  
+
+  evbuffer_drain(source, sbuflen);
   log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
-
   conn_cease_transmission(conn);
 
-  s->type = find_uri_type(buf, sizeof(buf));
+  s->type = find_uri_type(buf, bufsize);
   s->have_transmitted = true;
+
+
+  free(buf);
+  free(data2);
   return 0;
+
+err:
+  free(buf);
+  free(data2);
+  return -1;
+
 }
 
 
@@ -547,11 +567,13 @@ http::transmit(struct evbuffer *source, conn_t *conn)
 
   if (is_clientside) {
         /* On the client side, we have to embed the data in a GET query somehow;
-       the only plausible places to put it are the URL and cookies.  This
-       presently uses the URL. And it can't be binary. */
+	   the only plausible places to put it are the URL and cookies.  */
 
-    if (evbuffer_get_length(source) < 72)
-      return http_client_uri_transmit(this, source, conn); //@@
+    /*    if (evbuffer_get_length(source) < 72)
+      return http_client_uri_transmit(this, source, conn);
+    */
+
+ //@@
     return http_client_cookie_transmit(this, source, conn); //@@
   }
   else {
@@ -588,15 +610,16 @@ http::transmit(struct evbuffer *source, conn_t *conn)
 int
 http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
 
-  int cnt = 0;
-  unsigned char* data;
+  char* data;
   int type;
 
   do {
     struct evbuffer_ptr s2 = evbuffer_search(source, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
-    unsigned char *p;
-    unsigned char c, h, secondhalf;
+    char *p;
+    char *pend;
+
     char outbuf[MAX_COOKIE_SIZE];
+    char outbuf2[MAX_COOKIE_SIZE];
     int sofar = 0;
     int cookie_mode = 0;
 
@@ -609,7 +632,7 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
 
     log_debug("SERVER received request header of length %d", (int)s2.pos);
 
-    data = evbuffer_pullup(source, s2.pos+4);
+    data = (char*) evbuffer_pullup(source, s2.pos+4);
 
     if (data == NULL) {
       log_debug("SERVER evbuffer_pullup fails");
@@ -622,54 +645,45 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
     type = find_uri_type((char *)data, s2.pos+4);
 
     if (strstr((char*) data, "Cookie") != NULL) {
-      p = (unsigned char*) strstr((char*) data, "Cookie:") + sizeof "Cookie: "-1;
+      p = strstr((char*) data, "Cookie:") + sizeof "Cookie: "-1;
       cookie_mode = 1;
     }
     else
       p = data + sizeof "GET /" -1;
 
+    pend = strstr(p, "\r\n");
 
-    secondhalf = 0;
-    c = 0;
-
-
-    while (strncmp((char*) p, "\r\n", 2) != 0 && (cookie_mode != 0 || p[0] != '.') && sofar < MAX_COOKIE_SIZE) {
-      if (!secondhalf)
-        c = 0;
-      if ('0' <= *p && *p <= '9')
-        h = *p - '0';
-      else if ('a' <= *p && *p <= 'f')
-        h = *p - 'a' + 10;
-      else {
-        p++;
-        continue;
-      }
-
-      c = (c << 4) + h;
-      if (secondhalf) {
-        outbuf[sofar++] = c;
-        cnt++;
-      }
-      secondhalf = !secondhalf;
-      p++;
+    if (pend == NULL || (pend - p > MAX_COOKIE_SIZE)) {
+      fprintf(stderr, "incorrect cookie recovery \n");
+      exit(-1);
+      
     }
 
 
+
+    bzero(outbuf, sizeof(outbuf));
+    int cookielen = unwrap_b64_cookie((char*) p, (char*) outbuf, pend - p);
+
+
+    desanitize_b64(outbuf, cookielen);
+    outbuf[cookielen] = '\n';
+    bzero(outbuf2, sizeof(outbuf2));
+
+    base64::decoder D;
+    sofar = D.decode(outbuf, cookielen+1, outbuf2);
+
+
+    if (sofar <= 0) 
+      log_warn("decode failed\n"); 
+      
+
     if (sofar >= MAX_COOKIE_SIZE) {
-       fprintf(stderr, "cookie buffer overflow\n"); 
+      log_warn("cookie buffer overflow????\n"); 
        exit(-1);
     }
 
-    outbuf[sofar] = 0;
 
-    if (secondhalf) {
-      fprintf(stderr, "incorrect cookie or uri recovery \n");
-      exit(-1);
-    }
-
-
-
-    if (evbuffer_add(dest, outbuf, sofar)) {
+    if (evbuffer_add(dest, outbuf2, sofar)) {
       log_debug("Failed to transfer buffer");
       return RECV_BAD;
     }
@@ -679,7 +693,6 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
 
   s->have_received = 1;
   s->type = type;
-  //  fprintf(stderr, "SERVER RECEIVED payload %d %d\n", cnt, type);
 
   conn_transmit_soon(conn, 100);
   return RECV_GOOD;

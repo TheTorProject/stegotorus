@@ -19,6 +19,9 @@ PROTOCOLS = \
 	src/protocol/null.cc
 
 STEGANOGRAPHERS = \
+	src/steg/b64cookies.cc \
+	src/steg/b64encode.cc \
+	src/steg/b64decode.cc \
 	src/steg/cookies.cc \
 	src/steg/crc32.cc \
 	src/steg/embed.cc \
