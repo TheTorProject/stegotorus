@@ -42,3 +42,5 @@
 
 /build/
 /build-*/
+/bench/
+/bench-*/
