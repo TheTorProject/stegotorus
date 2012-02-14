@@ -20,6 +20,8 @@
  *
  ***************************************************************************/
 
+#define _XOPEN_SOURCE 600 /* strdup */
+
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +34,20 @@ typedef enum {
   GLOB_NO_MEM,
   GLOB_ERROR
 } GlobCode;
+
+/* assumes ASCII */
+static inline bool
+ISALPHA(unsigned char c)
+{
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+/* C90 guarantees '0' through '9' are consecutive */
+static inline bool
+ISDIGIT(unsigned char c)
+{
+  return c >= '0' && c <= '9';
+}
 
 /*
  * glob_word()
@@ -86,8 +102,8 @@ static GlobCode glob_set(URLGlob *glob, char *pattern,
         if(!new_arr) {
           short elem;
           for(elem = 0; elem < pat->content.Set.size; elem++)
-            Curl_safefree(pat->content.Set.elements[elem]);
-          Curl_safefree(pat->content.Set.elements);
+            free(pat->content.Set.elements[elem]);
+          free(pat->content.Set.elements);
           pat->content.Set.ptr_s = 0;
           pat->content.Set.size = 0;
         }
@@ -104,8 +120,8 @@ static GlobCode glob_set(URLGlob *glob, char *pattern,
       if(!pat->content.Set.elements[pat->content.Set.size]) {
         short elem;
         for(elem = 0; elem < pat->content.Set.size; elem++)
-          Curl_safefree(pat->content.Set.elements[elem]);
-        Curl_safefree(pat->content.Set.elements);
+          free(pat->content.Set.elements[elem]);
+        free(pat->content.Set.elements);
         pat->content.Set.ptr_s = 0;
         pat->content.Set.size = 0;
         snprintf(glob->errormsg, sizeof(glob->errormsg), "out of memory\n");
@@ -122,8 +138,8 @@ static GlobCode glob_set(URLGlob *glob, char *pattern,
         if(res) {
           short elem;
           for(elem = 0; elem < pat->content.Set.size; elem++)
-            Curl_safefree(pat->content.Set.elements[elem]);
-          Curl_safefree(pat->content.Set.elements);
+            free(pat->content.Set.elements[elem]);
+          free(pat->content.Set.elements);
           pat->content.Set.ptr_s = 0;
           pat->content.Set.size = 0;
           return res;
@@ -337,7 +353,7 @@ static GlobCode glob_word(URLGlob *glob, char *pattern,
   }
 
   if(res)
-    Curl_safefree(glob->literal[litindex]);
+    free(glob->literal[litindex]);
 
   return res;
 }
@@ -361,7 +377,7 @@ int glob_url(URLGlob** glob, char* url, int *urlnum, FILE *error)
 
   glob_expand = calloc(1, sizeof(URLGlob));
   if(!glob_expand) {
-    Curl_safefree(glob_buffer);
+    free(glob_buffer);
     return CURLE_OUT_OF_MEMORY;
   }
   glob_expand->size = 0;
@@ -380,8 +396,8 @@ int glob_url(URLGlob** glob, char* url, int *urlnum, FILE *error)
               glob_expand->errormsg);
     }
     /* it failed, we cleanup */
-    Curl_safefree(glob_buffer);
-    Curl_safefree(glob_expand);
+    free(glob_buffer);
+    free(glob_expand);
     *urlnum = 1;
     return (res == GLOB_NO_MEM) ? CURLE_OUT_OF_MEMORY : CURLE_URL_MALFORMAT;
   }
@@ -397,7 +413,7 @@ void glob_cleanup(URLGlob* glob)
 
   for(i = glob->size - 1; i < glob->size; --i) {
     if(!(i & 1)) {     /* even indexes contain literals */
-      Curl_safefree(glob->literal[i/2]);
+      free(glob->literal[i/2]);
     }
     else {              /* odd indexes contain sets or ranges */
       if((glob->pattern[i/2].type == UPTSet) &&
@@ -405,14 +421,14 @@ void glob_cleanup(URLGlob* glob)
         for(elem = glob->pattern[i/2].content.Set.size - 1;
              elem >= 0;
              --elem) {
-          Curl_safefree(glob->pattern[i/2].content.Set.elements[elem]);
+          free(glob->pattern[i/2].content.Set.elements[elem]);
         }
-        Curl_safefree(glob->pattern[i/2].content.Set.elements);
+        free(glob->pattern[i/2].content.Set.elements);
       }
     }
   }
-  Curl_safefree(glob->glob_buffer);
-  Curl_safefree(glob);
+  free(glob->glob_buffer);
+  free(glob);
 }
 
 int glob_next_url(char **globbed, URLGlob *glob)
