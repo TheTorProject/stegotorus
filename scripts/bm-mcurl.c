@@ -162,9 +162,9 @@ process_urls(struct url_iter *it, CURLM *multi, CURL **handles,
         last = now;
         url = url_next(it);
         if (url) {
-          if (curl_easy_setopt(handles[maxh], CURLOPT_URL, url) != CURLM_OK)
+          if (curl_easy_setopt(handles[maxh], CURLOPT_URL, url))
             abort();
-          if (curl_multi_add_handle(multi, handles[maxh]) != CURLM_OK)
+          if (curl_multi_add_handle(multi, handles[maxh]))
             abort();
           maxh++;
           free(url); /* curl takes a copy */

@@ -20,8 +20,6 @@
 #
 # bwm-ng: http://www.gropp.org/?id=projects&sub=bwm-ng
 # curl: http://curl.haxx.se/
-# httperf: http://www.hpl.hp.com/research/linux/httperf/
-# tsocks: http://tsocks.sourceforge.net/about.php
 # tor: https://torproject.org/
 # stegotorus: you already have it :)
 #
@@ -61,10 +59,9 @@ FUDGE_FIXEDRATE = 2.5
 
 C_bwm     = "bwm-ng"
 C_curl    = "curl"
-C_httperf = "httperf"
+C_mcurl   = "bm-mcurl"
 C_storus  = "stegotorus-wrapper"
 C_tor     = "/usr/sbin/tor"
-C_tsocks  = "/usr/lib/libtsocks.so"
 
 P_nylon   = "nylon"
 P_storus  = "stegotorus-wrapper"
@@ -97,9 +94,10 @@ def monitor(report, label, period):
             (stamp, iface, upbytes, dnbytes, rest) = line.split(';', 4)
             if iface == 'total': continue
 
-            # convert to most compact possible form
-            upbytes = str(float(upbytes))
-            dnbytes = str(float(dnbytes))
+            # convert to most compact possible form,
+            # scale to decimal kilobytes
+            upbytes = str(float(upbytes)/1000)
+            dnbytes = str(float(dnbytes)/1000)
 
             report.write("%s,%d,%s,%s\n" % (label,n,upbytes,dnbytes))
             n += 1
@@ -279,24 +277,10 @@ def c_curl(url, proxyhost):
                           proxyhost + ":" + PROXY_PORT,
                           url, "-o", "/dev/null"))
 
-def c_httperf(prefix, rate, proxyhost):
-    fp = open("tsocks.conf", "w")
-    fp.write("""\
-server = %s
-local = %s/255.255.255.255
-server_port = %s
-server_type = 5
-""" % (proxyhost, proxyhost, PROXY_PORT))
-    fp.close()
-    return ClientProcess((C_httperf, "--hog",
-                          "--server=" + TARGET,
-                          "--uri=" + prefix,
-                          "--period=" + str(rate),
-                          "--num-calls=5", "--num-conns=2000",
-                          "--wset=10000,1"),
-                         { 'LD_PRELOAD' : C_tsocks,
-                           'TSOCKS_CONF_FILE' :
-                               os.path.join(os.getcwd(), "tsocks.conf") })
+def c_mcurl(prefix, cps, proxyhost):
+    return ClientProcess((C_mcurl, str(cps), '200', proxyhost,
+                          'http://' + TARGET + '/' + prefix +
+                          '/[0-9]/[0-9]/[0-9]/[0-9].html'))
 
 # Benchmarks.
 
@@ -306,13 +290,13 @@ def bench_fixedrate_direct(report):
     try:
         proxy = p_nylon()
 
-        for cap in range(10, 810, 10):
+        for cap in range(10,810,10):
             sys.stderr.write("fixedrate,direct,%d\n" % (cap * 1000))
             try:
                 client = c_curl('http://' + TARGET + '/bm-fixedrate.cgi/' +
                                 str(int(cap * 1000 * FUDGE_FIXEDRATE)),
                                 PROXY)
-                monitor(report, "fixedrate,direct,%d" % (cap * 1000), 60)
+                monitor(report, "fixedrate,direct,%d" % cap, 60)
             finally:
                 if client is not None:
                     client.terminate()
@@ -333,12 +317,12 @@ def bench_fixedrate_tor(report):
         time.sleep(5) # tor startup is slow
 
         for cap in range(10,810,10):
-            sys.stderr.write("fixedrate,tor,%d\n" % (cap * 1000))
+            sys.stderr.write("fixedrate,tor,%d\n" % cap)
             try:
                 client = c_curl('http://' + TARGET + '/bm-fixedrate.cgi/' +
                                 str(int(cap * 1000 * FUDGE_FIXEDRATE)),
                                 '127.0.0.1')
-                monitor(report, "fixedrate,tor,%d" % (cap * 1000), 60)
+                monitor(report, "fixedrate,tor,%d" % cap, 60)
             finally:
                 if client is not None:
                     client.terminate()
@@ -358,10 +342,10 @@ def bench_files_direct(report, prefix):
     try:
         proxy = p_nylon()
 
-        for cps in range(1,81):
+        for cps in range(1,151):
             sys.stderr.write("files.%s,direct,%d\n" % (prefix, cps))
             try:
-                client = c_httperf(prefix, 1./cps, PROXY_IP)
+                client = c_mcurl(prefix, cps, PROXY_IP)
                 monitor(report, "files.%s,direct,%d" % (prefix, cps), 60)
             finally:
                 if client is not None:
@@ -382,10 +366,10 @@ def bench_files_tor(report, prefix):
         proxyl = c_tor_direct()
         time.sleep(5) # tor startup is slow
 
-        for cps in range(1,81):
+        for cps in range(1,151):
             sys.stderr.write("files.%s,tor,%d\n" % (prefix, cps))
             try:
-                client = c_httperf(prefix, 1./cps, '127.0.0.1')
+                client = c_mcurl(prefix, cps, '127.0.0.1')
                 monitor(report, "files.%s,tor,%d" % (prefix, cps), 60)
             finally:
                 if client is not None:
