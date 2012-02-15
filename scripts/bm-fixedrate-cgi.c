@@ -13,10 +13,6 @@
 #include <time.h>
 #include <unistd.h>
 
-/* 1400 bytes is a safe figure for per-packet transmissible payload. */
-#define BLOCKSZ 1400
-
-
 #if __GNUC__ >= 3
 #define NORETURN void __attribute__((noreturn))
 #else
@@ -48,14 +44,22 @@ error_500(const char *syscall)
 static void
 generate(unsigned long rate, bool dryrun)
 {
-  double interval;
   timer_t timerid;
   struct sigevent sev;
   struct itimerspec its;
   sigset_t mask;
   int sig;
   char *data;
-  size_t bufsz = BLOCKSZ;
+  size_t bufsz;
+
+  /* Despite our use of the high-resolution interval timers, we cannot
+     count on being scheduled more often than 1/CLOCKS_PER_SEC
+     seconds.  We ask to be scheduled every 0.01 seconds to avoid a
+     class of rounding errors, since it is very likely that we will be
+     asked to generate at a rate that is a power of ten.
+
+     Therefore, every time we are scheduled we should produce R/100
+     bytes of data. */
 
   /* You send data at R bytes per second in 1400-byte blocks by
      calling write() every 1/(R/1400) second.  However, despite our
@@ -63,24 +67,19 @@ generate(unsigned long rate, bool dryrun)
      being scheduled more often than every 1/CLOCKS_PER_SEC seconds,
      so if we need to send data faster than that, bump up the block
      size instead.  */
-  interval = 1./(rate/(double)BLOCKSZ);
+  bufsz = rate / 100;
 
-  if (interval < 1./CLOCKS_PER_SEC) {
-    interval = 1./CLOCKS_PER_SEC;
-    bufsz = rate / CLOCKS_PER_SEC;
-  }
-
-  its.it_value.tv_sec = lrint(floor(interval));
-  its.it_value.tv_nsec = lrint((interval - its.it_value.tv_sec) * 1e9);
+  its.it_value.tv_sec = 0;
+  its.it_value.tv_nsec = 10000000; /* 1e7 ns = 0.01 s */
   its.it_interval.tv_sec = its.it_value.tv_sec;
   its.it_interval.tv_nsec = its.it_value.tv_nsec;
 
   if (dryrun) {
     printf("Content-Type: text/plain\n\n"
            "Goal %lu bytes per second:\n"
-           "would send %lu bytes every %f seconds\n"
+           "would send %zu bytes every 0.01 seconds\n"
            "  \"    \"    \"     \"     \"   %lu sec + %lu nsec\n",
-           rate, bufsz, interval,
+           rate, bufsz,
            (unsigned long)its.it_value.tv_sec,
            (unsigned long)its.it_value.tv_nsec);
     return;

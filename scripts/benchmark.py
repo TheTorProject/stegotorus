@@ -46,10 +46,10 @@ PROXY_SSH_CMD = ("ssh", PROXY)
 
 TARGET    = "storustest.nfshost.com"
 
-# Fudge factors.  For some reason, bm-fixedrate generates data a
-# linear factor slower than it was meant to; this is the quick fix.
+# For some reason, bm-fixedrate generates data a linear factor slower
+# than it was meant to; this is the quick fix.
 
-FUDGE_FIXEDRATE = 2.5
+FUDGE_FIXEDRATE = 1.939
 
 # Programs we need to run.  Change these if any binary is not in the
 # default path or hasn't got the default name.
@@ -58,7 +58,6 @@ FUDGE_FIXEDRATE = 2.5
 # setup, write a wrapper script.
 
 C_bwm     = "bwm-ng"
-C_curl    = "curl"
 C_mcurl   = "bm-mcurl"
 C_storus  = "stegotorus-wrapper"
 C_tor     = "/usr/sbin/tor"
@@ -232,10 +231,13 @@ def p_tor_direct():
 ORPort %s
 SocksPort 0
 BridgeRelay 1
+AssumeReachable 1
 PublishServerDescriptor 0
 ExitPolicy reject *:*
 DataDirectory .
 Log err stderr
+ContactInfo zackw at cmu dot edu
+Nickname storustest
 # unfortunately there doesn't seem to be any way to tell Tor to accept
 # OR connections from specific IP addresses only.
 """ % PROXY_PORT)
@@ -268,17 +270,24 @@ Log err stderr
 Bridge %s:%s
 UseBridges 1
 SafeSocks 0
+ControlPort 9051
+__DisablePredictedCircuits 1
+__LeaveStreamsUnattached 1
 """ % (PROXY_PORT, PROXY_IP, PROXY_PORT))
     fp.close()
     return ClientProcess((C_tor, "--quiet", "-f", "tor-direct-client.conf"))
 
+def c_torctl():
+    return ClientProcess((os.path.dirname(__file__) + '/bm-tor-controller.py'))
+
 def c_curl(url, proxyhost):
-    return ClientProcess((C_curl, "-s", "--socks5-hostname",
+    return ClientProcess((C_mcurl, '1', '1',
                           proxyhost + ":" + PROXY_PORT,
-                          url, "-o", "/dev/null"))
+                          url))
 
 def c_mcurl(prefix, cps, proxyhost):
-    return ClientProcess((C_mcurl, str(cps), '200', proxyhost,
+    return ClientProcess((C_mcurl, str(cps), '200',
+                          proxyhost + ':' + PROXY_PORT,
                           'http://' + TARGET + '/' + prefix +
                           '/[0-9]/[0-9]/[0-9]/[0-9].html'))
 
@@ -296,7 +305,7 @@ def bench_fixedrate_direct(report):
                 client = c_curl('http://' + TARGET + '/bm-fixedrate.cgi/' +
                                 str(int(cap * 1000 * FUDGE_FIXEDRATE)),
                                 PROXY)
-                monitor(report, "fixedrate,direct,%d" % cap, 60)
+                monitor(report, "fixedrate,direct,%d" % cap, 10)
             finally:
                 if client is not None:
                     client.terminate()
@@ -314,6 +323,7 @@ def bench_fixedrate_tor(report):
     try:
         proxy = p_tor_direct()
         proxyl = c_tor_direct()
+        proxyc = c_torctl()
         time.sleep(5) # tor startup is slow
 
         for cap in range(10,810,10):
@@ -332,17 +342,20 @@ def bench_fixedrate_tor(report):
         if proxy is not None:
             proxy.terminate()
             proxy.wait()
+        if proxyc is not None:
+            proxyc.terminate()
+            proxyc.wait()
         if proxyl is not None:
             proxyl.terminate()
             proxyl.wait()
 
-def bench_files_direct(report, prefix):
+def bench_files_direct(report, prefix, maxconn):
     client = None
     proxy = None
     try:
         proxy = p_nylon()
 
-        for cps in range(1,151):
+        for cps in range(1,maxconn+1):
             sys.stderr.write("files.%s,direct,%d\n" % (prefix, cps))
             try:
                 client = c_mcurl(prefix, cps, PROXY_IP)
@@ -357,16 +370,17 @@ def bench_files_direct(report, prefix):
             proxy.terminate()
             proxy.wait()
 
-def bench_files_tor(report, prefix):
+def bench_files_tor(report, prefix, maxconn):
     client = None
     proxy = None
     proxyl = None
     try:
         proxy = p_tor_direct()
         proxyl = c_tor_direct()
+        proxyc = c_torctl()
         time.sleep(5) # tor startup is slow
 
-        for cps in range(1,151):
+        for cps in range(1,maxconn+1):
             sys.stderr.write("files.%s,tor,%d\n" % (prefix, cps))
             try:
                 client = c_mcurl(prefix, cps, '127.0.0.1')
@@ -380,6 +394,9 @@ def bench_files_tor(report, prefix):
         if proxy is not None:
             proxy.terminate()
             proxy.wait()
+        if proxyc is not None:
+            proxyc.terminate()
+            proxyc.wait()
         if proxyl is not None:
             proxyl.terminate()
             proxyl.wait()
@@ -388,7 +405,7 @@ if __name__ == '__main__':
     sys.stdout.write("benchmark,relay,cap,obs,up,down\n")
     bench_fixedrate_direct(sys.stdout)
     bench_fixedrate_tor(sys.stdout)
-    bench_files_direct(sys.stdout, "fixed")
-    bench_files_tor(sys.stdout, "fixed")
-    bench_files_direct(sys.stdout, "pareto")
-    bench_files_tor(sys.stdout, "pareto")
+    bench_files_direct(sys.stdout, "fixed", 120)
+    bench_files_tor(sys.stdout, "fixed", 120)
+    bench_files_direct(sys.stdout, "pareto", 80)
+    bench_files_tor(sys.stdout, "pareto", 80)
