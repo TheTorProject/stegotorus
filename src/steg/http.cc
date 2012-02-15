@@ -621,7 +621,7 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
     char outbuf[MAX_COOKIE_SIZE];
     char outbuf2[MAX_COOKIE_SIZE];
     int sofar = 0;
-    int cookie_mode = 0;
+    //int cookie_mode = 0;
 
 
     if (s2.pos == -1) {
@@ -646,7 +646,7 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
 
     if (strstr((char*) data, "Cookie") != NULL) {
       p = strstr((char*) data, "Cookie:") + sizeof "Cookie: "-1;
-      cookie_mode = 1;
+      //cookie_mode = 1;
     }
     else
       p = data + sizeof "GET /" -1;
