@@ -61,8 +61,7 @@ struct config_t
   /** Return an extended 'conn_t' object for a new socket using this
       configuration.  The 'index' argument is equal to the 'N'
       argument to get_listen_addrs or get_target_addrs that retrieved
-      the address to which the socket is bound.  Must fill in the
-      'cfg' field of the generic structure.  */
+      the address to which the socket is bound.  */
   virtual conn_t *conn_create(size_t index) = 0;
 };
 

@@ -72,11 +72,13 @@ static const uint8_t s2c_key[] =
 /* Connections and circuits */
 
 namespace {
+  struct chop_config_t;
   struct chop_circuit_t;
   typedef unordered_map<uint64_t, chop_circuit_t *> chop_circuit_table;
 
   struct chop_conn_t : conn_t
   {
+    chop_config_t *cfg;
     chop_circuit_t *upstream;
     steg_t *steg;
     struct evbuffer *recv_pending;
@@ -783,7 +785,7 @@ chop_push_to_upstream(chop_circuit_t *ckt)
 static int
 chop_find_or_make_circuit(chop_conn_t *conn, uint64_t circuit_id)
 {
-  chop_config_t *cfg = static_cast<chop_config_t *>(conn->cfg);
+  chop_config_t *cfg = conn->cfg;
   chop_circuit_table::value_type in(circuit_id, 0);
   std::pair<chop_circuit_table::iterator, bool> out = cfg->circuits.insert(in);
   chop_circuit_t *ck;

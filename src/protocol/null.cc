@@ -21,6 +21,7 @@ namespace {
 
   struct null_conn_t : conn_t
   {
+    null_config_t *cfg;
     null_circuit_t *upstream;
 
     CONN_DECLARE_METHODS(null);

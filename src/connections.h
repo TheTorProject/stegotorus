@@ -14,7 +14,6 @@
     Connections are associated with circuits (and thus with upstream
     socket-level connections) as quickly as possible.  */
 struct conn_t {
-  config_t           *cfg;
   const char         *peername;
   struct bufferevent *buffer;
   unsigned int        serial;
