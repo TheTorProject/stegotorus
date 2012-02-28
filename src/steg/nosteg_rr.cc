@@ -80,11 +80,7 @@ nosteg_rr::transmit(struct evbuffer *source, conn_t *conn)
   }
 
   can_transmit = false;
-  if (is_clientside) {
-    conn_cease_transmission(conn);
-  } else {
-    conn_close_after_transmit(conn);
-  }
+  conn->cease_transmission();
 
   return 0;
 }
@@ -104,10 +100,10 @@ nosteg_rr::receive(conn_t *conn, struct evbuffer *dest)
   }
 
   if (is_clientside) {
-    conn_expect_close(conn);
+    conn->expect_close();
   } else {
     can_transmit = true;
-    conn_transmit_soon(conn, 100);
+    conn->transmit_soon(100);
   }
 
   return 0;

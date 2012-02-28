@@ -369,7 +369,7 @@ http_client_cookie_transmit (http *s, struct evbuffer *source, conn_t *conn) {
 
   evbuffer_drain(source, sbuflen);
   log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
-  conn_cease_transmission(conn);
+  conn->cease_transmission();
 
   s->type = find_uri_type(buf, bufsize);
   s->have_transmitted = true;
@@ -530,7 +530,7 @@ http_client_uri_transmit (http *s, struct evbuffer *source, conn_t *conn) {
 
 
   evbuffer_drain(source, slen);
-  conn_cease_transmission(conn);
+  conn->cease_transmission();
   s->type = find_uri_type(outbuf, sizeof(outbuf));
   s->have_transmitted = 1;
   return 0;
@@ -694,7 +694,7 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
   s->have_received = 1;
   s->type = type;
 
-  conn_transmit_soon(conn, 100);
+  conn->transmit_soon(100);
   return RECV_GOOD;
 }
 

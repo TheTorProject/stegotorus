@@ -166,10 +166,10 @@ int embed::transmit(struct evbuffer *source, conn_t *conn) {
   // check if this trace is finished and whether we need to send again
   if (advance_packet()) {
     log_debug("send finished trace");
-    conn_close_after_transmit(conn);
+    conn->cease_transmission();
   } else if (is_outgoing()) {
     log_debug("sending again in %d ms", get_pkt_time());
-    conn_transmit_soon(conn, get_pkt_time());
+    conn->transmit_soon(get_pkt_time());
   }
 
   // update last time
@@ -210,23 +210,23 @@ int embed::receive(conn_t *conn, struct evbuffer *dest) {
       }
     }
     pkt_size += data_len + 2;
-    
+
     // read padding
     if (exp_pkt_size > pkt_size) {
       size_t padding = exp_pkt_size - pkt_size;
       if (evbuffer_drain(source, padding) == -1) return -1;
     }
-    
+
     src_len -= exp_pkt_size;
     pkt_size = 0;
 
     log_debug("received packet %d of trace %d",
 	      cur_pkt, cur_idx);
-    
+
     // advance packet; if done with trace, sender should close connection
     if (advance_packet()) {
-      conn_cease_transmission(conn);
-      conn_expect_close(conn);
+      conn->cease_transmission();
+      conn->expect_close();
       log_debug("received last packet in trace");
       return 0;
     }
@@ -234,7 +234,7 @@ int embed::receive(conn_t *conn, struct evbuffer *dest) {
 
   if (is_outgoing()) {
     log_debug("preparing to send in %d ms", get_pkt_time());
-    conn_transmit_soon(conn, get_pkt_time());
+    conn->transmit_soon(get_pkt_time());
   }
 
   log_debug("remaining source length: %d", src_len);

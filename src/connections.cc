@@ -146,32 +146,6 @@ conn_send_eof(conn_t *dest)
   } /* otherwise, it's already been done */
 }
 
-/* Protocol methods of connections. */
-
-void
-conn_expect_close(conn_t *conn)
-{
-  conn->expect_close();
-}
-
-void
-conn_cease_transmission(conn_t *conn)
-{
-  conn->cease_transmission();
-}
-
-void
-conn_close_after_transmit(conn_t *conn)
-{
-  conn->close_after_transmit();
-}
-
-void
-conn_transmit_soon(conn_t *conn, unsigned long timeout)
-{
-  conn->transmit_soon(timeout);
-}
-
 /* Circuits. */
 
 /* The flush timer is used to ensure forward progress for protocols

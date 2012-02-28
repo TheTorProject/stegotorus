@@ -160,9 +160,7 @@ http_server_SWF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
   }
 
     
-  // conn_cease_transmission(conn);
-  conn_close_after_transmit(conn);
-
+  conn->cease_transmission();
 
   free(inbuf);
   free(outbuf);
@@ -249,6 +247,6 @@ http_handle_client_SWF_receive(steg_t *, conn_t *conn, struct evbuffer *dest, st
   }
 
   //  downcast_steg(s)->have_received = 1;
-  conn_expect_close(conn);
+  conn->expect_close();
   return RECV_GOOD;
 }

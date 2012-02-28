@@ -123,7 +123,6 @@ extern const proto_module *const supported_protos[];
   virtual int  recv_eof();                              \
   virtual void expect_close();                          \
   virtual void cease_transmission();                    \
-  virtual void close_after_transmit();                  \
   virtual void transmit_soon(unsigned long timeout)     \
   /* deliberate absence of semicolon */
 
@@ -131,8 +130,6 @@ extern const proto_module *const supported_protos[];
   void mod##_conn_t::expect_close()                     \
   { log_abort(this, "steg stub called"); }              \
   void mod##_conn_t::cease_transmission()               \
-  { log_abort(this, "steg stub called"); }              \
-  void mod##_conn_t::close_after_transmit()             \
   { log_abort(this, "steg stub called"); }              \
   void mod##_conn_t::transmit_soon(unsigned long)       \
   { log_abort(this, "steg stub called"); }

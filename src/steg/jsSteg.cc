@@ -874,7 +874,7 @@ http_server_JS_transmit (steg_t*, struct evbuffer *source, conn_t *conn, unsigne
   evbuffer_drain(source, sbuflen);
 
   free(outbuf2);
-  conn_close_after_transmit(conn);
+  conn->cease_transmission();
   //  downcast_steg(s)->have_transmitted = 1;
   return 0;
 }
@@ -1075,8 +1075,7 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   log_debug("Drained source for %d char\n", response_len);
    
   //  downcast_steg(s)->have_received = 1;
-  conn_expect_close(conn);
-  
+  conn->expect_close();
   return RECV_GOOD;
 }
 

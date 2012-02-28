@@ -422,7 +422,7 @@ int http_server_PDF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
 
   evbuffer_drain(source, sbuflen);
 
-  conn_close_after_transmit(conn);
+  conn->cease_transmission();
   //  downcast_steg(s)->have_transmitted = 1;
   return 0;
 }
@@ -502,7 +502,7 @@ http_handle_client_PDF_receive(steg_t *, conn_t *conn, struct evbuffer *dest, st
   }
 
   //  downcast_steg(s)->have_received = 1;
-  conn_expect_close(conn);
+  conn->expect_close();
   return RECV_GOOD;
 }
 

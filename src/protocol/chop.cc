@@ -1366,13 +1366,6 @@ chop_conn_t::cease_transmission()
 }
 
 void
-chop_conn_t::close_after_transmit()
-{
-  this->no_more_transmissions = true;
-  conn_do_flush(this);
-}
-
-void
 chop_conn_t::transmit_soon(unsigned long milliseconds)
 {
   struct timeval tv;

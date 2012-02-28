@@ -60,8 +60,9 @@ struct conn_t {
       depending on the protocol.  */
   virtual int recv_eof() = 0;
 
-  /* The next four methods are for the use of steganography modules.
-     If you don't use steganography modules, you can use protocol.h's
+  /* The next several conn_t methods are used by steganography modules
+     to provide hints about appropriate higher-level behavior.
+     If your protocol doesn't use steganography modules, use protocol.h's
      PROTO_STEG_STUBS to define stubs that crash if called.  */
 
   /** It is an error if any further data is received from the remote
@@ -72,10 +73,6 @@ struct conn_t {
       on this connection.  However, the peer may still send data back. */
   virtual void cease_transmission() = 0;
 
-  /** After all pending data is transmitted, close this connection.
-      (This is stronger than cease_transmission - no reply is expected.) */
-  virtual void close_after_transmit() = 0;
-
   /** If TIMEOUT milliseconds elapse without anything having been
       transmitted on this connection, you need to make up some data
       and send it.  */
@@ -84,9 +81,9 @@ struct conn_t {
 
 /** When all currently-open connections and circuits are closed, stop
     the main event loop and exit the program.  If 'barbaric' is true,
-    forcibly close them all now, then stop the event loop.  It
-    is a bug to call any function that creates connections or circuits
-    after conn_start_shutdown has been called. */
+    forcibly close them all now, then stop the event loop.
+    It is a bug to call any function that creates connections or
+    circuits after conn_start_shutdown has been called. */
 void conn_start_shutdown(int barbaric);
 
 /** Create a new inbound connection from a configuration and a
@@ -99,24 +96,6 @@ size_t conn_count(void);
 
 void conn_send_eof(conn_t *conn);
 void conn_do_flush(conn_t *conn);
-
-/* The next several conn_t methods are used by steganography modules to
-   provide hints about appropriate higher-level behavior.  */
-
-/** The peer is expected to close CONN without any further
-    transmissions. */
-void conn_expect_close(conn_t *conn);
-
-/** Do not transmit any more data on this connection after the outbound
-    queue has drained.  However, the peer may still send data back. */
-void conn_cease_transmission(conn_t *conn);
-
-/** Close CONN after all pending data is transmitted. */
-void conn_close_after_transmit(conn_t *conn);
-
-/** We must transmit something on this connection within TIMEOUT
-    milliseconds. */
-void conn_transmit_soon(conn_t *conn, unsigned long timeout);
 
 /**
    This struct holds all the state for an "upstream" connection to the
