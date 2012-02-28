@@ -503,7 +503,7 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
   /* Upon successful connection, enable traffic on both sides of the
      connection, and replace this callback with the regular event_cb */
   if (what & BEV_EVENT_CONNECTED) {
-    circuit_t *ckt = conn->circuit;
+    circuit_t *ckt = conn->circuit();
     log_assert(ckt);
     log_assert(ckt->up_peer);
     log_assert(conn->buffer == bev);
@@ -539,7 +539,7 @@ static void
 downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = (conn_t *)arg;
-  circuit_t *ckt = conn->circuit;
+  circuit_t *ckt = conn->circuit();
   socks_state_t *socks;
 
   log_debug(conn, "what=%04hx", what);

@@ -15,7 +15,6 @@
     socket-level connections) as quickly as possible.  */
 struct conn_t {
   config_t           *cfg;
-  circuit_t          *circuit;
   const char         *peername;
   struct bufferevent *buffer;
   unsigned int        serial;
@@ -24,6 +23,11 @@ struct conn_t {
 
   conn_t() : connected(false), flushing(false) {}
   virtual ~conn_t();
+
+  /** Return the upstream circuit for this connection, if there is one.
+      NOTE: this is *not* a pure virtual method because it can be called
+      legitimately after the subclass destructor has run. */
+  virtual circuit_t *circuit() const;
 
   /** Create an upstream circuit for this connection, if it is
       possible to do so without receiving data from the downstream

@@ -123,6 +123,7 @@ extern const proto_module *const supported_protos[];
 #define CONN_DECLARE_METHODS(mod)                       \
   mod##_conn_t();                                       \
   virtual ~mod##_conn_t();                              \
+  virtual circuit_t *circuit() const;                   \
   virtual int  maybe_open_upstream();                   \
   virtual int  handshake();                             \
   virtual int  recv();                                  \

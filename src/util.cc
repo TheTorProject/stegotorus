@@ -595,10 +595,11 @@ logpfx(int severity, const char *fn, conn_t *conn)
   fprintf(log_dest, "[%s] ", sev_to_string(severity));
   if (log_min_sev == LOG_SEV_DEBUG && fn)
     fprintf(log_dest, "%s: ", fn);
-  if (conn)
-    fprintf(log_dest, "<%u.%u> ",
-            conn->circuit ? conn->circuit->serial : 0,
-            conn->serial);
+  if (conn) {
+    circuit_t *ckt = conn->circuit();
+    unsigned int ckt_serial = ckt ? ckt->serial : 0;
+    fprintf(log_dest, "<%u.%u> ", ckt_serial, conn->serial);
+  }
 }
 
 /**** Public logging API. ****/

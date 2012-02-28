@@ -9,19 +9,26 @@
 #include <event2/buffer.h>
 
 namespace {
-  struct null_config_t : config_t {
+  struct null_config_t : config_t
+  {
     struct evutil_addrinfo *listen_addr;
     struct evutil_addrinfo *target_addr;
 
     CONFIG_DECLARE_METHODS(null);
   };
 
-  struct null_conn_t : conn_t {
+  struct null_circuit_t;
+
+  struct null_conn_t : conn_t
+  {
+    null_circuit_t *upstream;
+
     CONN_DECLARE_METHODS(null);
   };
 
-  struct null_circuit_t : circuit_t {
-    conn_t *downstream;
+  struct null_circuit_t : circuit_t
+  {
+    null_conn_t *downstream;
 
     CIRCUIT_DECLARE_METHODS(null);
   };
@@ -112,12 +119,13 @@ null_config_t::get_target_addrs(size_t n)
 circuit_t *
 null_config_t::circuit_create(size_t)
 {
-  circuit_t *ckt = new null_circuit_t;
+  null_circuit_t *ckt = new null_circuit_t;
   ckt->cfg = this;
   return ckt;
 }
 
 null_circuit_t::null_circuit_t()
+  : downstream(NULL)
 {
 }
 
@@ -126,17 +134,23 @@ null_circuit_t::~null_circuit_t()
   if (downstream) {
     /* break the circular reference before deallocating the
        downstream connection */
-    downstream->circuit = NULL;
+    downstream->upstream = NULL;
     delete downstream;
   }
 }
 
 /* Add a connection to this circuit. */
 void
-null_circuit_t::add_downstream(conn_t *conn)
+null_circuit_t::add_downstream(conn_t *cn)
 {
+  null_conn_t *conn = dynamic_cast<null_conn_t *>(cn);
+  log_assert(conn);
+  log_assert(!conn->upstream);
   log_assert(!this->downstream);
+
   this->downstream = conn;
+  conn->upstream = this;
+
   log_debug(this, "added connection <%d.%d> to %s",
             this->serial, conn->serial, conn->peername);
 }
@@ -145,12 +159,18 @@ null_circuit_t::add_downstream(conn_t *conn)
    protocol, it is because of a network error, and the whole circuit
    should be closed.  */
 void
-null_circuit_t::drop_downstream(conn_t *conn)
+null_circuit_t::drop_downstream(conn_t *cn)
 {
+  null_conn_t *conn = dynamic_cast<null_conn_t *>(cn);
+  log_assert(conn);
   log_assert(this->downstream == conn);
+  log_assert(conn->upstream == this);
+
   log_debug(this, "dropped connection <%d.%d> to %s",
             this->serial, conn->serial, conn->peername);
   this->downstream = NULL;
+  conn->upstream = NULL;
+
   if (evbuffer_get_length(bufferevent_get_output(this->up_buffer)) > 0)
     /* this may already have happened, but there's no harm in
        doing it again */
@@ -190,18 +210,29 @@ null_config_t::conn_create(size_t)
 }
 
 null_conn_t::null_conn_t()
+  : upstream(NULL)
 {
 }
 
 null_conn_t::~null_conn_t()
 {
+  if (this->upstream)
+    circuit_drop_downstream(this->upstream, this);
+}
+
+/* Only used by connection callbacks */
+circuit_t *
+null_conn_t::circuit() const
+{
+  return upstream;
 }
 
 /** Null inbound-to-outbound connections are 1:1 */
 int
 null_conn_t::maybe_open_upstream()
 {
-  circuit_t *ckt = circuit_create(this->cfg, 0);
+  null_circuit_t *ckt = dynamic_cast<null_circuit_t *>
+    (circuit_create(this->cfg, 0));
   if (!ckt)
     return -1;
 
@@ -221,8 +252,8 @@ null_conn_t::handshake()
 int
 null_conn_t::recv()
 {
-  log_assert(this->circuit);
-  return evbuffer_add_buffer(bufferevent_get_output(this->circuit->up_buffer),
+  log_assert(this->upstream);
+  return evbuffer_add_buffer(bufferevent_get_output(this->upstream->up_buffer),
                              conn_get_inbound(this));
 }
 
@@ -230,12 +261,12 @@ null_conn_t::recv()
 int
 null_conn_t::recv_eof()
 {
-  if (this->circuit) {
+  if (this->upstream) {
     if (evbuffer_get_length(conn_get_inbound(this)) > 0)
       if (this->recv())
         return -1;
 
-    circuit_recv_eof(this->circuit);
+    circuit_recv_eof(this->upstream);
   }
   return 0;
 }

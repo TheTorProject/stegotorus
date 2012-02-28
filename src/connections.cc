@@ -115,16 +115,19 @@ conn_t::~conn_t()
   log_debug(this, "closing connection; %lu remaining",
             (unsigned long) connections.size());
 
-  if (this->circuit) {
-    circuit_drop_downstream(this->circuit, this);
-  }
-
   if (this->peername)
     free((void *)this->peername);
   if (this->buffer)
     bufferevent_free(this->buffer);
 
   maybe_finish_shutdown();
+}
+
+/** Potentially called during connection construction or destruction. */
+circuit_t *
+conn_t::circuit() const
+{
+  return 0;
 }
 
 void
@@ -290,16 +293,12 @@ circuit_add_upstream(circuit_t *ckt, struct bufferevent *buf, const char *peer)
 void
 circuit_add_downstream(circuit_t *ckt, conn_t *down)
 {
-  log_assert(!down->circuit);
-  down->circuit = ckt;
   ckt->add_downstream(down);
 }
 
 void
 circuit_drop_downstream(circuit_t *ckt, conn_t *down)
 {
-  log_assert(down->circuit == ckt);
-  down->circuit = NULL;
   ckt->drop_downstream(down);
 }
 
