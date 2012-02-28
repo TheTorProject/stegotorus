@@ -44,10 +44,9 @@ struct steg_t
 };
 
 /** STEG_DEFINE_MODULE defines an object with this type, plus the
-    function that it points to.  You don't ever manipulate this object
-    directly; however, read its documentation to understand the
-    arguments to STEG_DEFINE_MODULE. */
-
+    function that it points to; there is a table of all such objects,
+    which generic code uses to know what steganography modules are
+    available. */
 struct steg_module
 {
   /** Name of the steganography module. Must be a valid C identifier. */

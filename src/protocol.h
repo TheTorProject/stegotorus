@@ -68,17 +68,12 @@ struct config_t
 int config_is_supported(const char *name);
 config_t *config_create(int n_options, const char *const *options);
 
-/**
-   This struct defines a protocol and its methods; note that not all
-   of them are methods on the same object in the C++ sense.
-   See connections.h for the definitions of 'conn_t' and 'circuit_t'.
-
-   A filled-in, statically allocated proto_module object is the
-   principal interface between each individual protocol and generic code.
- */
+/** PROTO_DEFINE_MODULE defines an object with this type, plus the
+    function that it points to; there is a table of all such objects,
+    which generic code uses to know what protocols are available. */
 struct proto_module
 {
-  /** The short name of this protocol. Must be a valid C identifier. */
+  /** Name of this protocol. Must be a valid C identifier. */
   const char *name;
 
   /** Create a config_t instance for this module from a set of command
