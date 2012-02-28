@@ -27,8 +27,8 @@
 #
 # nylon: http://monkey.org/~marius/pages/?page=nylon
 # tor, stegotorus
-#
-# You configure this script by setting variables below.
+
+# CONFIGURATION - ADJUST VARIABLES BELOW AS NECESSARY
 
 # Client host
 
@@ -39,17 +39,12 @@ CLIENT_IFACE  = "eth0"
 
 PROXY         = "sandbox03.sv.cmu.edu"
 PROXY_IP      = "209.129.244.30" # some things won't do DNS for this
-PROXY_PORT    = "1080"
+PROXY_PORT    = 1080
 PROXY_SSH_CMD = ("ssh", PROXY)
 
 # Target
 
 TARGET    = "storustest.nfshost.com"
-
-# For some reason, bm-fixedrate generates data a linear factor slower
-# than it was meant to; this is the quick fix.
-
-FUDGE_FIXEDRATE = 1.939
 
 # Programs we need to run.  Change these if any binary is not in the
 # default path or hasn't got the default name.
@@ -59,14 +54,22 @@ FUDGE_FIXEDRATE = 1.939
 
 C_bwm     = "bwm-ng"
 C_mcurl   = "bm-mcurl"
-C_storus  = "stegotorus-wrapper"
+C_storus  = "stegotorus"
 C_tor     = "/usr/sbin/tor"
 
 P_nylon   = "nylon"
-P_storus  = "stegotorus-wrapper"
+P_storus  = "./stegotorus/build/stegotorus"
 P_tor     = "tor"
 P_python  = "/usr/local/bin/python" # this must be an absolute path,
                                     # it goes on a shebang line
+
+# For some reason, bm-fixedrate generates data a linear factor slower
+# than it was meant to; this is the quick fix.  To calibrate this
+# number, set it to 1 and run the direct fixedrate test, do a linear
+# regression on 'down' as a function of 'cap', and the number you want
+# is 1 over the slope of the line.
+
+FUDGE_FIXEDRATE = 1.939
 
 # ACTUAL PROGRAM STARTS HERE
 
@@ -220,27 +223,37 @@ Verbose=0
 PIDfile=nylon.pid
 
 [Server]
-Port=%s
+Port=%d
 Allow-IP=%s/32
 """ % (PROXY_PORT, CLIENT_IP))
 
-def p_tor_direct():
-    return ProxyProcess((P_tor, "--quiet", "-f", "tor-direct.conf"),
-                        "tor-direct.conf",
+def p_tor():
+    return ProxyProcess((P_tor, "--quiet", "-f", "tor.conf"),
+                        "tor.conf",
                         """\
-ORPort %s
+ORPort %d
 SocksPort 0
 BridgeRelay 1
 AssumeReachable 1
 PublishServerDescriptor 0
-ExitPolicy reject *:*
+ExitPolicy accept *:80
 DataDirectory .
 Log err stderr
 ContactInfo zackw at cmu dot edu
 Nickname storustest
+AllowSingleHopExits 1
 # unfortunately there doesn't seem to be any way to tell Tor to accept
 # OR connections from specific IP addresses only.
 """ % PROXY_PORT)
+
+def p_storus(smode):
+    return ProxyProcess((P_storus, "--log-min-severity=warn",
+                         "chop", "server", "127.0.0.1:%d" % PROXY_PORT,
+                         "%s:%d" % (PROXY_IP, PROXY_PORT+1), smode,
+                         "%s:%d" % (PROXY_IP, PROXY_PORT+2), smode,
+                         "%s:%d" % (PROXY_IP, PROXY_PORT+3), smode,
+                         "%s:%d" % (PROXY_IP, PROXY_PORT+4), smode))
+
 
 class ClientProcess(subprocess.Popen):
     """A process running on the local machine.  This is probably doing
@@ -264,80 +277,91 @@ def c_tor_direct():
     fp = open("tor-direct-client.conf", "w")
     fp.write("""\
 ORPort 0
-SocksPort %s
+SocksPort %d
 DataDirectory .
 Log err stderr
-Bridge %s:%s
+Bridge %s:%d
 UseBridges 1
 SafeSocks 0
 ControlPort 9051
+AllowSingleHopCircuits 1
+ExcludeSingleHopRelays 0
 __DisablePredictedCircuits 1
 __LeaveStreamsUnattached 1
 """ % (PROXY_PORT, PROXY_IP, PROXY_PORT))
     fp.close()
     return ClientProcess((C_tor, "--quiet", "-f", "tor-direct-client.conf"))
 
+def c_tor_storus():
+    fp = open("tor-storus-client.conf", "w")
+    fp.write("""\
+ORPort 0
+SocksPort %d
+Socks5Proxy 127.0.0.1:%s
+DataDirectory .
+Log err stderr
+Bridge %s:%d
+UseBridges 1
+SafeSocks 0
+ControlPort 9051
+AllowSingleHopCircuits 1
+ExcludeSingleHopRelays 0
+__DisablePredictedCircuits 1
+__LeaveStreamsUnattached 1
+""" % (PROXY_PORT, PROXY_PORT+1, PROXY_IP, PROXY_PORT))
+    fp.close()
+    return ClientProcess((C_tor, "--quiet", "-f", "tor-storus-client.conf"))
+
+def c_storus(smode):
+    return ClientProcess((C_storus, "--log-min-severity=warn",
+                          "chop", "socks", "127.0.0.1:%d" % (PROXY_PORT+1),
+                          "%s:%d" % (PROXY_IP, PROXY_PORT+1), smode,
+                          "%s:%d" % (PROXY_IP, PROXY_PORT+2), smode,
+                          "%s:%d" % (PROXY_IP, PROXY_PORT+3), smode,
+                          "%s:%d" % (PROXY_IP, PROXY_PORT+4), smode))
+
 def c_torctl():
-    return ClientProcess((os.path.dirname(__file__) + '/bm-tor-controller.py'))
+    return ClientProcess((os.path.dirname(__file__) + '/bm-tor-controller.py'
+                          ))
 
 def c_curl(url, proxyhost):
     return ClientProcess((C_mcurl, '1', '1',
-                          proxyhost + ":" + PROXY_PORT,
+                          proxyhost + ":" + str(PROXY_PORT),
                           url))
 
 def c_mcurl(prefix, cps, proxyhost):
     return ClientProcess((C_mcurl, str(cps), '200',
-                          proxyhost + ':' + PROXY_PORT,
+                          proxyhost + ':' + str(PROXY_PORT),
                           'http://' + TARGET + '/' + prefix +
                           '/[0-9]/[0-9]/[0-9]/[0-9].html'))
 
 # Benchmarks.
 
-def bench_fixedrate_direct(report):
-    client = None
+def t_direct(report, bench, *args):
     proxy = None
     try:
         proxy = p_nylon()
 
-        for cap in range(10,810,10):
-            sys.stderr.write("fixedrate,direct,%d\n" % (cap * 1000))
-            try:
-                client = c_curl('http://' + TARGET + '/bm-fixedrate.cgi/' +
-                                str(int(cap * 1000 * FUDGE_FIXEDRATE)),
-                                PROXY)
-                monitor(report, "fixedrate,direct,%d" % cap, 10)
-            finally:
-                if client is not None:
-                    client.terminate()
-                    client.wait()
-                    client = None
+        bench(report, PROXY_IP, "direct", *args)
+
     finally:
         if proxy is not None:
             proxy.terminate()
             proxy.wait()
 
-def bench_fixedrate_tor(report):
-    client = None
+def t_tor(report, bench, *args):
     proxy = None
     proxyl = None
+    proxyc = None
     try:
-        proxy = p_tor_direct()
+        proxy = p_tor()
         proxyl = c_tor_direct()
+        time.sleep(1)
         proxyc = c_torctl()
-        time.sleep(5) # tor startup is slow
+        time.sleep(4)
 
-        for cap in range(10,810,10):
-            sys.stderr.write("fixedrate,tor,%d\n" % cap)
-            try:
-                client = c_curl('http://' + TARGET + '/bm-fixedrate.cgi/' +
-                                str(int(cap * 1000 * FUDGE_FIXEDRATE)),
-                                '127.0.0.1')
-                monitor(report, "fixedrate,tor,%d" % cap, 60)
-            finally:
-                if client is not None:
-                    client.terminate()
-                    client.wait()
-                    client = None
+        bench(report, '127.0.0.1', "tor", *args)
+
     finally:
         if proxy is not None:
             proxy.terminate()
@@ -349,47 +373,23 @@ def bench_fixedrate_tor(report):
             proxyl.terminate()
             proxyl.wait()
 
-def bench_files_direct(report, prefix, maxconn):
-    client = None
+def t_storus(report, bench, smode, *args):
     proxy = None
-    try:
-        proxy = p_nylon()
-
-        for cps in range(1,maxconn+1):
-            sys.stderr.write("files.%s,direct,%d\n" % (prefix, cps))
-            try:
-                client = c_mcurl(prefix, cps, PROXY_IP)
-                monitor(report, "files.%s,direct,%d" % (prefix, cps), 60)
-            finally:
-                if client is not None:
-                    client.terminate()
-                    client.wait()
-                    client = None
-    finally:
-        if proxy is not None:
-            proxy.terminate()
-            proxy.wait()
-
-def bench_files_tor(report, prefix, maxconn):
-    client = None
-    proxy = None
+    proxys = None
     proxyl = None
+    proxym = None
+    proxyc = None
     try:
-        proxy = p_tor_direct()
-        proxyl = c_tor_direct()
+        proxy = p_tor()
+        proxys = p_storus(smode)
+        proxyl = c_tor_storus()
+        proxym = c_storus(smode)
+        time.sleep(1)
         proxyc = c_torctl()
-        time.sleep(5) # tor startup is slow
+        time.sleep(4)
 
-        for cps in range(1,maxconn+1):
-            sys.stderr.write("files.%s,tor,%d\n" % (prefix, cps))
-            try:
-                client = c_mcurl(prefix, cps, '127.0.0.1')
-                monitor(report, "files.%s,tor,%d" % (prefix, cps), 60)
-            finally:
-                if client is not None:
-                    client.terminate()
-                    client.wait()
-                    client = None
+        bench(report, '127.0.0.1', "st.http", *args)
+
     finally:
         if proxy is not None:
             proxy.terminate()
@@ -400,12 +400,53 @@ def bench_files_tor(report, prefix, maxconn):
         if proxyl is not None:
             proxyl.terminate()
             proxyl.wait()
+        if proxys is not None:
+            proxys.terminate()
+            proxys.wait()
+        if proxym is not None:
+            proxym.terminate()
+            proxym.wait()
+
+def bench_fixedrate(report, proxyaddr, relay, bmax, bstep, mtime):
+    for cap in range(bstep, bmax+bstep, bstep):
+        tag = "fixedrate,%s,%d" % (relay, cap)
+        sys.stderr.write(tag + "\n")
+        try:
+            client = c_curl('http://' + TARGET + '/bm-fixedrate.cgi/' +
+                            str(int(cap * 1000 * FUDGE_FIXEDRATE)),
+                            proxyaddr)
+            monitor(report, tag, mtime)
+        finally:
+            if client is not None:
+                client.terminate()
+                client.wait()
+                client = None
+
+def bench_files(report, proxyaddr, relay, prefix, maxconn, mtime):
+    for cps in range(1,maxconn+1):
+        tag = "files.%s,%s,%d" % (prefix, relay, cps)
+        sys.stderr.write(tag + "\n")
+        try:
+            client = c_mcurl(prefix, cps, proxyaddr)
+            monitor(report, tag, mtime)
+        finally:
+            if client is not None:
+                client.terminate()
+                client.wait()
+                client = None
 
 if __name__ == '__main__':
-    sys.stdout.write("benchmark,relay,cap,obs,up,down\n")
-    bench_fixedrate_direct(sys.stdout)
-    bench_fixedrate_tor(sys.stdout)
-    bench_files_direct(sys.stdout, "fixed", 120)
-    bench_files_tor(sys.stdout, "fixed", 120)
-    bench_files_direct(sys.stdout, "pareto", 80)
-    bench_files_tor(sys.stdout, "pareto", 80)
+    r = sys.stdout
+    r.write("benchmark,relay,cap,obs,up,down\n")
+
+    t_direct(r, bench_fixedrate, 700, 10, 20)
+    t_direct(r, bench_files, "fixed", 120, 20)
+    t_direct(r, bench_files, "pareto", 120, 20)
+
+    t_tor(r, bench_fixedrate, 700, 10, 20)
+    t_tor(r, bench_files, "fixed", 120, 20)
+    t_tor(r, bench_files, "pareto", 120, 20)
+
+    t_storus(r, bench_fixedrate, "http", 700, 10, 30)
+    t_storus(r, bench_files, "http", "fixed", 120, 30)
+    t_storus(r, bench_files, "http", "pareto", 120, 30)
