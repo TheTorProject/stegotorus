@@ -146,7 +146,6 @@ void conn_transmit_soon(conn_t *conn, unsigned long timeout);
  */
 
 struct circuit_t {
-  config_t           *cfg;
   struct event       *flush_timer;
   struct event       *axe_timer;
   struct bufferevent *up_buffer;
@@ -160,6 +159,9 @@ struct circuit_t {
 
   circuit_t() : connected(false), flushing(false), pending_eof(false) {}
   virtual ~circuit_t();
+
+  /** Return the configuration that this circuit belongs to. */
+  virtual config_t *cfg() const;
 
   /** Add a downstream connection to this circuit. */
   virtual void add_downstream(conn_t *conn) = 0;

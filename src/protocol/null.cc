@@ -21,7 +21,7 @@ namespace {
 
   struct null_conn_t : conn_t
   {
-    null_config_t *cfg;
+    null_config_t *config;
     null_circuit_t *upstream;
 
     CONN_DECLARE_METHODS(null);
@@ -29,6 +29,7 @@ namespace {
 
   struct null_circuit_t : circuit_t
   {
+    null_config_t *config;
     null_conn_t *downstream;
 
     CIRCUIT_DECLARE_METHODS(null);
@@ -121,7 +122,7 @@ circuit_t *
 null_config_t::circuit_create(size_t)
 {
   null_circuit_t *ckt = new null_circuit_t;
-  ckt->cfg = this;
+  ckt->config = this;
   return ckt;
 }
 
@@ -138,6 +139,12 @@ null_circuit_t::~null_circuit_t()
     downstream->upstream = NULL;
     delete downstream;
   }
+}
+
+config_t *
+null_circuit_t::cfg() const
+{
+  return this->config;
 }
 
 /* Add a connection to this circuit. */
@@ -206,7 +213,7 @@ conn_t *
 null_config_t::conn_create(size_t)
 {
   null_conn_t *conn = new null_conn_t;
-  conn->cfg = this;
+  conn->config = this;
   return conn;
 }
 
@@ -233,7 +240,7 @@ int
 null_conn_t::maybe_open_upstream()
 {
   null_circuit_t *ckt = dynamic_cast<null_circuit_t *>
-    (circuit_create(this->cfg, 0));
+    (circuit_create(this->config, 0));
   if (!ckt)
     return -1;
 

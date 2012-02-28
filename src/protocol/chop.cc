@@ -78,7 +78,7 @@ namespace {
 
   struct chop_conn_t : conn_t
   {
-    chop_config_t *cfg;
+    chop_config_t *config;
     chop_circuit_t *upstream;
     steg_t *steg;
     struct evbuffer *recv_pending;
@@ -94,6 +94,7 @@ namespace {
     unordered_set<chop_conn_t *> downstreams;
     encryptor *send_crypt;
     decryptor *recv_crypt;
+    chop_config_t *config;
 
     uint64_t circuit_id;
     uint32_t send_offset;
@@ -785,9 +786,9 @@ chop_push_to_upstream(chop_circuit_t *ckt)
 static int
 chop_find_or_make_circuit(chop_conn_t *conn, uint64_t circuit_id)
 {
-  chop_config_t *cfg = conn->cfg;
   chop_circuit_table::value_type in(circuit_id, 0);
-  std::pair<chop_circuit_table::iterator, bool> out = cfg->circuits.insert(in);
+  std::pair<chop_circuit_table::iterator, bool> out
+    = conn->config->circuits.insert(in);
   chop_circuit_t *ck;
 
   if (!out.second) { // element already exists
@@ -798,7 +799,7 @@ chop_find_or_make_circuit(chop_conn_t *conn, uint64_t circuit_id)
     ck = out.first->second;
     log_debug(conn, "found circuit to %s", ck->up_peer);
   } else {
-    ck = dynamic_cast<chop_circuit_t *>(circuit_create(cfg, 0));
+    ck = dynamic_cast<chop_circuit_t *>(circuit_create(conn->config, 0));
     if (!ck) {
       log_warn(conn, "failed to create new circuit");
       return -1;
@@ -943,7 +944,7 @@ circuit_t *
 chop_config_t::circuit_create(size_t)
 {
   chop_circuit_t *ckt = new chop_circuit_t;
-  ckt->cfg = this;
+  ckt->config = this;
 
   if (this->mode == LSN_SIMPLE_SERVER) {
     ckt->send_crypt = encryptor::create(s2c_key, 16);
@@ -1009,11 +1010,16 @@ chop_circuit_t::~chop_circuit_t()
      message and the hidden channel closed s->c before c->s: the
      circuit will get destroyed on the client side after the c->s FIN,
      and the mandatory reply will be to a stale circuit. */
-  chop_config_t *cfg = static_cast<chop_config_t *>(this->cfg);
-  out = cfg->circuits.find(this->circuit_id);
-  log_assert(out != cfg->circuits.end());
+  out = this->config->circuits.find(this->circuit_id);
+  log_assert(out != this->config->circuits.end());
   log_assert(out->second == this);
   out->second = NULL;
+}
+
+config_t *
+chop_circuit_t::cfg() const
+{
+  return this->config;
 }
 
 void
@@ -1061,7 +1067,7 @@ chop_circuit_t::drop_downstream(conn_t *cn)
         circuit_do_flush(this);
       else
         circuit_close(this);
-    } else if (this->cfg->mode == LSN_SIMPLE_SERVER) {
+    } else if (this->config->mode == LSN_SIMPLE_SERVER) {
       circuit_arm_axe_timer(this, this->axe_interval());
     } else {
       circuit_arm_flush_timer(this, this->flush_interval());
@@ -1073,7 +1079,7 @@ conn_t *
 chop_config_t::conn_create(size_t index)
 {
   chop_conn_t *conn = new chop_conn_t;
-  conn->cfg = this;
+  conn->config = this;
   conn->steg = steg_new(this->steg_targets.at(index),
                         this->mode != LSN_SIMPLE_SERVER);
   if (!conn->steg) {
@@ -1124,7 +1130,7 @@ chop_conn_t::handshake()
      instead of a 10ms timeout as in dsteg, because unlike there, the
      server can't even _connect to its upstream_ till it gets the
      first packet from the client. */
-  if (this->cfg->mode != LSN_SIMPLE_SERVER)
+  if (this->config->mode != LSN_SIMPLE_SERVER)
     circuit_arm_flush_timer(this->upstream, 1);
   return 0;
 }
@@ -1140,7 +1146,7 @@ chop_circuit_t::send()
        bring us back here.  If we're the server, we have to just
        twiddle our thumbs and hope the client reconnects. */
     log_debug(this, "no downstream connections");
-    if (this->cfg->mode != LSN_SIMPLE_SERVER)
+    if (this->config->mode != LSN_SIMPLE_SERVER)
       circuit_reopen_downstreams(this);
     else
       circuit_arm_axe_timer(this, this->axe_interval());
@@ -1173,7 +1179,7 @@ chop_circuit_t::send()
       conn_send_eof(conn);
     }
   } else {
-    if (this->cfg->mode != LSN_SIMPLE_SERVER)
+    if (this->config->mode != LSN_SIMPLE_SERVER)
       circuit_arm_flush_timer(this, this->flush_interval());
   }
   return 0;
@@ -1316,7 +1322,7 @@ chop_conn_t::recv()
       conn_send_eof(conn);
     }
   } else {
-    if (ckt->cfg->mode != LSN_SIMPLE_SERVER)
+    if (ckt->config->mode != LSN_SIMPLE_SERVER)
       circuit_arm_flush_timer(ckt, ckt->flush_interval());
   }
 
@@ -1377,7 +1383,7 @@ chop_conn_t::transmit_soon(unsigned long milliseconds)
   tv.tv_usec = (milliseconds % 1000) * 1000;
 
   if (!this->must_transmit_timer)
-    this->must_transmit_timer = evtimer_new(this->cfg->base,
+    this->must_transmit_timer = evtimer_new(this->config->base,
                                             must_transmit_timer_cb, this);
   evtimer_add(this->must_transmit_timer, &tv);
 }

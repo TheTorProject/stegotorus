@@ -54,8 +54,7 @@ struct config_t
   /** Return an extended 'circuit_t' object for a new socket using
       this configuration.  The 'index' argument is equal to the 'N'
       argument to get_listen_addrs or get_target_addrs that retrieved
-      the address to which the socket is bound.  Must fill in the
-      'cfg' field of the generic structure.  */
+      the address to which the socket is bound.  */
   virtual circuit_t *circuit_create(size_t index) = 0;
 
   /** Return an extended 'conn_t' object for a new socket using this
@@ -141,6 +140,7 @@ extern const proto_module *const supported_protos[];
 #define CIRCUIT_DECLARE_METHODS(mod)            \
   mod##_circuit_t();                            \
   virtual ~mod##_circuit_t();                   \
+  virtual config_t *cfg() const;                \
   virtual void add_downstream(conn_t *);        \
   virtual void drop_downstream(conn_t *);       \
   virtual int  send();                          \

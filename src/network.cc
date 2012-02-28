@@ -250,7 +250,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   circuit_t *ckt = (circuit_t *)arg;
   socks_state_t *socks;
   enum socks_ret socks_ret;
-  log_assert(ckt->cfg->mode == LSN_SOCKS_CLIENT);
+  log_assert(ckt->cfg()->mode == LSN_SOCKS_CLIENT);
   log_assert(ckt->socks_state);
   socks = ckt->socks_state;
 
@@ -639,14 +639,14 @@ circuit_open_upstream(circuit_t *ckt)
   struct bufferevent *buf;
   char *peername;
 
-  addr = ckt->cfg->get_target_addrs(0);
+  addr = ckt->cfg()->get_target_addrs(0);
 
   if (!addr) {
     log_warn(ckt, "no target addresses available");
     return -1;
   }
 
-  buf = bufferevent_socket_new(ckt->cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
+  buf = bufferevent_socket_new(ckt->cfg()->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
     log_warn(ckt, "unable to create outbound socket buffer");
     return -1;
@@ -681,7 +681,7 @@ static bool
 create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
                                size_t index, bool is_socks)
 {
-  config_t *cfg = ckt->cfg;
+  config_t *cfg = ckt->cfg();
   char *peername;
   struct bufferevent *buf;
   conn_t *conn;
@@ -726,7 +726,7 @@ create_outbound_connections(circuit_t *ckt, bool is_socks)
   size_t n = 0;
   bool any_successes = false;
 
-  while ((addr = ckt->cfg->get_target_addrs(n))) {
+  while ((addr = ckt->cfg()->get_target_addrs(n))) {
     any_successes |= create_one_outbound_connection(ckt, addr, n, is_socks);
     n++;
   }
@@ -750,7 +750,7 @@ circuit_reopen_downstreams(circuit_t *ckt)
 static void
 create_outbound_connections_socks(circuit_t *ckt)
 {
-  config_t *cfg = ckt->cfg;
+  config_t *cfg = ckt->cfg();
   struct bufferevent *buf = NULL;
   conn_t *conn;
   const char *host;
@@ -765,7 +765,7 @@ create_outbound_connections_socks(circuit_t *ckt)
 
   /* XXXX Feed socks state through the protocol and get a connection set.
      This is a stopgap. */
-  if (ckt->cfg->ignore_socks_destination) {
+  if (ckt->cfg()->ignore_socks_destination) {
     create_outbound_connections(ckt, true);
     return;
   }
