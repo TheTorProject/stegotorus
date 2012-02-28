@@ -69,7 +69,7 @@ nosteg_rr::transmit(struct evbuffer *source, conn_t *conn)
 {
   log_assert(can_transmit);
 
-  struct evbuffer *dest = conn_get_outbound(conn);
+  struct evbuffer *dest = conn->outbound();
 
   log_debug(conn, "transmitting %lu bytes",
             (unsigned long)evbuffer_get_length(source));
@@ -92,7 +92,7 @@ nosteg_rr::transmit(struct evbuffer *source, conn_t *conn)
 int
 nosteg_rr::receive(conn_t *conn, struct evbuffer *dest)
 {
-  struct evbuffer *source = conn_get_inbound(conn);
+  struct evbuffer *source = conn->inbound();
 
   log_debug(conn, "%s-side receiving %lu bytes",
             is_clientside ? "client" : "server",

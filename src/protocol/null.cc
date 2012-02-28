@@ -184,14 +184,14 @@ null_circuit_t::drop_downstream(conn_t *cn)
        doing it again */
     circuit_do_flush(this);
   else
-    circuit_close(this);
+    delete this;
 }
 
 /* Send data from the upstream buffer. */
 int
 null_circuit_t::send()
 {
-  return evbuffer_add_buffer(conn_get_outbound(this->downstream),
+  return evbuffer_add_buffer(this->downstream->outbound(),
                              bufferevent_get_input(this->up_buffer));
 }
 
@@ -225,7 +225,7 @@ null_conn_t::null_conn_t()
 null_conn_t::~null_conn_t()
 {
   if (this->upstream)
-    circuit_drop_downstream(this->upstream, this);
+    this->upstream->drop_downstream(this);
 }
 
 /* Only used by connection callbacks */
@@ -244,7 +244,7 @@ null_conn_t::maybe_open_upstream()
   if (!ckt)
     return -1;
 
-  circuit_add_downstream(ckt, this);
+  ckt->add_downstream(this);
   circuit_open_upstream(ckt);
   return 0;
 }
@@ -262,7 +262,7 @@ null_conn_t::recv()
 {
   log_assert(this->upstream);
   return evbuffer_add_buffer(bufferevent_get_output(this->upstream->up_buffer),
-                             conn_get_inbound(this));
+                             this->inbound());
 }
 
 /** Receive EOF from connection SOURCE */
@@ -270,7 +270,7 @@ int
 null_conn_t::recv_eof()
 {
   if (this->upstream) {
-    if (evbuffer_get_length(conn_get_inbound(this)) > 0)
+    if (evbuffer_get_length(this->inbound()) > 0)
       if (this->recv())
         return -1;
 

@@ -711,7 +711,7 @@ http_server_JS_transmit (steg_t*, struct evbuffer *source, conn_t *conn, unsigne
 
   struct evbuffer_iovec *iv;
   int nv;
-  struct evbuffer *dest = conn_get_outbound(conn);
+  struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
   char *hend, *jsTemplate = NULL, *outbuf, *outbuf2;
   char data[(int) sbuflen*2];

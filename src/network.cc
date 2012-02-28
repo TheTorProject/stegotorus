@@ -223,16 +223,16 @@ server_listener_cb(struct evconnlistener *, evutil_socket_t fd,
   }
 
   /* If appropriate at this point, connect to upstream. */
-  if (conn_maybe_open_upstream(conn) < 0) {
+  if (conn->maybe_open_upstream() < 0) {
     log_debug(conn, "error opening upstream circuit");
-    conn_close(conn);
+    delete conn;
     return;
   }
 
   /* Queue handshake, if any. */
-  if (conn_handshake(conn) < 0) {
+  if (conn->handshake() < 0) {
     log_debug(conn, "error during handshake");
-    conn_close(conn);
+    delete conn;
     return;
   }
 
@@ -275,7 +275,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
   if (socks_ret == SOCKS_INCOMPLETE)
     return; /* need to read more data. */
   else if (socks_ret == SOCKS_BROKEN)
-    circuit_close(ckt); /* XXXX send socks reply */
+    delete ckt; /* XXXX send socks reply */
   else if (socks_ret == SOCKS_CMD_NOT_CONNECT) {
     bufferevent_enable(bev, EV_WRITE);
     bufferevent_disable(bev, EV_READ);
@@ -315,9 +315,9 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
   log_debug(down, "%lu bytes available",
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
-  if (conn_recv(down)) {
+  if (down->recv()) {
     log_debug(down, "error during receive");
-    conn_close(down);
+    delete down;
   }
 }
 
@@ -353,10 +353,10 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
         log_debug(ckt, "acknowledging EOF upstream");
         shutdown(bufferevent_getfd(bev), SHUT_RD);
       } else {
-        circuit_close(ckt);
+        delete ckt;
       }
     } else {
-      circuit_close(ckt);
+      delete ckt;
     }
   } else {
     /* We should never get BEV_EVENT_CONNECTED here.
@@ -391,16 +391,16 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
 
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Peer is done sending us data. */
-      conn_recv_eof(conn);
+      conn->recv_eof();
       if (bufferevent_get_enabled(bev) ||
           evbuffer_get_length(bufferevent_get_input(bev)) > 0) {
         log_debug(conn, "acknowledging EOF downstream");
         shutdown(bufferevent_getfd(bev), SHUT_RD);
       } else {
-        conn_close(conn);
+        delete conn;
       }
     } else {
-      conn_close(conn);
+      delete conn;
     }
   } else {
     /* We should never get BEV_EVENT_CONNECTED here.
@@ -431,7 +431,7 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
       log_debug(ckt, "sending EOF upstream");
       shutdown(bufferevent_getfd(bev), SHUT_WR);
     } else {
-      circuit_close(ckt);
+      delete ckt;
     }
   }
 }
@@ -455,7 +455,7 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
       log_debug(conn, "sending EOF downstream");
       shutdown(bufferevent_getfd(bev), SHUT_WR);
     } else {
-      conn_close(conn);
+      delete conn;
     }
   }
 }
@@ -518,9 +518,9 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
     conn->connected = 1;
 
     /* Queue handshake, if any. */
-    if (conn_handshake(conn) < 0) {
+    if (conn->handshake() < 0) {
       log_debug(conn, "error during handshake");
-      conn_close(conn);
+      delete conn;
       return;
     }
 
@@ -572,7 +572,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
       socks_send_reply(socks, bufferevent_get_output(ckt->up_buffer), err);
       circuit_do_flush(ckt);
     } else {
-      circuit_close(ckt);
+      delete ckt;
     }
     return;
   }
@@ -607,9 +607,9 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     conn->connected = 1;
 
     /* Queue handshake, if any. */
-    if (conn_handshake(conn)) {
+    if (conn->handshake()) {
       log_debug(conn, "error during handshake");
-      conn_close(conn);
+      delete conn;
       return;
     }
 
@@ -711,7 +711,7 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
 
  success:
   conn = conn_create(cfg, index, buf, peername);
-  circuit_add_downstream(ckt, conn);
+  ckt->add_downstream(conn);
   bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
                     is_socks ? downstream_socks_connect_cb
                     : downstream_connect_cb, conn);
@@ -733,11 +733,11 @@ create_outbound_connections(circuit_t *ckt, bool is_socks)
 
   if (n == 0) {
     log_warn(ckt, "no target addresses available");
-    circuit_close(ckt);
+    delete ckt;
   }
   if (any_successes == 0) {
     log_warn(ckt, "no outbound connections were successful");
-    circuit_close(ckt);
+    delete ckt;
   }
 }
 
@@ -785,7 +785,7 @@ create_outbound_connections_socks(circuit_t *ckt)
 
   /* we don't know the peername yet */
   conn = conn_create(cfg, 0, buf, NULL);
-  circuit_add_downstream(ckt, conn);
+  ckt->add_downstream(conn);
   bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
                     downstream_socks_connect_cb, conn);
   bufferevent_enable(buf, EV_READ|EV_WRITE);
@@ -793,7 +793,7 @@ create_outbound_connections_socks(circuit_t *ckt)
 
  failure:
   /* XXXX send socks reply */
-  circuit_close(ckt);
+  delete ckt;
   if (buf)
     bufferevent_free(buf);
 }
@@ -815,7 +815,7 @@ circuit_do_flush(circuit_t *ckt)
 void
 conn_do_flush(conn_t *conn)
 {
-  size_t remain = evbuffer_get_length(conn_get_outbound(conn));
+  size_t remain = evbuffer_get_length(conn->outbound());
   conn->flushing = 1;
 
   /* If 'remain' is already zero, we have to call the flush callback

@@ -22,10 +22,10 @@ test_transfer(void *state)
   const struct proto_test_args *a = s->args;
 
   /* Handshake */
-  tt_int_op(0, ==, conn_handshake(s->conn_client));
-  tt_int_op(0, ==, conn_recv(s->conn_server));
-  tt_int_op(0, ==, conn_handshake(s->conn_server));
-  tt_int_op(0, ==, conn_recv(s->conn_client));
+  tt_int_op(0, ==, s->conn_client->handshake());
+  tt_int_op(0, ==, s->conn_server->recv());
+  tt_int_op(0, ==, s->conn_server->handshake());
+  tt_int_op(0, ==, s->conn_client->recv());
   /* End of Handshake */
 
   /* client -> server */
@@ -33,14 +33,14 @@ test_transfer(void *state)
   circuit_send(s->ckt_client);
   tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_client)));
   tt_int_op(a->len_c2s_on_wire, ==,
-            evbuffer_get_length(conn_get_inbound(s->conn_server)));
+            evbuffer_get_length(s->conn_server->inbound()));
   tt_mem_op(a->c2s_on_wire, ==,
-            evbuffer_pullup(conn_get_inbound(s->conn_server),
+            evbuffer_pullup(s->conn_server->inbound(),
                             a->len_c2s_on_wire),
             a->len_c2s_on_wire);
 
-  conn_recv(s->conn_server);
-  tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_server)));
+  s->conn_server->recv();
+  tt_int_op(0, ==, evbuffer_get_length(s->conn_server->inbound()));
   tt_int_op(SLEN(msg1), ==,
             evbuffer_get_length(bufferevent_get_input(s->buf_server)));
   tt_mem_op(msg1, ==,
@@ -52,14 +52,14 @@ test_transfer(void *state)
   circuit_send(s->ckt_server);
   tt_int_op(0, ==, evbuffer_get_length(bufferevent_get_output(s->buf_server)));
   tt_int_op(a->len_s2c_on_wire, ==,
-            evbuffer_get_length(conn_get_inbound(s->conn_client)));
+            evbuffer_get_length(s->conn_client->inbound()));
   tt_mem_op(a->s2c_on_wire, ==,
-            evbuffer_pullup(conn_get_inbound(s->conn_client),
+            evbuffer_pullup(s->conn_client->inbound(),
                             a->len_s2c_on_wire),
             a->len_s2c_on_wire);
 
-  conn_recv(s->conn_client);
-  tt_int_op(0, ==, evbuffer_get_length(conn_get_inbound(s->conn_client)));
+  s->conn_client->recv();
+  tt_int_op(0, ==, evbuffer_get_length(s->conn_client->inbound()));
   tt_int_op(SLEN(msg2), ==,
             evbuffer_get_length(bufferevent_get_input(s->buf_client)));
   tt_mem_op(msg2, ==,

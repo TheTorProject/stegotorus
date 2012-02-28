@@ -806,7 +806,7 @@ chop_find_or_make_circuit(chop_conn_t *conn, uint64_t circuit_id)
     }
     if (circuit_open_upstream(ck)) {
       log_warn(conn, "failed to begin upstream connection");
-      circuit_close(ck);
+      delete ck;
       return -1;
     }
     log_debug(conn, "created new circuit to %s", ck->up_peer);
@@ -814,7 +814,7 @@ chop_find_or_make_circuit(chop_conn_t *conn, uint64_t circuit_id)
     out.first->second = ck;
   }
 
-  circuit_add_downstream(ck, conn);
+  ck->add_downstream(conn);
   return 0;
 }
 
@@ -838,7 +838,7 @@ chop_config_t::~chop_config_t()
   for (chop_circuit_table::iterator i = circuits.begin();
        i != circuits.end(); i++)
     if (i->second)
-      circuit_close(i->second);
+      delete i->second;
 }
 
 bool
@@ -984,10 +984,10 @@ chop_circuit_t::~chop_circuit_t()
        i != this->downstreams.end(); i++) {
     chop_conn_t *conn = *i;
     conn->upstream = NULL;
-    if (evbuffer_get_length(conn_get_outbound(conn)) > 0)
+    if (evbuffer_get_length(conn->outbound()) > 0)
       conn_do_flush(conn);
     else
-      conn_close(conn);
+      delete conn;
   }
 
   delete this->send_crypt;
@@ -1066,7 +1066,7 @@ chop_circuit_t::drop_downstream(conn_t *cn)
            doing it again */
         circuit_do_flush(this);
       else
-        circuit_close(this);
+        delete this;
     } else if (this->config->mode == LSN_SIMPLE_SERVER) {
       circuit_arm_axe_timer(this, this->axe_interval());
     } else {
@@ -1098,7 +1098,7 @@ chop_conn_t::chop_conn_t()
 chop_conn_t::~chop_conn_t()
 {
   if (this->upstream)
-    circuit_drop_downstream(this->upstream, this);
+    this->upstream->drop_downstream(this);
   if (this->steg)
     delete this->steg;
   if (this->must_transmit_timer)
@@ -1340,14 +1340,14 @@ chop_conn_t::recv_eof()
   if (this->upstream) {
     chop_circuit_t *ckt = this->upstream;
 
-    if (evbuffer_get_length(conn_get_inbound(this)) > 0)
+    if (evbuffer_get_length(this->inbound()) > 0)
       if (this->recv())
         return -1;
 
     if ((ckt->sent_fin || this->no_more_transmissions) &&
         (!this->must_transmit_timer ||
          !evtimer_pending(this->must_transmit_timer, NULL)))
-      circuit_drop_downstream(ckt, this);
+      ckt->drop_downstream(this);
   }
   return 0;
 }

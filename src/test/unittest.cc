@@ -55,8 +55,8 @@ setup_proto_test_state(const struct testcase_t *tcase)
   circuit_add_upstream(s->ckt_server, pairs[2][1],
                        xstrdup("to-harness-server"));
 
-  circuit_add_downstream(s->ckt_client, s->conn_client);
-  circuit_add_downstream(s->ckt_server, s->conn_server);
+  s->ckt_client->add_downstream(s->conn_client);
+  s->ckt_server->add_downstream(s->conn_server);
 
   return s;
 }
@@ -68,11 +68,11 @@ cleanup_proto_test_state(const struct testcase_t *, void *state)
 
   /* We don't want to trigger circuit_*_shutdown, so dissociate the circuits
      from their connections and close each separately. */
-  circuit_drop_downstream(s->ckt_client, s->conn_client);
-  circuit_drop_downstream(s->ckt_server, s->conn_server);
+  s->ckt_client->drop_downstream(s->conn_client);
+  s->ckt_server->drop_downstream(s->conn_server);
 
-  conn_close(s->conn_client);
-  conn_close(s->conn_server);
+  delete s->conn_client;
+  delete s->conn_server;
 
   delete s->cfg_client;
   delete s->cfg_server;

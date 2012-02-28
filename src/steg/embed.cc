@@ -136,7 +136,7 @@ size_t embed::transmit_room(conn_t * /* conn */) {
 }
 
 int embed::transmit(struct evbuffer *source, conn_t *conn) {
-  struct evbuffer *dest = conn_get_outbound(conn);
+  struct evbuffer *dest = conn->outbound();
   short src_len = evbuffer_get_length(source);
   short pkt_size = get_pkt_size();
   short used = src_len + 2;
@@ -178,7 +178,7 @@ int embed::transmit(struct evbuffer *source, conn_t *conn) {
 }
 
 int embed::receive(conn_t *conn, struct evbuffer *dest) {
-  struct evbuffer *source = conn_get_inbound(conn);
+  struct evbuffer *source = conn->inbound();
   short src_len = evbuffer_get_length(source);
   short pkt_size = 0;
 

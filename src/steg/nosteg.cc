@@ -65,7 +65,7 @@ nosteg::transmit_room(conn_t *)
 int
 nosteg::transmit(struct evbuffer *source, conn_t *conn)
 {
-  struct evbuffer *dest = conn_get_outbound(conn);
+  struct evbuffer *dest = conn->outbound();
 
   log_debug(conn, "transmitting %lu bytes",
             (unsigned long)evbuffer_get_length(source));
@@ -81,7 +81,7 @@ nosteg::transmit(struct evbuffer *source, conn_t *conn)
 int
 nosteg::receive(conn_t *conn, struct evbuffer *dest)
 {
-  struct evbuffer *source = conn_get_inbound(conn);
+  struct evbuffer *source = conn->inbound();
 
   log_debug(conn, "receiving %lu bytes",
             (unsigned long)evbuffer_get_length(source));

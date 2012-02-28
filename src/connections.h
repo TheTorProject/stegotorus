@@ -21,12 +21,24 @@ struct conn_t {
   bool                flushing : 1;
 
   conn_t() : connected(false), flushing(false) {}
+
+  /** Close and deallocate a connection.  If the connection is part of a
+      circuit, disconnect it from the circuit; this may cause the circuit
+      to close as well. */
   virtual ~conn_t();
 
   /** Return the upstream circuit for this connection, if there is one.
       NOTE: this is *not* a pure virtual method because it can be called
       legitimately after the subclass destructor has run. */
   virtual circuit_t *circuit() const;
+
+  /** Retrieve the inbound evbuffer for this connection. */
+  struct evbuffer *inbound() const
+  { return this->buffer ? bufferevent_get_input(this->buffer) : 0; }
+
+  /** Retrieve the outbound evbuffer for this connection. */
+  struct evbuffer *outbound()
+  { return this->buffer ? bufferevent_get_output(this->buffer) : 0; }
 
   /** Create an upstream circuit for this connection, if it is
       possible to do so without receiving data from the downstream
@@ -82,35 +94,8 @@ void conn_start_shutdown(int barbaric);
 conn_t *conn_create(config_t *cfg, size_t index, struct bufferevent *buf,
                     const char *peername);
 
-/** Close and deallocate a connection.  If the connection is part of a
-    circuit, close the other side of that circuit as well. */
-void conn_close(conn_t *conn);
-
 /** Report the number of currently-open connections. */
 size_t conn_count(void);
-
-/** Retrieve the inbound evbuffer for a connection. */
-static inline struct evbuffer *conn_get_inbound(conn_t *conn)
-{ return conn->buffer ? bufferevent_get_input(conn->buffer) : NULL; }
-
-/** Retrieve the outbound evbuffer for a connection. */
-static inline struct evbuffer *conn_get_outbound(conn_t *conn)
-{ return conn->buffer ? bufferevent_get_output(conn->buffer) : NULL; }
-
-/** Connect to upstream, if it is possible to do so without receiving
-    data from the downstream peer first. */
-int conn_maybe_open_upstream(conn_t *conn);
-
-/** Transmit the protocol-specific handshake message (if any) for a
-    connection. */
-int conn_handshake(conn_t *conn);
-
-/** Receive data from SOURCE, decode it, and write it to upstream. */
-int conn_recv(conn_t *source);
-
-/** No more data will be received from the peer; flush any internally
-    buffered data to your upstream. */
-int conn_recv_eof(conn_t *source);
 
 void conn_send_eof(conn_t *conn);
 void conn_do_flush(conn_t *conn);
@@ -187,12 +172,8 @@ void circuit_add_upstream(circuit_t *ckt,
                           struct bufferevent *buf, const char *peer);
 int circuit_open_upstream(circuit_t *ckt);
 
-void circuit_add_downstream(circuit_t *ckt, conn_t *down);
-void circuit_drop_downstream(circuit_t *ckt, conn_t *down);
-
 void circuit_reopen_downstreams(circuit_t *ckt);
 
-void circuit_close(circuit_t *ckt);
 void circuit_recv_eof(circuit_t *ckt);
 
 void circuit_send(circuit_t *ckt);

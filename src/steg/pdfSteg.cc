@@ -298,7 +298,7 @@ pdfUnwrap (char *data, unsigned int dlen,
 
 int http_server_PDF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
 
-  struct evbuffer *dest = conn_get_outbound(conn);
+  struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
   unsigned int mpdf;
   char *pdfTemplate = NULL, *hend;

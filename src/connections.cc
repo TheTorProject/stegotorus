@@ -59,14 +59,14 @@ conn_start_shutdown(int barbaric)
       v.swap(circuits);
       for (unordered_set<circuit_t *>::iterator i = v.begin();
            i != v.end(); i++)
-        circuit_close(*i);
+        delete *i;
     }
     if (!connections.empty()) {
       unordered_set<conn_t *> v;
       v.swap(connections);
       for (unordered_set<conn_t *>::iterator i = v.begin();
            i != v.end(); i++)
-        conn_close(*i);
+        delete *i;
     }
     closing_all_connections = false;
   }
@@ -130,17 +130,11 @@ conn_t::circuit() const
   return 0;
 }
 
-void
-conn_close(conn_t *conn)
-{
-  delete conn;
-}
-
 /* Drain the transmit queue and send a TCP-level EOF indication to DEST. */
 void
 conn_send_eof(conn_t *dest)
 {
-  struct evbuffer *outbuf = conn_get_outbound(dest);
+  struct evbuffer *outbuf = dest->outbound();
   if (evbuffer_get_length(outbuf)) {
     log_debug(dest, "flushing out %lu bytes",
               (unsigned long) evbuffer_get_length(outbuf));
@@ -153,30 +147,6 @@ conn_send_eof(conn_t *dest)
 }
 
 /* Protocol methods of connections. */
-
-int
-conn_maybe_open_upstream(conn_t *conn)
-{
-  return conn->maybe_open_upstream();
-}
-
-int
-conn_handshake(conn_t *conn)
-{
-  return conn->handshake();
-}
-
-int
-conn_recv(conn_t *source)
-{
-  return source->recv();
-}
-
-int
-conn_recv_eof(conn_t *source)
-{
-  return source->recv_eof();
-}
 
 void
 conn_expect_close(conn_t *conn)
@@ -231,7 +201,7 @@ axe_timer_cb(evutil_socket_t, short, void *arg)
       evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)) > 0)
     circuit_do_flush(ckt);
   else
-    circuit_close(ckt);
+    delete ckt;
 }
 
 circuit_t *
@@ -279,12 +249,6 @@ circuit_t::cfg() const
 }
 
 void
-circuit_close(circuit_t *ckt)
-{
-  delete ckt;
-}
-
-void
 circuit_add_upstream(circuit_t *ckt, struct bufferevent *buf, const char *peer)
 {
   log_assert(!ckt->up_buffer);
@@ -297,36 +261,12 @@ circuit_add_upstream(circuit_t *ckt, struct bufferevent *buf, const char *peer)
 /* circuit_open_upstream is in network.c */
 
 void
-circuit_add_downstream(circuit_t *ckt, conn_t *down)
-{
-  ckt->add_downstream(down);
-}
-
-void
-circuit_drop_downstream(circuit_t *ckt, conn_t *down)
-{
-  ckt->drop_downstream(down);
-}
-
-static int
-circuit_send_raw(circuit_t *ckt)
-{
-  return ckt->send();
-}
-
-void
 circuit_send(circuit_t *ckt)
 {
-  if (circuit_send_raw(ckt)) {
+  if (ckt->send()) {
     log_info(ckt, "error during transmit");
-    circuit_close(ckt);
+    delete ckt;
   }
-}
-
-static int
-circuit_send_eof_raw(circuit_t *ckt)
-{
-  return ckt->send_eof();
 }
 
 void
@@ -334,10 +274,10 @@ circuit_send_eof(circuit_t *ckt)
 {
   if (ckt->socks_state) {
     log_debug(ckt, "EOF during SOCKS phase");
-    circuit_close(ckt);
-  } else if (circuit_send_eof_raw(ckt)) {
+    delete ckt;
+  } else if (ckt->send_eof()) {
     log_info(ckt, "error during transmit");
-    circuit_close(ckt);
+    delete ckt;
   }
 }
 

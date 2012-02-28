@@ -257,7 +257,7 @@ http_client_cookie_transmit (http *s, struct evbuffer *source, conn_t *conn) {
      presently uses the URL. And it can't be binary. */
 
 
-  struct evbuffer *dest = conn_get_outbound(conn);
+  struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
   int bufsize = 10000;
   char* buf = (char*) xmalloc(bufsize);
@@ -457,7 +457,7 @@ int
 http_client_uri_transmit (http *s, struct evbuffer *source, conn_t *conn) {
 
 
-  struct evbuffer *dest = conn_get_outbound(conn);
+  struct evbuffer *dest = conn->outbound();
 
 
   struct evbuffer_iovec *iv;
@@ -711,7 +711,7 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
 int
 http::receive(conn_t *conn, struct evbuffer *dest)
 {
-  struct evbuffer *source = conn_get_inbound(conn);
+  struct evbuffer *source = conn->inbound();
   // unsigned int type;
   int rval = RECV_BAD;
 

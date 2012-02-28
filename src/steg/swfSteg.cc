@@ -125,7 +125,7 @@ swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
 int 
 http_server_SWF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
 
-  struct evbuffer *dest = conn_get_outbound(conn);
+  struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
   char* inbuf;
   char* outbuf;
