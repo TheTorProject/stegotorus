@@ -33,6 +33,7 @@ using std::vector;
 using std::string;
 
 static struct event_base *the_event_base;
+static bool allow_kq = false;
 
 /**
    Puts stegotorus's networking subsystem on "closing time" mode. This
@@ -174,7 +175,8 @@ usage(void)
   fprintf(stderr, "\n* Available arguments:\n"
           "--log-file=<file> ~ set logfile\n"
           "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
-          "--no-log ~ disable logging\n");
+          "--no-log ~ disable logging\n"
+          "--allow-kqueue ~ allow use of kqueue(2) (may be buggy)\n");
 
   exit(1);
 }
@@ -190,9 +192,10 @@ usage(void)
 static int
 handle_generic_args(const char *const *argv)
 {
-  int logmethod_set=0;
-  int logsev_set=0;
-  int i=1;
+  bool logmethod_set = false;
+  bool logsev_set = false;
+  bool allow_kq_set = false;
+  int i = 1;
 
   while (argv[i] &&
          !strncmp(argv[i],"--",2)) {
@@ -216,8 +219,8 @@ handle_generic_args(const char *const *argv)
         log_warn("error at setting logging severity");
         exit(1);
       }
-      logsev_set=1;
-    } else if (!strncmp(argv[i], "--no-log", 9)) {
+      logsev_set = true;
+    } else if (!strcmp(argv[i], "--no-log")) {
         if (logsev_set) {
           fprintf(stderr, "you've already set a min. log severity!\n");
           exit(1);
@@ -226,7 +229,14 @@ handle_generic_args(const char *const *argv)
           fprintf(stderr, "error at setting logging severity.\n");
           exit(1);
         }
-        logsev_set=1;
+        logsev_set = true;
+    } else if (!strcmp(argv[i], "--allow-kqueue")) {
+      if (allow_kq_set) {
+        fprintf(stderr, "you've already allowed kqueue!\n");
+        exit(1);
+      }
+      allow_kq = true;
+      allow_kq_set = true;
     } else {
       log_warn("unrecognizable argument '%s'", argv[i]);
       exit(1);
@@ -240,6 +250,7 @@ handle_generic_args(const char *const *argv)
 int
 main(int, const char *const *argv)
 {
+  struct event_config *evcfg;
   struct event *sig_int;
   struct event *sig_term;
   struct event *stdin_eof;
@@ -302,10 +313,26 @@ main(int, const char *const *argv)
   }
 #endif
 
-  /* Initialize libevent */
-  the_event_base = event_base_new();
+  /* Configure and initialize libevent. */
+  evcfg = event_config_new();
+  if (!evcfg)
+    log_abort("failed to initialize networking (evcfg)");
+
+  /* The main reason we bother with an event_config object is that
+     nobody's had time to track down the bugs that only the kqueue
+     backend exposes and figure out whose fault they are. There is
+     a command line switch waiting for the person who will do this
+     detective work. */
+  if (!allow_kq)
+    if (event_config_avoid_method(evcfg, "kqueue"))
+      log_abort("failed to initialize networking (avoiding kqueue)");
+
+  /* Possibly worth doing in the future: activating Windows IOCP and
+     telling it how many CPUs to use. */
+
+  the_event_base = event_base_new_with_config(evcfg);
   if (!the_event_base)
-    log_abort("failed to initialize networking");
+    log_abort("failed to initialize networking (evbase)");
 
   /* ASN should this happen only when SOCKS is enabled? */
   if (init_evdns_base(the_event_base))
@@ -319,7 +346,7 @@ main(int, const char *const *argv)
                          handle_signal_cb, NULL);
   sig_term = evsignal_new(the_event_base, SIGTERM,
                           handle_signal_cb, NULL);
-  if (event_add(sig_int,NULL) || event_add(sig_term,NULL))
+  if (event_add(sig_int, NULL) || event_add(sig_term, NULL))
     log_abort("failed to initialize signal handling");
 
 #ifndef _WIN32
@@ -391,7 +418,7 @@ main(int, const char *const *argv)
   event_free(sig_term);
   free(stdin_eof);
   event_base_free(the_event_base);
-
+  event_config_free(evcfg);
   log_close();
 
   return 0;
