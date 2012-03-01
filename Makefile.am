@@ -80,6 +80,7 @@ noinst_HEADERS = \
 	src/test/unittest.h
 
 dist_noinst_SCRIPTS = \
+	src/audit-globals.sh \
 	src/genmodtable.sh \
 	src/test/genunitgrps.sh
 
@@ -94,10 +95,15 @@ CLEANFILES = protolist.cc steglist.cc unitgrplist.cc \
 
 GMOD  = $(SHELL) $(srcdir)/src/genmodtable.sh
 GUNIT = $(SHELL) $(srcdir)/src/test/genunitgrps.sh
+AGLOB = $(SHELL) $(srcdir)/src/audit-globals.sh
 
 AM_V_gs   = $(AM_V_gs_$(V))
 AM_V_gs_  = $(AM_V_gs_$(AM_DEFAULT_VERBOSITY))
 AM_V_gs_0 = @echo "  GEN   " $(patsubst stamp-%,%.cc,$@);
+
+AM_V_ag   = $(AM_V_ag_$(V))
+AM_V_ag_  = $(AM_V_ag_$(AM_DEFAULT_VERBOSITY))
+AM_V_ag_0 = @echo "  AGLOB ";
 
 protolist.cc: stamp-protolist ;
 stamp-protolist: $(PROTOCOLS) Makefile src/genmodtable.sh
@@ -113,6 +119,14 @@ unitgrplist.cc: stamp-unitgrplist ;
 stamp-unitgrplist: $(UTGROUPS) Makefile src/test/genunitgrps.sh
 	$(AM_V_gs) $(GUNIT) unitgrplist.cc $(filter %.cc, $^)
 	$(AM_V_at) touch stamp-unitgrplist
+
+stamp-audit-globals: src/audit-globals.sh Makefile \
+  $(libstegotorus_a_OBJECTS) $(stegotorus_OBJECTS)
+	$(AM_V_ag) $(AGLOB) $(libstegotorus_a_OBJECTS) $(stegotorus_OBJECTS)
+	$(AM_V_at) touch stamp-audit-globals
+
+# prevent stegotorus from being linked if s-a-g fails
+EXTRA_stegotorus_DEPENDENCIES = stamp-audit-globals
 
 # Testing
 check-local:
