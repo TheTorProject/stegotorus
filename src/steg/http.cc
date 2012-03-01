@@ -40,6 +40,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "swfSteg.h"
 #include "pdfSteg.h"
 #include "jsSteg.h"
+#include "b64decode.h"
 #include "b64cookies.h"
 
 #include <event2/buffer.h>

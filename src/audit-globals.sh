@@ -42,15 +42,11 @@ sed '
   /^util the_evdns_base$/d
 
   # These are grandfathered; they need to be removed.
-  /^steg\/b64cookies std::__ioinit$/d
-  /^steg\/b64decode std::__ioinit$/d
-  /^steg\/b64encode std::__ioinit$/d
   /^steg\/embed embed_init$/d
   /^steg\/embed embed_num_traces$/d
   /^steg\/embed embed_traces$/d
   /^steg\/http has_peer_name$/d
   /^steg\/http peername$/d
-  /^steg\/http std::__ioinit$/d
   /^steg\/payloads payload_count$/d
   /^steg\/payloads payload_hdrs$/d
   /^steg\/payloads payloads$/d

@@ -1,5 +1,8 @@
 
 #include "b64cookies.h"
+
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int unwrap_b64_cookie(char* inbuf, char* outbuf, int buflen) {
