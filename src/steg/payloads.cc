@@ -15,11 +15,9 @@ static unsigned int max_JS_capacity = 0;
 static unsigned int max_HTML_capacity = 0;
 static unsigned int max_PDF_capacity = 0;
 
-
-
-pentry_header payload_hdrs[MAX_PAYLOADS];
-char* payloads[MAX_PAYLOADS];
-int payload_count = 0;
+static pentry_header payload_hdrs[MAX_PAYLOADS];
+static char* payloads[MAX_PAYLOADS];
+static int payload_count = 0;
 
 
 unsigned int get_max_JS_capacity() {

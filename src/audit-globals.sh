@@ -16,8 +16,8 @@ sed '
   / [DBdb] /!d
 
   s/^src\///
-  s/\.o: / /
-  s/\.obj: / /
+  s/\.o: */ /
+  s/\.obj: */ /
   s/ [0-9a-fA-F][0-9a-fA-F]* [DBdb] / /
 
   # This is the whitelist, in the form of a bunch of sed "d" commands.
@@ -51,7 +51,9 @@ sed '
   /^steg\/http has_peer_name$/d
   /^steg\/http peername$/d
   /^steg\/http std::__ioinit$/d
-  /^steg\/payloads _payload_count$/d
+  /^steg\/payloads payload_count$/d
+  /^steg\/payloads payload_hdrs$/d
+  /^steg\/payloads payloads$/d
   /^steg\/payloads initTypePayload$/d
   /^steg\/payloads max_HTML_capacity$/d
   /^steg\/payloads max_JS_capacity$/d
