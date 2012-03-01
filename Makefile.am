@@ -20,8 +20,6 @@ PROTOCOLS = \
 
 STEGANOGRAPHERS = \
 	src/steg/b64cookies.cc \
-	src/steg/b64encode.cc \
-	src/steg/b64decode.cc \
 	src/steg/cookies.cc \
 	src/steg/crc32.cc \
 	src/steg/embed.cc \
@@ -35,6 +33,7 @@ STEGANOGRAPHERS = \
 	src/steg/zpack.cc
 
 libstegotorus_a_SOURCES = \
+	src/base64.cc \
 	src/connections.cc \
 	src/crypt.cc \
 	src/network.cc \
