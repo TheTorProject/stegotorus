@@ -92,8 +92,8 @@ namespace {
   {
     chop_reassembly_elt reassembly_queue;
     unordered_set<chop_conn_t *> downstreams;
-    encryptor *send_crypt;
-    decryptor *recv_crypt;
+    gcm_encryptor *send_crypt;
+    gcm_decryptor *recv_crypt;
     chop_config_t *config;
 
     uint64_t circuit_id;
@@ -947,11 +947,11 @@ chop_config_t::circuit_create(size_t)
   ckt->config = this;
 
   if (this->mode == LSN_SIMPLE_SERVER) {
-    ckt->send_crypt = encryptor::create(s2c_key, 16);
-    ckt->recv_crypt = decryptor::create(c2s_key, 16);
+    ckt->send_crypt = gcm_encryptor::create(s2c_key, 16);
+    ckt->recv_crypt = gcm_decryptor::create(c2s_key, 16);
   } else {
-    ckt->send_crypt = encryptor::create(c2s_key, 16);
-    ckt->recv_crypt = decryptor::create(s2c_key, 16);
+    ckt->send_crypt = gcm_encryptor::create(c2s_key, 16);
+    ckt->recv_crypt = gcm_decryptor::create(s2c_key, 16);
     while (!ckt->circuit_id)
       rng_bytes((uint8_t *)&ckt->circuit_id, sizeof(uint64_t));
 

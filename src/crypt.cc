@@ -36,38 +36,100 @@ public:
   }                                                             \
   return rv /* deliberate absence of semicolon */
 
+// Crypto++ doesn't let us set a key without also setting an IV,
+// even though we will always override the IV later.
+static const uint8_t dummy_iv[16] = {};
+
 namespace {
-  struct encryptor_impl : encryptor
+  struct ecb_encryptor_impl : ecb_encryptor
   {
-    CryptoPP::GCM<CryptoPP::AES>::Encryption ctx;
-    virtual void encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
-                         const uint8_t *nonce, size_t nlen);
-    virtual ~encryptor_impl();
+    CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ctx;
+    virtual ~ecb_encryptor_impl();
+    virtual void encrypt(uint8_t *out, const uint8_t *in);
   };
 
-  struct decryptor_impl : decryptor
+  struct ecb_decryptor_impl : ecb_decryptor
+  {
+    CryptoPP::ECB_Mode<CryptoPP::AES>::Decryption ctx;
+    virtual ~ecb_decryptor_impl();
+    virtual void decrypt(uint8_t *out, const uint8_t *in);
+  };
+}
+
+ecb_encryptor *
+ecb_encryptor::create(const uint8_t *key, size_t keylen)
+{
+  try {
+    ecb_encryptor_impl *enc = new ecb_encryptor_impl;
+    enc->ctx.SetKey(key, keylen);
+    return enc;
+  }
+  CATCH_ALL_EXCEPTIONS(0);
+}
+
+ecb_decryptor *
+ecb_decryptor::create(const uint8_t *key, size_t keylen)
+{
+  try {
+    ecb_decryptor_impl *dec = new ecb_decryptor_impl;
+    dec->ctx.SetKey(key, keylen);
+    return dec;
+  }
+  CATCH_ALL_EXCEPTIONS(0);
+}
+
+ecb_encryptor::~ecb_encryptor() {}
+ecb_encryptor_impl::~ecb_encryptor_impl() {}
+ecb_decryptor::~ecb_decryptor() {}
+ecb_decryptor_impl::~ecb_decryptor_impl() {}
+
+void
+ecb_encryptor_impl::encrypt(uint8_t *out, const uint8_t *in)
+{
+  try {
+    this->ctx.ProcessData(out, in, AES_BLOCK_LEN);
+  }
+  CATCH_ALL_EXCEPTIONS();
+}
+
+void
+ecb_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in)
+{
+  try {
+    this->ctx.ProcessData(out, in, AES_BLOCK_LEN);
+  }
+  CATCH_ALL_EXCEPTIONS();
+}
+
+
+namespace {
+  struct gcm_encryptor_impl : gcm_encryptor
+  {
+    CryptoPP::GCM<CryptoPP::AES>::Encryption ctx;
+    virtual ~gcm_encryptor_impl();
+    virtual void encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                         const uint8_t *nonce, size_t nlen);
+  };
+
+  struct gcm_decryptor_impl : gcm_decryptor
   {
     CryptoPP::GCM<CryptoPP::AES>::Decryption ctx;
+    virtual ~gcm_decryptor_impl();
     virtual int decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                         const uint8_t *nonce, size_t nlen);
     virtual void decrypt_unchecked(uint8_t *out,
                                    const uint8_t *in, size_t inlen,
                                    const uint8_t *nonce, size_t nlen);
-    virtual ~decryptor_impl();
   };
 }
 
-// Crypto++ doesn't let us set a key without also setting an IV,
-// even though we will always override the IV later.
-static const uint8_t dummy_iv[16] = {};
-
-encryptor *
-encryptor::create(const uint8_t *key, size_t keylen)
+gcm_encryptor *
+gcm_encryptor::create(const uint8_t *key, size_t keylen)
 {
   try {
-    encryptor_impl *enc = new encryptor_impl;
+    gcm_encryptor_impl *enc = new gcm_encryptor_impl;
     // sadly, these are not checkable at compile time
-    log_assert(enc->ctx.DigestSize() == 16);
+    log_assert(enc->ctx.DigestSize() == GCM_TAG_LEN);
     log_assert(!enc->ctx.NeedsPrespecifiedDataLengths());
     enc->ctx.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
     return enc;
@@ -75,13 +137,13 @@ encryptor::create(const uint8_t *key, size_t keylen)
   CATCH_ALL_EXCEPTIONS(0);
 }
 
-decryptor *
-decryptor::create(const uint8_t *key, size_t keylen)
+gcm_decryptor *
+gcm_decryptor::create(const uint8_t *key, size_t keylen)
 {
   try {
-    decryptor_impl *dec = new decryptor_impl;
+    gcm_decryptor_impl *dec = new gcm_decryptor_impl;
     // sadly, these are not checkable at compile time
-    log_assert(dec->ctx.DigestSize() == 16);
+    log_assert(dec->ctx.DigestSize() == GCM_TAG_LEN);
     log_assert(!dec->ctx.NeedsPrespecifiedDataLengths());
     dec->ctx.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
     return dec;
@@ -89,14 +151,14 @@ decryptor::create(const uint8_t *key, size_t keylen)
   CATCH_ALL_EXCEPTIONS(0);
 }
 
-encryptor::~encryptor() {}
-encryptor_impl::~encryptor_impl() {}
-decryptor::~decryptor() {}
-decryptor_impl::~decryptor_impl() {}
+gcm_encryptor::~gcm_encryptor() {}
+gcm_encryptor_impl::~gcm_encryptor_impl() {}
+gcm_decryptor::~gcm_decryptor() {}
+gcm_decryptor_impl::~gcm_decryptor_impl() {}
 
 void
-encryptor_impl::encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
-                        const uint8_t *nonce, size_t nlen)
+gcm_encryptor_impl::encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                            const uint8_t *nonce, size_t nlen)
 {
   try {
     this->ctx.EncryptAndAuthenticate(out, out + inlen, 16,
@@ -106,8 +168,8 @@ encryptor_impl::encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
 }
 
 int
-decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
-                        const uint8_t *nonce, size_t nlen)
+gcm_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                            const uint8_t *nonce, size_t nlen)
 {
   try {
     return this->ctx.DecryptAndVerify(out,
@@ -119,9 +181,9 @@ decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
 }
 
 void
-decryptor_impl::decrypt_unchecked(uint8_t *out,
-                                  const uint8_t *in, size_t inlen,
-                                  const uint8_t *nonce, size_t nlen)
+gcm_decryptor_impl::decrypt_unchecked(uint8_t *out,
+                                      const uint8_t *in, size_t inlen,
+                                      const uint8_t *nonce, size_t nlen)
 {
   try {
     // there is no convenience function for this
@@ -145,8 +207,8 @@ namespace {
     uint8_t leftover;
     bool dead : 1;
 
-    virtual size_t generate(uint8_t *buf, size_t len);
     virtual ~key_generator_impl();
+    virtual size_t generate(uint8_t *buf, size_t len);
 
     key_generator_impl(const uint8_t *prk,
                        const uint8_t *info, size_t ilen)

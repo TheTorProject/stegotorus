@@ -1,4 +1,4 @@
-/* Copyright 2011 Nick Mathewson, George Kadianakis, Zack Weinberg
+/* Copyright 2011, 2012 Nick Mathewson, George Kadianakis, Zack Weinberg
    See LICENSE for other credits and copying information
 */
 
@@ -8,55 +8,94 @@
 const size_t AES_BLOCK_LEN = 16;
 const size_t GCM_TAG_LEN   = 16;
 
-struct encryptor
+struct ecb_encryptor
 {
+  ecb_encryptor() {}
+  virtual ~ecb_encryptor();
+
+  /** Return a new AES/ECB encryption state using 'key' (of length 'keylen')
+      as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
+  static ecb_encryptor *create(const uint8_t *key, size_t keylen);
+
+  /** Encrypt exactly AES_BLOCK_LEN bytes of data in the buffer 'in' and
+      write the result to 'out'.  */
+  virtual void encrypt(uint8_t *out, const uint8_t *in) = 0;
+
+private:
+  ecb_encryptor(const ecb_encryptor&);
+  ecb_encryptor& operator=(const ecb_encryptor&);
+};
+
+struct ecb_decryptor
+{
+  ecb_decryptor() {}
+  virtual ~ecb_decryptor();
+
+  /** Return a new AES/ECB decryption state using 'key' (of length 'keylen')
+      as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
+  static ecb_decryptor *create(const uint8_t *key, size_t keylen);
+
+  /** Decrypt exactly AES_BLOCK_LEN bytes of data in the buffer 'in' and
+      write the result to 'out'.  */
+  virtual void decrypt(uint8_t *out, const uint8_t *in) = 0;
+
+private:
+  ecb_decryptor(const ecb_decryptor&) DELETE_METHOD;
+  ecb_decryptor& operator=(const ecb_decryptor&) DELETE_METHOD;
+};
+
+
+struct gcm_encryptor
+{
+  gcm_encryptor() {}
+  virtual ~gcm_encryptor();
+
   /** Return a new AES/GCM encryption state using 'key' (of length 'keylen')
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
-  static encryptor *create(const uint8_t *key, size_t keylen);
+  static gcm_encryptor *create(const uint8_t *key, size_t keylen);
 
   /** Encrypt 'inlen' bytes of data in the buffer 'in', writing the
-      result plus a MAC to the buffer 'out', whose length must be at
-      least 'inlen'+16 bytes.  Use 'nonce' (of length 'nlen') as the
-      encryption nonce; 'nlen' must be at least 12 bytes.  */
+      result plus an authentication tag to the buffer 'out', whose
+      length must be at least 'inlen'+16 bytes.  Use 'nonce'
+      (of length 'nlen') as the encryption nonce; 'nlen' must be at
+      least 12 bytes.  */
   virtual void encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                        const uint8_t *nonce, size_t nlen) = 0;
 
-  virtual ~encryptor();
-
-  encryptor() {}
 private:
-  encryptor(const encryptor&) DELETE_METHOD;
-  encryptor& operator=(const encryptor&) DELETE_METHOD;
+  gcm_encryptor(const gcm_encryptor&);
+  gcm_encryptor& operator=(const gcm_encryptor&);
 };
 
-struct decryptor
+struct gcm_decryptor
 {
+  gcm_decryptor() {}
+  virtual ~gcm_decryptor();
+
   /** Return a new AES/GCM decryption state using 'key' (of length 'keylen')
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
-  static decryptor *create(const uint8_t *key, size_t keylen);
+  static gcm_decryptor *create(const uint8_t *key, size_t keylen);
 
-  /** Decrypt 'inlen' bytes of data in the buffer 'in'; the last 16 bytes
-      of this buffer are assumed to be the MAC.  Write the result to the
-      buffer 'out', whose length must be at least 'inlen'-16 bytes.  Use
-      'nonce' (of length 'nlen') as the encryption nonce; as above, 'nlen'
-      must be at least 12 bytes.  Returns 0 if successful, -1 if the MAC
-      did not validate. */
+  /** Decrypt 'inlen' bytes of data in the buffer 'in'; the last 16
+      bytes of this buffer are assumed to be the authentication tag.
+      Write the result to the buffer 'out', whose length must be at
+      least 'inlen'-16 bytes.  Use 'nonce' (of length 'nlen') as the
+      encryption nonce; as above, 'nlen' must be at least 12 bytes.
+      Returns 0 if successful, -1 if the authentication check fails. */
   virtual int decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                       const uint8_t *nonce, size_t nlen) = 0;
 
-  /** Decrypt 'inlen' bytes of data in the buffer 'in' WITHOUT CHECKING
-      THE MAC.  Arguments same as decrypt().  This should be used only to
-      decode just enough of an incoming block to know how long it's going
-      to be and therefore where the MAC begins. */
+  /** Decrypt 'inlen' bytes of data in the buffer 'in' WITHOUT
+      CHECKING THE AUTHENTICATION TAG.  Arguments same as decrypt().
+      This should be used only to decode just enough of an incoming
+      block to know how long it's going to be and therefore where the
+      tag begins. */
   virtual void decrypt_unchecked(uint8_t *out, const uint8_t *in, size_t inlen,
                                  const uint8_t *nonce, size_t nlen) = 0;
 
-  virtual ~decryptor();
-
-  decryptor() {}
 private:
-  decryptor(const decryptor&) DELETE_METHOD;
-  decryptor& operator=(const decryptor&) DELETE_METHOD;
+  gcm_decryptor(const gcm_decryptor&) DELETE_METHOD;
+  gcm_decryptor& operator=(const gcm_decryptor&) DELETE_METHOD;
 };
 
 /** Generate keying material from an initial key of some kind, a salt
