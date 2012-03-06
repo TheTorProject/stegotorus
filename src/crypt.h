@@ -25,8 +25,8 @@ struct encryptor
 
   encryptor() {}
 private:
-  encryptor(const encryptor&);
-  encryptor& operator=(const encryptor&);
+  encryptor(const encryptor&) DELETE_METHOD;
+  encryptor& operator=(const encryptor&) DELETE_METHOD;
 };
 
 struct decryptor
@@ -55,8 +55,8 @@ struct decryptor
 
   decryptor() {}
 private:
-  decryptor(const decryptor&);
-  decryptor& operator=(const decryptor&);
+  decryptor(const decryptor&) DELETE_METHOD;
+  decryptor& operator=(const decryptor&) DELETE_METHOD;
 };
 
 /** Generate keying material from an initial key of some kind, a salt
@@ -95,8 +95,8 @@ struct key_generator
   virtual ~key_generator();
   key_generator() {}
 private:
-  key_generator(const decryptor&);
-  key_generator& operator=(const decryptor&);
+  key_generator(const key_generator&) DELETE_METHOD;
+  key_generator& operator=(const key_generator&) DELETE_METHOD;
 };
 
 #endif

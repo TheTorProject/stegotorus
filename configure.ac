@@ -65,6 +65,9 @@ LIBS="$LIBS $ws32_LIBS"
 
 AC_CHECK_HEADERS([execinfo.h],,, [AC_INCLUDES_DEFAULT()])
 
+AX_CXXFLAGS_STDCXX_11([ext])
+AX_CXX_DELETE_METHOD
+
 ### Output ###
 
 AC_CONFIG_FILES([Makefile])

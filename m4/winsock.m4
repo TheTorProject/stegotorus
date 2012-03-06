@@ -47,10 +47,10 @@ AC_DEFUN([AX_LIB_WINSOCK2],
   ])
 
   ws32_LIBS=
-  if test "x$ac_cv_search_ntohl" == "xno"; then
-    AC_MSG_ERROR([could not find ntohl])
-  elif test "x$ac_cv_search_ntohl" != "xnone required"; then
-    ws32_LIBS="$ac_cv_search_ntohl"
-  fi
+  case "$ac_cv_search_ntohl" in
+    no)              AC_MSG_ERROR([could not find ntohl]) ;;
+    "none required") ;;
+    *)               ws32_LIBS="$ac_cv_search_ntohl"
+  esac
   AC_SUBST(ws32_LIBS)
 ])
