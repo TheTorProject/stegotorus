@@ -5,6 +5,11 @@
 #include "util.h"
 #include "crypt.h"
 
+// temporary, I hope, kludge
+#ifdef __APPLE_CC__
+#define CRYPTOPP_DISABLE_X86ASM
+#endif
+
 #include <cryptopp/aes.h>
 #include <cryptopp/hmac.h>
 #include <cryptopp/gcm.h>
@@ -100,7 +105,6 @@ ecb_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in)
   }
   CATCH_ALL_EXCEPTIONS();
 }
-
 
 namespace {
   struct gcm_encryptor_impl : gcm_encryptor
