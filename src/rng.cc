@@ -9,6 +9,9 @@
 #include <math.h>
 #include <cryptopp/osrng.h>
 
+/* not sure why, but on OSX we only see std::isnan, not ::isnan */
+using std::isnan;
+
 /* Note: this file wraps a C++ library into a C-style program and must
    insulate that program from C++ semantics it is not prepared to handle;
    most importantly, all exceptions must be converted to error codes. */
