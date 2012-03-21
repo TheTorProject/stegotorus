@@ -6,11 +6,8 @@
 #include "rng.h"
 
 #include <limits>
-#include <math.h>
+#include <cmath>
 #include <cryptopp/osrng.h>
-
-/* not sure why, but on OSX we only see std::isnan, not ::isnan */
-using std::isnan;
 
 /* Note: this file wraps a C++ library into a C-style program and must
    insulate that program from C++ semantics it is not prepared to handle;
@@ -202,6 +199,13 @@ rng_double()
 int
 rng_range_geom(unsigned int hi, unsigned int xv)
 {
+  using std::exp;
+  using std::log;
+  using std::floor;
+  using std::isnan;
+  using std::min;
+  using std::max;
+
   log_assert(hi <= ((unsigned int)INT_MAX)+1);
   log_assert(0 < xv && xv < hi);
 
@@ -228,5 +232,5 @@ rng_range_geom(unsigned int hi, unsigned int xv)
 
   /* Round down for the geometric distribution, and clamp to [0, hi)
      for great defensiveness. */
-  return std::min(hi-1, std::max(0U, (unsigned int)floor(T)));
+  return min(hi-1, max(0U, (unsigned int)floor(T)));
 }
