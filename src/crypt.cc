@@ -14,6 +14,7 @@
 #include <cryptopp/hmac.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/sha.h>
+#include <cryptopp/secblock.h>
 
 // work around a bug in crypto++ 5.6.0's pwdbased.h
 #if CRYPTOPP_VERSION < 561
@@ -28,6 +29,9 @@ public:
 #endif
 
 #include <cryptopp/pwdbased.h>
+
+// 32 bytes -> no extra memory allocation even for big keys, hopefully
+typedef CryptoPP::SecBlockWithHint<byte, 32> KeyBlock;
 
 /* Note: this file wraps a C++ library into a C-style program and must
    insulate that program from C++ semantics it is not prepared to handle;
@@ -72,10 +76,40 @@ ecb_encryptor::create(const uint8_t *key, size_t keylen)
   CATCH_ALL_EXCEPTIONS(0);
 }
 
+ecb_encryptor *
+ecb_encryptor::create(key_generator *gen, size_t keylen)
+{
+  try {
+    KeyBlock key(keylen);
+    size_t got = gen->generate(key, keylen);
+    log_assert(got == keylen);
+
+    ecb_encryptor_impl *enc = new ecb_encryptor_impl;
+    enc->ctx.SetKey(key, keylen);
+    return enc;
+  }
+  CATCH_ALL_EXCEPTIONS(0);
+}
+
 ecb_decryptor *
 ecb_decryptor::create(const uint8_t *key, size_t keylen)
 {
   try {
+    ecb_decryptor_impl *dec = new ecb_decryptor_impl;
+    dec->ctx.SetKey(key, keylen);
+    return dec;
+  }
+  CATCH_ALL_EXCEPTIONS(0);
+}
+
+ecb_decryptor *
+ecb_decryptor::create(key_generator *gen, size_t keylen)
+{
+  try {
+    KeyBlock key(keylen);
+    size_t got = gen->generate(key, keylen);
+    log_assert(got == keylen);
+
     ecb_decryptor_impl *dec = new ecb_decryptor_impl;
     dec->ctx.SetKey(key, keylen);
     return dec;
@@ -121,9 +155,6 @@ namespace {
     virtual ~gcm_decryptor_impl();
     virtual int decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                         const uint8_t *nonce, size_t nlen);
-    virtual void decrypt_unchecked(uint8_t *out,
-                                   const uint8_t *in, size_t inlen,
-                                   const uint8_t *nonce, size_t nlen);
   };
 }
 
@@ -141,10 +172,46 @@ gcm_encryptor::create(const uint8_t *key, size_t keylen)
   CATCH_ALL_EXCEPTIONS(0);
 }
 
+gcm_encryptor *
+gcm_encryptor::create(key_generator *gen, size_t keylen)
+{
+  try {
+    KeyBlock key(keylen);
+    size_t got = gen->generate(key, keylen);
+    log_assert(got == keylen);
+
+    gcm_encryptor_impl *enc = new gcm_encryptor_impl;
+    // sadly, these are not checkable at compile time
+    log_assert(enc->ctx.DigestSize() == GCM_TAG_LEN);
+    log_assert(!enc->ctx.NeedsPrespecifiedDataLengths());
+    enc->ctx.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
+    return enc;
+  }
+  CATCH_ALL_EXCEPTIONS(0);
+}
+
 gcm_decryptor *
 gcm_decryptor::create(const uint8_t *key, size_t keylen)
 {
   try {
+    gcm_decryptor_impl *dec = new gcm_decryptor_impl;
+    // sadly, these are not checkable at compile time
+    log_assert(dec->ctx.DigestSize() == GCM_TAG_LEN);
+    log_assert(!dec->ctx.NeedsPrespecifiedDataLengths());
+    dec->ctx.SetKeyWithIV(key, keylen, dummy_iv, sizeof dummy_iv);
+    return dec;
+  }
+  CATCH_ALL_EXCEPTIONS(0);
+}
+
+gcm_decryptor *
+gcm_decryptor::create(key_generator *gen, size_t keylen)
+{
+  try {
+    KeyBlock key(keylen);
+    size_t got = gen->generate(key, keylen);
+    log_assert(got == keylen);
+
     gcm_decryptor_impl *dec = new gcm_decryptor_impl;
     // sadly, these are not checkable at compile time
     log_assert(dec->ctx.DigestSize() == GCM_TAG_LEN);
@@ -182,19 +249,6 @@ gcm_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
       ? 0 : -1; // caller will log decryption failure
   }
   CATCH_ALL_EXCEPTIONS(-1);
-}
-
-void
-gcm_decryptor_impl::decrypt_unchecked(uint8_t *out,
-                                      const uint8_t *in, size_t inlen,
-                                      const uint8_t *nonce, size_t nlen)
-{
-  try {
-    // there is no convenience function for this
-    this->ctx.Resynchronize(nonce, nlen);
-    this->ctx.ProcessData(out, in, inlen);
-  }
-  CATCH_ALL_EXCEPTIONS();
 }
 
 typedef CryptoPP::HMAC<CryptoPP::SHA256> HMAC_SHA256;

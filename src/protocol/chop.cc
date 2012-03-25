@@ -512,32 +512,17 @@ chop_config_t::circuit_create(size_t)
     key_generator::from_passphrase((const uint8_t *)passphrase,
                                    sizeof(passphrase) - 1,
                                    0, 0, 0, 0);
-  uint8_t kbuf[16];
 
   if (mode == LSN_SIMPLE_SERVER) {
-    log_assert(kgen->generate(kbuf, 16) == 16);
-    ckt->send_crypt = gcm_encryptor::create(kbuf, 16);
-
-    log_assert(kgen->generate(kbuf, 16) == 16);
-    ckt->send_hdr_crypt = ecb_encryptor::create(kbuf, 16);
-
-    log_assert(kgen->generate(kbuf, 16) == 16);
-    ckt->recv_crypt = gcm_decryptor::create(kbuf, 16);
-
-    log_assert(kgen->generate(kbuf, 16) == 16);
-    ckt->recv_hdr_crypt = ecb_decryptor::create(kbuf, 16);
+    ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
+    ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 16);
+    ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
+    ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 16);
   } else {
-    log_assert(kgen->generate(kbuf, 16) == 16);
-    ckt->recv_crypt = gcm_decryptor::create(kbuf, 16);
-
-    log_assert(kgen->generate(kbuf, 16) == 16);
-    ckt->recv_hdr_crypt = ecb_decryptor::create(kbuf, 16);
-
-    log_assert(kgen->generate(kbuf, 16) == 16);
-    ckt->send_crypt = gcm_encryptor::create(kbuf, 16);
-
-    log_assert(kgen->generate(kbuf, 16) == 16);
-    ckt->send_hdr_crypt = ecb_encryptor::create(kbuf, 16);
+    ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
+    ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 16);
+    ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
+    ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 16);
 
     std::pair<chop_circuit_table::iterator, bool> out;
     do {
@@ -551,7 +536,6 @@ chop_config_t::circuit_create(size_t)
     out.first->second = ckt;
   }
 
-  memset(kbuf, 0, 16);
   delete kgen;
   return ckt;
 }
@@ -1027,7 +1011,6 @@ chop_circuit_t::check_for_eof()
       conn_send_eof(conn);
     }
   }
-  
 
   // If we're the client we have to keep trying to talk as long as we
   // haven't both sent and received a FIN, or we might deadlock.

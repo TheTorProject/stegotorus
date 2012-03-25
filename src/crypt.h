@@ -8,6 +8,8 @@
 const size_t AES_BLOCK_LEN = 16;
 const size_t GCM_TAG_LEN   = 16;
 
+struct key_generator;
+
 struct ecb_encryptor
 {
   ecb_encryptor() {}
@@ -16,6 +18,11 @@ struct ecb_encryptor
   /** Return a new AES/ECB encryption state using 'key' (of length 'keylen')
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
   static ecb_encryptor *create(const uint8_t *key, size_t keylen);
+
+  /** Return a new AES/ECB encryption state, generating a key of
+      length 'keylen' from the key generator 'gen'.  'keylen' must be
+      16, 24, or 32 bytes. */
+  static ecb_encryptor *create(key_generator *gen, size_t keylen);
 
   /** Encrypt exactly AES_BLOCK_LEN bytes of data in the buffer 'in' and
       write the result to 'out'.  */
@@ -35,6 +42,11 @@ struct ecb_decryptor
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
   static ecb_decryptor *create(const uint8_t *key, size_t keylen);
 
+  /** Return a new AES/ECB decryption state, generating a key of
+      length 'keylen' from the key generator 'gen'.  'keylen' must be
+      16, 24, or 32 bytes. */
+  static ecb_decryptor *create(key_generator *gen, size_t keylen);
+
   /** Decrypt exactly AES_BLOCK_LEN bytes of data in the buffer 'in' and
       write the result to 'out'.  */
   virtual void decrypt(uint8_t *out, const uint8_t *in) = 0;
@@ -53,6 +65,11 @@ struct gcm_encryptor
   /** Return a new AES/GCM encryption state using 'key' (of length 'keylen')
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
   static gcm_encryptor *create(const uint8_t *key, size_t keylen);
+
+  /** Return a new AES/GCM encryption state, generating a key of
+      length 'keylen' from the key generator 'gen'.  'keylen' must be
+      16, 24, or 32 bytes. */
+  static gcm_encryptor *create(key_generator *gen, size_t keylen);
 
   /** Encrypt 'inlen' bytes of data in the buffer 'in', writing the
       result plus an authentication tag to the buffer 'out', whose
@@ -76,6 +93,11 @@ struct gcm_decryptor
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
   static gcm_decryptor *create(const uint8_t *key, size_t keylen);
 
+  /** Return a new AES/GCM decryption state, generating a key of
+      length 'keylen' from the key generator 'gen'.  'keylen' must be
+      16, 24, or 32 bytes. */
+  static gcm_decryptor *create(key_generator *gen, size_t keylen);
+
   /** Decrypt 'inlen' bytes of data in the buffer 'in'; the last 16
       bytes of this buffer are assumed to be the authentication tag.
       Write the result to the buffer 'out', whose length must be at
@@ -84,14 +106,6 @@ struct gcm_decryptor
       Returns 0 if successful, -1 if the authentication check fails. */
   virtual int decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                       const uint8_t *nonce, size_t nlen) = 0;
-
-  /** Decrypt 'inlen' bytes of data in the buffer 'in' WITHOUT
-      CHECKING THE AUTHENTICATION TAG.  Arguments same as decrypt().
-      This should be used only to decode just enough of an incoming
-      block to know how long it's going to be and therefore where the
-      tag begins. */
-  virtual void decrypt_unchecked(uint8_t *out, const uint8_t *in, size_t inlen,
-                                 const uint8_t *nonce, size_t nlen) = 0;
 
 private:
   gcm_decryptor(const gcm_decryptor&) DELETE_METHOD;

@@ -762,11 +762,6 @@ test_crypt_aesgcm_good_dec(void *)
     tt_int_op(rv, ==, 0);
     tt_mem_op(obuf, ==, testvecs[i].pt, testvecs[i].len);
 
-    c->decrypt_unchecked(obuf,
-                         (const uint8_t *)testvecs[i].ct, testvecs[i].len,
-                         (const uint8_t *)testvecs[i].iv, 16);
-    tt_mem_op(obuf, ==, testvecs[i].pt, testvecs[i].len);
-
     delete c;
   }
   c = 0;
