@@ -273,9 +273,7 @@ key_generator::from_passphrase(const uint8_t *phra, size_t plen,
     // to just feed its output directly to the HKDF-Expand phase; an
     // alternative would be to run PBKDF2 on the passphrase without a
     // salt, then put the result through HKDF-Extract with the salt.
-    //
-    // 1000 iterations or 50 ms, whichever is more
-    extractor.DeriveKey(prk, SHA256_LEN, 0, phra, plen, salt, slen, 1000, 0.05);
+    extractor.DeriveKey(prk, SHA256_LEN, 0, phra, plen, salt, slen, 1000);
 
     key_generator *r = new key_generator_impl(prk, ctxt, clen);
     memset(prk, 0, SHA256_LEN);
