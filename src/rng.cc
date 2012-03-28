@@ -128,8 +128,10 @@ rng_double()
     unsigned int n;
   };
 
+#if 0
   static_assert(sizeof(double) == sizeof(uint64_t),
                 "this code works only with 64-bit, IEEE double");
+#endif
   union ieee754_double {
     double d;
     uint64_t i;
