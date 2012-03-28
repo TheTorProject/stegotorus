@@ -10,7 +10,6 @@
 #
 #   Check for baseline language coverage in the compiler for the C++11
 #   standard; if necessary, add switches to CXXFLAGS to enable support.
-#   Errors out if no mode that supports C++11 baseline syntax can be found.
 #   The argument, if specified, indicates whether you insist on an extended
 #   mode (e.g. -std=gnu++11) or a strict conformance mode (e.g. -std=c++11).
 #   If neither is specified, you get whatever works, with preference for an
@@ -102,6 +101,6 @@ AC_DEFUN([AX_CXXFLAGS_STDCXX_11], [dnl
   fi])
 
   if test x$ac_success = xno; then
-    AC_MSG_ERROR([*** A compiler with support for C++11 language features is required.])
+    AC_MSG_WARN([*** Compiler support for C++11 language features not detected.])
   fi
 ])
