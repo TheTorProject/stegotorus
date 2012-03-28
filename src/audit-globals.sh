@@ -40,6 +40,8 @@ sed '
   /^util log_dest$/d
   /^util log_min_sev$/d
   /^util the_evdns_base$/d
+  /^crypt log_crypto()::initialized$/d
+  /^crypt init_crypto()::initialized$/d
 
   # These are grandfathered; they need to be removed.
   /^steg\/embed embed_init$/d

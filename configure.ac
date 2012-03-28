@@ -43,16 +43,17 @@ AM_CONDITIONAL([INTEGRATION_TESTS], [test "$PYOS" = "posix"])
 
 ### Libraries ###
 
-# libcrypto++ 5.6.0 is the earliest version with GCM support.
-PKG_CHECK_MODULES([libcryptopp], [libcrypto++ >= 5.6.0])
+# Presently no need for libssl, only libcrypto.
+# We require version 1.0.1 for GCM support.
+PKG_CHECK_MODULES([libcrypto], [libcrypto >= 1.0.1])
 # libevent 2.0 radically changed the API
 PKG_CHECK_MODULES([libevent], [libevent >= 2.0])
 # there's no good reason not to require the latest zlib, which is
 # from 2009
 PKG_CHECK_MODULES([libz], [zlib >= 1.2.3.4])
 
-LIBS="$libevent_LIBS $libcryptopp_LIBS $libz_LIBS"
-lib_CPPFLAGS="$libevent_CFLAGS $libcryptopp_CFLAGS $libz_CFLAGS"
+LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS"
+lib_CPPFLAGS="$libevent_CFLAGS $libcrypto_CFLAGS $libz_CFLAGS"
 AC_SUBST(lib_CPPFLAGS)
 
 # ntohl and a bunch of related functions require a special library on Windows.

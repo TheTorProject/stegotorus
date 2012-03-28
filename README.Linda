@@ -22,9 +22,9 @@ automake (GNU automake) 1.11.1
 
 $> sudo port install pkgconfig
 
- d) libcrypto++, libevent-2, 
+ d) openssl >= 1.0.1, libevent-2
 
-$> sudo port install libcryptopp
+$> sudo port install openssl
 $> sudo port install libevent
 
  e) tor

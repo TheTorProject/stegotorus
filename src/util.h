@@ -8,6 +8,7 @@
 #include "config.h"
 
 #define __STDC_LIMIT_MACROS
+#define __STDC_CONSTANT_MACROS
 #include <limits.h>
 #include <stdarg.h> /* va_list */
 #include <stddef.h> /* size_t, ptrdiff_t, offsetof, NULL */

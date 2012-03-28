@@ -100,8 +100,12 @@ main(int argc, const char **argv)
   char *logminsev;
 
   logminsev = getenv("TT_LOG");
-  if (logminsev)
+  if (logminsev) {
+    log_set_method(LOG_METHOD_STDERR, 0);
     log_set_min_severity(logminsev);
+  } else {
+    log_set_method(LOG_METHOD_NULL, 0);
+  }
 
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
