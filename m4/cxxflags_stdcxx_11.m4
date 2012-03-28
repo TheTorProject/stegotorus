@@ -99,8 +99,4 @@ AC_DEFUN([AX_CXXFLAGS_STDCXX_11], [dnl
       fi
     done
   fi])
-
-  if test x$ac_success = xno; then
-    AC_MSG_WARN([*** Compiler support for C++11 language features not detected.])
-  fi
 ])

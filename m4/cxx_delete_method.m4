@@ -50,7 +50,8 @@ AC_DEFUN([AX_CXX_DELETE_METHOD], [dnl
       [ax_cv_cxx_delete_method_syntax=yes],
       [ax_cv_cxx_delete_method_syntax=no])])
   # ... and this one should fail.
-  AC_CACHE_CHECK(whether $CXX enforces method deletion,
+  if test x$ax_cv_cxx_delete_method_syntax = xyes; then
+   AC_CACHE_CHECK(whether $CXX enforces method deletion,
                  ax_cv_cxx_delete_method_enforced, [
     AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
       struct foo {
@@ -62,8 +63,9 @@ AC_DEFUN([AX_CXX_DELETE_METHOD], [dnl
    ]])],
       [ax_cv_cxx_delete_method_enforced=no],
       [ax_cv_cxx_delete_method_enforced=yes])])
-  if test $ax_cv_cxx_delete_method_syntax = yes &&
-     test $ax_cv_cxx_delete_method_enforced = yes
+  fi
+  if test x$ax_cv_cxx_delete_method_syntax = xyes &&
+     test x$ax_cv_cxx_delete_method_enforced = xyes
   then
      AC_DEFINE([DELETE_METHOD], [= delete],
                [Define as `= delete' if your compiler supports C++11 method
