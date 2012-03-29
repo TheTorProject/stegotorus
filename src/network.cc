@@ -333,7 +333,7 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
 
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
     if (what & BEV_EVENT_ERROR)
-      log_warn(ckt, "network error in %s: %s",
+      log_info(ckt, "network error in %s: %s",
                (what & BEV_EVENT_READING) ? "read" : "write",
                evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     else if (what & BEV_EVENT_EOF)
@@ -377,7 +377,7 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
 
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
     if (what & BEV_EVENT_ERROR)
-      log_warn(conn, "network error in %s: %s",
+      log_info(conn, "network error in %s: %s",
                (what & BEV_EVENT_READING) ? "read" : "write",
                evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     else if (what & BEV_EVENT_EOF)

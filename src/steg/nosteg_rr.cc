@@ -42,6 +42,7 @@ namespace {
 struct nosteg_rr : steg_t
 {
   bool can_transmit : 1;
+  bool did_transmit : 1;
   STEG_DECLARE_METHODS(nosteg_rr);
 };
 }
@@ -50,7 +51,8 @@ STEG_DEFINE_MODULE(nosteg_rr);
 
 nosteg_rr::nosteg_rr(bool is_clientside)
   : steg_t(is_clientside),
-    can_transmit(is_clientside)
+    can_transmit(is_clientside),
+    did_transmit(false)
 {
 }
 
@@ -79,6 +81,7 @@ nosteg_rr::transmit(struct evbuffer *source, conn_t *conn)
     return -1;
   }
 
+  did_transmit = true;
   can_transmit = false;
   conn->cease_transmission();
 
@@ -101,7 +104,7 @@ nosteg_rr::receive(conn_t *conn, struct evbuffer *dest)
 
   if (is_clientside) {
     conn->expect_close();
-  } else {
+  } else if (!did_transmit) {
     can_transmit = true;
     conn->transmit_soon(100);
   }
