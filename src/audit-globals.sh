@@ -39,6 +39,8 @@ sed '
   /^rng rng$/d
   /^util log_dest$/d
   /^util log_min_sev$/d
+  /^util log_timestamps$/d
+  /^util log_ts_base$/d
   /^util the_evdns_base$/d
   /^crypt log_crypto()::initialized$/d
   /^crypt init_crypto()::initialized$/d

@@ -176,6 +176,7 @@ usage(void)
           "--log-file=<file> ~ set logfile\n"
           "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
           "--no-log ~ disable logging\n"
+          "--timestamp-logs ~ add timestamps to all log messages\n"
           "--allow-kqueue ~ allow use of kqueue(2) (may be buggy)\n");
 
   exit(1);
@@ -188,6 +189,8 @@ usage(void)
    If it succeeds it returns the number of argv arguments its caller
    should skip to get past the optional arguments we already handled.
    If it fails, it exits the program.
+
+   Note: this function should NOT use log_* to print diagnostics.
 */
 static int
 handle_generic_args(const char *const *argv)
@@ -195,28 +198,30 @@ handle_generic_args(const char *const *argv)
   bool logmethod_set = false;
   bool logsev_set = false;
   bool allow_kq_set = false;
+  bool timestamps_set = false;
   int i = 1;
 
   while (argv[i] &&
          !strncmp(argv[i],"--",2)) {
     if (!strncmp(argv[i], "--log-file=", 11)) {
       if (logmethod_set) {
-        log_warn("you've already set a log file!");
+        fprintf(stderr, "you've already set a log file!\n");
         exit(1);
       }
       if (log_set_method(LOG_METHOD_FILE,
                          (char *)argv[i]+11) < 0) {
-        log_warn("failed creating logfile");
+        fprintf(stderr, "failed to open logfile '%s': %s\n", argv[i]+11,
+                strerror(errno));
         exit(1);
       }
       logmethod_set=1;
     } else if (!strncmp(argv[i], "--log-min-severity=", 19)) {
       if (logsev_set) {
-        log_warn("you've already set a min. log severity!");
+        fprintf(stderr, "you've already set a min. log severity!\n");
         exit(1);
       }
       if (log_set_min_severity((char *)argv[i]+19) < 0) {
-        log_warn("error at setting logging severity");
+        fprintf(stderr, "error at setting logging severity");
         exit(1);
       }
       logsev_set = true;
@@ -230,6 +235,13 @@ handle_generic_args(const char *const *argv)
           exit(1);
         }
         logsev_set = true;
+    } else if (!strcmp(argv[i], "--timestamp-logs")) {
+      if (timestamps_set) {
+        fprintf(stderr, "you've already asked for timestamps!\n");
+        exit(1);
+      }
+      log_enable_timestamps();
+      timestamps_set = true;
     } else if (!strcmp(argv[i], "--allow-kqueue")) {
       if (allow_kq_set) {
         fprintf(stderr, "you've already allowed kqueue!\n");
@@ -238,7 +250,7 @@ handle_generic_args(const char *const *argv)
       allow_kq = true;
       allow_kq_set = true;
     } else {
-      log_warn("unrecognizable argument '%s'", argv[i]);
+      fprintf(stderr, "unrecognizable argument '%s'", argv[i]);
       exit(1);
     }
     i++;

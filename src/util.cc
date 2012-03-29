@@ -402,6 +402,9 @@ ascii_strlower(char *s)
 static FILE *log_dest;
 /* minimum logging severity */
 static int log_min_sev = LOG_SEV_INFO;
+/* whether timestamps are wanted */
+static bool log_timestamps = false;
+static struct timeval log_ts_base = { 0, 0 };
 
 /** Helper: map a log severity to descriptive string. */
 static const char *
@@ -473,7 +476,7 @@ log_open(const char *filename)
    Ignores errors.
 */
 void
-log_close(void)
+log_close()
 {
   if (log_dest && log_dest != stderr)
     fclose(log_dest);
@@ -523,11 +526,19 @@ log_set_min_severity(const char* sev_string)
   return 0;
 }
 
+/** Enable timestamps on all log messages. */
+void
+log_enable_timestamps()
+{
+  log_timestamps = true;
+  gettimeofday(&log_ts_base, 0);
+}
+
 /** True if the minimum log severity is "debug".  Used in a few places
     to avoid some expensive formatting work if we are going to ignore the
     result. */
 int
-log_do_debug(void)
+log_do_debug()
 {
   return log_min_sev == LOG_SEV_DEBUG;
 }
@@ -550,7 +561,7 @@ logv(int severity, const char *format, va_list ap)
   putc('\n', log_dest);
 }
 
-static void
+static bool
 logpfx(int severity, const char *fn)
 {
   if (!sev_is_valid(severity))
@@ -558,48 +569,39 @@ logpfx(int severity, const char *fn)
 
   /* See if the user is interested in this log message. */
   if (!log_dest || severity < log_min_sev)
-    return;
+    return false;
+
+  if (log_timestamps) {
+    struct timeval now, delta;
+    gettimeofday(&now, 0);
+    timeval_subtract(&now, &log_ts_base, &delta);
+    fprintf(log_dest, "%.4f ",
+            delta.tv_sec + double(delta.tv_usec) / 1e6);
+  }
 
   fprintf(log_dest, "[%s] ", sev_to_string(severity));
   if (log_min_sev == LOG_SEV_DEBUG && fn)
     fprintf(log_dest, "%s: ", fn);
+  return true;
 }
 
 static void
 logpfx(int severity, const char *fn, circuit_t *ckt)
 {
-  if (!sev_is_valid(severity))
-    abort();
-
-  /* See if the user is interested in this log message. */
-  if (!log_dest || severity < log_min_sev)
-    return;
-
-  fprintf(log_dest, "[%s] ", sev_to_string(severity));
-  if (log_min_sev == LOG_SEV_DEBUG && fn)
-    fprintf(log_dest, "%s: ", fn);
-  if (ckt)
-    fprintf(log_dest, "<%u> ", ckt->serial);
+  if (logpfx(severity, fn))
+    if (ckt)
+      fprintf(log_dest, "<%u> ", ckt->serial);
 }
 
 static void
 logpfx(int severity, const char *fn, conn_t *conn)
 {
-  if (!sev_is_valid(severity))
-    abort();
-
-  /* See if the user is interested in this log message. */
-  if (!log_dest || severity < log_min_sev)
-    return;
-
-  fprintf(log_dest, "[%s] ", sev_to_string(severity));
-  if (log_min_sev == LOG_SEV_DEBUG && fn)
-    fprintf(log_dest, "%s: ", fn);
-  if (conn) {
-    circuit_t *ckt = conn->circuit();
-    unsigned int ckt_serial = ckt ? ckt->serial : 0;
-    fprintf(log_dest, "<%u.%u> ", ckt_serial, conn->serial);
-  }
+  if (logpfx(severity, fn))
+    if (conn) {
+      circuit_t *ckt = conn->circuit();
+      unsigned int ckt_serial = ckt ? ckt->serial : 0;
+      fprintf(log_dest, "<%u.%u> ", ckt_serial, conn->serial);
+    }
 }
 
 /**** Public logging API. ****/
@@ -722,7 +724,7 @@ int timeval_subtract(struct timeval *x, struct timeval *y,
     y->tv_sec -= nsec;
   }
 
-  /* Compute the time remaining to wait.                                        
+  /* Compute the time remaining to wait.
      tv_usec is certainly positive. */
   result->tv_sec = x->tv_sec - y->tv_sec;
   result->tv_usec = x->tv_usec - y->tv_usec;

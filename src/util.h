@@ -171,7 +171,12 @@ int log_set_method(int method, const char *filename);
     'sev_string' may be "warn", "info", or "debug" (case-insensitively). */
 int log_set_min_severity(const char* sev_string);
 
-/** True if debug messages are being logged. */
+/** Request timestamps on all log messages. */
+void log_enable_timestamps();
+
+/** True if debug messages are being logged. Guard expensive debugging
+    checks with this, to avoid doing useless work when the messages are
+    just going to be thrown away anyway. */
 int log_do_debug(void);
 
 /** Close the logfile if it's open.  Ignores errors. */
