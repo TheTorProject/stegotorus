@@ -137,7 +137,10 @@ null_circuit_t::~null_circuit_t()
     /* break the circular reference before deallocating the
        downstream connection */
     downstream->upstream = NULL;
-    delete downstream;
+    if (evbuffer_get_length(downstream->outbound()) > 0)
+      conn_do_flush(downstream);
+    else
+      delete downstream;
   }
 }
 
@@ -191,6 +194,9 @@ null_circuit_t::drop_downstream(conn_t *cn)
 int
 null_circuit_t::send()
 {
+  log_debug(this, "sending %lu bytes",
+            evbuffer_get_length(bufferevent_get_input(this->up_buffer)));
+
   return evbuffer_add_buffer(this->downstream->outbound(),
                              bufferevent_get_input(this->up_buffer));
 }
@@ -261,6 +267,7 @@ int
 null_conn_t::recv()
 {
   log_assert(this->upstream);
+  log_debug(this, "receiving %lu bytes", evbuffer_get_length(this->inbound()));
   return evbuffer_add_buffer(bufferevent_get_output(this->upstream->up_buffer),
                              this->inbound());
 }

@@ -236,6 +236,8 @@ public:
   {
     reassembly_elt rv = { 0, op_DAT };
     uint8_t front = next_to_process & 0xFF;
+    log_debug("next_to_process=%d data=%p op=%02x",
+              next_to_process, cbuf[front].data, cbuf[front].op);
     if (cbuf[front].data) {
       rv = cbuf[front];
       cbuf[front].data = 0;
@@ -255,14 +257,14 @@ public:
   insert(uint32_t seqno, opcode_t op, evbuffer *data, conn_t *conn)
   {
     if (seqno - window() > 255) {
-      log_warn(conn, "block outside receive window");
+      log_info(conn, "block outside receive window");
       evbuffer_free(data);
       return false;
     }
     uint8_t front = next_to_process & 0xFF;
     uint8_t pos = front + (seqno - window());
     if (cbuf[pos].data) {
-      log_warn(conn, "duplicate block");
+      log_info(conn, "duplicate block");
       evbuffer_free(data);
       return false;
     }
@@ -1193,7 +1195,7 @@ chop_conn_t::recv()
     block_header hdr(recv_pending, *upstream->recv_hdr_crypt);
     if (!hdr.valid(upstream->recv_queue.window())) {
       const uint8_t *c = hdr.cleartext();
-      log_warn(this, "invalid block header: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+      log_info(this, "invalid block header: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
                c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
                c[8], c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
       return -1;
@@ -1214,11 +1216,11 @@ chop_conn_t::recv()
     if (upstream->recv_crypt->decrypt(decodebuf,
                                       decodebuf, hdr.total_len() - HEADER_LEN,
                                       hdr.nonce(), HEADER_LEN)) {
-      log_warn("MAC verification failure");
+      log_info("MAC verification failure");
       return -1;
     }
 
-    log_debug(this, "receiving block %u <d=%lu p=%lu f=%u>",
+    log_debug(this, "receiving block %u <d=%lu p=%lu f=%02x>",
               hdr.seqno(), (unsigned long)hdr.dlen(), (unsigned long)hdr.plen(),
               (unsigned int)hdr.opcode());
 
