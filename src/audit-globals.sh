@@ -46,9 +46,6 @@ sed '
   /^crypt init_crypto()::initialized$/d
 
   # These are grandfathered; they need to be removed.
-  /^steg\/embed embed_init$/d
-  /^steg\/embed embed_num_traces$/d
-  /^steg\/embed embed_traces$/d
   /^steg\/http has_peer_name$/d
   /^steg\/http peername$/d
   /^steg\/payloads payload_count$/d

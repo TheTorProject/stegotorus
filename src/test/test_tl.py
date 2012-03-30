@@ -78,8 +78,14 @@ class TimelineTest(object):
             "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
             ))
 
-    # NOTE: 'embed' steg presently cannot be tested using this system
-    # because it runs out of trace data before any of the tests complete.
+    # buggy, disabled
+    #def test_embed(self):
+    #    self.doTest("chop",
+    #       ("chop", "server", "127.0.0.1:5001",
+    #        "127.0.0.1:5010","embed",
+    #        "chop", "client", "127.0.0.1:4999",
+    #        "127.0.0.1:5010","embed",
+    #        ))
 
     # NOTE: 'http' steg presently cannot be tested using this system
     # because the trace pools are process-global rather than per-listener.

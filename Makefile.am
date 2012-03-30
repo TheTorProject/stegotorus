@@ -131,6 +131,7 @@ check-local:
 	$(AM_V_at) ./unittests
 if INTEGRATION_TESTS
 	@echo --- Integration tests ---
+	[ -e traces ] || ln -s $(srcdir)/traces .
 	$(AM_V_at) $(PYTHON) -m unittest discover -s $(srcdir)/src/test -p 'test_*.py' -v
 else
 	@echo !!! Integration tests skipped !!!

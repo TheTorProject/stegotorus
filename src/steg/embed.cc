@@ -4,32 +4,34 @@
 #include "steg.h"
 #include "rng.h"
 
+#include <errno.h>
 #include <event2/buffer.h>
-#include <event2/event.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <time.h>
+#include <vector>
+
+using std::vector;
 
 namespace {
   struct trace_t {
-    int num_pkt;              // number of packets in trace
-    short *pkt_sizes;         // packet sizes (positive = client->server)
-    int *pkt_times;           // packet inter-arrival times
+    vector<short> pkt_sizes;  // packet sizes (positive = client->server)
+    vector<int> pkt_times;    // packet inter-arrival times
   };
 
   struct embed_steg_config_t : steg_config_t {
     bool is_clientside;
+    vector<trace_t> traces;
 
     STEG_CONFIG_DECLARE_METHODS(embed);
+
+    size_t get_random_trace() const;
   };
 
   struct embed_steg_t : steg_t {
     embed_steg_config_t *config;
     conn_t *conn;
 
-    int cur_idx;              // current trace index
+    int cur_idx;           // current trace index
     trace_t *cur;             // current trace
-    int cur_pkt;              // current packet in the trace
+    int cur_pkt;           // current packet in the trace
     struct timeval last_pkt;  // time at which last packet was sent/received
 
     embed_steg_t(embed_steg_config_t *cf, conn_t *cn);
@@ -45,10 +47,6 @@ namespace {
 }
 
 STEG_DEFINE_MODULE(embed);
-
-static int embed_init = 0;      // whether traces are initialized
-static int embed_num_traces;    // number of traces
-static trace_t *embed_traces;   // global array of all traces
 
 static int
 millis_since(struct timeval *last)
@@ -66,6 +64,32 @@ embed_steg_config_t::embed_steg_config_t(config_t *cfg)
   : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
+  // read in traces to use for connections
+  FILE *trace_file = fopen("traces/embed.txt", "r");
+  if (!trace_file)
+    log_abort("opening traces/embed.txt: %s", strerror(errno));
+
+  int num_traces;
+  if (fscanf(trace_file, "%d", &num_traces) < 1)
+    log_abort("couldn't read number of traces");
+
+  traces.resize(num_traces);
+
+  for (vector<trace_t>::iterator p = traces.begin(); p != traces.end(); ++p) {
+    int num_pkt;
+    if (fscanf(trace_file, "%d", &num_pkt) < 1)
+      log_abort("couldn't read number of packets in trace %ld",
+                p - traces.begin());
+
+    p->pkt_sizes.resize(num_pkt);
+    p->pkt_times.resize(num_pkt);
+    for (int i = 0; i < num_pkt; i++)
+      if (fscanf(trace_file, "%hd %d", &p->pkt_sizes[i], &p->pkt_times[i]) < 1)
+        log_abort("couldn't read trace entry %ld/%d",
+                  p - traces.begin(), i);
+  }
+
+  log_debug("read %d traces", num_traces);
 }
 
 embed_steg_config_t::~embed_steg_config_t()
@@ -78,50 +102,17 @@ embed_steg_config_t::steg_create(conn_t *conn)
   return new embed_steg_t(this, conn);
 }
 
-static void
-init_embed_traces()
+size_t
+embed_steg_config_t::get_random_trace() const
 {
-  // read in traces to use for connections
-  FILE *trace_file = fopen("traces/embed.txt", "r");
-  if (fscanf(trace_file, "%d", &embed_num_traces) < 1) {
-    log_abort("couldn't read number of traces to use -- exiting");
-    exit(1);
-  }
-  embed_traces = (trace_t *)xmalloc(sizeof(trace_t) * embed_num_traces);
-  for (int i = 0; i < embed_num_traces; i++) {
-    int num_pkt;
-    if (fscanf(trace_file, "%d", &num_pkt) < 1) {
-      log_abort("couldn't read number of packets to use -- exiting");
-      exit(1);
-    }
-    embed_traces[i].num_pkt = num_pkt;
-    embed_traces[i].pkt_sizes = (short *)xmalloc(sizeof(short) * num_pkt);
-    embed_traces[i].pkt_times = (int *)xmalloc(sizeof(int) * num_pkt);
-    for (int j = 0; j < embed_traces[i].num_pkt; j++) {
-      if (fscanf(trace_file, "%hd %d",
-                 &embed_traces[i].pkt_sizes[j],
-                 &embed_traces[i].pkt_times[j]) < 1) {
-        log_abort("couldn't read numbers of packet size and times to use -- exiting");
-        exit(1);
-      }
-    }
-  }
-  log_debug("read %d traces to use", embed_num_traces);
-
-  embed_init = 1;
-}
-
-static int
-get_random_trace()
-{
-  return rng_int(embed_num_traces);
+  return rng_int(traces.size());
 }
 
 bool
 embed_steg_t::advance_packet()
 {
   cur_pkt++;
-  return cur_pkt == cur->num_pkt;
+  return cur_pkt == int(cur->pkt_sizes.size());
 }
 
 short
@@ -146,18 +137,16 @@ bool
 embed_steg_t::is_finished()
 {
   if (cur_idx == -1) return true;
-  return cur_pkt >= cur->num_pkt;
+  return cur_pkt >= int(cur->pkt_sizes.size());
 }
 
 embed_steg_t::embed_steg_t(embed_steg_config_t *cf, conn_t *cn)
   : config(cf), conn(cn)
 {
-  if (!embed_init) init_embed_traces();
-
   cur_idx = -1;
   if (config->is_clientside) {
-    cur_idx = get_random_trace();
-    cur = &embed_traces[cur_idx];
+    cur_idx = config->get_random_trace();
+    cur = &config->traces[cur_idx];
     cur_pkt = 0;
   }
   gettimeofday(&last_pkt, NULL);
@@ -243,7 +232,7 @@ embed_steg_t::receive(struct evbuffer *dest)
   // if we are receiving the first packet of the trace, read the index
   if (cur_idx == -1) {
     if (evbuffer_remove(source, &cur_idx, 4) != 4) return -1;
-    cur = &embed_traces[cur_idx];
+    cur = &config->traces[cur_idx];
     cur_pkt = 0;
     pkt_size += 4;
 

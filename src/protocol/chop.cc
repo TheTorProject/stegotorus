@@ -771,7 +771,9 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t blocksize)
   size_t avail = evbuffer_get_length(xmit_pending);
   opcode_t op = op_DAT;
 
-  if (avail > SECTION_LEN)
+  if (avail > blocksize - MIN_BLOCK_SIZE)
+    avail = blocksize - MIN_BLOCK_SIZE;
+  else if (avail > SECTION_LEN)
     avail = SECTION_LEN;
   else if (upstream_eof && !sent_fin)
     // this block will carry the last byte of real data to be sent in
