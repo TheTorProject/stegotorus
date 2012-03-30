@@ -1,5 +1,6 @@
 #include "util.h"
 #include "connections.h"
+#include "protocol.h"
 #include "steg.h"
 #include "rng.h"
 
@@ -9,18 +10,29 @@
 #include <unistd.h>
 #include <time.h>
 
-typedef struct trace_t {
-  int num_pkt;              // number of packets in trace
-  short *pkt_sizes;         // packet sizes (positive = client->server)
-  int *pkt_times;           // packet inter-arrival times
-} trace_t;
-
 namespace {
-  struct embed : steg_t {
+  struct trace_t {
+    int num_pkt;              // number of packets in trace
+    short *pkt_sizes;         // packet sizes (positive = client->server)
+    int *pkt_times;           // packet inter-arrival times
+  };
+
+  struct embed_steg_config_t : steg_config_t {
+    bool is_clientside;
+
+    STEG_CONFIG_DECLARE_METHODS(embed);
+  };
+
+  struct embed_steg_t : steg_t {
+    embed_steg_config_t *config;
+    conn_t *conn;
+
     int cur_idx;              // current trace index
     trace_t *cur;             // current trace
     int cur_pkt;              // current packet in the trace
     struct timeval last_pkt;  // time at which last packet was sent/received
+
+    embed_steg_t(embed_steg_config_t *cf, conn_t *cn);
 
     STEG_DECLARE_METHODS(embed);
 
@@ -32,13 +44,15 @@ namespace {
   };
 }
 
+STEG_DEFINE_MODULE(embed);
+
 static int embed_init = 0;      // whether traces are initialized
 static int embed_num_traces;    // number of traces
 static trace_t *embed_traces;   // global array of all traces
 
-STEG_DEFINE_MODULE(embed);
-
-int millis_since(struct timeval *last) {
+static int
+millis_since(struct timeval *last)
+{
   struct timeval cur;
   int diff = 0;
   gettimeofday(&cur, NULL);
@@ -48,13 +62,31 @@ int millis_since(struct timeval *last) {
   return diff;
 }
 
-void init_embed_traces() {
+embed_steg_config_t::embed_steg_config_t(config_t *cfg)
+  : steg_config_t(cfg),
+    is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
+{
+}
+
+embed_steg_config_t::~embed_steg_config_t()
+{
+}
+
+steg_t *
+embed_steg_config_t::steg_create(conn_t *conn)
+{
+  return new embed_steg_t(this, conn);
+}
+
+static void
+init_embed_traces()
+{
   // read in traces to use for connections
   FILE *trace_file = fopen("traces/embed.txt", "r");
   if (fscanf(trace_file, "%d", &embed_num_traces) < 1) {
     log_abort("couldn't read number of traces to use -- exiting");
     exit(1);
-  }    
+  }
   embed_traces = (trace_t *)xmalloc(sizeof(trace_t) * embed_num_traces);
   for (int i = 0; i < embed_num_traces; i++) {
     int num_pkt;
@@ -67,10 +99,10 @@ void init_embed_traces() {
     embed_traces[i].pkt_times = (int *)xmalloc(sizeof(int) * num_pkt);
     for (int j = 0; j < embed_traces[i].num_pkt; j++) {
       if (fscanf(trace_file, "%hd %d",
-		 &embed_traces[i].pkt_sizes[j],
-		 &embed_traces[i].pkt_times[j]) < 1) {
-	log_abort("couldn't read numbers of packet size and times to use -- exiting");
-	exit(1);
+                 &embed_traces[i].pkt_sizes[j],
+                 &embed_traces[i].pkt_times[j]) < 1) {
+        log_abort("couldn't read numbers of packet size and times to use -- exiting");
+        exit(1);
       }
     }
   }
@@ -79,39 +111,51 @@ void init_embed_traces() {
   embed_init = 1;
 }
 
-int get_random_trace() {
+static int
+get_random_trace()
+{
   return rng_int(embed_num_traces);
 }
 
-bool embed::advance_packet() {
+bool
+embed_steg_t::advance_packet()
+{
   cur_pkt++;
   return cur_pkt == cur->num_pkt;
 }
 
-short embed::get_pkt_size() {
+short
+embed_steg_t::get_pkt_size()
+{
   return abs(cur->pkt_sizes[cur_pkt]);
 }
 
-bool embed::is_outgoing() {
-  return (cur->pkt_sizes[cur_pkt] < 0) ^ is_clientside;
+bool
+embed_steg_t::is_outgoing()
+{
+  return (cur->pkt_sizes[cur_pkt] < 0) ^ config->is_clientside;
 }
 
-int embed::get_pkt_time() {
+int
+embed_steg_t::get_pkt_time()
+{
   return cur->pkt_times[cur_pkt];
 }
 
-bool embed::is_finished() {
+bool
+embed_steg_t::is_finished()
+{
   if (cur_idx == -1) return true;
   return cur_pkt >= cur->num_pkt;
 }
 
-embed::embed(bool is_clientside)
-  : steg_t(is_clientside)
+embed_steg_t::embed_steg_t(embed_steg_config_t *cf, conn_t *cn)
+  : config(cf), conn(cn)
 {
   if (!embed_init) init_embed_traces();
 
   cur_idx = -1;
-  if (is_clientside) {
+  if (config->is_clientside) {
     cur_idx = get_random_trace();
     cur = &embed_traces[cur_idx];
     cur_pkt = 0;
@@ -119,11 +163,19 @@ embed::embed(bool is_clientside)
   gettimeofday(&last_pkt, NULL);
 }
 
-embed::~embed()
+embed_steg_t::~embed_steg_t()
 {
 }
 
-size_t embed::transmit_room(conn_t * /* conn */) {
+steg_config_t *
+embed_steg_t::cfg()
+{
+  return config;
+}
+
+size_t
+embed_steg_t::transmit_room()
+{
   if (is_finished() || !is_outgoing()) return 0;
 
   int time_diff = millis_since(&last_pkt);
@@ -135,7 +187,9 @@ size_t embed::transmit_room(conn_t * /* conn */) {
   return room;
 }
 
-int embed::transmit(struct evbuffer *source, conn_t *conn) {
+int
+embed_steg_t::transmit(struct evbuffer *source)
+{
   struct evbuffer *dest = conn->outbound();
   short src_len = evbuffer_get_length(source);
   short pkt_size = get_pkt_size();
@@ -177,13 +231,15 @@ int embed::transmit(struct evbuffer *source, conn_t *conn) {
   return 0;
 }
 
-int embed::receive(conn_t *conn, struct evbuffer *dest) {
+int
+embed_steg_t::receive(struct evbuffer *dest)
+{
   struct evbuffer *source = conn->inbound();
   short src_len = evbuffer_get_length(source);
   short pkt_size = 0;
 
   log_debug("receiving buffer of length %d", src_len);
-  
+
   // if we are receiving the first packet of the trace, read the index
   if (cur_idx == -1) {
     if (evbuffer_remove(source, &cur_idx, 4) != 4) return -1;
@@ -206,7 +262,7 @@ int embed::receive(conn_t *conn, struct evbuffer *dest) {
     if (evbuffer_remove(source, &data_len, 2) != 2) return -1;
     if (data_len > 0) {
       if (evbuffer_remove_buffer(source, dest, data_len) != data_len) {
-	return -1;
+return -1;
       }
     }
     pkt_size += data_len + 2;
@@ -221,7 +277,7 @@ int embed::receive(conn_t *conn, struct evbuffer *dest) {
     pkt_size = 0;
 
     log_debug("received packet %d of trace %d",
-	      cur_pkt, cur_idx);
+              cur_pkt, cur_idx);
 
     // advance packet; if done with trace, sender should close connection
     if (advance_packet()) {

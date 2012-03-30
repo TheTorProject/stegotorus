@@ -18,16 +18,17 @@ steg_is_supported(const char *name)
 }
 
 /* Instantiate a steg module by name. */
-steg_t *
-steg_new(const char *name, bool is_clientside)
+steg_config_t *
+steg_new(const char *name, config_t *cfg)
 {
   const steg_module *const *s;
   for (s = supported_stegs; *s; s++)
     if (!strcmp(name, (**s).name))
-      return (**s).new_(is_clientside);
-  return NULL;
+      return (**s).new_(cfg); 
+ return 0;
 }
 
-/* Define this here rather than in the class definition so that the
-   vtable will be emitted in only one place. */
+/* Define these here rather than in the class definition so that the
+   vtables will be emitted in only one place. */
+steg_config_t::~steg_config_t() {}
 steg_t::~steg_t() {}

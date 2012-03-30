@@ -34,6 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "util.h"
 #include "connections.h"
+#include "protocol.h"
 #include "steg.h"
 #include "payloads.h"
 #include "cookies.h"
@@ -60,20 +61,48 @@ static int has_peer_name = 0;
 static char peername[512];
 
 namespace {
-struct http : steg_t
-{
-  bool have_transmitted : 1;
-  bool have_received : 1;
-  int type;
+  struct http_steg_config_t : steg_config_t
+  {
+    bool is_clientside : 1;
 
-  STEG_DECLARE_METHODS(http);
-};
+    STEG_CONFIG_DECLARE_METHODS(http);
+  };
+
+  struct http_steg_t : steg_t
+  {
+    http_steg_config_t *config;
+    conn_t *conn;
+
+    bool have_transmitted : 1;
+    bool have_received : 1;
+    int type;
+
+    http_steg_t(http_steg_config_t *cf, conn_t *cn);
+    STEG_DECLARE_METHODS(http);
+  };
 }
 
 STEG_DEFINE_MODULE(http);
 
-int http_client_uri_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
-int http_client_cookie_transmit (steg_t *s, struct evbuffer *source, conn_t *conn);
+http_steg_config_t::http_steg_config_t(config_t *cfg)
+  : steg_config_t(cfg),
+    is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
+{
+}
+
+http_steg_config_t::~http_steg_config_t()
+{
+}
+
+steg_t *
+http_steg_config_t::steg_create(conn_t *conn)
+{
+  return new http_steg_t(this, conn);
+}
+
+
+int http_client_uri_transmit (http_steg_t *s, struct evbuffer *source, conn_t *conn);
+int http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source, conn_t *conn);
 
 void evbuffer_dump(struct evbuffer *buf, FILE *out);
 void buf_dump(unsigned char* buf, int len, FILE *out);
@@ -128,11 +157,11 @@ buf_dump(unsigned char* buf, int len, FILE *out)
 }
 
 
-http::http(bool is_clientside)
-  : steg_t(is_clientside),
+http_steg_t::http_steg_t(http_steg_config_t *cf, conn_t *cn)
+  : config(cf), conn(cn),
     have_transmitted(false), have_received(false)
 {
-  if (is_clientside)
+  if (config->is_clientside)
     load_payloads("traces/client.out");
   else {
     load_payloads("traces/server.out");
@@ -144,12 +173,18 @@ http::http(bool is_clientside)
   }
 }
 
-http::~http()
+http_steg_t::~http_steg_t()
 {
 }
 
+steg_config_t *
+http_steg_t::cfg()
+{
+  return config;
+}
+
 size_t
-http::transmit_room(conn_t *)
+http_steg_t::transmit_room()
 {
   unsigned int mjc;
 
@@ -158,7 +193,7 @@ http::transmit_room(conn_t *)
     return 0;
 
 
-  if (is_clientside) {
+  if (config->is_clientside) {
     return (MIN_COOKIE_SIZE + rand() % (MAX_COOKIE_SIZE - MIN_COOKIE_SIZE)) / 4;
   }
   else {
@@ -251,7 +286,9 @@ lookup_peer_name_from_ip(char* p_ip, char* p_name)  {
 
 
 int
-http_client_cookie_transmit (http *s, struct evbuffer *source, conn_t *conn) {
+http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
+                             conn_t *conn)
+{
 
   /* On the client side, we have to embed the data in a GET query somehow;
      the only plausible places to put it are the URL and cookies.  This
@@ -455,7 +492,9 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 
 
 int
-http_client_uri_transmit (http *s, struct evbuffer *source, conn_t *conn) {
+http_client_uri_transmit (http_steg_t *s,
+                          struct evbuffer *source, conn_t *conn)
+{
 
 
   struct evbuffer *dest = conn->outbound();
@@ -558,7 +597,7 @@ http_client_uri_transmit (http *s, struct evbuffer *source, conn_t *conn) {
 
 
 int
-http::transmit(struct evbuffer *source, conn_t *conn)
+http_steg_t::transmit(struct evbuffer *source)
 {
   //  struct evbuffer *dest = conn_get_outbound(conn);
 
@@ -566,7 +605,7 @@ http::transmit(struct evbuffer *source, conn_t *conn)
 
 
 
-  if (is_clientside) {
+  if (config->is_clientside) {
         /* On the client side, we have to embed the data in a GET query somehow;
 	   the only plausible places to put it are the URL and cookies.  */
 
@@ -609,7 +648,7 @@ http::transmit(struct evbuffer *source, conn_t *conn)
 
 
 int
-http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
+http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
 
   char* data;
   int type;
@@ -710,14 +749,14 @@ http_server_receive(http *s, conn_t *conn, struct evbuffer *dest, struct evbuffe
 
 
 int
-http::receive(conn_t *conn, struct evbuffer *dest)
+http_steg_t::receive(struct evbuffer *dest)
 {
   struct evbuffer *source = conn->inbound();
   // unsigned int type;
   int rval = RECV_BAD;
 
 
-  if (is_clientside) {
+  if (config->is_clientside) {
     switch(type) {
 
     case HTTP_CONTENT_SWF:

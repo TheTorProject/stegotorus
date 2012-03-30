@@ -39,35 +39,67 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <event2/buffer.h>
 
 namespace {
-struct nosteg_rr : steg_t
-{
-  bool can_transmit : 1;
-  bool did_transmit : 1;
-  STEG_DECLARE_METHODS(nosteg_rr);
-};
+  struct nosteg_rr_steg_config_t : steg_config_t
+  {
+    STEG_CONFIG_DECLARE_METHODS(nosteg_rr);
+  };
+
+  struct nosteg_rr_steg_t : steg_t
+  {
+    nosteg_rr_steg_config_t *config;
+    conn_t *conn;
+
+    bool can_transmit : 1;
+    bool did_transmit : 1;
+
+    nosteg_rr_steg_t(nosteg_rr_steg_config_t *cf, conn_t *cn);
+    STEG_DECLARE_METHODS(nosteg_rr);
+  };
 }
 
 STEG_DEFINE_MODULE(nosteg_rr);
 
-nosteg_rr::nosteg_rr(bool is_clientside)
-  : steg_t(is_clientside),
-    can_transmit(is_clientside),
+nosteg_rr_steg_config_t::nosteg_rr_steg_config_t(config_t *cfg)
+  : steg_config_t(cfg)
+{
+}
+
+nosteg_rr_steg_config_t::~nosteg_rr_steg_config_t()
+{
+}
+
+steg_t *
+nosteg_rr_steg_config_t::steg_create(conn_t *conn)
+{
+  return new nosteg_rr_steg_t(this, conn);
+}
+
+nosteg_rr_steg_t::nosteg_rr_steg_t(nosteg_rr_steg_config_t *cf,
+                                   conn_t *cn)
+  : config(cf), conn(cn),
+    can_transmit(cf->cfg->mode != LSN_SIMPLE_SERVER),
     did_transmit(false)
 {
 }
 
-nosteg_rr::~nosteg_rr()
+nosteg_rr_steg_t::~nosteg_rr_steg_t()
 {
 }
 
+steg_config_t *
+nosteg_rr_steg_t::cfg()
+{
+  return config;
+}
+
 size_t
-nosteg_rr::transmit_room(conn_t *)
+nosteg_rr_steg_t::transmit_room()
 {
   return can_transmit ? SIZE_MAX : 0;
 }
 
 int
-nosteg_rr::transmit(struct evbuffer *source, conn_t *conn)
+nosteg_rr_steg_t::transmit(struct evbuffer *source)
 {
   log_assert(can_transmit);
 
@@ -89,12 +121,12 @@ nosteg_rr::transmit(struct evbuffer *source, conn_t *conn)
 }
 
 int
-nosteg_rr::receive(conn_t *conn, struct evbuffer *dest)
+nosteg_rr_steg_t::receive(struct evbuffer *dest)
 {
   struct evbuffer *source = conn->inbound();
 
   log_debug(conn, "%s-side receiving %lu bytes",
-            is_clientside ? "client" : "server",
+            config->cfg->mode == LSN_SIMPLE_SERVER ? "server" : "client",
             (unsigned long)evbuffer_get_length(source));
 
   if (evbuffer_add_buffer(dest, source)) {
@@ -102,7 +134,7 @@ nosteg_rr::receive(conn_t *conn, struct evbuffer *dest)
     return -1;
   }
 
-  if (is_clientside) {
+  if (config->cfg->mode != LSN_SIMPLE_SERVER) {
     conn->expect_close();
   } else if (!did_transmit) {
     can_transmit = true;

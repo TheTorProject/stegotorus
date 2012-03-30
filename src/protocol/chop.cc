@@ -371,7 +371,7 @@ struct chop_config_t : config_t
 {
   struct evutil_addrinfo *up_address;
   vector<struct evutil_addrinfo *> down_addresses;
-  vector<const char *> steg_targets;
+  vector<steg_config_t *> steg_targets;
   chop_circuit_table circuits;
 
   CONFIG_DECLARE_METHODS(chop);
@@ -392,7 +392,9 @@ chop_config_t::~chop_config_t()
        i != down_addresses.end(); i++)
     evutil_freeaddrinfo(*i);
 
-  // The strings in steg_targets are not on the heap.
+  for (vector<steg_config_t *>::iterator i = steg_targets.begin();
+       i != steg_targets.end(); i++)
+    delete *i;
 
   for (chop_circuit_table::iterator i = circuits.begin();
        i != circuits.end(); i++)
@@ -454,7 +456,7 @@ chop_config_t::init(int n_options, const char *const *options)
       log_warn("chop: steganographer '%s' not supported", options[i]);
       goto usage;
     }
-    steg_targets.push_back(options[i]);
+    steg_targets.push_back(steg_new(options[i], this));
   }
   return true;
 
@@ -744,7 +746,7 @@ chop_circuit_t::send_targeted(chop_conn_t *conn)
     avail = SECTION_LEN;
   avail += MIN_BLOCK_SIZE;
 
-  size_t room = conn->steg->transmit_room(conn);
+  size_t room = conn->steg->transmit_room();
   if (room < MIN_BLOCK_SIZE) {
     log_warn(conn, "send() called without enough transmit room "
              "(have %lu, need %lu)", (unsigned long)room,
@@ -752,7 +754,7 @@ chop_circuit_t::send_targeted(chop_conn_t *conn)
     return -1;
   }
   log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
-            conn->steg->name());
+            conn->steg->cfg()->name());
 
   if (room < avail)
     avail = room;
@@ -868,7 +870,7 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
     if (conn->steg) {
       // Find the connections whose transmit rooms are closest to the
       // desired transmission length from both directions.
-      size_t room = conn->steg->transmit_room(conn);
+      size_t room = conn->steg->transmit_room();
 
       if (room <= MIN_BLOCK_SIZE)
 	room = 0;
@@ -877,7 +879,7 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
         room = MAX_BLOCK_SIZE;
 
       log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
-                conn->steg->name());
+                conn->steg->cfg()->name());
 
       if (room >= desired) {
         if (room < minabove) {
@@ -1029,7 +1031,7 @@ chop_config_t::conn_create(size_t index)
 {
   chop_conn_t *conn = new chop_conn_t;
   conn->config = this;
-  conn->steg = steg_new(steg_targets.at(index), mode != LSN_SIMPLE_SERVER);
+  conn->steg = steg_targets.at(index)->steg_create(conn);
   if (!conn->steg) {
     free(conn);
     return 0;
@@ -1082,7 +1084,7 @@ chop_conn_t::send(struct evbuffer *block)
     }
   }
 
-  if (steg->transmit(block, this)) {
+  if (steg->transmit(block)) {
     log_warn(this, "failed to transmit block");
     return -1;
   }
@@ -1154,7 +1156,7 @@ chop_conn_t::recv_handshake()
 int
 chop_conn_t::recv()
 {
-  if (steg->receive(this, recv_pending))
+  if (steg->receive(recv_pending))
     return -1;
 
   if (!upstream) {
@@ -1320,7 +1322,7 @@ chop_conn_t::send()
   } else {
     log_debug(this, "must send (no upstream)");
 
-    size_t room = steg->transmit_room(this);
+    size_t room = steg->transmit_room();
     if (room < MIN_BLOCK_SIZE) {
       log_warn(this, "send() called without enough transmit room "
                "(have %lu, need %lu)", (unsigned long)room,
@@ -1351,7 +1353,7 @@ chop_conn_t::send()
       return;
     }
 
-    if (steg->transmit(chaff, this))
+    if (steg->transmit(chaff))
       conn_do_flush(this);
 
     evbuffer_free(chaff);

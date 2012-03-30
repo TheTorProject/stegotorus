@@ -39,31 +39,61 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <event2/buffer.h>
 
 namespace {
-struct nosteg : steg_t
-{
-  STEG_DECLARE_METHODS(nosteg);
-};
+  struct nosteg_steg_config_t : steg_config_t
+  {
+    STEG_CONFIG_DECLARE_METHODS(nosteg);
+  };
+
+  struct nosteg_steg_t : steg_t
+  {
+    nosteg_steg_config_t *config;
+    conn_t *conn;
+
+    nosteg_steg_t(nosteg_steg_config_t *cf, conn_t *cn);
+    STEG_DECLARE_METHODS(nosteg);
+  };
 }
 
 STEG_DEFINE_MODULE(nosteg);
 
-nosteg::nosteg(bool is_clientside)
-  : steg_t(is_clientside)
+nosteg_steg_config_t::nosteg_steg_config_t(config_t *cfg)
+  : steg_config_t(cfg)
 {
 }
 
-nosteg::~nosteg()
+nosteg_steg_config_t::~nosteg_steg_config_t()
 {
+}
+
+steg_t *
+nosteg_steg_config_t::steg_create(conn_t *conn)
+{
+  return new nosteg_steg_t(this, conn);
+}
+
+nosteg_steg_t::nosteg_steg_t(nosteg_steg_config_t *cf, conn_t *cn)
+  : config(cf), conn(cn)
+{
+}
+
+nosteg_steg_t::~nosteg_steg_t()
+{
+}
+
+steg_config_t *
+nosteg_steg_t::cfg()
+{
+  return config;
 }
 
 size_t
-nosteg::transmit_room(conn_t *)
+nosteg_steg_t::transmit_room()
 {
   return SIZE_MAX;
 }
 
 int
-nosteg::transmit(struct evbuffer *source, conn_t *conn)
+nosteg_steg_t::transmit(struct evbuffer *source)
 {
   struct evbuffer *dest = conn->outbound();
 
@@ -79,7 +109,7 @@ nosteg::transmit(struct evbuffer *source, conn_t *conn)
 }
 
 int
-nosteg::receive(conn_t *conn, struct evbuffer *dest)
+nosteg_steg_t::receive(struct evbuffer *dest)
 {
   struct evbuffer *source = conn->inbound();
 
