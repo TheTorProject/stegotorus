@@ -18,6 +18,7 @@
 // controlling content gzipping for jsSteg
 #define JS_GZIP_RESP             1
 
+struct payloads;
 
 int encodeHTTPBody(char *data, char *jTemplate,  char *jData,unsigned int dlen, 
 		   unsigned int jtlen, unsigned int jdlen, int mode);
@@ -62,7 +63,7 @@ int testDecode2(char *inBuf, char *outBuf,
 
 
 int 
-http_server_JS_transmit (steg_t* s, struct evbuffer *source, conn_t *conn, unsigned int content_type);
+http_server_JS_transmit (payloads& pl, struct evbuffer *source, conn_t *conn, unsigned int content_type);
 
 int
 http_handle_client_JS_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);

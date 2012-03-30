@@ -296,7 +296,10 @@ pdfUnwrap (char *data, unsigned int dlen,
 
 
 
-int http_server_PDF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
+int
+http_server_PDF_transmit (payloads& pl, struct evbuffer *source,
+                          conn_t *conn)
+{
 
   struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
@@ -341,7 +344,7 @@ int http_server_PDF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
 
   log_debug("SERVER sbuflen = %d; cnt = %d", (int)sbuflen, cnt);
 
-  mpdf = get_max_PDF_capacity();
+  mpdf = pl.max_PDF_capacity;
 
   if (mpdf <= 0) {
     log_warn("SERVER ERROR: No pdfTemplate found\n");
@@ -354,7 +357,7 @@ int http_server_PDF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
     return -1;
   }
 
-  if (get_payload(HTTP_CONTENT_PDF, sbuflen, &pdfTemplate, &pdfTemplateSize) == 1) {
+  if (get_payload(pl, HTTP_CONTENT_PDF, sbuflen, &pdfTemplate, &pdfTemplateSize) == 1) {
     log_debug("SERVER found the next HTTP response template with size %d", pdfTemplateSize);
   } else {
     log_warn("SERVER couldn't find the next HTTP response template");

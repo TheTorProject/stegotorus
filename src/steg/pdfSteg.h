@@ -10,7 +10,7 @@
 #include "steg.h"
 #include <event2/buffer.h>
 
-
+struct payloads;
 
 #define PDF_DELIMITER    '?'
 #define PDF_DELIMITER2   '.'
@@ -21,7 +21,7 @@ int pdfUnwrap (char *data, unsigned int dlen, char *outbuf, unsigned int outbufs
 int addDelimiter(char *inbuf, int inbuflen, char *outbuf, int outbuflen, const char delimiter1, const char delimiter2);
 int removeDelimiter(char *inbuf, int inbuflen, char *outbuf, int outbuflen, const char delimiter1, int* endFlag, int* escape);
 
-int http_server_PDF_transmit (steg_t* s, struct evbuffer *source, conn_t *conn);
+int http_server_PDF_transmit (payloads& pl, struct evbuffer *source, conn_t *conn);
 int
 http_handle_client_PDF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
 

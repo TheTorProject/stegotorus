@@ -706,8 +706,10 @@ int testDecode2(char *inBuf, char *outBuf,
 }
 
 
-int 
-http_server_JS_transmit (steg_t*, struct evbuffer *source, conn_t *conn, unsigned int content_type) {
+int
+http_server_JS_transmit (payloads& pl, struct evbuffer *source, conn_t *conn,
+                         unsigned int content_type)
+{
 
   struct evbuffer_iovec *iv;
   int nv;
@@ -742,9 +744,9 @@ http_server_JS_transmit (steg_t*, struct evbuffer *source, conn_t *conn, unsigne
   }
 
   if (content_type == HTTP_CONTENT_JAVASCRIPT) {
-    mjs = get_max_JS_capacity();
+    mjs = pl.max_JS_capacity;
   } else if (content_type == HTTP_CONTENT_HTML) {
-    mjs = get_max_HTML_capacity();
+    mjs = pl.max_HTML_capacity;
   }
 
   if (mjs <= 0) {
@@ -781,7 +783,7 @@ http_server_JS_transmit (steg_t*, struct evbuffer *source, conn_t *conn, unsigne
 
 
 
-  if (get_payload(content_type, datalen, &jsTemplate, &jsLen) == 1) {
+  if (get_payload(pl, content_type, datalen, &jsTemplate, &jsLen) == 1) {
     log_debug("SERVER found the applicable HTTP response template with size %d", jsLen);
   } else {
     log_warn("SERVER couldn't find the applicable HTTP response template");

@@ -61,6 +61,7 @@ namespace {
   struct http_steg_config_t : steg_config_t
   {
     bool is_clientside : 1;
+    payloads pl;
 
     STEG_CONFIG_DECLARE_METHODS(http);
   };
@@ -86,6 +87,17 @@ http_steg_config_t::http_steg_config_t(config_t *cfg)
   : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
+
+  if (is_clientside)
+    load_payloads(this->pl, "traces/client.out");
+  else {
+    load_payloads(this->pl, "traces/server.out");
+    init_JS_payload_pool(this->pl, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
+    //   init_JS_payload_pool(this, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE, HTTP_CONTENT_HTML);
+    init_HTML_payload_pool(this->pl, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
+    init_PDF_payload_pool(this->pl, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE);
+    init_SWF_payload_pool(this->pl, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
+  }
 }
 
 http_steg_config_t::~http_steg_config_t()
@@ -160,17 +172,6 @@ http_steg_t::http_steg_t(http_steg_config_t *cf, conn_t *cn)
     have_transmitted(false), have_received(false)
 {
   memset(peer_dnsname, 0, sizeof peer_dnsname);
-
-  if (config->is_clientside)
-    load_payloads("traces/client.out");
-  else {
-    load_payloads("traces/server.out");
-    init_JS_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
-    //   init_JS_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE, HTTP_CONTENT_HTML);
-    init_HTML_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
-    init_PDF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE);
-    init_SWF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
-  }
 }
 
 http_steg_t::~http_steg_t()
@@ -207,7 +208,7 @@ http_steg_t::transmit_room()
       return 1024;
 
     case HTTP_CONTENT_JAVASCRIPT:
-      mjc = get_max_JS_capacity() / 2;
+      mjc = config->pl.max_JS_capacity / 2;
       if (mjc > 1024) {
         // it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
         int rval = 512 + rand()%(mjc - 1024);
@@ -218,7 +219,7 @@ http_steg_t::transmit_room()
       exit(-1);
 
     case HTTP_CONTENT_HTML:
-      mjc = get_max_HTML_capacity() / 2;
+      mjc = config->pl.max_HTML_capacity / 2;
       if (mjc > 1024) {
         // it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
         int rval = 512 + rand()%(mjc - 1024);
@@ -323,7 +324,8 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
 
   // retry up to 10 times
   while (!payload_len) {
-    payload_len = find_client_payload(buf, bufsize, TYPE_HTTP_REQUEST);
+    payload_len = find_client_payload(s->config->pl, buf, bufsize,
+                                      TYPE_HTTP_REQUEST);
     if (cnt++ == 10) {
       goto err;
     }
@@ -547,7 +549,8 @@ http_client_uri_transmit (http_steg_t *s,
 
   // retry up to 10 times
   while (!len) {
-    len = find_client_payload(buf, sizeof(buf), TYPE_HTTP_REQUEST);
+    len = find_client_payload(s->config->pl, buf, sizeof(buf),
+                              TYPE_HTTP_REQUEST);
     if (cnt++ == 10) return -1;
   }
 
@@ -617,19 +620,19 @@ http_steg_t::transmit(struct evbuffer *source)
     switch(type) {
 
     case HTTP_CONTENT_SWF:
-      rval = http_server_SWF_transmit(this, source, conn);
+      rval = http_server_SWF_transmit(this->config->pl, source, conn);
       break;
 
     case HTTP_CONTENT_JAVASCRIPT:
-      rval = http_server_JS_transmit(this, source, conn, HTTP_CONTENT_JAVASCRIPT);
+      rval = http_server_JS_transmit(this->config->pl, source, conn, HTTP_CONTENT_JAVASCRIPT);
       break;
 
     case HTTP_CONTENT_HTML:
-      rval = http_server_JS_transmit(this, source, conn, HTTP_CONTENT_HTML);
+      rval = http_server_JS_transmit(this->config->pl, source, conn, HTTP_CONTENT_HTML);
       break;
 
     case HTTP_CONTENT_PDF:
-      rval = http_server_PDF_transmit(this, source, conn);
+      rval = http_server_PDF_transmit(this->config->pl, source, conn);
       break;
     }
 

@@ -20,7 +20,7 @@ static const char http_response_1[] =
 
 
 unsigned int 
-swf_wrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
+swf_wrap(payloads& pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
 
   char* swf;
   int in_swf_len;
@@ -38,7 +38,7 @@ swf_wrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
   
 
 
-  if (!get_payload(HTTP_CONTENT_SWF, -1, &resp, &resp_len)) {
+  if (!get_payload(pl, HTTP_CONTENT_SWF, -1, &resp, &resp_len)) {
     log_warn("swfsteg: no suitable payload found\n");
     return -1;
   }
@@ -118,12 +118,9 @@ swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
   return inf_len - SWF_SAVE_HEADER_LEN - SWF_SAVE_FOOTER_LEN;
 }
 
-
-
-
-
-int 
-http_server_SWF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
+int
+http_server_SWF_transmit(payloads& pl, struct evbuffer *source, conn_t *conn)
+{
 
   struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
@@ -141,7 +138,7 @@ http_server_SWF_transmit (steg_t*, struct evbuffer *source, conn_t *conn) {
   outbuf = (char *)xmalloc(4*sbuflen + SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 512);
 
   //  fprintf(stderr, "server wrapping swf len %d\n", (int) sbuflen);
-  outlen = swf_wrap(inbuf, sbuflen, outbuf, 4*sbuflen + SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 512);
+  outlen = swf_wrap(pl, inbuf, sbuflen, outbuf, 4*sbuflen + SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 512);
 
   if (outlen < 0) {
     log_warn("swf_wrap failed\n");

@@ -120,22 +120,36 @@ typedef struct service_state {
   int dir;
 }state;
 
+struct payloads {
+  int initTypePayload[MAX_CONTENT_TYPE];
+  int typePayloadCount[MAX_CONTENT_TYPE];
+  int typePayload[MAX_CONTENT_TYPE][MAX_PAYLOADS];
+  int typePayloadCap[MAX_CONTENT_TYPE][MAX_PAYLOADS];
+
+  unsigned int max_JS_capacity;
+  unsigned int max_HTML_capacity;
+  unsigned int max_PDF_capacity;
+
+  pentry_header payload_hdrs[MAX_PAYLOADS];
+  char* payloads[MAX_PAYLOADS];
+  int payload_count;
+};
+
 
 #define HTTP_MSG_BUF_SIZE 100000
 
-void load_payloads(const char* fname);
-unsigned int find_client_payload(char* buf, int len, int type);
-unsigned int find_server_payload(char** buf, int len, int type, int contentType);
+void load_payloads(payloads& pl, const char* fname);
+unsigned int find_client_payload(payloads& pl, char* buf, int len, int type);
+unsigned int find_server_payload(payloads& pl, char** buf, int len, int type, int contentType);
 
-int init_JS_payload_pool(int len, int type, int minCapacity);
-int init_SWF_payload_pool(int len, int type, int minCapacity);
-int init_PDF_payload_pool(int len, int type,int minCapacity);
-int init_HTML_payload_pool(int len, int type, int minCapacity);
+int init_JS_payload_pool(payloads& pl, int len, int type, int minCapacity);
+int init_SWF_payload_pool(payloads& pl, int len, int type, int minCapacity);
+int init_PDF_payload_pool(payloads& pl, int len, int type,int minCapacity);
+int init_HTML_payload_pool(payloads& pl, int len, int type, int minCapacity);
 
 
-int get_next_payload (int contentType, char** buf, int* size, int* cap);
-
-int get_payload (int contentType, int cap, char** buf, int* size);
+int get_next_payload (payloads& pl, int contentType, char** buf, int* size, int* cap);
+int get_payload (payloads& pl, int contentType, int cap, char** buf, int* size);
 
 int has_eligible_HTTP_content (char* buf, int len, int type);
 int fixContentLen (char* payload, int payloadLen, char *buf, int bufLen);

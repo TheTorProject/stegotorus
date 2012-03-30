@@ -2,38 +2,6 @@
 #include "payloads.h"
 #include "swfSteg.h"
 
-
-/* These variables below are write-once, hence they should be race-safe */
-
-static int initTypePayload[MAX_CONTENT_TYPE];
-static int typePayloadCount[MAX_CONTENT_TYPE];
-static int typePayload[MAX_CONTENT_TYPE][MAX_PAYLOADS];
-static int typePayloadCap[MAX_CONTENT_TYPE][MAX_PAYLOADS];
-
-
-static unsigned int max_JS_capacity = 0;
-static unsigned int max_HTML_capacity = 0;
-static unsigned int max_PDF_capacity = 0;
-
-static pentry_header payload_hdrs[MAX_PAYLOADS];
-static char* payloads[MAX_PAYLOADS];
-static int payload_count = 0;
-
-
-unsigned int get_max_JS_capacity() {
-  return max_JS_capacity;
-}
-
-unsigned int get_max_HTML_capacity() {
-  return max_HTML_capacity;
-}
-
-unsigned int get_max_PDF_capacity() {
-  return max_PDF_capacity;
-}
-
-
-
 /*
  * fixContentLen corrects the Content-Length for an HTTP msg that
  * has been ungzipped, and removes the "Content-Encoding: gzip"
@@ -208,16 +176,14 @@ log_debug("new: hdrLen = %d, bodyLen = %d, payloadLen = %d", hdrLen, bodyLen, hd
   return -1;
 }
 
-void load_payloads(const char* fname) {
+void load_payloads(payloads& pl, const char* fname)
+{
   FILE* f;
   char buf[HTTP_MSG_BUF_SIZE];
   char buf2[HTTP_MSG_BUF_SIZE];
   pentry_header pentry;
   int pentryLen;
   int r;
-
-  if (payload_count != 0)
-    return;
 
   srand(time(NULL));
   f = fopen(fname, "r");
@@ -226,9 +192,10 @@ void load_payloads(const char* fname) {
     exit(1);
   }
 
-  bzero(payload_hdrs, sizeof(payload_hdrs));
+  bzero(pl.payload_hdrs, sizeof(pl.payload_hdrs));
+  pl.payload_count = 0;
 
-  while (payload_count < MAX_PAYLOADS) {
+  while (pl.payload_count < MAX_PAYLOADS) {
 
     if (fread(&pentry, 1, sizeof(pentry_header), f) < sizeof(pentry_header)) {
       break;
@@ -270,22 +237,21 @@ void load_payloads(const char* fname) {
     // }
 
     if (r < 0) {
-      payloads[payload_count] = (char *)xmalloc(pentry.length + 1);
-      memcpy(payloads[payload_count], buf, pentry.length);
+      pl.payloads[pl.payload_count] = (char *)xmalloc(pentry.length + 1);
+      memcpy(pl.payloads[pl.payload_count], buf, pentry.length);
     } else {
       pentry.length = r;
-      payloads[payload_count] = (char *)xmalloc(pentry.length + 1);
-      memcpy(payloads[payload_count], buf2, pentry.length);
+      pl.payloads[pl.payload_count] = (char *)xmalloc(pentry.length + 1);
+      memcpy(pl.payloads[pl.payload_count], buf2, pentry.length);
     }
-    payload_hdrs[payload_count] = pentry;
-    payloads[payload_count][pentry.length] = 0;
-    payload_count++;
+    pl.payload_hdrs[pl.payload_count] = pentry;
+    pl.payloads[pl.payload_count][pentry.length] = 0;
+    pl.payload_count++;
   } // while
 
-#ifdef DEBUG
-  printf("loading payload count = %d\n", payload_count);
-#endif
-  
+
+  log_debug("loaded %d payloads from %s\n", pl.payload_count, fname);
+
   fclose(f);
 }
 
@@ -561,18 +527,16 @@ find_uri_type(char* buf) {
 
 
 
-unsigned int find_client_payload(char* buf, int len, int type) {
-  int r = rand() % payload_count;
+unsigned int find_client_payload(payloads& pl, char* buf, int len, int type) {
+  int r = rand() % pl.payload_count;
   int cnt = 0;
   char* inbuf;
 
-#ifdef DEBUG
-  fprintf(stderr, "TRYING payload %d \n", r);
-#endif
+  log_debug("trying payload %d", r);
   while (1) {
-    pentry_header* p = &payload_hdrs[r];
+    pentry_header* p = &pl.payload_hdrs[r];
     if (p->ptype == type) {
-      inbuf = payloads[r];
+      inbuf = pl.payloads[r];
       if (find_uri_type(inbuf, p->length) != HTTP_CONTENT_SWF &&
           find_uri_type(inbuf, p->length) != HTTP_CONTENT_HTML &&
 	  find_uri_type(inbuf, p->length) != HTTP_CONTENT_JAVASCRIPT &&
@@ -588,12 +552,11 @@ unsigned int find_client_payload(char* buf, int len, int type) {
       break;
     }
   next:
-    r = (r+1) % payload_count;
-    
+    r = (r+1) % pl.payload_count;
 
     // no matching payloads...
-    if (cnt++ == payload_count) {
-      fprintf(stderr, "NO MATCHING PAYLOADS... \n");
+    if (cnt++ == pl.payload_count) {
+      log_warn("no matching payloads");
       return 0;
     }
   }
@@ -602,7 +565,6 @@ unsigned int find_client_payload(char* buf, int len, int type) {
 
   // clean up the buffer...
   return parse_client_headers(inbuf, buf, len);
-  
 }
 
 
@@ -1132,10 +1094,9 @@ unsigned int capacityPDF (char* buf, int len) {
 
 
 
-int  init_JS_payload_pool(int len, int type, int minCapacity) {
-
+int init_JS_payload_pool(payloads& pl, int len, int type, int minCapacity) {
   // stat for usable payload
-  int minPayloadSize = 0, maxPayloadSize = 0; 
+  int minPayloadSize = 0, maxPayloadSize = 0;
   int sumPayloadSize = 0;
   int minPayloadCap = 0, maxPayloadCap = 0;
   int sumPayloadCap = 0;
@@ -1149,40 +1110,35 @@ int  init_JS_payload_pool(int len, int type, int minCapacity) {
   int cap;
   int mode;
 
-
-
-  if (payload_count == 0) {
+  if (pl.payload_count == 0) {
     log_debug("payload_count == 0; forgot to run load_payloads()?\n");
     return 0;
   }
-  
-  if (initTypePayload[contentType] != 0) return 1; // init is done already
 
-
-  for (r = 0; r < payload_count; r++) {
-    p = &payload_hdrs[r];
+  for (r = 0; r < pl.payload_count; r++) {
+    p = &pl.payload_hdrs[r];
     if (p->ptype != type || p->length > len) {
       continue;
     }
 
-    msgbuf = payloads[r];
+    msgbuf = pl.payloads[r];
 
     mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_JAVASCRIPT);
     if (mode == CONTENT_JAVASCRIPT) {
-      
+
       cap = capacityJS3(msgbuf, p->length, mode);
-      if (cap <  JS_DELIMITER_SIZE) 
+      if (cap <  JS_DELIMITER_SIZE)
 	continue;
 
       cap = (cap - JS_DELIMITER_SIZE)/2;
 
       if (cap > minCapacity) {
-	typePayloadCap[contentType][cnt] = cap; // (cap-JS_DELIMITER_SIZE)/2;
+	pl.typePayloadCap[contentType][cnt] = cap; // (cap-JS_DELIMITER_SIZE)/2;
 	// because we use 2 hex char to encode every data byte, the available
 	// capacity for encoding data is divided by 2
-	typePayload[contentType][cnt] = r;
+	pl.typePayload[contentType][cnt] = r;
 	cnt++;
-	
+
 	// update stat
 	if (cnt == 1) {
 	  minPayloadSize = p->length; maxPayloadSize = p->length;
@@ -1203,13 +1159,13 @@ int  init_JS_payload_pool(int len, int type, int minCapacity) {
   }
 
   
-  max_JS_capacity = maxPayloadCap;
+  pl.max_JS_capacity = maxPayloadCap;
 
 
-  initTypePayload[contentType] = 1;
-  typePayloadCount[contentType] = cnt;
+  pl.initTypePayload[contentType] = 1;
+  pl.typePayloadCount[contentType] = cnt;
   log_debug("init_payload_pool: typePayloadCount for contentType %d = %d",
-     contentType, typePayloadCount[contentType]); 
+     contentType, pl.typePayloadCount[contentType]); 
   log_debug("minPayloadSize = %d", minPayloadSize); 
   log_debug("maxPayloadSize = %d", maxPayloadSize); 
   log_debug("avgPayloadSize = %f", (float)sumPayloadSize/(float)cnt); 
@@ -1220,7 +1176,7 @@ int  init_JS_payload_pool(int len, int type, int minCapacity) {
 }
 
 
-int  init_HTML_payload_pool(int len, int type, int minCapacity) {
+int  init_HTML_payload_pool(payloads& pl, int len, int type, int minCapacity) {
 
   // stat for usable payload
   int minPayloadSize = 0, maxPayloadSize = 0; 
@@ -1239,21 +1195,18 @@ int  init_HTML_payload_pool(int len, int type, int minCapacity) {
 
 
 
-  if (payload_count == 0) {
+  if (pl.payload_count == 0) {
     log_debug("payload_count == 0; forgot to run load_payloads()?\n");
     return 0;
   }
-  
-  if (initTypePayload[contentType] != 0) return 1; // init is done already
 
-
-  for (r = 0; r < payload_count; r++) {
-    p = &payload_hdrs[r];
+  for (r = 0; r < pl.payload_count; r++) {
+    p = &pl.payload_hdrs[r];
     if (p->ptype != type || p->length > len) {
       continue;
     }
 
-    msgbuf = payloads[r];
+    msgbuf = pl.payloads[r];
 
     mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_HTML);
     if (mode == CONTENT_HTML_JAVASCRIPT) {
@@ -1265,10 +1218,10 @@ int  init_HTML_payload_pool(int len, int type, int minCapacity) {
       cap = (cap - JS_DELIMITER_SIZE)/2;
 
       if (cap > minCapacity) {
-	typePayloadCap[contentType][cnt] = cap; // (cap-JS_DELIMITER_SIZE)/2;
+	pl.typePayloadCap[contentType][cnt] = cap; // (cap-JS_DELIMITER_SIZE)/2;
 	// because we use 2 hex char to encode every data byte, the available
 	// capacity for encoding data is divided by 2
-	typePayload[contentType][cnt] = r;
+	pl.typePayload[contentType][cnt] = r;
 	cnt++;
 	
 	// update stat
@@ -1291,13 +1244,12 @@ int  init_HTML_payload_pool(int len, int type, int minCapacity) {
   }
 
   
-  max_HTML_capacity = maxPayloadCap;
+  pl.max_HTML_capacity = maxPayloadCap;
 
 
-  initTypePayload[contentType] = 1;
-  typePayloadCount[contentType] = cnt;
+  pl.typePayloadCount[contentType] = cnt;
   log_debug("init_payload_pool: typePayloadCount for contentType %d = %d",
-     contentType, typePayloadCount[contentType]); 
+     contentType, pl.typePayloadCount[contentType]); 
   log_debug("minPayloadSize = %d", minPayloadSize); 
   log_debug("maxPayloadSize = %d", maxPayloadSize); 
   log_debug("avgPayloadSize = %f", (float)sumPayloadSize/(float)cnt); 
@@ -1307,14 +1259,9 @@ int  init_HTML_payload_pool(int len, int type, int minCapacity) {
   return 1;
 }
 
-
-
-
-
-
-
-
-int  init_PDF_payload_pool(int len, int type, int minCapacity) {
+int
+init_PDF_payload_pool(payloads& pl, int len, int type, int minCapacity)
+{
 
   // stat for usable payload
   int minPayloadSize = 0, maxPayloadSize = 0; 
@@ -1331,21 +1278,18 @@ int  init_PDF_payload_pool(int len, int type, int minCapacity) {
   unsigned int contentType = HTTP_CONTENT_PDF;
   
 
-  if (payload_count == 0) {
+  if (pl.payload_count == 0) {
      fprintf(stderr, "payload_count == 0; forgot to run load_payloads()?\n");
      return 0;
   }
-  
-  if (initTypePayload[contentType] != 0) return 1; // init is done already
 
-
-  for (r = 0; r < payload_count; r++) {
-    p = &payload_hdrs[r];
+  for (r = 0; r < pl.payload_count; r++) {
+    p = &pl.payload_hdrs[r];
     if (p->ptype != type || p->length > len) {
       continue;
     }
 
-    msgbuf = payloads[r];
+    msgbuf = pl.payloads[r];
 
     mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_PDF);
     if (mode > 0) {
@@ -1356,8 +1300,8 @@ int  init_PDF_payload_pool(int len, int type, int minCapacity) {
       log_debug("got pdf (index %d) with capacity %d", r, cap);
       if (cap > minCapacity) {
 	log_debug("pdf (index %d) greater than mincapacity %d", cnt, minCapacity);
-	typePayloadCap[contentType][cnt] = (cap-PDF_DELIMITER_SIZE)/2;
-	typePayload[contentType][cnt] = r;
+	pl.typePayloadCap[contentType][cnt] = (cap-PDF_DELIMITER_SIZE)/2;
+	pl.typePayload[contentType][cnt] = r;
 	cnt++;
 	
 	// update stat
@@ -1376,11 +1320,11 @@ int  init_PDF_payload_pool(int len, int type, int minCapacity) {
     }
   }
 
-  max_PDF_capacity = maxPayloadCap;
-  initTypePayload[contentType] = 1;
-  typePayloadCount[contentType] = cnt;
+  pl.max_PDF_capacity = maxPayloadCap;
+  pl.initTypePayload[contentType] = 1;
+  pl.typePayloadCount[contentType] = cnt;
   log_debug("init_payload_pool: typePayloadCount for contentType %d = %d",
-     contentType, typePayloadCount[contentType]); 
+     contentType, pl.typePayloadCount[contentType]); 
   log_debug("minPayloadSize = %d", minPayloadSize); 
   log_debug("maxPayloadSize = %d", maxPayloadSize); 
   log_debug("avgPayloadSize = %f", (float)sumPayloadSize/(float)cnt); 
@@ -1390,12 +1334,9 @@ int  init_PDF_payload_pool(int len, int type, int minCapacity) {
   return 1;
 }
 
-
-
-
-
-int  init_SWF_payload_pool(int len, int type, int /*unused */) {
-
+int
+init_SWF_payload_pool(payloads& pl, int len, int type, int /*unused */)
+{
   // stat for usable payload
   int minPayloadSize = 0, maxPayloadSize = 0; 
   int sumPayloadSize = 0;
@@ -1408,26 +1349,23 @@ int  init_SWF_payload_pool(int len, int type, int /*unused */) {
   unsigned int contentType = HTTP_CONTENT_SWF;
 
 
-  if (payload_count == 0) {
+  if (pl.payload_count == 0) {
      fprintf(stderr, "payload_count == 0; forgot to run load_payloads()?\n");
      return 0;
   }
-  
-  if (initTypePayload[contentType] != 0) return 1; // init is done already
 
-
-  for (r = 0; r < payload_count; r++) {
-    p = &payload_hdrs[r];
+  for (r = 0; r < pl.payload_count; r++) {
+    p = &pl.payload_hdrs[r];
     if (p->ptype != type || p->length > len) {
       continue;
     }
 
-    msgbuf = payloads[r];
+    msgbuf = pl.payloads[r];
     // found a payload corr to the specified contentType
 
     mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_SWF);
     if (mode > 0) {
-      typePayload[contentType][cnt] = r;
+      pl.typePayload[contentType][cnt] = r;
       cnt++;
       // update stat
       if (cnt == 1) {
@@ -1444,10 +1382,10 @@ int  init_SWF_payload_pool(int len, int type, int /*unused */) {
     }
   }
     
-  initTypePayload[contentType] = 1;
-  typePayloadCount[contentType] = cnt;
+  pl.initTypePayload[contentType] = 1;
+  pl.typePayloadCount[contentType] = cnt;
   log_debug("init_payload_pool: typePayloadCount for contentType %d = %d",
-     contentType, typePayloadCount[contentType]); 
+     contentType, pl.typePayloadCount[contentType]); 
   log_debug("minPayloadSize = %d", minPayloadSize); 
   log_debug("maxPayloadSize = %d", maxPayloadSize); 
   log_debug("avgPayloadSize = %f", (float)sumPayloadSize/(float)cnt); 
@@ -1462,27 +1400,29 @@ int  init_SWF_payload_pool(int len, int type, int /*unused */) {
 
 
 
-int get_next_payload (int contentType, char** buf, int* size, int* cap) {
+int get_next_payload (payloads& pl, int contentType, char** buf,
+                      int* size, int* cap)
+{
   int r;
 
   log_debug("get_next_payload: contentType = %d, initTypePayload = %d, typePayloadCount = %d",
-      contentType, initTypePayload[contentType], typePayloadCount[contentType]);
+      contentType, pl.initTypePayload[contentType], pl.typePayloadCount[contentType]);
 
 
   if (contentType <= 0 ||
       contentType >= MAX_CONTENT_TYPE ||
-      initTypePayload[contentType] == 0 ||
-      typePayloadCount[contentType] == 0)
+      pl.initTypePayload[contentType] == 0 ||
+      pl.typePayloadCount[contentType] == 0)
     return 0;
 
-  r = rand() % typePayloadCount[contentType];
+  r = rand() % pl.typePayloadCount[contentType];
 //  int r = 1;
 //  log_debug("SERVER: *** always choose the same payload ***");
 
   log_debug("SERVER: picked payload with index %d", r);
-  *buf = payloads[typePayload[contentType][r]];
-  *size = payload_hdrs[typePayload[contentType][r]].length;
-  *cap = typePayloadCap[contentType][r];
+  *buf = pl.payloads[pl.typePayload[contentType][r]];
+  *size = pl.payload_hdrs[pl.typePayload[contentType][r]].length;
+  *cap = pl.typePayloadCap[contentType][r];
   return 1;
 }
 
@@ -1493,20 +1433,20 @@ int get_next_payload (int contentType, char** buf, int* size, int* cap) {
 
 
 
-int get_payload (int contentType, int cap, char** buf, int* size) {
+int get_payload (payloads& pl, int contentType, int cap, char** buf, int* size) {
   int r, i, cnt, found = 0, numCandidate = 0, first, best, current;
 
   log_debug("get_payload: contentType = %d, initTypePayload = %d, typePayloadCount = %d",
-      contentType, initTypePayload[contentType], typePayloadCount[contentType]);
+      contentType, pl.initTypePayload[contentType], pl.typePayloadCount[contentType]);
 
   if (contentType <= 0 ||
       contentType >= MAX_CONTENT_TYPE ||
-      initTypePayload[contentType] == 0 ||
-      typePayloadCount[contentType] == 0)
+      pl.initTypePayload[contentType] == 0 ||
+      pl.typePayloadCount[contentType] == 0)
     return 0;
 
 
-  cnt = typePayloadCount[contentType];
+  cnt = pl.typePayloadCount[contentType];
   r = rand() % cnt;
   best = r;
   first = r;
@@ -1518,12 +1458,12 @@ int get_payload (int contentType, int cap, char** buf, int* size) {
     i++;
     current = (r+i)%cnt;
 
-    if (typePayloadCap[contentType][current] <= cap)
+    if (pl.typePayloadCap[contentType][current] <= cap)
       continue;
 
     if (found) {
-      if (payload_hdrs[typePayload[contentType][best]].length >
-          payload_hdrs[typePayload[contentType][current]].length)
+      if (pl.payload_hdrs[pl.typePayload[contentType][best]].length >
+          pl.payload_hdrs[pl.typePayload[contentType][current]].length)
         best = current;
     } else {
       first = current;
@@ -1535,11 +1475,11 @@ int get_payload (int contentType, int cap, char** buf, int* size) {
 
   if (found) {
     log_debug("first payload size=%d, best payload size=%d, num candidate=%d\n",
-      payload_hdrs[typePayload[contentType][first]].length,
-      payload_hdrs[typePayload[contentType][best]].length,
+      pl.payload_hdrs[pl.typePayload[contentType][first]].length,
+      pl.payload_hdrs[pl.typePayload[contentType][best]].length,
       numCandidate);
-    *buf = payloads[typePayload[contentType][best]];
-    *size = payload_hdrs[typePayload[contentType][best]].length;
+    *buf = pl.payloads[pl.typePayload[contentType][best]];
+    *size = pl.payload_hdrs[pl.typePayload[contentType][best]].length;
     return 1;
   } else {
     return 0;
