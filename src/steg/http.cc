@@ -54,11 +54,8 @@ int
 http_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
 
 int
-lookup_peer_name_from_ip(char* p_ip, char* p_name);
+lookup_peer_name_from_ip(const char* p_ip, char* p_name);
 
-
-static int has_peer_name = 0;
-static char peername[512];
 
 namespace {
   struct http_steg_config_t : steg_config_t
@@ -72,6 +69,7 @@ namespace {
   {
     http_steg_config_t *config;
     conn_t *conn;
+    char peer_dnsname[512];
 
     bool have_transmitted : 1;
     bool have_received : 1;
@@ -161,6 +159,8 @@ http_steg_t::http_steg_t(http_steg_config_t *cf, conn_t *cn)
   : config(cf), conn(cn),
     have_transmitted(false), have_received(false)
 {
+  memset(peer_dnsname, 0, sizeof peer_dnsname);
+
   if (config->is_clientside)
     load_payloads("traces/client.out");
   else {
@@ -243,7 +243,7 @@ http_steg_t::transmit_room()
 
 
 int
-lookup_peer_name_from_ip(char* p_ip, char* p_name)  {
+lookup_peer_name_from_ip(const char* p_ip, char* p_name)  {
   struct addrinfo* ailist;
   struct addrinfo* aip;
   struct addrinfo hint;
@@ -330,9 +330,8 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
   }
   buf[payload_len] = 0;
 
-  if (has_peer_name == 0 && lookup_peer_name_from_ip((char*) conn->peername, peername))
-    has_peer_name = 1;
-
+  if (s->peer_dnsname[0] == '\0')
+    lookup_peer_name_from_ip(conn->peername, s->peer_dnsname);
 
   bzero(data2, sbuflen*4);
   E.encode((char*) data, sbuflen, (char*) data2);
@@ -370,8 +369,8 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
     goto err;
   }
 
-  rval = evbuffer_add(dest, peername, strlen(peername));
-  if (rval) { 
+  rval = evbuffer_add(dest, s->peer_dnsname, strlen(s->peer_dnsname));
+  if (rval) {
     log_warn("error adding peername field\n");
     goto err;
   }
@@ -515,11 +514,8 @@ http_client_uri_transmit (http_steg_t *s,
   int len =0;
   char buf[10000];
 
-
-  if (has_peer_name == 0 && lookup_peer_name_from_ip((char*) conn->peername, peername))
-    has_peer_name = 1;
-
-
+  if (s->peer_dnsname[0] == '\0')
+    lookup_peer_name_from_ip(conn->peername, s->peer_dnsname);
 
   nv = evbuffer_peek(source, slen, NULL, NULL, 0);
   iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
@@ -560,7 +556,7 @@ http_client_uri_transmit (http_steg_t *s,
 
   if (evbuffer_add(dest, outbuf, datalen)  ||  // add uri field
       evbuffer_add(dest, "HTTP/1.1\r\nHost: ", 19) ||
-      evbuffer_add(dest, peername, strlen(peername)) ||
+      evbuffer_add(dest, s->peer_dnsname, strlen(s->peer_dnsname)) ||
       evbuffer_add(dest, strstr(buf, "\r\n"), len - (unsigned int) (strstr(buf, "\r\n") - buf))  ||  // add everything but first line
       evbuffer_add(dest, "\r\n", 2)) {
       log_debug("error ***********************");
