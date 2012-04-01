@@ -778,10 +778,8 @@ http_server_JS_transmit (payloads& pl, struct evbuffer *source, conn_t *conn,
 
   free(iv);
 
-  log_debug("SERVER encoded data in hex string (len %d):", datalen);
+  //log_debug("SERVER encoded data in hex string (len %d):", datalen);
   //    buf_dump((unsigned char*)data, datalen, stderr);
-
-
 
   if (get_payload(pl, content_type, datalen, &jsTemplate, &jsLen) == 1) {
     log_debug("SERVER found the applicable HTTP response template with size %d", jsLen);

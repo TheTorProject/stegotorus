@@ -1158,10 +1158,7 @@ int init_JS_payload_pool(payloads& pl, int len, int type, int minCapacity) {
     }
   }
 
-  
   pl.max_JS_capacity = maxPayloadCap;
-
-
   pl.initTypePayload[contentType] = 1;
   pl.typePayloadCount[contentType] = cnt;
   log_debug("init_payload_pool: typePayloadCount for contentType %d = %d",
@@ -1243,10 +1240,8 @@ int  init_HTML_payload_pool(payloads& pl, int len, int type, int minCapacity) {
     }
   }
 
-  
   pl.max_HTML_capacity = maxPayloadCap;
-
-
+  pl.initTypePayload[contentType] = 1;
   pl.typePayloadCount[contentType] = cnt;
   log_debug("init_payload_pool: typePayloadCount for contentType %d = %d",
      contentType, pl.typePayloadCount[contentType]); 
@@ -1436,8 +1431,9 @@ int get_next_payload (payloads& pl, int contentType, char** buf,
 int get_payload (payloads& pl, int contentType, int cap, char** buf, int* size) {
   int r, i, cnt, found = 0, numCandidate = 0, first, best, current;
 
-  log_debug("get_payload: contentType = %d, initTypePayload = %d, typePayloadCount = %d",
-      contentType, pl.initTypePayload[contentType], pl.typePayloadCount[contentType]);
+  log_debug("contentType = %d, initTypePayload = %d, typePayloadCount = %d",
+            contentType, pl.initTypePayload[contentType],
+            pl.typePayloadCount[contentType]);
 
   if (contentType <= 0 ||
       contentType >= MAX_CONTENT_TYPE ||

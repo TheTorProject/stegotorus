@@ -87,8 +87,13 @@ class TimelineTest(object):
     #        "127.0.0.1:5010","embed",
     #        ))
 
-    # NOTE: 'http' steg presently cannot be tested using this system
-    # because the trace pools are process-global rather than per-listener.
+    def test_http(self):
+        self.doTest("chop",
+           ("chop", "server", "127.0.0.1:5001",
+            "127.0.0.1:5010","http","127.0.0.1:5011","http",
+            "chop", "client", "127.0.0.1:4999",
+            "127.0.0.1:5010","http","127.0.0.1:5011","http",
+            ))
 
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
 # the test directory.

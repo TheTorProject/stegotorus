@@ -444,12 +444,14 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = (conn_t *)arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
-  log_debug(conn, "%lu bytes still to transmit%s%s",
+  log_debug(conn, "%lu bytes still to transmit%s%s%s",
             (unsigned long)remain,
             conn->connected ? "" : " (not connected)",
-            conn->flushing ? "" : " (not flushing)");
+            conn->flushing ? "" : " (not flushing)",
+            conn->circuit() ? "" : " (no circuit)");
 
-  if (remain == 0 && conn->flushing && conn->connected) {
+  if (remain == 0 && ((conn->flushing && conn->connected)
+                      || !conn->circuit())) {
     bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev)) {
       log_debug(conn, "sending EOF downstream");

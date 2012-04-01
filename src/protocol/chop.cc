@@ -667,46 +667,49 @@ chop_circuit_t::send()
 {
   circuit_disarm_flush_timer(this);
 
-  if (downstreams.empty()) {
-    // We have no connections, but we must send.  If we're the client,
-    // reopen our outbound connections; the on-connection event will
-    // bring us back here.  If we're the server, we have to just
-    // twiddle our thumbs and hope the client reconnects.
-    log_debug(this, "no downstream connections");
-    if (config->mode != LSN_SIMPLE_SERVER)
-      circuit_reopen_downstreams(this);
-    else
-      circuit_arm_axe_timer(this, axe_interval());
-    return 0;
-  }
-
   struct evbuffer *xmit_pending = bufferevent_get_input(up_buffer);
   size_t avail = evbuffer_get_length(xmit_pending);
   size_t avail0 = avail;
 
-  // Send at least one block, even if there is no real data to send.
-  do {
-    log_debug(this, "%lu bytes to send", (unsigned long)avail);
-    size_t blocksize;
-    chop_conn_t *target = pick_connection(avail, &blocksize);
-    if (!target) {
-      // this is not an error; it can happen e.g. when the server has
-      // something to send immediately and the client hasn't spoken yet
-      log_debug(this, "no target connection available");
-      break;
-    }
+  if (downstreams.empty()) {
+    log_debug(this, "no downstream connections");
+  } else {
+    // Send at least one block, even if there is no real data to send.
+    do {
+      log_debug(this, "%lu bytes to send", (unsigned long)avail);
+      size_t blocksize;
+      chop_conn_t *target = pick_connection(avail, &blocksize);
+      if (!target) {
+        // this is not an error; it can happen e.g. when the server has
+        // something to send immediately and the client hasn't spoken yet
+        log_debug(this, "no target connection available");
+        break;
+      }
 
-    if (send_targeted(target, blocksize))
-      return -1;
+      if (send_targeted(target, blocksize))
+        return -1;
 
-    avail = evbuffer_get_length(xmit_pending);
-  } while (avail > 0);
+      avail = evbuffer_get_length(xmit_pending);
+    } while (avail > 0);
+  }
 
-  if (avail0 > avail) // we transmitted some real data
-    dead_cycles = 0;
-  else {
+  if (avail0 == avail) { // no forward progress
     dead_cycles++;
     log_debug(this, "%u dead cycles", dead_cycles);
+
+    // If there was real data and we didn't make any progress on it,
+    // or if there are no downstream connections at all, and we're the
+    // client, try opening new connections.  If we're the server, we
+    // have to just twiddle our thumbs and hope the client does that.
+    // Note that due to the sliding window of receive blocks, there is
+    // a hard upper limit of 127 outstanding connections (that is,
+    // half the receive window).
+    if ((avail0 > 0 && downstreams.size() < 127) || downstreams.empty()) {
+      if (config->mode != LSN_SIMPLE_SERVER)
+        circuit_reopen_downstreams(this);
+      else
+        circuit_arm_axe_timer(this, axe_interval());
+    }
   }
 
   return check_for_eof();
@@ -843,6 +846,10 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
   send_seq++;
   if (f == op_FIN)
     sent_fin = true;
+  if ((f == op_DAT || f == op_FIN) && d > 0)
+    // We are making forward progress if we are _either_ sending or
+    // receiving data.
+    dead_cycles = 0;
   return 0;
 }
 
@@ -868,34 +875,32 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
   for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
        i != downstreams.end(); i++) {
     chop_conn_t *conn = *i;
-    // We can only use candidates that have a steg target already.
-    if (conn->steg) {
-      // Find the connections whose transmit rooms are closest to the
-      // desired transmission length from both directions.
-      size_t room = conn->steg->transmit_room();
+    if (!conn->steg) {
+      log_debug(conn, "offers 0 bytes (no steg)");
+      continue;
+    }
 
-      if (room <= MIN_BLOCK_SIZE)
-	room = 0;
+    size_t room = conn->steg->transmit_room();
 
-      if (room > MAX_BLOCK_SIZE)
-        room = MAX_BLOCK_SIZE;
+    if (room <= MIN_BLOCK_SIZE)
+      room = 0;
 
-      log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
-                conn->steg->cfg()->name());
+    if (room > MAX_BLOCK_SIZE)
+      room = MAX_BLOCK_SIZE;
 
-      if (room >= desired) {
-        if (room < minabove) {
-          minabove = room;
-          targabove = conn;
-        }
-      } else {
-        if (room > maxbelow) {
-          maxbelow = room;
-          targbelow = conn;
-        }
+    log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
+              conn->steg->cfg()->name());
+
+    if (room >= desired) {
+      if (room < minabove) {
+        minabove = room;
+        targabove = conn;
       }
     } else {
-      log_debug(conn, "offers 0 bytes (no steg)");
+      if (room > maxbelow) {
+        maxbelow = room;
+        targbelow = conn;
+      }
     }
   }
 
@@ -943,6 +948,9 @@ chop_circuit_t::process_queue()
           log_info(this, "protocol error: data after FIN");
           pending_error = true;
         } else {
+          // We are making forward progress if we are _either_ sending or
+          // receiving data.
+          dead_cycles = 0;
           if (evbuffer_add_buffer(bufferevent_get_output(up_buffer),
                                   blk.data)) {
             log_warn(this, "buffer transfer failure");
@@ -989,8 +997,6 @@ chop_circuit_t::process_queue()
   }
 
   log_debug(this, "processed %u blocks", count);
-  if (count > 0)
-    dead_cycles = 0;
   if (sent_error)
     return -1;
 
@@ -1318,8 +1324,10 @@ chop_conn_t::send()
   // comes in for a stale circuit.
   if (upstream) {
     log_debug(this, "must send");
-    if (upstream->send_targeted(this))
+    if (upstream->send_targeted(this)) {
+      upstream->drop_downstream(this);
       conn_do_flush(this);
+    }
 
   } else {
     log_debug(this, "must send (no upstream)");
