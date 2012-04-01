@@ -73,6 +73,8 @@ const size_t SECTION_LEN = UINT16_MAX;
 const size_t MIN_BLOCK_SIZE = HEADER_LEN + TRAILER_LEN;
 const size_t MAX_BLOCK_SIZE = MIN_BLOCK_SIZE + SECTION_LEN*2;
 
+const size_t HANDSHAKE_LEN = sizeof(uint32_t);
+
 enum opcode_t
 {
   op_DAT = 0,       // Pass data section along to upstream
@@ -729,16 +731,18 @@ chop_circuit_t::send_special(opcode_t f, struct evbuffer *payload)
   size_t blocksize;
   log_assert(d <= SECTION_LEN);
   chop_conn_t *conn = pick_connection(d, &blocksize);
+  size_t lo = MIN_BLOCK_SIZE + ((conn && !conn->sent_handshake)
+                                ? HANDSHAKE_LEN : 0);
 
-  if (!conn || (blocksize - MIN_BLOCK_SIZE < d)) {
+  if (!conn || (blocksize - lo < d)) {
     log_warn("no usable connection for special block "
              "(opcode %02x, need %lu bytes, have %lu)",
-             (unsigned int)f, (unsigned long)(d + MIN_BLOCK_SIZE),
+             (unsigned int)f, (unsigned long)(d + lo),
              (unsigned long)blocksize);
     return -1;
   }
 
-  return send_targeted(conn, d, (blocksize - MIN_BLOCK_SIZE) - d, f, payload);
+  return send_targeted(conn, d, (blocksize - lo) - d, f, payload);
 }
 
 int
@@ -749,33 +753,47 @@ chop_circuit_t::send_targeted(chop_conn_t *conn)
     avail = SECTION_LEN;
   avail += MIN_BLOCK_SIZE;
 
-  size_t room = conn->steg->transmit_room();
-  if (room < MIN_BLOCK_SIZE) {
-    log_warn(conn, "send() called without enough transmit room "
-             "(have %lu, need %lu)", (unsigned long)room,
-             (unsigned long)MIN_BLOCK_SIZE);
-    return -1;
+  // If we have any data to transmit, ensure we do not send a block
+  // that contains no data at all.
+  size_t lo = MIN_BLOCK_SIZE + (avail == MIN_BLOCK_SIZE ? 0 : 1);
+
+  // If this connection has not yet sent a handshake, it will need to.
+  size_t hi = MAX_BLOCK_SIZE;
+  if (!conn->sent_handshake) {
+    lo += HANDSHAKE_LEN;
+    hi += HANDSHAKE_LEN;
+    avail += HANDSHAKE_LEN;
   }
-  log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
+
+  size_t room = conn->steg->transmit_room(avail, lo, hi);
+  if (room == 0)
+    log_abort(conn, "must send but cannot send");
+  if (room < lo || room >= hi)
+    log_abort(conn, "steg size request (%lu) out of range [%lu, %lu]",
+              (unsigned long)room, (unsigned long)lo, (unsigned long)hi);
+
+  log_debug(conn, "requests %lu bytes (%s)", (unsigned long)room,
             conn->steg->cfg()->name());
 
-  if (room < avail)
-    avail = room;
-
-  return send_targeted(conn, avail);
+  return send_targeted(conn, room);
 }
 
 int
 chop_circuit_t::send_targeted(chop_conn_t *conn, size_t blocksize)
 {
-  log_assert(blocksize >= MIN_BLOCK_SIZE && blocksize <= MAX_BLOCK_SIZE);
+  size_t lo = MIN_BLOCK_SIZE, hi = MAX_BLOCK_SIZE;
+  if (!conn->sent_handshake) {
+    lo += HANDSHAKE_LEN;
+    hi += HANDSHAKE_LEN;
+  }
+  log_assert(blocksize >= lo && blocksize <= hi);
 
   struct evbuffer *xmit_pending = bufferevent_get_input(up_buffer);
   size_t avail = evbuffer_get_length(xmit_pending);
   opcode_t op = op_DAT;
 
-  if (avail > blocksize - MIN_BLOCK_SIZE)
-    avail = blocksize - MIN_BLOCK_SIZE;
+  if (avail > blocksize - lo)
+    avail = blocksize - lo;
   else if (avail > SECTION_LEN)
     avail = SECTION_LEN;
   else if (upstream_eof && !sent_fin)
@@ -783,7 +801,7 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t blocksize)
     // this direction; mark it as such
     op = op_FIN;
 
-  return send_targeted(conn, avail, (blocksize - MIN_BLOCK_SIZE) - avail,
+  return send_targeted(conn, avail, (blocksize - lo) - avail,
                        op, xmit_pending);
 }
 
@@ -868,6 +886,10 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
 
   desired += MIN_BLOCK_SIZE;
 
+  // If we have any data to transmit, ensure we do not send a block
+  // that contains no data at all.
+  size_t lo = MIN_BLOCK_SIZE + (desired == MIN_BLOCK_SIZE ? 0 : 1);
+
   log_debug(this, "target block size %lu bytes", (unsigned long)desired);
 
   // Find the best fit for the desired transmission from all the
@@ -880,18 +902,25 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
       continue;
     }
 
-    size_t room = conn->steg->transmit_room();
+    size_t shake = conn->sent_handshake ? 0 : HANDSHAKE_LEN;
+    size_t room = conn->steg->transmit_room(desired + shake, lo + shake,
+                                            MAX_BLOCK_SIZE + shake);
+    if (room == 0) {
+      log_debug(conn, "offers 0 bytes (%s)",
+                conn->steg->cfg()->name());
+      continue;
+    }
 
-    if (room <= MIN_BLOCK_SIZE)
-      room = 0;
-
-    if (room > MAX_BLOCK_SIZE)
-      room = MAX_BLOCK_SIZE;
+    if (room < lo + shake || room >= MAX_BLOCK_SIZE + shake)
+      log_abort(conn, "steg size request (%lu) out of range [%lu, %lu]",
+                (unsigned long)room,
+                (unsigned long)(lo + shake),
+                (unsigned long)(MAX_BLOCK_SIZE + shake));
 
     log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
               conn->steg->cfg()->name());
 
-    if (room >= desired) {
+    if (room >= desired + shake) {
       if (room < minabove) {
         minabove = room;
         targabove = conn;
@@ -915,7 +944,7 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
   // their initial values, so we'll return NULL and set blocksize to 0,
   // which callers know how to handle.
   if (targabove) {
-    *blocksize = desired;
+    *blocksize = minabove;
     return targabove;
   } else {
     *blocksize = maxbelow;
@@ -1086,7 +1115,7 @@ chop_conn_t::send(struct evbuffer *block)
                 upstream ? '+' : '-',
                 upstream ? upstream->circuit_id : 0);
     if (evbuffer_prepend(block, (void *)&upstream->circuit_id,
-                         sizeof(upstream->circuit_id))) {
+                         HANDSHAKE_LEN)) {
       log_warn(this, "failed to prepend handshake to first block");
       return -1;
     }
@@ -1332,29 +1361,28 @@ chop_conn_t::send()
   } else {
     log_debug(this, "must send (no upstream)");
 
-    size_t room = steg->transmit_room();
-    if (room < MIN_BLOCK_SIZE) {
-      log_warn(this, "send() called without enough transmit room "
-               "(have %lu, need %lu)", (unsigned long)room,
-               (unsigned long)MIN_BLOCK_SIZE);
-      conn_do_flush(this);
-      return;
-    }
+    size_t room = steg->transmit_room(MIN_BLOCK_SIZE, MIN_BLOCK_SIZE,
+                                      MAX_BLOCK_SIZE);
+    if (room < MIN_BLOCK_SIZE || room >= MAX_BLOCK_SIZE)
+      log_abort(this, "steg size request (%lu) out of range [%lu, %lu]",
+                (unsigned long)room,
+                (unsigned long)MIN_BLOCK_SIZE,
+                (unsigned long)MAX_BLOCK_SIZE);
 
     // Since we have no upstream, we can't encrypt anything; instead,
     // generate random bytes and feed them straight to steg_transmit.
     struct evbuffer *chaff = evbuffer_new();
     struct evbuffer_iovec v;
-    if (!chaff || evbuffer_reserve_space(chaff, MIN_BLOCK_SIZE, &v, 1) != 1 ||
-        v.iov_len < MIN_BLOCK_SIZE) {
+    if (!chaff || evbuffer_reserve_space(chaff, room, &v, 1) != 1 ||
+        v.iov_len < room) {
       log_warn(this, "memory allocation failed");
       if (chaff)
         evbuffer_free(chaff);
       conn_do_flush(this);
       return;
     }
-    v.iov_len = MIN_BLOCK_SIZE;
-    rng_bytes((uint8_t *)v.iov_base, MIN_BLOCK_SIZE);
+    v.iov_len = room;
+    rng_bytes((uint8_t *)v.iov_base, room);
     if (evbuffer_commit_space(chaff, &v, 1)) {
       log_warn(this, "evbuffer_commit_space failed");
       if (chaff)

@@ -163,7 +163,7 @@ embed_steg_t::cfg()
 }
 
 size_t
-embed_steg_t::transmit_room()
+embed_steg_t::transmit_room(size_t, size_t lo, size_t hi)
 {
   if (is_finished() || !is_outgoing()) return 0;
 
@@ -173,6 +173,9 @@ embed_steg_t::transmit_room()
   // 2 bytes for data length, 4 bytes for the index of a new trace
   size_t room = get_pkt_size() - 2;
   if (cur_pkt == 0) room -= 4;
+
+  if (room < lo) room = lo;
+  if (room > hi) room = hi;
   return room;
 }
 

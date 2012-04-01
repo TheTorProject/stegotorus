@@ -87,9 +87,9 @@ nosteg_steg_t::cfg()
 }
 
 size_t
-nosteg_steg_t::transmit_room()
+nosteg_steg_t::transmit_room(size_t pref, size_t, size_t)
 {
-  return SIZE_MAX;
+  return pref;
 }
 
 int

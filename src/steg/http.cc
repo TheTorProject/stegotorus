@@ -36,6 +36,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "connections.h"
 #include "protocol.h"
 #include "steg.h"
+#include "rng.h"
+
 #include "payloads.h"
 #include "cookies.h"
 #include "swfSteg.h"
@@ -184,64 +186,59 @@ http_steg_t::cfg()
   return config;
 }
 
-size_t
-http_steg_t::transmit_room()
+static size_t
+clamp(size_t val, size_t lo, size_t hi)
 {
-  unsigned int mjc;
+  if (val < lo) return lo;
+  if (val > hi) return hi;
+  return val;
+}
 
+size_t
+http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
+{
   if (have_transmitted)
     /* can't send any more on this connection */
     return 0;
 
-
   if (config->is_clientside) {
-    return (MIN_COOKIE_SIZE + rand() % (MAX_COOKIE_SIZE - MIN_COOKIE_SIZE)) / 4;
+    // MIN_COOKIE_SIZE and MAX_COOKIE_SIZE are *after* base64'ing
+    if (lo < MIN_COOKIE_SIZE*3/4)
+      lo = MIN_COOKIE_SIZE*3/4;
+
+    if (hi > MAX_COOKIE_SIZE*3/4)
+      hi = MAX_COOKIE_SIZE*3/4;
   }
   else {
-
     if (!have_received)
       return 0;
 
     switch (type) {
-
     case HTTP_CONTENT_SWF:
-      return 1024;
+      if (hi >= 1024)
+        hi = 1024;
+      break;
 
     case HTTP_CONTENT_JAVASCRIPT:
-      mjc = config->pl.max_JS_capacity / 2;
-      if (mjc > 1024) {
-        // it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
-        int rval = 512 + rand()%(mjc - 1024);
-        //	fprintf(stderr, "returning rval %d, mjc  %d\n", rval, mjc);
-        return rval;
-      }
-      log_warn("js capacity too small\n");
-      exit(-1);
+      if (hi >= config->pl.max_JS_capacity / 2)
+        hi = config->pl.max_JS_capacity / 2;
+      break;
 
     case HTTP_CONTENT_HTML:
-      mjc = config->pl.max_HTML_capacity / 2;
-      if (mjc > 1024) {
-        // it should be 1024 + ...., but seems like we need to be a little bit smaller (chopper bug?)
-        int rval = 512 + rand()%(mjc - 1024);
-        //	fprintf(stderr, "returning rval %d, mjc  %d\n", rval, mjc);
-        return rval;
-      }
-      log_warn("js capacity too small\n");
-      exit(-1);
+      if (hi >= config->pl.max_HTML_capacity / 2)
+        hi = config->pl.max_HTML_capacity / 2;
+      break;
 
     case HTTP_CONTENT_PDF:
-      // return 1024 + rand()%(get_max_PDF_capacity() - 1024)
-      return PDF_MIN_AVAIL_SIZE;
+      if (hi >= PDF_MIN_AVAIL_SIZE)
+        hi = PDF_MIN_AVAIL_SIZE;
+      break;
     }
-
-    return SIZE_MAX;
   }
+
+  log_assert(hi >= lo);
+  return clamp(pref + rng_range_geom(hi - lo, 8), lo, hi);
 }
-
-
-
-
-
 
 int
 lookup_peer_name_from_ip(const char* p_ip, char* p_name)  {
@@ -346,7 +343,7 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
   // substitute / with _, + with ., = with - that maybe inserted anywhere in the middle 
   sanitize_b64(data2, len);
 
-  
+
   cookie_len = gen_b64_cookie_field(cookiebuf, data2, len);
   cookiebuf[cookie_len] = 0;
 
@@ -356,7 +353,10 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
     log_debug("cookie generation failed\n");
     return -1;
   }
-  
+  log_debug(conn, "cookie input %ld encoded %d final %d",
+            sbuflen, len, cookie_len);
+  log_debug(conn, "cookie encoded: %s", data2);
+  log_debug(conn, "cookie final: %s", cookiebuf);
 
   // add uri field
   rval = evbuffer_add(dest, buf, strstr(buf, "\r\n") - buf + 2);
@@ -657,27 +657,26 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
     char *p;
     char *pend;
 
-    char outbuf[MAX_COOKIE_SIZE];
+    char outbuf[MAX_COOKIE_SIZE * 3/2];
     char outbuf2[MAX_COOKIE_SIZE];
     int sofar = 0;
     //int cookie_mode = 0;
 
 
     if (s2.pos == -1) {
-      log_debug("Did not find end of request %d", (int) evbuffer_get_length(source));
-      //      evbuffer_dump(source, stderr);
+      log_debug(conn, "Did not find end of request %d",
+                (int) evbuffer_get_length(source));
       return RECV_INCOMPLETE;
     }
 
-    log_debug("SERVER received request header of length %d", (int)s2.pos);
+    log_debug(conn, "SERVER received request header of length %d", (int)s2.pos);
 
     data = (char*) evbuffer_pullup(source, s2.pos+4);
 
     if (data == NULL) {
-      log_debug("SERVER evbuffer_pullup fails");
+      log_debug(conn, "SERVER evbuffer_pullup fails");
       return RECV_BAD;
     }
-
 
     data[s2.pos+3] = 0;
 
@@ -691,18 +690,13 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
       p = data + sizeof "GET /" -1;
 
     pend = strstr(p, "\r\n");
-
-    if (pend == NULL || (pend - p > MAX_COOKIE_SIZE)) {
-      fprintf(stderr, "incorrect cookie recovery \n");
-      exit(-1);
-      
-    }
-
-
+    log_assert(pend);
+    if (pend - p > MAX_COOKIE_SIZE * 3/2)
+      log_abort(conn, "cookie too big: %lu (max %lu)",
+                (unsigned long)(pend - p), (unsigned long)MAX_COOKIE_SIZE);
 
     bzero(outbuf, sizeof(outbuf));
     int cookielen = unwrap_b64_cookie((char*) p, (char*) outbuf, pend - p);
-
 
     desanitize_b64(outbuf, cookielen);
     outbuf[cookielen] = '\n';
@@ -711,24 +705,18 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
     base64::decoder D;
     sofar = D.decode(outbuf, cookielen+1, outbuf2);
 
+    if (sofar <= 0)
+      log_warn(conn, "base64 decode failed\n");
 
-    if (sofar <= 0) 
-      log_warn("decode failed\n"); 
-      
-
-    if (sofar >= MAX_COOKIE_SIZE) {
-      log_warn("cookie buffer overflow????\n"); 
-       exit(-1);
-    }
-
+    if (sofar >= MAX_COOKIE_SIZE)
+      log_abort(conn, "cookie decode buffer overflow\n");
 
     if (evbuffer_add(dest, outbuf2, sofar)) {
-      log_debug("Failed to transfer buffer");
+      log_debug(conn, "Failed to transfer buffer");
       return RECV_BAD;
     }
     evbuffer_drain(source, s2.pos + sizeof("\r\n\r\n") - 1);
   } while (evbuffer_get_length(source));
-
 
   s->have_received = 1;
   s->type = type;
@@ -736,16 +724,6 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
   conn->transmit_soon(100);
   return RECV_GOOD;
 }
-
-
-
-
-
-
-
-
-
-
 
 int
 http_steg_t::receive(struct evbuffer *dest)

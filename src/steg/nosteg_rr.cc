@@ -93,9 +93,9 @@ nosteg_rr_steg_t::cfg()
 }
 
 size_t
-nosteg_rr_steg_t::transmit_room()
+nosteg_rr_steg_t::transmit_room(size_t pref, size_t, size_t)
 {
-  return can_transmit ? SIZE_MAX : 0;
+  return can_transmit ? pref : 0;
 }
 
 int

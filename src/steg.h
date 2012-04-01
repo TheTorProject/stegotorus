@@ -52,11 +52,22 @@ struct steg_t
   /** Return the steg_config_t from which this steg_t was created. */
   virtual steg_config_t *cfg() = 0;
 
-  /** Report the maximum number of bytes that could be transmitted on
-      your connection at this time.  You must be prepared to handle a
-      subsequent request to transmit any _smaller_ number of bytes on
-      this connection.  */
-  virtual size_t transmit_room() = 0;
+  /** The protocol using this steg module would like to transmit PREF
+      bytes on your connection.  Return an adjusted number of bytes;
+      you may adjust down to indicate that you cannot transmit all of
+      the available data, or up to indicate that it should be padded.
+
+      Returning zero indicates that your connection cannot transmit at
+      all right now; if you do this, transmit() will not be called.
+      Returning any nonzero value indicates that you want to transmit
+      exactly that number of bytes.  The protocol may or may not call
+      transmit() after you return a nonzero value, but if it does, it
+      will provide the number of bytes you requested.
+
+      If you return a nonzero value, it MUST be greater than or equal
+      to MIN, and less than or equal to MAX.  PREF is guaranteed to be
+      in this range already.  */
+  virtual size_t transmit_room(size_t pref, size_t min, size_t max) = 0;
 
   /** Consume all of the data in SOURCE, disguise it, and write it to
       the outbound buffer for your connection. Return 0 on success, -1
@@ -94,32 +105,33 @@ steg_config_t *steg_new(const char *name, config_t *cfg);
 
 /* Macros for use in defining steg modules. */
 
-#define STEG_DEFINE_MODULE(mod)                                 \
-  /* new_ dispatchers */                                        \
-  static steg_config_t *mod##_new(config_t *cfg)                \
-  { return new mod##_steg_config_t(cfg); }                      \
-                                                                \
-  /* canned methods */                                          \
-  const char *mod##_steg_config_t::name() { return #mod; }      \
-                                                                \
-  /* module object */                                           \
-  extern const steg_module s_mod_##mod = {                      \
-    #mod, mod##_new                                             \
+#define STEG_DEFINE_MODULE(mod)                         \
+  /* new_ dispatchers */                                \
+  static steg_config_t *mod##_new(config_t *cfg)        \
+  { return new mod##_steg_config_t(cfg); }              \
+                                                        \
+  /* canned methods */                                  \
+  const char *mod##_steg_config_t::name()               \
+  { return #mod; }                                      \
+                                                        \
+  /* module object */                                   \
+  extern const steg_module s_mod_##mod = {              \
+    #mod, mod##_new                                     \
   } /* deliberate absence of semicolon */
 
-#define STEG_CONFIG_DECLARE_METHODS(mod)                        \
-  mod##_steg_config_t(config_t *cfg);                           \
-  virtual ~mod##_steg_config_t();                               \
-  virtual const char *name();                                   \
-  virtual steg_t *steg_create(conn_t *conn)                     \
+#define STEG_CONFIG_DECLARE_METHODS(mod)                \
+  mod##_steg_config_t(config_t *);                      \
+  virtual ~mod##_steg_config_t();                       \
+  virtual const char *name();                           \
+  virtual steg_t *steg_create(conn_t *)                 \
   /* deliberate absence of semicolon */
 
-#define STEG_DECLARE_METHODS(mod)                               \
-  virtual ~mod##_steg_t();                                      \
-  virtual steg_config_t *cfg();                                 \
-  virtual size_t transmit_room();                               \
-  virtual int transmit(struct evbuffer *source);                \
-  virtual int receive(struct evbuffer *dest)                    \
+#define STEG_DECLARE_METHODS(mod)                       \
+  virtual ~mod##_steg_t();                              \
+  virtual steg_config_t *cfg();                         \
+  virtual size_t transmit_room(size_t, size_t, size_t); \
+  virtual int transmit(struct evbuffer *);              \
+  virtual int receive(struct evbuffer *)                \
   /* deliberate absence of semicolon */
 
 #endif
