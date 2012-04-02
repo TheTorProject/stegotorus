@@ -236,7 +236,11 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
     }
   }
 
-  log_assert(hi >= lo);
+  if (hi < lo)
+    log_abort("hi<lo: client=%d type=%d hi=%ld lo=%ld",
+              config->is_clientside, type,
+              (unsigned long)hi, (unsigned long)lo);
+
   return clamp(pref + rng_range_geom(hi - lo, 8), lo, hi);
 }
 

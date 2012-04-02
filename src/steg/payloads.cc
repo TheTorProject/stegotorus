@@ -1050,17 +1050,15 @@ unsigned int capacityPDF (char* buf, int len) {
 
   while (bp < (buf+len)) {
      streamStart = strInBinary("stream", 6, bp, (buf+len)-bp);
-     // streamStart = strstr(bp, "stream");
      if (streamStart == NULL) break;
      bp = streamStart+6;
      streamEnd = strInBinary("endstream", 9, bp, (buf+len)-bp);
-     // streamEnd = strstr(bp, "endstream");
      if (streamEnd == NULL) break;
      // count the number of char between streamStart+6 and streamEnd
      size = streamEnd - (streamStart+6) - 2; // 2 for \r\n before streamEnd
      if (size > 0) {
        cnt = cnt + size;
-       log_debug("capacity of pdf increase by %d", size);
+       // log_debug("capacity of pdf increase by %d", size);
      }
      bp += 9;
   }
