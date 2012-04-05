@@ -1,6 +1,6 @@
 This doesn't work yet.
 
-It requires Crypto++ 5.6.0 or later.
+It requires OpenSSL 1.0.1 or later.
 
 It requires Libevent 2.0 or later.
 

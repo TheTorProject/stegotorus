@@ -5,12 +5,6 @@ AC_LANG([C++])
 AM_INIT_AUTOMAKE([foreign nostdinc silent-rules subdir-objects])
 AM_MAINTAINER_MODE([enable])
 
-dnl The stock definition of AC_INCLUDES_DEFAULT performs a whole bunch
-dnl of completely unnecessary checks *even if* you override its
-dnl mostly-useless default header list at invocation time.
-dnl Replace it with a version that does nothing unless requested.
-m4_pushdef([AC_INCLUDES_DEFAULT], [$1])
-
 ### Programs ###
 
 AC_PROG_CXX
@@ -64,7 +58,7 @@ LIBS="$LIBS $ws32_LIBS"
 
 ### Language features ###
 
-AC_CHECK_HEADERS([execinfo.h],,, [AC_INCLUDES_DEFAULT()])
+AC_CHECK_HEADERS([execinfo.h],,,[/**/])
 
 AX_CXXFLAGS_STDCXX_11([ext])
 AX_CXX_DELETE_METHOD
