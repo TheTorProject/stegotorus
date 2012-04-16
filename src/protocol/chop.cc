@@ -1158,7 +1158,7 @@ chop_conn_t::recv_handshake()
                       sizeof circuit_id) != sizeof circuit_id)
     return -1;
 
-  chop_circuit_table::value_type in(circuit_id, 0);
+  chop_circuit_table::value_type in(circuit_id, (chop_circuit_t *)0);
   std::pair<chop_circuit_table::iterator, bool> out
     = this->config->circuits.insert(in);
   chop_circuit_t *ck;
