@@ -312,6 +312,8 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *down = (conn_t *)arg;
 
+  down->ever_received = 1;
+
   log_debug(down, "%lu bytes available",
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
@@ -375,6 +377,11 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = (conn_t *)arg;
 
+  log_debug(conn, "what=%04hx enabled=%x inbound=%ld outbound=%ld",
+            what, bufferevent_get_enabled(bev),
+            evbuffer_get_length(bufferevent_get_input(bev)),
+            evbuffer_get_length(bufferevent_get_output(bev)));
+
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
     if (what & BEV_EVENT_ERROR)
       log_info(conn, "network error in %s: %s",
@@ -393,7 +400,8 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
       /* Peer is done sending us data. */
       conn->recv_eof();
       if (bufferevent_get_enabled(bev) ||
-          evbuffer_get_length(bufferevent_get_input(bev)) > 0) {
+          evbuffer_get_length(bufferevent_get_input(bev)) > 0 ||
+          evbuffer_get_length(bufferevent_get_output(bev)) > 0) {
         log_debug(conn, "acknowledging EOF downstream");
         shutdown(bufferevent_getfd(bev), SHUT_RD);
       } else {
@@ -444,14 +452,15 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = (conn_t *)arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
-  log_debug(conn, "%lu bytes still to transmit%s%s%s",
+  log_debug(conn, "%lu bytes still to transmit%s%s%s%s",
             (unsigned long)remain,
             conn->connected ? "" : " (not connected)",
             conn->flushing ? "" : " (not flushing)",
-            conn->circuit() ? "" : " (no circuit)");
+            conn->circuit() ? "" : " (no circuit)",
+            conn->ever_received ? "" : " (never received)");
 
   if (remain == 0 && ((conn->flushing && conn->connected)
-                      || !conn->circuit())) {
+                      || (!conn->circuit() && conn->ever_received))) {
     bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev)) {
       log_debug(conn, "sending EOF downstream");
@@ -822,5 +831,6 @@ conn_do_flush(conn_t *conn)
   if (remain == 0)
     downstream_flush_cb(conn->buffer, conn);
   else
-    log_debug(conn, "flushing %lu bytes to peer", (unsigned long)remain);
+    log_debug(conn, "flushing %lu bytes to peer [enabled=%x]", (unsigned long)remain,
+              bufferevent_get_enabled(conn->buffer));
 }

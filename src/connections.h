@@ -19,8 +19,9 @@ struct conn_t {
   unsigned int        serial;
   bool                connected : 1;
   bool                flushing : 1;
+  bool                ever_received : 1;
 
-  conn_t() : connected(false), flushing(false) {}
+  conn_t() : connected(false), flushing(false), ever_received(false) {}
 
   /** Close and deallocate a connection.  If the connection is part of a
       circuit, disconnect it from the circuit; this may cause the circuit
