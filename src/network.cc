@@ -674,7 +674,6 @@ circuit_open_upstream(circuit_t *ckt)
   return -1;
 
  success:
-  bufferevent_enable(buf, EV_READ|EV_WRITE);
   circuit_add_upstream(ckt, buf, peername);
   return 0;
 }
@@ -717,7 +716,6 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
   bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
                     is_socks ? downstream_socks_connect_cb
                     : downstream_connect_cb, conn);
-  bufferevent_enable(buf, EV_READ|EV_WRITE);
   return true;
 }
 
@@ -790,7 +788,6 @@ create_outbound_connections_socks(circuit_t *ckt)
   ckt->add_downstream(conn);
   bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
                     downstream_socks_connect_cb, conn);
-  bufferevent_enable(buf, EV_READ|EV_WRITE);
   return;
 
  failure:
