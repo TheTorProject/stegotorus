@@ -1,3 +1,4 @@
+#include "util.h"
 #include "crc32.h"
 
 #define CRC32C(c,d) (c=(c>>8)^crc_c[(c^(d))&0xFF])
@@ -69,8 +70,9 @@ static const unsigned int crc_c[256] = {
 	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d,
 };
 
-
-unsigned int generate_crc32c(char *buffer, size_t length) {
+unsigned int
+generate_crc32c(const char *buffer, size_t length)
+{
   size_t i;
   unsigned int crc32 = ~0L;
 
@@ -79,4 +81,3 @@ unsigned int generate_crc32c(char *buffer, size_t length) {
   }
   return ~crc32;
 }
-
