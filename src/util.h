@@ -57,6 +57,9 @@ struct event_base;
 
 /***** Memory allocation. *****/
 
+/** Any size_t larger than this amount is likely to be an underflow. */
+#define SIZE_T_CEILING  (SIZE_MAX/2 - 16)
+
 /* Because this isn't Tor and functions named "tor_whatever" would be
    confusing, I am instead following the GNU convention of naming
    allocate-memory-or-crash functions "xwhatever". Also, at this time

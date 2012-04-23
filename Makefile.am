@@ -49,6 +49,7 @@ stegotorus_SOURCES = \
 
 UTGROUPS = \
 	src/test/unittest_crypt.cc \
+	src/test/unittest_pdfsteg.cc \
 	src/test/unittest_socks.cc \
 	src/test/unittest_config.cc \
 	src/test/unittest_transfer.cc

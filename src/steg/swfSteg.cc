@@ -1,5 +1,11 @@
+#include "util.h"
 #include "swfSteg.h"
+#include "connections.h"
+#include "payloads.h"
+#include "zlib.h"
+#include "zpack.h"
 
+#include <event2/buffer.h>
 
 static const char http_response_1[] =
   "HTTP/1.1 200 OK\r\n"
@@ -9,17 +15,7 @@ static const char http_response_1[] =
   "Content-Type: application/x-shockwave-flash\r\n"
   "Content-Length: ";
 
-
-
-
-
-
-
-
-
-
-
-unsigned int 
+unsigned int
 swf_wrap(payloads& pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
 
   char* swf;

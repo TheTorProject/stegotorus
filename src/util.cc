@@ -17,9 +17,6 @@
 #include <sys/un.h>
 #endif
 
-/** Any size_t larger than this amount is likely to be an underflow. */
-#define SIZE_T_CEILING  (SIZE_MAX/2 - 16)
-
 /**************************** Memory Allocation ******************************/
 
 static void ATTR_NORETURN
