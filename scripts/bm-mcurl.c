@@ -1,4 +1,10 @@
-/* Use libcurl to retrieve many URLs, according to a wildcard pattern,
+/* Copyright 2012 Zachary Weinberg
+   Copying and distribution of this file, with or without modification, are
+   permitted in any medium without royalty provided the copyright notice
+   and this notice are preserved. This file is offered as-is, without any
+   warranty.
+
+   Use libcurl to retrieve many URLs, according to a wildcard pattern,
    starting new connections at a constant rate until we hit a limit.
 
    Command line arguments -- all are required, but 'proxy' may be an

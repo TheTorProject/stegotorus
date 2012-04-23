@@ -1,5 +1,5 @@
-# Makefile for stegotorus
-# Copyright 2011 Nick Mathewson, George Kadianakis, Zack Weinberg
+# Copyright 2011 Nick Mathewson, George Kadianakis
+# Copyright 2011, 2012 SRI International
 # See LICENSE for other credits and copying information
 
 ACLOCAL_AMFLAGS = -I m4 --install

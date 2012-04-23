@@ -1,4 +1,6 @@
 #! /bin/sh
+# Copyright 2011 SRI International
+# See LICENSE for other credits and copying information
 
 set -e
 

@@ -1,3 +1,7 @@
+/* Copyright 2011, 2012 SRI International
+ * See LICENSE for other credits and copying information
+ */
+
 #include "payloads.h"
 #include "jsSteg.h"
 #include "cookies.h"

@@ -1,3 +1,10 @@
+/* Copyright 2012 Zachary Weinberg
+ *
+ * Copying and distribution of this file, with or without modification, are
+ * permitted in any medium without royalty provided the copyright notice
+ * and this notice are preserved. This file is offered as-is, without any
+ * warranty.
+ */
 #define _XOPEN_SOURCE 600
 #define _POSIX_C_SOURCE 200112
 

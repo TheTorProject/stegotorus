@@ -1,6 +1,7 @@
-/* Copyright 2011 Nick Mathewson, George Kadianakis, Zack Weinberg
-   See LICENSE for other credits and copying information
-*/
+/* Copyright 2011 Nick Mathewson, George Kadianakis
+ * Copyright 2011 SRI International
+ * See LICENSE for other credits and copying information
+ */
 
 #ifndef UNITTEST_H
 #define UNITTEST_H

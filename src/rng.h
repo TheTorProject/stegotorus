@@ -1,6 +1,6 @@
-/* Copyright 2011 Zack Weinberg
-   See LICENSE for other credits and copying information
-*/
+/* Copyright 2011 SRI International
+ * See LICENSE for other credits and copying information
+ */
 
 #ifndef RNG_H
 #define RNG_H

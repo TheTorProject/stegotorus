@@ -1,7 +1,6 @@
-/* Copyright 2011 Zack Weinberg
-   See LICENSE for other credits and copying information
-*/
-
+/* Copyright 2011, 2012 SRI International
+ * See LICENSE for other credits and copying information
+ */
 #ifndef STEG_H
 #define STEG_H
 

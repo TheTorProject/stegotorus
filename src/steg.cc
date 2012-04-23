@@ -1,6 +1,6 @@
-/* Copyright 2011 Zack Weinberg
-   See LICENSE for other credits and copying information
-*/
+/* Copyright 2011 SRI International
+ * See LICENSE for other credits and copying information
+ */
 
 #include "util.h"
 #include "steg.h"
@@ -24,7 +24,7 @@ steg_new(const char *name, config_t *cfg)
   const steg_module *const *s;
   for (s = supported_stegs; *s; s++)
     if (!strcmp(name, (**s).name))
-      return (**s).new_(cfg); 
+      return (**s).new_(cfg);
  return 0;
 }
 

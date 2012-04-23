@@ -1,7 +1,9 @@
+/* Copyright 2011, 2012 SRI International
+ * See LICENSE for other credits and copying information
+ */
+
 #ifndef _COOKIES_H
 #define _COOKIES_H
-
-
 
 #include <stdio.h>
 #include <strings.h>

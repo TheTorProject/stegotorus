@@ -1,6 +1,7 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
-   See LICENSE for other credits and copying information
-*/
+ * Copyright 2011, 2012 SRI International
+ * See LICENSE for other credits and copying information
+ */
 
 #include "util.h"
 #include "main.h"

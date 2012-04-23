@@ -1,3 +1,7 @@
+/* Copyright 2011, 2012 SRI International
+ * See LICENSE for other credits and copying information
+ */
+
 #include "util.h"
 #include "connections.h"
 #include "protocol.h"

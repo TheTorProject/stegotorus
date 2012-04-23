@@ -1,9 +1,6 @@
-/* Copyright 2011, 2012 Zack Weinberg
-   See LICENSE for other credits and copying information
-
-   The chopper is the core StegoTorus protocol implementation.
-   For its design, see doc/chopper.txt.  Note that it is still
-   being implemented, and may change incompatibly.  */
+/* Copyright 2011, SRI International
+ * See LICENSE for other credits and copying information
+ */
 
 #include "util.h"
 #include "connections.h"
@@ -19,9 +16,9 @@
 #include <event2/event.h>
 #include <event2/buffer.h>
 
-#ifdef HAVE_EXECINFO_H
-#include <execinfo.h>
-#endif
+/* The chopper is the core StegoTorus protocol implementation.
+   For its design, see doc/chopper.txt.  Note that it is still
+   being implemented, and may change incompatibly.  */
 
 using std::tr1::unordered_map;
 using std::tr1::unordered_set;
@@ -557,12 +554,6 @@ chop_circuit_t::~chop_circuit_t()
              sent_fin ? '+' : '-', received_fin ? '+' : '-',
              upstream_eof ? '+' : '-',
              (unsigned long)downstreams.size());
-#ifdef HAVE_EXECINFO_H
-    int n;
-    void *backtracebuf[256];
-    n = backtrace(backtracebuf, sizeof backtracebuf / sizeof(void*));
-    backtrace_symbols_fd(backtracebuf, n, 2);
-#endif
   }
 
   for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();

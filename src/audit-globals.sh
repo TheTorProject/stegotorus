@@ -1,4 +1,6 @@
 #! /bin/sh
+# Copyright 2012 SRI International
+# See LICENSE for other credits and copying information
 
 # Due to the multi-listener architecture of stegotorus, nearly all
 # global variables are bugs.  This program enforces a white-list of

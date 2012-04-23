@@ -1,3 +1,7 @@
+dnl Copyright 2011 Nick Mathewson, George Kadianakis
+dnl Copyright 2011, 2012 SRI International
+dnl See LICENSE for other credits and copying information
+dnl
 AC_PREREQ([2.61])dnl Possibly earlier will do, but this is what I have
 AC_INIT([stegotorus], [0.0])
 AC_CONFIG_SRCDIR([src/main.cc])

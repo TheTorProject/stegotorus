@@ -1,3 +1,6 @@
+/* Copyright 2011, 2012 SRI International
+ * See LICENSE for other credits and copying information
+ */
 #ifndef _ZPACK_H
 #define _ZPACK_H
 

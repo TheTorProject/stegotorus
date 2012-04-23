@@ -1,3 +1,6 @@
+# Copyright 2011, 2012 SRI International
+# See LICENSE for other credits and copying information
+
 # Integration tests for stegotorus - "timeline" tests.
 #
 # These tests use the 'tltester' utility to script a sequence of

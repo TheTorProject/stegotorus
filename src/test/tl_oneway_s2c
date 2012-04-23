@@ -1,3 +1,6 @@
+# Copyright 2011 SRI International
+# See LICENSE for other credits and copying information
+#
 # lots of server-to-client, no client-to-server
 
 < I
