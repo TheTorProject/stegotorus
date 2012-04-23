@@ -1,29 +1,31 @@
 #ifndef _PDFSTEG_H
 #define _PDFSTEG_H
 
-
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
-#include "util.h"
-#include "connections.h"
-#include "steg.h"
-#include <event2/buffer.h>
-
 struct payloads;
 
-#define PDF_DELIMITER    '?'
-#define PDF_DELIMITER2   '.'
+// These are the public interface.
 
-int pdfWrap (char *data, unsigned int dlen, char *pdfTemplate, unsigned int plen, char *outbuf, unsigned int outbufsize);
-int pdfUnwrap (char *data, unsigned int dlen, char *outbuf, unsigned int outbufsize);
+int http_server_PDF_transmit(payloads &pl, struct evbuffer *source,
+                             conn_t *conn);
+int http_handle_client_PDF_receive(steg_t *s, conn_t *conn,
+                                   struct evbuffer *dest,
+                                   struct evbuffer* source);
 
-int addDelimiter(char *inbuf, int inbuflen, char *outbuf, int outbuflen, const char delimiter1, const char delimiter2);
-int removeDelimiter(char *inbuf, int inbuflen, char *outbuf, int outbuflen, const char delimiter1, int* endFlag, int* escape);
+// These are exposed only for the sake of unit tests.
 
-int http_server_PDF_transmit (payloads& pl, struct evbuffer *source, conn_t *conn);
-int
-http_handle_client_PDF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
+ssize_t pdf_add_delimiter(const char *inbuf, size_t inbuflen,
+                          char *outbuf, size_t outbuflen,
+                          char delimiter1, char delimiter2);
+
+ssize_t pdf_remove_delimiter(const char *inbuf, size_t inbuflen,
+                             char *outbuf, size_t outbuflen,
+                             char delimiter1, bool *endFlag, bool *escape);
+
+ssize_t pdf_wrap(const char *data, size_t dlen,
+                 const char *pdfTemplate, size_t plen,
+                 char *outbuf, size_t outbufsize);
+
+ssize_t pdf_unwrap(const char *data, size_t dlen,
+                   char *outbuf, size_t outbufsize);
 
 #endif
-

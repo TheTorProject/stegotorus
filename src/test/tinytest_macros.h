@@ -168,6 +168,10 @@
 	tt_assert_test_type(a,b,#a" "#op" "#b,void*,			\
 			    (_val1 op _val2),"%p")
 
+#define tt_char_op(a,op,b)                                              \
+        tt_assert_test_type(a,b,#a" "#op" "#b,int,                      \
+                            (_val1 op _val2),"'%c'")
+
 #define tt_str_op(a,op,b)						\
 	tt_assert_test_type(a,b,#a" "#op" "#b,const char *,		\
 			    (strcmp(_val1,_val2) op 0),"<%s>")
@@ -176,7 +180,7 @@
   tt_assert_test_fmt_type(a,b,#a" "#op" "#b,                            \
                           const char *,                                 \
                           (strncmp(_val1, _val2, len) op 0),            \
-                          char *, "%s",                                 \
+                          char *, "<%s>",                               \
                           { _print = xstrndup(_value, len); },          \
                           { free(_print); }                             \
                           );
@@ -185,7 +189,7 @@
   tt_assert_test_fmt_type(a,b,#a" "#op" "#b,                            \
                           const char *,                                 \
                           (memcmp(_val1, _val2, len) op 0),             \
-                          char *, "%s",                                 \
+                          char *, "<%s>",                               \
                           { _print = tt_base16_encode(_value, len); },  \
                           { free(_print); }                             \
                           );
