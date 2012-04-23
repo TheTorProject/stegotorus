@@ -19,7 +19,6 @@ PROTOCOLS = \
 STEGANOGRAPHERS = \
 	src/steg/b64cookies.cc \
 	src/steg/cookies.cc \
-	src/steg/crc32.cc \
 	src/steg/embed.cc \
 	src/steg/http.cc \
 	src/steg/jsSteg.cc \
@@ -27,11 +26,11 @@ STEGANOGRAPHERS = \
 	src/steg/nosteg_rr.cc \
 	src/steg/payloads.cc \
 	src/steg/pdfSteg.cc \
-	src/steg/swfSteg.cc \
-	src/steg/zpack.cc
+	src/steg/swfSteg.cc
 
 libstegotorus_a_SOURCES = \
 	src/base64.cc \
+	src/crc32.cc \
 	src/connections.cc \
 	src/crypt.cc \
 	src/network.cc \
@@ -40,6 +39,7 @@ libstegotorus_a_SOURCES = \
 	src/socks.cc \
 	src/steg.cc \
 	src/util.cc \
+	src/zpack.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
 
 nodist_libstegotorus_a_SOURCES = protolist.cc steglist.cc
