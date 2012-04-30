@@ -30,7 +30,6 @@ STEGANOGRAPHERS = \
 
 libstegotorus_a_SOURCES = \
 	src/base64.cc \
-	src/crc32.cc \
 	src/connections.cc \
 	src/crypt.cc \
 	src/network.cc \
@@ -52,7 +51,8 @@ UTGROUPS = \
 	src/test/unittest_pdfsteg.cc \
 	src/test/unittest_socks.cc \
 	src/test/unittest_config.cc \
-	src/test/unittest_transfer.cc
+	src/test/unittest_transfer.cc \
+	src/test/unittest_zlib.cc
 
 unittests_SOURCES = \
 	src/test/tinytest.cc \

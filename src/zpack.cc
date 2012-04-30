@@ -4,7 +4,8 @@
 #include "util.h"
 #include "zpack.h"
 #include "zlib.h"
-#include "crc32.h"
+
+#include <limits>
 
 #define CHUNK 16384
 
@@ -296,7 +297,7 @@ gzDeflate(const char *source, size_t slen, char *dest, size_t dlen,
     return -1;
   }
 
-  crc = generate_crc32c(source, slen);
+  crc = generate_crc32c((const uint8_t *)source, slen);
 
   c = (unsigned char *)dest + 10 + z.total_out;
   c[0] = (crc >>  0) & 0xff;
@@ -311,4 +312,23 @@ gzDeflate(const char *source, size_t slen, char *dest, size_t dlen,
   if (deflateEnd(&z) != Z_OK)
     return -1;
   return 10 + z.total_out + 8;
+}
+
+uint32_t
+generate_crc32c(const uint8_t *string, size_t length)
+{
+  // zlib doesn't believe in size_t. When size_t is bigger than uInt,
+  // we theoretically could break the operation up into uInt-sized
+  // chunks to support the full range of size_t, but I doubt we will
+  // ever need to crc32 more than 2^32 bytes, so I'm not bothering.
+  // -- zw, 2012
+  log_assert(length <= std::numeric_limits<uInt>::max());
+
+  uLong crc = crc32(crc32(0, 0, 0), string, length);
+
+  // zlib also doesn't believe 'long' can be more than 32 bits wide.
+  // This shouldn't ever fire unless there is a bug in zlib.
+  log_assert(crc <= std::numeric_limits<uint32_t>::max());
+
+  return crc;
 }
