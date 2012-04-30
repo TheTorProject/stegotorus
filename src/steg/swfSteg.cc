@@ -62,7 +62,9 @@ swf_wrap(payloads& pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
   memcpy(tmp_buf, swf+8, SWF_SAVE_HEADER_LEN);
   memcpy(tmp_buf+SWF_SAVE_HEADER_LEN, inbuf, in_len);
   memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+in_len, swf + in_swf_len - SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
-  out_swf_len = def(tmp_buf, SWF_SAVE_HEADER_LEN + in_len + SWF_SAVE_FOOTER_LEN, tmp_buf2+8, 
+  out_swf_len = def((const uint8_t *)tmp_buf,
+                    SWF_SAVE_HEADER_LEN + in_len + SWF_SAVE_FOOTER_LEN,
+                    (uint8_t *)tmp_buf2+8, 
 		    in_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512-8, 
 		    Z_DEFAULT_COMPRESSION);
 
@@ -98,7 +100,8 @@ swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
 
   tmp_buf = (char *)xmalloc(in_len * 8);
 
-  inf_len = inf(inbuf + 8, in_len - 8, tmp_buf, in_len * 8); 
+  inf_len = inf((const uint8_t *)inbuf + 8, in_len - 8,
+                (uint8_t *)tmp_buf, in_len * 8); 
 
   //  fprintf(stderr, "in_swf_len = %d\n", in_len -8 );
 

@@ -17,13 +17,13 @@
    an error reading or writing the files. */
 
 ssize_t
-def(const char *source, size_t slen, char *dest, size_t dlen, int level)
+def(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen, int level)
 {
   int ret, flush;
   size_t have;
   z_stream strm;
-  unsigned char in[CHUNK];
-  unsigned char out[CHUNK];
+  uint8_t in[CHUNK];
+  uint8_t out[CHUNK];
   size_t dlen_orig = dlen;
 
   if (slen > SIZE_T_CEILING || dlen > SIZE_T_CEILING)
@@ -89,13 +89,13 @@ def(const char *source, size_t slen, char *dest, size_t dlen, int level)
    is an error reading or writing the files. */
 
 ssize_t
-inf(const char *source, size_t slen, char *dest, size_t dlen)
+inf(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen)
 {
   int ret;
   size_t have;
   z_stream strm;
-  unsigned char in[CHUNK];
-  unsigned char out[CHUNK];
+  uint8_t in[CHUNK];
+  uint8_t out[CHUNK];
   size_t dlen_orig = dlen;
 
   if (slen > SIZE_T_CEILING || dlen > SIZE_T_CEILING)
@@ -167,13 +167,13 @@ inf(const char *source, size_t slen, char *dest, size_t dlen)
 /* assumes that we know there is exactly 10 bytes of gzip header */
 
 ssize_t
-gzInflate(const char *source, size_t slen, char *dest, size_t dlen)
+gzInflate(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen)
 {
   int ret;
   size_t have;
   z_stream strm;
-  unsigned char in[CHUNK];
-  unsigned char out[CHUNK];
+  uint8_t in[CHUNK];
+  uint8_t out[CHUNK];
   size_t dlen_orig = dlen;
 
   if (slen > SIZE_T_CEILING || dlen > SIZE_T_CEILING)
@@ -248,11 +248,10 @@ gzInflate(const char *source, size_t slen, char *dest, size_t dlen)
 }
 
 ssize_t
-gzDeflate(const char *source, size_t slen, char *dest, size_t dlen,
+gzDeflate(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen,
           time_t mtime)
 {
-  unsigned char *c;
-  unsigned long crc;
+  uint32_t crc;
   z_stream z;
 
   if (slen > SIZE_T_CEILING || dlen > SIZE_T_CEILING)
@@ -270,25 +269,24 @@ gzDeflate(const char *source, size_t slen, char *dest, size_t dlen,
                            Z_DEFAULT_STRATEGY))
     return -1;
 
-  z.next_in = (Bytef *)source;
+  z.next_in = const_cast<uint8_t*>(source);
   z.avail_in = slen;
   z.total_in = 0;
 
   /* write gzip header */
 
-  c = (unsigned char *)dest;
-  c[0] = 0x1f;
-  c[1] = 0x8b;
-  c[2] = Z_DEFLATED;
-  c[3] = 0; /* options */
-  c[4] = (mtime >>  0) & 0xff;
-  c[5] = (mtime >>  8) & 0xff;
-  c[6] = (mtime >> 16) & 0xff;
-  c[7] = (mtime >> 24) & 0xff;
-  c[8] = 0x00; /* extra flags */
-  c[9] = 0x03; /* UNIX */
+  dest[0] = 0x1f;
+  dest[1] = 0x8b;
+  dest[2] = Z_DEFLATED;
+  dest[3] = 0; /* options */
+  dest[4] = (mtime >>  0) & 0xff;
+  dest[5] = (mtime >>  8) & 0xff;
+  dest[6] = (mtime >> 16) & 0xff;
+  dest[7] = (mtime >> 24) & 0xff;
+  dest[8] = 0x00; /* extra flags */
+  dest[9] = 0x03; /* UNIX */
 
-  z.next_out = c + 10;
+  z.next_out = dest + 10;
   z.avail_out = dlen - 10 - 8;
   z.total_out = 0;
 
@@ -297,17 +295,17 @@ gzDeflate(const char *source, size_t slen, char *dest, size_t dlen,
     return -1;
   }
 
-  crc = generate_crc32c((const uint8_t *)source, slen);
+  crc = generate_crc32c(source, slen);
 
-  c = (unsigned char *)dest + 10 + z.total_out;
-  c[0] = (crc >>  0) & 0xff;
-  c[1] = (crc >>  8) & 0xff;
-  c[2] = (crc >> 16) & 0xff;
-  c[3] = (crc >> 24) & 0xff;
-  c[4] = (z.total_in >>  0) & 0xff;
-  c[5] = (z.total_in >>  8) & 0xff;
-  c[6] = (z.total_in >> 16) & 0xff;
-  c[7] = (z.total_in >> 24) & 0xff;
+  dest = dest + 10 + z.total_out;
+  dest[0] = (crc >>  0) & 0xff;
+  dest[1] = (crc >>  8) & 0xff;
+  dest[2] = (crc >> 16) & 0xff;
+  dest[3] = (crc >> 24) & 0xff;
+  dest[4] = (z.total_in >>  0) & 0xff;
+  dest[5] = (z.total_in >>  8) & 0xff;
+  dest[6] = (z.total_in >> 16) & 0xff;
+  dest[7] = (z.total_in >> 24) & 0xff;
 
   if (deflateEnd(&z) != Z_OK)
     return -1;
