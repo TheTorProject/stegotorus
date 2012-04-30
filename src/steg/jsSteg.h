@@ -13,7 +13,6 @@
 #include "connections.h"
 #include "steg.h"
 #include <event2/buffer.h>
-#include "zpack.h"
 
 // error codes
 #define INVALID_BUF_SIZE	-1

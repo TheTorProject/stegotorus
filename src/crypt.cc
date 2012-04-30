@@ -384,8 +384,12 @@ gcm_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
   if (!EVP_DecryptUpdate(&ctx, out, &olen, in, inlen) || size_t(olen) != inlen)
     return log_crypto_warn("gcm_encryptor::decrypt");
 
-  if (!EVP_DecryptFinal_ex(&ctx, out + inlen, &olen) || olen != 0)
+  if (!EVP_DecryptFinal_ex(&ctx, out + inlen, &olen) || olen != 0) {
+    /* don't warn for simple MAC failures */
+    if (!ERR_peek_error())
+      return -1;
     return log_crypto_warn("gcm_decryptor::check tag");
+  }
 
   return 0;
 }

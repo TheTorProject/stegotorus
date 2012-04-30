@@ -3,10 +3,9 @@
  */
 #include "util.h"
 #include "swfSteg.h"
+#include "compression.h"
 #include "connections.h"
 #include "payloads.h"
-#include "zlib.h"
-#include "zpack.h"
 
 #include <event2/buffer.h>
 
@@ -62,18 +61,12 @@ swf_wrap(payloads& pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
   memcpy(tmp_buf, swf+8, SWF_SAVE_HEADER_LEN);
   memcpy(tmp_buf+SWF_SAVE_HEADER_LEN, inbuf, in_len);
   memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+in_len, swf + in_swf_len - SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
-  out_swf_len = def((const uint8_t *)tmp_buf,
-                    SWF_SAVE_HEADER_LEN + in_len + SWF_SAVE_FOOTER_LEN,
-                    (uint8_t *)tmp_buf2+8, 
-		    in_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512-8, 
-		    Z_DEFAULT_COMPRESSION);
-
-  //  sprintf(hdr, "%s%d\r\n\r\n", http_response_1, out_swf_len + 8);
-
-
-
-  //  fprintf(stderr, "out_swf_len = %d\n", out_swf_len);
-
+  out_swf_len =
+    compress((const uint8_t *)tmp_buf,
+             SWF_SAVE_HEADER_LEN + in_len + SWF_SAVE_FOOTER_LEN,
+             (uint8_t *)tmp_buf2+8,
+             in_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512-8,
+             c_format_zlib);
 
   hdr_len =   gen_response_header((char*) "application/x-shockwave-flash", 0, out_swf_len + 8, hdr, sizeof(hdr));
 
@@ -100,8 +93,8 @@ swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
 
   tmp_buf = (char *)xmalloc(in_len * 8);
 
-  inf_len = inf((const uint8_t *)inbuf + 8, in_len - 8,
-                (uint8_t *)tmp_buf, in_len * 8); 
+  inf_len = decompress((const uint8_t *)inbuf + 8, in_len - 8,
+                       (uint8_t *)tmp_buf, in_len * 8); 
 
   //  fprintf(stderr, "in_swf_len = %d\n", in_len -8 );
 

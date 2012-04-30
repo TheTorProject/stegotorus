@@ -30,6 +30,7 @@ STEGANOGRAPHERS = \
 
 libstegotorus_a_SOURCES = \
 	src/base64.cc \
+	src/compression.cc \
 	src/connections.cc \
 	src/crypt.cc \
 	src/network.cc \
@@ -38,7 +39,6 @@ libstegotorus_a_SOURCES = \
 	src/socks.cc \
 	src/steg.cc \
 	src/util.cc \
-	src/zpack.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
 
 nodist_libstegotorus_a_SOURCES = protolist.cc steglist.cc
@@ -47,12 +47,12 @@ stegotorus_SOURCES = \
 	src/main.cc
 
 UTGROUPS = \
+	src/test/unittest_compression.cc \
+	src/test/unittest_config.cc \
 	src/test/unittest_crypt.cc \
 	src/test/unittest_pdfsteg.cc \
 	src/test/unittest_socks.cc \
-	src/test/unittest_config.cc \
-	src/test/unittest_transfer.cc \
-	src/test/unittest_zlib.cc
+	src/test/unittest_transfer.cc
 
 unittests_SOURCES = \
 	src/test/tinytest.cc \

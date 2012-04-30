@@ -5,6 +5,7 @@
 #include "payloads.h"
 #include "jsSteg.h"
 #include "cookies.h"
+#include "compression.h"
 
 void buf_dump(unsigned char* buf, int len, FILE *out);
 
@@ -828,8 +829,8 @@ http_server_JS_transmit (payloads& pl, struct evbuffer *source, conn_t *conn,
     // sizeof outbuf2 = cLen + 10-byte for gzip header + 8-byte for crc 
     outbuf2 = (char *)xmalloc(cLen+18);  
 
-    outbuf2len = gzDeflate((const uint8_t *)outbuf, cLen,
-                           (uint8_t *)outbuf2, cLen+18, time(NULL));
+    outbuf2len = compress((const uint8_t *)outbuf, cLen,
+                          (uint8_t *)outbuf2, cLen+18, c_format_gzip);
 
     if (outbuf2len <= 0) {
       log_warn("gzDeflate for outbuf fails");
@@ -992,8 +993,8 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   gzipMode = isGzipContent(respMsg);
   if (gzipMode) {
     log_debug("gzip content encoding detected");
-    buf2len = gzInflate((const uint8_t *)httpBody, httpBodyLen,
-                        (uint8_t *)buf2, HTTP_MSG_BUF_SIZE);
+    buf2len = decompress((const uint8_t *)httpBody, httpBodyLen,
+                         (uint8_t *)buf2, HTTP_MSG_BUF_SIZE);
     if (buf2len <= 0) {
       log_warn("gzInflate for httpBody fails");
       fprintf(stderr, "gzInflate for httpBody fails");
