@@ -28,6 +28,8 @@ sed '
   # .o or .obj extension.
 
   # These are genuinely OK.
+  /^compression ZLIB_CEILING$/d
+  /^compression ZLIB_UINT_MAX$/d
   /^connections circuits$/d
   /^connections connections$/d
   /^connections closing_all_connections$/d
@@ -46,18 +48,6 @@ sed '
   /^util the_evdns_base$/d
   /^crypt log_crypto()::initialized$/d
   /^crypt init_crypto()::initialized$/d
-
-  # These are grandfathered; they need to be removed.
-  /^steg\/payloads payload_count$/d
-  /^steg\/payloads payload_hdrs$/d
-  /^steg\/payloads payloads$/d
-  /^steg\/payloads initTypePayload$/d
-  /^steg\/payloads max_HTML_capacity$/d
-  /^steg\/payloads max_JS_capacity$/d
-  /^steg\/payloads max_PDF_capacity$/d
-  /^steg\/payloads typePayload$/d
-  /^steg\/payloads typePayloadCap$/d
-  /^steg\/payloads typePayloadCount$/d
 ')
 
 if [ -n "$symbols" ]; then
