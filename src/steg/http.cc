@@ -307,7 +307,7 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
   if (s->peer_dnsname[0] == '\0')
     lookup_peer_name_from_ip(conn->peername, s->peer_dnsname);
 
-  bzero(data2, sbuflen*4);
+  memset(data2, 0, sbuflen*4);
   E.encode((char*) data, sbuflen, (char*) data2);
   E.encode_end(data2+strlen((char*) data2));
 
@@ -668,12 +668,12 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
       log_abort(conn, "cookie too big: %lu (max %lu)",
                 (unsigned long)(pend - p), (unsigned long)MAX_COOKIE_SIZE);
 
-    bzero(outbuf, sizeof(outbuf));
+    memset(outbuf, 0, sizeof(outbuf));
     int cookielen = unwrap_b64_cookie((char*) p, (char*) outbuf, pend - p);
 
     desanitize_b64(outbuf, cookielen);
     outbuf[cookielen] = '\n';
-    bzero(outbuf2, sizeof(outbuf2));
+    memset(outbuf2, 0, sizeof(outbuf2));
 
     base64::decoder D;
     sofar = D.decode(outbuf, cookielen+1, outbuf2);

@@ -190,8 +190,8 @@ void desanitize_b64(char* input, int len) {
 
 //   srand(time(NULL));
 
-//   bzero(data2, sizeof(data2));
-//   bzero(outbuf, sizeof(outbuf));
+//   memset(data2, 0, sizeof(data2));
+//   memset(outbuf, 0, sizeof(outbuf));
 
 //   base64::encoder E;
 //   E.encode(data, strlen(data), data2);
@@ -208,7 +208,7 @@ void desanitize_b64(char* input, int len) {
 //   cookielen = gen_b64_cookie_field((char*) outbuf, (char*) data2, strlen(data2));
 //   printf("cookie=%s\n", outbuf);
 
-//   bzero(data2, sizeof(data2));
+//   memset(data2, 0, sizeof(data2));
 //   cookielen = unwrap_b64_cookie((char*) outbuf, (char*) data2, strlen(outbuf));
 
 
@@ -219,10 +219,8 @@ void desanitize_b64(char* input, int len) {
 //   data2[strlen(data2)] = '\n';
 
 
-//   bzero(outbuf, 200);
+//   memset(outbuf, 0, sizeof(outbuf));
 
-
-  
 //   base64::decoder D;
 //   D.decode(data2, strlen(data2), outbuf);
 //   printf("%s\n", outbuf);

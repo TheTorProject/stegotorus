@@ -216,10 +216,10 @@ int main () {
 
   for (i=0; i < 1000000; i++) {
     int cookielen = rand()%50 + 5;
-    bzero(outbuf, sizeof(outbuf));
+    memset(outbuf, 0, sizeof(outbuf));
     int len = gen_cookie_field(outbuf, cookielen, data, sizeof(data));
     //    printf("len = %d cookie = %s %d\n", len, outbuf, cookielen);
-    bzero(data2, sizeof(data2));
+    memset(data2, 0, sizeof(data2));
     int len2 = unwrap_cookie(outbuf, data2, cookielen);
     //    printf("unwrapped datalen = %d data = %s\n", len, data2);
 

@@ -199,7 +199,7 @@ void load_payloads(payloads& pl, const char* fname)
     exit(1);
   }
 
-  bzero(pl.payload_hdrs, sizeof(pl.payload_hdrs));
+  memset(pl.payload_hdrs, 0, sizeof(pl.payload_hdrs));
   pl.payload_count = 0;
 
   while (pl.payload_count < MAX_PAYLOADS) {
@@ -1598,7 +1598,7 @@ void testCapacityJS () {
 /*****
 int main() {
   char buf[HTTP_MSG_BUF_SIZE];
-  bzero(buf, sizeof(buf));
+  memset(buf, 0, sizeof(buf));
   // test for TYPE_HTTP_REQUEST
   // load_payloads("../../traces/client.out");
   // int len = find_client_payload(buf, 10000, TYPE_HTTP_REQUEST);
