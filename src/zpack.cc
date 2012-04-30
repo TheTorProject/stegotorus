@@ -7,319 +7,159 @@
 
 #include <limits>
 
-#define CHUNK 16384
+// zlib doesn't believe in size_t. When size_t is bigger than uInt, we
+// theoretically could break operations up into uInt-sized chunks to
+// support the full range of size_t, but I doubt we will ever need to
+// compress, decompress, or crc32 more than 2^32 bytes in one
+// operation, so I'm not bothering.  -- zw, 2012
+//
+// The indirection through ZLIB_UINT_MAX makes some versions of gcc
+// not produce a 'comparison is always (true/false)' warning.
+const size_t ZLIB_UINT_MAX = std::numeric_limits<uInt>::max();
+const size_t ZLIB_CEILING = (SIZE_T_CEILING > ZLIB_UINT_MAX
+                             ? ZLIB_UINT_MAX : SIZE_T_CEILING);
 
-/* Compress from file source to file dest until EOF on source.
-   def() returns Z_OK on success, Z_MEM_ERROR if memory could not be
-   allocated for processing, Z_STREAM_ERROR if an invalid compression
-   level is supplied, Z_VERSION_ERROR if the version of zlib.h and the
-   version of the library linked do not match, or Z_ERRNO if there is
-   an error reading or writing the files. */
-
+// Compress from 'source' to 'dest', producing 'zlib' (RFC 1950) format,
+// with compression level 'level'.
 ssize_t
 def(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen, int level)
 {
-  int ret, flush;
-  size_t have;
-  z_stream strm;
-  uint8_t in[CHUNK];
-  uint8_t out[CHUNK];
-  size_t dlen_orig = dlen;
-
-  if (slen > SIZE_T_CEILING || dlen > SIZE_T_CEILING)
+  if (slen > ZLIB_CEILING || dlen > ZLIB_CEILING)
     return -1;
 
-  /* allocate deflate state */
-  strm.zalloc = Z_NULL;
-  strm.zfree = Z_NULL;
-  strm.opaque = Z_NULL;
-  ret = deflateInit(&strm, level);
-  if (ret != Z_OK)
-    return ret;
+  z_stream strm;
+  memset(&strm, 0, sizeof strm);
+  int ret = deflateInit(&strm, level);
+  if (ret != Z_OK) {
+    log_warn("compression failure (initialization): %s", strm.msg);
+    return -1;
+  }
 
-  /* compress until end of file */
-  do {
-    if (slen > CHUNK)
-      strm.avail_in = CHUNK;
-    else
-      strm.avail_in = slen;
+  strm.next_in = const_cast<Bytef*>(source);
+  strm.avail_in = slen;
+  strm.next_out = dest;
+  strm.avail_out = dlen;
 
-    memcpy (in, source, strm.avail_in);
-    slen = slen - strm.avail_in;
-    source = source + strm.avail_in;
+  ret = deflate(&strm, Z_FINISH);
+  if (ret != Z_STREAM_END) {
+    log_warn("compression failure: %s", strm.msg);
+    deflateEnd(&strm);
+    return -1;
+  }
 
-    flush = (slen == 0) ? Z_FINISH : Z_NO_FLUSH;
-    strm.next_in = in;
-
-    /* run deflate() on input until output buffer not full, finish
-       compression if all of source has been read in */
-    do {
-      strm.avail_out = CHUNK;
-      strm.next_out = out;
-      ret = deflate(&strm, flush);    /* no bad return value */
-      log_assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
-      have = CHUNK - strm.avail_out;
-
-      if (dlen < have) {
-        log_warn("dest buf too small - have %lu, need %lu",
-                 (unsigned long)dlen, (unsigned long)have);
-        return Z_ERRNO;
-      }
-
-      memcpy(dest, out, have);
-      dest += have;
-      dlen = dlen - have;
-    } while (strm.avail_out == 0);
-    log_assert(strm.avail_in == 0);     /* all input will be used */
-
-    /* done when last data in file processed */
-  } while (flush != Z_FINISH);
-  log_assert(ret == Z_STREAM_END);        /* stream will be complete */
-
-  /* clean up and return */
   deflateEnd(&strm);
-  return (dlen_orig - dlen);
+  return strm.total_out;
 }
 
-/* Decompress from file source to file dest until stream ends or EOF.
-   inf() returns Z_OK on success, Z_MEM_ERROR if memory could not be
-   allocated for processing, Z_DATA_ERROR if the deflate data is
-   invalid or incomplete, Z_VERSION_ERROR if the version of zlib.h and
-   the version of the library linked do not match, or Z_ERRNO if there
-   is an error reading or writing the files. */
-
+// Decompress 'zlib'-format data from 'source' to 'dest'.
 ssize_t
 inf(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen)
 {
-  int ret;
-  size_t have;
-  z_stream strm;
-  uint8_t in[CHUNK];
-  uint8_t out[CHUNK];
-  size_t dlen_orig = dlen;
-
-  if (slen > SIZE_T_CEILING || dlen > SIZE_T_CEILING)
+  if (slen > ZLIB_CEILING || dlen > ZLIB_CEILING)
     return -1;
 
   /* allocate inflate state */
-  strm.zalloc = Z_NULL;
-  strm.zfree = Z_NULL;
-  strm.opaque = Z_NULL;
-  strm.avail_in = 0;
-  strm.next_in = Z_NULL;
-  ret = inflateInit(&strm);
-  if (ret != Z_OK)
-    return ret;
+  z_stream strm;
+  memset(&strm, 0, sizeof strm);
+  int ret = inflateInit(&strm);
+  if (ret != Z_OK) {
+    log_warn("decompression failure (initialization): %s", strm.msg);
+    return -1;
+  }
 
-  /* decompress until deflate stream ends or end of file */
-  do {
-    if (slen == 0)
-      break;
+  strm.next_in = const_cast<Bytef*>(source);
+  strm.avail_in = slen;
+  strm.next_out = dest;
+  strm.avail_out = dlen;
 
-    if (slen > CHUNK)
-      strm.avail_in = CHUNK;
-    else
-      strm.avail_in = slen;
+  ret = inflate(&strm, Z_FINISH);
+  if (ret != Z_STREAM_END) {
+    log_warn("decompression failure: %s", strm.msg);
+    inflateEnd(&strm);
+    return -1;
+  }
 
-    memcpy(in, source, strm.avail_in);
-    slen = slen - strm.avail_in;
-    source = source + strm.avail_in;
-    strm.next_in = in;
-
-    /* run inflate() on input until output buffer not full */
-    do {
-      strm.avail_out = CHUNK;
-      strm.next_out = out;
-      ret = inflate(&strm, Z_NO_FLUSH);
-      log_assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
-      switch (ret) {
-      case Z_NEED_DICT:
-      case Z_DATA_ERROR:
-      case Z_MEM_ERROR:
-        inflateEnd(&strm);
-        return ret;
-      }
-      have = CHUNK - strm.avail_out;
-
-      if (dlen < have) {
-        log_warn("dest buf too small - have %lu, need %lu",
-                 (unsigned long)dlen, (unsigned long)have);
-        return Z_ERRNO;
-      }
-
-      memcpy(dest, out, have);
-      dest += have;
-      dlen = dlen - have;
-
-    } while (strm.avail_out == 0);
-
-    /* done when inflate() says it's done */
-  } while (ret != Z_STREAM_END);
-
-  /* clean up and return */
   inflateEnd(&strm);
-
-  if (ret == Z_STREAM_END)
-    return dlen_orig - dlen;
-  return Z_DATA_ERROR;
+  return strm.total_out;
 }
-
-/* assumes that we know there is exactly 10 bytes of gzip header */
 
 ssize_t
 gzInflate(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen)
 {
-  int ret;
-  size_t have;
-  z_stream strm;
-  uint8_t in[CHUNK];
-  uint8_t out[CHUNK];
-  size_t dlen_orig = dlen;
-
-  if (slen > SIZE_T_CEILING || dlen > SIZE_T_CEILING)
+  if (slen > ZLIB_CEILING || dlen > ZLIB_CEILING)
     return -1;
 
-  /* allocate inflate state */
-  strm.zalloc = Z_NULL;
-  strm.zfree = Z_NULL;
-  strm.opaque = Z_NULL;
-  strm.avail_in = 0;
-  strm.next_in = Z_NULL;
+  z_stream strm;
+  memset(&strm, 0, sizeof strm);
+  int ret = inflateInit2(&strm, MAX_WBITS|16); // 16 = decode gzip (only)
 
-  ret = inflateInit2(&strm, -MAX_WBITS);
-  if (ret != Z_OK)
-    return ret;
+  if (ret != Z_OK) {
+    log_warn("decompression failure (initialization): %s", strm.msg);
+    return -1;
+  }
 
-  source = source + 10;
-  slen -= 10;
+  strm.next_in = const_cast<Bytef*>(source);
+  strm.avail_in = slen;
+  strm.next_out = dest;
+  strm.avail_out = dlen;
 
-  /* decompress until deflate stream ends or end of file */
-  do {
-    if (slen == 0)
-      break;
+  ret = inflate(&strm, Z_FINISH);
+  if (ret != Z_STREAM_END) {
+    log_warn("decompression failure: %s", strm.msg);
+    inflateEnd(&strm);
+    return -1;
+  }
 
-    if (slen > CHUNK)
-      strm.avail_in = CHUNK;
-    else
-      strm.avail_in = slen;
-
-    memcpy(in, source, strm.avail_in);
-    slen = slen - strm.avail_in;
-    source = source + strm.avail_in;
-    strm.next_in = in;
-
-    /* run inflate() on input until output buffer not full */
-    do {
-      strm.avail_out = CHUNK;
-      strm.next_out = out;
-      ret = inflate(&strm, Z_NO_FLUSH);
-      log_assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
-      switch (ret) {
-      case Z_NEED_DICT:
-        ret = Z_DATA_ERROR;     /* and fall through */
-      case Z_DATA_ERROR:
-      case Z_MEM_ERROR:
-        inflateEnd(&strm);
-        return ret;
-      }
-      have = CHUNK - strm.avail_out;
-
-      if (dlen < have) {
-        log_warn("dest buf too small - have %lu, need %lu",
-                 (unsigned long)dlen, (unsigned long)have);
-        return Z_ERRNO;
-      }
-
-      memcpy(dest, out, have);
-      dest += have;
-      dlen = dlen - have;
-
-    } while (strm.avail_out == 0);
-
-    /* done when inflate() says it's done */
-  } while (ret != Z_STREAM_END);
-
-  /* clean up and return */
   inflateEnd(&strm);
-
-  if (ret == Z_STREAM_END)
-    return dlen_orig - dlen;
-  return Z_DATA_ERROR;
+  return strm.total_out;
 }
 
 ssize_t
 gzDeflate(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen,
           time_t mtime)
 {
-  uint32_t crc;
-  z_stream z;
-
-  if (slen > SIZE_T_CEILING || dlen > SIZE_T_CEILING)
+  if (slen > ZLIB_CEILING || dlen > ZLIB_CEILING)
     return -1;
 
-  z.zalloc = Z_NULL;
-  z.zfree = Z_NULL;
-  z.opaque = Z_NULL;
-
-  if (Z_OK != deflateInit2(&z,
-                           Z_DEFAULT_COMPRESSION,
-                           Z_DEFLATED,
-                           -MAX_WBITS,  /* supress zlib-header */
-                           8,
-                           Z_DEFAULT_STRATEGY))
-    return -1;
-
-  z.next_in = const_cast<uint8_t*>(source);
-  z.avail_in = slen;
-  z.total_in = 0;
-
-  /* write gzip header */
-
-  dest[0] = 0x1f;
-  dest[1] = 0x8b;
-  dest[2] = Z_DEFLATED;
-  dest[3] = 0; /* options */
-  dest[4] = (mtime >>  0) & 0xff;
-  dest[5] = (mtime >>  8) & 0xff;
-  dest[6] = (mtime >> 16) & 0xff;
-  dest[7] = (mtime >> 24) & 0xff;
-  dest[8] = 0x00; /* extra flags */
-  dest[9] = 0xFF; /* unknown */
-
-  z.next_out = dest + 10;
-  z.avail_out = dlen - 10 - 8;
-  z.total_out = 0;
-
-  if (deflate(&z, Z_FINISH) != Z_STREAM_END) {
-    deflateEnd(&z);
+  z_stream strm;
+  memset(&strm, 0, sizeof strm);
+  int ret = deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+                         MAX_WBITS|16, // compress as gzip
+                         8, Z_DEFAULT_STRATEGY);
+  if (ret != Z_OK) {
+    log_warn("compression failure (initialization): %s", strm.msg);
     return -1;
   }
 
-  crc = generate_crc32c(source, slen);
-
-  dest = dest + 10 + z.total_out;
-  dest[0] = (crc >>  0) & 0xff;
-  dest[1] = (crc >>  8) & 0xff;
-  dest[2] = (crc >> 16) & 0xff;
-  dest[3] = (crc >> 24) & 0xff;
-  dest[4] = (z.total_in >>  0) & 0xff;
-  dest[5] = (z.total_in >>  8) & 0xff;
-  dest[6] = (z.total_in >> 16) & 0xff;
-  dest[7] = (z.total_in >> 24) & 0xff;
-
-  if (deflateEnd(&z) != Z_OK)
+  gz_header gzh;
+  memset(&gzh, 0, sizeof gzh);
+  gzh.time = mtime;
+  gzh.os = 0xFF; // "unknown"
+  ret = deflateSetHeader(&strm, &gzh);
+  if (ret != Z_OK) {
+    log_warn("compression failure (initialization): %s", strm.msg);
     return -1;
-  return 10 + z.total_out + 8;
+  }
+
+  strm.next_in = const_cast<Bytef*>(source);
+  strm.avail_in = slen;
+  strm.next_out = dest;
+  strm.avail_out = dlen;
+
+  ret = deflate(&strm, Z_FINISH);
+  if (ret != Z_STREAM_END) {
+    log_warn("compression failure: %s", strm.msg);
+    deflateEnd(&strm);
+    return -1;
+  }
+
+  deflateEnd(&strm);
+  return strm.total_out;
 }
 
 uint32_t
 generate_crc32c(const uint8_t *string, size_t length)
 {
-  // zlib doesn't believe in size_t. When size_t is bigger than uInt,
-  // we theoretically could break the operation up into uInt-sized
-  // chunks to support the full range of size_t, but I doubt we will
-  // ever need to crc32 more than 2^32 bytes, so I'm not bothering.
-  // -- zw, 2012
   log_assert(length <= std::numeric_limits<uInt>::max());
 
   uLong crc = crc32(crc32(0, 0, 0), string, length);
