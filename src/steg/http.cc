@@ -17,7 +17,6 @@
 #include "b64cookies.h"
 
 #include <event2/buffer.h>
-#include <stdio.h>
 
 #define MIN_COOKIE_SIZE 24
 #define MAX_COOKIE_SIZE 1024
@@ -219,6 +218,7 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name)  {
   struct addrinfo* ailist;
   struct addrinfo* aip;
   struct addrinfo hint;
+  int res;
   char buf[128];
 
   hint.ai_flags = AI_CANONNAME;
@@ -234,15 +234,16 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name)  {
   buf[strchr(buf, ':') - buf] = 0;
 
 
-  if (getaddrinfo(buf, NULL, &hint, &ailist)) {
-    fprintf(stderr, "error: getaddrinfo() %s\n", p_ip);
-    exit(1);
+  if ((res = getaddrinfo(buf, NULL, &hint, &ailist))) {
+    log_warn("getaddrinfo(%s) failed: %s", p_ip, gai_strerror(res));
+    return 0;
   }
 
   for (aip = ailist; aip != NULL; aip = aip->ai_next) {
     char buf[512];
-    if (getnameinfo(aip->ai_addr, sizeof(struct sockaddr), buf, 512, NULL, 0, 0) == 0) {
-      sprintf(p_name, "%s", buf);
+    if (getnameinfo(aip->ai_addr, sizeof(struct sockaddr),
+        buf, 512, NULL, 0, 0) == 0) {
+      strcpy(p_name, buf);
       return 1;
     }
   }
@@ -437,7 +438,7 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 
 
     if (so_far > uri_sz - 6) {
-      fprintf(stderr, "too small\n");
+      log_warn("too small\n");
       return 0;
     }
   }
@@ -528,8 +529,6 @@ http_client_uri_transmit (http_steg_t *s,
     if (cnt++ == 10) return -1;
   }
 
-
-  //  fprintf(stderr, "outbuf = %s\n", outbuf);
 
   if (evbuffer_add(dest, outbuf, datalen)  ||  // add uri field
       evbuffer_add(dest, "HTTP/1.1\r\nHost: ", 19) ||

@@ -5,15 +5,6 @@
 #ifndef _PAYLOADS_H
 #define _PAYLOADS_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string.h>
-#include <sys/types.h>
-#include <arpa/inet.h>
-#include <ctype.h>
-
-
 /* three files:
    server_data, client data, protocol data
 */
@@ -21,8 +12,6 @@
 #define RECV_GOOD 0
 #define RECV_INCOMPLETE 0
 #define RECV_BAD -1
-
-
 
 #define CONN_DATA_REQUEST 1  /* payload packet sent by client */
 #define CONN_DATA_REPLY 2    /* payload packet sent by server */
@@ -33,7 +22,7 @@
 #define MAX_RESP_HDR_SIZE 512
 
 // max number of payloads that have enough capacity from which
-// we choose the best fit 
+// we choose the best fit
 #define MAX_CANDIDATE_PAYLOADS 10
 
 // jsSteg-specific defines
@@ -51,6 +40,8 @@
 // a JavaScript may encapsulate
 
 #define HTML_MIN_AVAIL_SIZE 1026
+
+#define HTTP_MSG_BUF_SIZE 100000
 
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
@@ -73,7 +64,6 @@
 #define CONTENT_JAVASCRIPT              1
 #define CONTENT_HTML_JAVASCRIPT         2
 
-
 // payloads for specific content type
 //
 // MAX_CONTENT_TYPE specifies the maximum number of supported content types
@@ -92,8 +82,6 @@
 
 #define MAX_CONTENT_TYPE		11
 
-
-
 typedef int SID;
 typedef short PacketType;
 typedef short StateFlag;
@@ -106,23 +94,20 @@ typedef short StateFlag;
 
 
 /* struct for reading in the payload_gen dump file */
-typedef struct {
+struct pentry_header {
   PacketType ptype;
   int length;
   ushort port; /* network format */
-}pentry_header;
+};
 
-
-
-
-typedef struct service_state {
+struct service_state {
   SID id;
   PacketType data_type;
   SID next_state;
   //  double* probabilities;
   StateFlag flg;
   int dir;
-}state;
+};
 
 struct payloads {
   int initTypePayload[MAX_CONTENT_TYPE];
@@ -139,12 +124,10 @@ struct payloads {
   int payload_count;
 };
 
-
-#define HTTP_MSG_BUF_SIZE 100000
-
 void load_payloads(payloads& pl, const char* fname);
 unsigned int find_client_payload(payloads& pl, char* buf, int len, int type);
-unsigned int find_server_payload(payloads& pl, char** buf, int len, int type, int contentType);
+unsigned int find_server_payload(payloads& pl, char** buf, int len, int type,
+                                 int contentType);
 
 int init_JS_payload_pool(payloads& pl, int len, int type, int minCapacity);
 int init_SWF_payload_pool(payloads& pl, int len, int type, int minCapacity);
@@ -152,8 +135,10 @@ int init_PDF_payload_pool(payloads& pl, int len, int type,int minCapacity);
 int init_HTML_payload_pool(payloads& pl, int len, int type, int minCapacity);
 
 
-int get_next_payload (payloads& pl, int contentType, char** buf, int* size, int* cap);
-int get_payload (payloads& pl, int contentType, int cap, char** buf, int* size);
+int get_next_payload (payloads& pl, int contentType, char** buf, int* size,
+                      int* cap);
+int get_payload (payloads& pl, int contentType, int cap, char** buf,
+                 int* size);
 
 int has_eligible_HTTP_content (char* buf, int len, int type);
 int fixContentLen (char* payload, int payloadLen, char *buf, int bufLen);
@@ -168,14 +153,15 @@ unsigned int capacityJS3 (char* buf, int len, int mode);
 unsigned int get_max_JS_capacity(void);
 unsigned int get_max_HTML_capacity(void);
 
-char * strInBinary (const char *pattern, unsigned int patternLen, const char *blob, unsigned int blobLen);
-
+char * strInBinary (const char *pattern, unsigned int patternLen,
+                    const char *blob, unsigned int blobLen);
 
 unsigned int capacityPDF (char* buf, int len);
 unsigned int get_max_PDF_capacity(void);
 int find_content_length (char *hdr, int hlen);
 int find_uri_type(char* buf, int size);
 
-int gen_response_header(char* content_type, int gzip, int length, char* buf, int buflen);
+int gen_response_header(char* content_type, int gzip, int length,
+                        char* buf, int buflen);
 
 #endif

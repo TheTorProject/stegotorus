@@ -2,11 +2,8 @@
  * See LICENSE for other credits and copying information
  */
 
+#include "util.h"
 #include "b64cookies.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 int unwrap_b64_cookie(char* inbuf, char* outbuf, int buflen) {
   int i,j;
@@ -71,7 +68,7 @@ int gen_b64_cookie_field(char* outbuf, char* data, int datalen) {
    int cnt = gen_one_b64cookie(outbuf, onecookielen, data + consumed, datalen - consumed);
 
     if (cnt < 0) {
-      fprintf(stderr, "error: couldn't create cookie %d\n", cnt);
+      log_warn("couldn't create cookie: %d\n", cnt);
       return cnt;
     }
 

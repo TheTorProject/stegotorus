@@ -2,6 +2,7 @@
  * See LICENSE for other credits and copying information
  */
 
+#include "util.h"
 #include "cookies.h"
 
 int unwrap_cookie(unsigned char* inbuf, unsigned char* outbuf, int buflen) {
@@ -118,7 +119,7 @@ int gen_cookie_field(unsigned char* outbuf, int total_cookie_len, unsigned char*
 
 
   if (total_cookie_len < 4) {
-    fprintf(stderr, "error: cookie length too small\n");
+    log_warn("cookie length too small (have %d, need 4)", total_cookie_len);
     return -1;
   }
 
@@ -128,7 +129,7 @@ int gen_cookie_field(unsigned char* outbuf, int total_cookie_len, unsigned char*
     int cnt =  gen_one_cookie(outbuf, cookielen, data + consumed, datalen - consumed);
 
     if (cnt < 0) {
-      fprintf(stderr, "error: couldn't create cookie %d\n", cnt);
+      log_warn("couldn't create cookie: %d", cnt);
       return cnt;
     }
 

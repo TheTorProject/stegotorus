@@ -6,6 +6,9 @@
 #include "payloads.h"
 #include "swfSteg.h"
 
+#include <ctype.h>
+#include <time.h>
+
 /*
  * fixContentLen corrects the Content-Length for an HTTP msg that
  * has been ungzipped, and removes the "Content-Encoding: gzip"

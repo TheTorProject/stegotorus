@@ -20,6 +20,7 @@ int
 http_server_SWF_transmit(payloads& pl, struct evbuffer *source, conn_t *conn);
 
 int
-http_handle_client_SWF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
+http_handle_client_SWF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
+                               struct evbuffer* source);
 
 #endif
