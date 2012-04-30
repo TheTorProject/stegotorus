@@ -284,7 +284,7 @@ gzDeflate(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen,
   dest[6] = (mtime >> 16) & 0xff;
   dest[7] = (mtime >> 24) & 0xff;
   dest[8] = 0x00; /* extra flags */
-  dest[9] = 0x03; /* UNIX */
+  dest[9] = 0xFF; /* unknown */
 
   z.next_out = dest + 10;
   z.avail_out = dlen - 10 - 8;
