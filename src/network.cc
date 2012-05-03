@@ -378,10 +378,10 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
 {
   conn_t *conn = (conn_t *)arg;
 
-  log_debug(conn, "what=%04hx enabled=%x inbound=%ld outbound=%ld",
+  log_debug(conn, "what=%04hx enabled=%x inbound=%lu outbound=%lu",
             what, bufferevent_get_enabled(bev),
-            evbuffer_get_length(bufferevent_get_input(bev)),
-            evbuffer_get_length(bufferevent_get_output(bev)));
+            (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)),
+            (unsigned long)evbuffer_get_length(bufferevent_get_output(bev)));
 
   if (what & (BEV_EVENT_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)) {
     if (what & BEV_EVENT_ERROR)
