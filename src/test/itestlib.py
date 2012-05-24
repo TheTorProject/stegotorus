@@ -13,7 +13,7 @@ import subprocess
 import threading
 import time
 
-TIMEOUT_LEN = 5 # seconds
+TIMEOUT_LEN = 20 # seconds
 
 # Helper: stick "| " at the beginning of each line of |s|.
 
@@ -137,6 +137,65 @@ class Tltester(subprocess.Popen):
                                   env=stegotorus_env,
                                   close_fds=True,
                                   **kwargs)
+        # invoke communicate() in a separate thread, since we will
+        # have several processes outstanding at the same time
+        self.communicator = threading.Thread(target=self.run_communicate)
+        self.communicator.start()
+        self.timeout = threading.Timer(TIMEOUT_LEN, self.stop)
+        self.timeout.start()
+
+    def stop(self):
+        if self.poll() is None:
+            self.terminate()
+
+    def run_communicate(self):
+        (out, err) = self.communicate()
+        self.output = out
+        self.errput = err
+
+    def check_completion(self, label):
+        self.communicator.join()
+        self.timeout.cancel()
+        self.timeout.join()
+        self.poll()
+
+        # exit status should be zero, and there should be nothing on
+        # stderr
+        if self.returncode != 0 or self.errput != "":
+            report = ""
+            # exit status should be zero
+            if self.returncode > 0:
+                report += label + " exit code: %d\n" % self.returncode
+            elif self.returncode < 0:
+                report += label + " killed: signal %d\n" % -self.returncode
+            if self.errput != "":
+                report += label + " stderr:\n%s\n" % indent(self.errput)
+            raise AssertionError(report)
+
+        # caller will crunch the output
+        return self.output
+
+
+# As above, but for the 'tester-proxy' which simulate an http proxy between
+# stegotorus server and client. 
+class TesterProxy(subprocess.Popen):
+    def __init__(self, extra_args=(), **kwargs):
+        """
+        Initiates the subprocess and based of args it decides how to manipulate the 
+        headers of the http packets
+        """
+        argv = ["./tester_proxy"]
+        argv.extend(extra_args)
+
+        subprocess.Popen.__init__(self, argv,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE,
+                                  close_fds=True,
+                                  **kwargs)
+        # wait for startup completion, which is signaled by
+        # the subprocess closing its stdout
+        self.output = self.stdout.read()
+
         # invoke communicate() in a separate thread, since we will
         # have several processes outstanding at the same time
         self.communicator = threading.Thread(target=self.run_communicate)

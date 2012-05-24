@@ -13,7 +13,7 @@ import os
 import os.path
 
 from unittest import TestCase, TestSuite
-from itestlib import Stegotorus, Tltester, diff
+from itestlib import Stegotorus, Tltester, TesterProxy, diff
 
 class TimelineTest(object):
 
@@ -81,6 +81,21 @@ class TimelineTest(object):
             "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
             ))
 
+    def doProxyTest(self, label, proxy_args, st_args):
+        """
+        It runs a proxy with proxy_args and then call doTest
+
+        INPUT:
+           - ``label``: The test title
+           - ``proxy_args``: arguments to be passed to the test proxy
+           - ``st_args``: arguments to be passed to Stegotorus
+        """
+        test_proxy = TesterProxy(proxy_args)
+
+        self.doTest(label, st_args)
+
+
+
     # buggy, disabled
     #def test_embed(self):
     #    self.doTest("chop",
@@ -90,12 +105,21 @@ class TimelineTest(object):
     #        "127.0.0.1:5010","embed",
     #        ))
 
-    def test_http(self):
-        self.doTest("chop",
+    # def test_http(self):
+    #     self.doTest("chop",
+    #        ("chop", "server", "127.0.0.1:5001",
+    #         "127.0.0.1:5010","http","127.0.0.1:5011","http",
+    #         "chop", "client", "127.0.0.1:4999",
+    #         "127.0.0.1:5010","http","127.0.0.1:5011","http",
+    #         ))
+
+    def test_http_simple_proxy(self):
+        self.doProxyTest("chop", 
+           ("127.0.0.1:8080", "127.0.0.1:5010"),
            ("chop", "server", "127.0.0.1:5001",
             "127.0.0.1:5010","http","127.0.0.1:5011","http",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","http","127.0.0.1:5011","http",
+            "127.0.0.1:8080","http","127.0.0.1:5011","http",
             ))
 
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
@@ -103,6 +127,8 @@ class TimelineTest(object):
 def load_tests(loader, standard_tests, pattern):
     suite = TestSuite()
     testdir = os.path.dirname(__file__)
+
+    testdir = (testdir == '') and '.' or testdir
 
     for f in sorted(os.listdir(testdir)):
         if f.startswith('tl_'):
