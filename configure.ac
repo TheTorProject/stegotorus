@@ -9,10 +9,22 @@ AC_LANG([C++])
 AM_INIT_AUTOMAKE([foreign nostdinc silent-rules subdir-objects])
 AM_MAINTAINER_MODE([enable])
 
+### Compiler and language features ###
+
+AC_PROG_CC
+AC_PROG_CXX
+AC_PROG_CXXCPP
+
+AX_SYS_EXTENSIONS
+AC_SYS_LARGEFILE
+
+AX_CXXFLAGS_STDCXX_11([ext])
+AX_CXX_DELETE_METHOD
+AX_CXX_STATIC_ASSERT
+
 ### Programs ###
 
-AC_PROG_CXX
-AC_PROG_RANLIB
+AX_PROG_RANLIB
 PKG_PROG_PKG_CONFIG
 
 # We need python 2.7 for TestLoader.discover().
@@ -60,13 +72,9 @@ AC_SUBST(lib_CPPFLAGS)
 AX_LIB_WINSOCK2
 LIBS="$LIBS $ws32_LIBS"
 
-### Language features ###
+### System features ###
 
 AC_CHECK_HEADERS([execinfo.h],,,[/**/])
-
-AX_CXXFLAGS_STDCXX_11([ext])
-AX_CXX_DELETE_METHOD
-AX_CXX_STATIC_ASSERT
 
 ### Output ###
 
