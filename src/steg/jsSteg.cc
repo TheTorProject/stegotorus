@@ -351,7 +351,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
   char *jsStart, *jsEnd;
   int skip;
   int scriptLen;
-  int fin;
+  int fin = 0;
   unsigned int dlen2 = dlen;
   dp = data;
   jtp = jTemplate;

@@ -112,7 +112,7 @@
 		setup_block;						\
 		_print2 = _print;					\
 		TT_DECLARE(_tt_status?"	 OK":"FAIL",			\
-			   ("assert(%s): "printf_fmt" vs "printf_fmt,	\
+			   ("assert(%s): " printf_fmt " vs " printf_fmt,\
 			    str_test, _print1, _print2));		\
 		_print = _print1;					\
 		cleanup_block;						\
