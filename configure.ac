@@ -74,7 +74,8 @@ LIBS="$LIBS $ws32_LIBS"
 
 ### System features ###
 
-AC_CHECK_HEADERS([execinfo.h],,,[/**/])
+AC_CHECK_HEADERS([execinfo.h paths.h],,,[/**/])
+AC_CHECK_FUNCS([closefrom execvpe])
 
 ### Output ###
 

@@ -7,6 +7,7 @@
 #define PROTOCOL_H
 
 struct proto_module;
+struct steg_config_t;
 
 /** A 'config_t' is a set of addresses to listen on, and what to do
     when connections are received.  A protocol module must define a
@@ -29,7 +30,7 @@ struct config_t
   /** Return the name of the protocol associated with this
       configuration.  You do not have to define this method in your
       subclass, PROTO_DEFINE_MODULE does it for you. */
-  virtual const char *name() = 0;
+  virtual const char *name() const = 0;
 
   /** Initialize yourself from a set of command line options.  This is
       separate from the subclass constructor so that it can fail:
@@ -42,7 +43,7 @@ struct config_t
       users of this function should call it repeatedly with successive
       values of N, starting from zero, until it returns NULL, and
       create listeners for every address returned. */
-  virtual evutil_addrinfo *get_listen_addrs(size_t n) = 0;
+  virtual evutil_addrinfo *get_listen_addrs(size_t n) const = 0;
 
   /** Return a set of addresses to attempt an outbound connection to,
       in the form of an 'evutil_addrinfo' linked list.  As with
@@ -50,7 +51,12 @@ struct config_t
       should in general attempt simultaneous connection to at least
       one address from every list.  The maximum N is indicated in the
       same way as for get_listen_addrs.  */
-  virtual evutil_addrinfo *get_target_addrs(size_t n) = 0;
+  virtual evutil_addrinfo *get_target_addrs(size_t n) const = 0;
+
+  /** Return the steganography module associated with either listener
+      or target address set N.  If called on a protocol that doesn't
+      use steganography, will return NULL.  */
+  virtual const steg_config_t *get_steg(size_t n) const = 0;
 
   /** Return an extended 'circuit_t' object for a new socket using
       this configuration.  The 'index' argument is equal to the 'N'
@@ -87,7 +93,7 @@ extern const proto_module *const supported_protos[];
 
 #define PROTO_DEFINE_MODULE(mod)                                \
   /* canned methods */                                          \
-  const char *mod##_config_t::name()                            \
+  const char *mod##_config_t::name() const                      \
   { return #mod; }                                              \
                                                                 \
   static config_t *                                             \
@@ -106,13 +112,18 @@ extern const proto_module *const supported_protos[];
 #define CONFIG_DECLARE_METHODS(mod)                             \
   mod##_config_t();                                             \
   virtual ~mod##_config_t();                                    \
-  virtual const char *name();                                   \
+  virtual const char *name() const;                             \
   virtual bool init(int n_opts, const char *const *opts);       \
-  virtual evutil_addrinfo *get_listen_addrs(size_t n);          \
-  virtual evutil_addrinfo *get_target_addrs(size_t n);          \
+  virtual evutil_addrinfo *get_listen_addrs(size_t n) const;    \
+  virtual evutil_addrinfo *get_target_addrs(size_t n) const;    \
+  virtual const steg_config_t *get_steg(size_t n) const;        \
   virtual circuit_t *circuit_create(size_t index);              \
   virtual conn_t *conn_create(size_t index)                     \
   /* deliberate absence of semicolon */
+
+#define CONFIG_STEG_STUBS(mod)                                  \
+  const steg_config_t *mod##_config_t::get_steg(size_t) const   \
+  { return 0; }
 
 #define CONN_DECLARE_METHODS(mod)                       \
   mod##_conn_t();                                       \

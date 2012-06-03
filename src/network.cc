@@ -20,17 +20,6 @@
 
 using std::vector;
 
-/**
-  This struct defines the state of a listener on a particular address.
- */
-struct listener_t
-{
-  config_t *cfg;
-  struct evconnlistener *listener;
-  char *address;
-  size_t index;
-};
-
 /** All our listeners. */
 static vector<listener_t *> listeners;
 
@@ -56,6 +45,11 @@ static void downstream_event_cb(struct bufferevent *bev, short what, void *arg);
 
 static void create_outbound_connections(circuit_t *ckt, bool is_socks);
 static void create_outbound_connections_socks(circuit_t *ckt);
+
+vector<listener_t *> const& get_all_listeners()
+{
+  return listeners;
+}
 
 /**
    This function opens listening sockets configured according to the

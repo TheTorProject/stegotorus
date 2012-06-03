@@ -27,27 +27,28 @@ sed '
   # them.  The above commands have stripped any leading src/ and/or
   # .o or .obj extension.
 
-  # These are genuinely OK.
   /^compression ZLIB_CEILING$/d
   /^compression ZLIB_UINT_MAX$/d
   /^connections circuits$/d
-  /^connections connections$/d
   /^connections closing_all_connections$/d
+  /^connections connections$/d
   /^connections last_ckt_serial$/d
   /^connections last_conn_serial$/d
   /^connections shutting_down$/d
+  /^crypt init_crypto()::initialized$/d
+  /^crypt log_crypto()::initialized$/d
   /^main allow_kq$/d
-  /^main the_event_base$/d
   /^main handle_signal_cb(int, short, void\*)::got_sigint$/d
+  /^main registration_helper$/d
+  /^main the_event_base$/d
   /^network listeners$/d
   /^rng rng$/d
+  /^subprocess-unix already_waited$/d
   /^util log_dest$/d
   /^util log_min_sev$/d
   /^util log_timestamps$/d
   /^util log_ts_base$/d
   /^util the_evdns_base$/d
-  /^crypt log_crypto()::initialized$/d
-  /^crypt init_crypto()::initialized$/d
 ')
 
 if [ -n "$symbols" ]; then

@@ -26,7 +26,7 @@ struct steg_config_t
 
   /** Report the name of this steg module.  You do not have to define
       this method in your subclass, STEG_DEFINE_MODULE does it for you. */
-  virtual const char *name() = 0;
+  virtual const char *name() const = 0;
 
   /** Create an extended 'steg_t' object (see below) from this
       configuration, associated with connection CONN.  */
@@ -110,7 +110,7 @@ steg_config_t *steg_new(const char *name, config_t *cfg);
   { return new mod##_steg_config_t(cfg); }              \
                                                         \
   /* canned methods */                                  \
-  const char *mod##_steg_config_t::name()               \
+  const char *mod##_steg_config_t::name() const         \
   { return #mod; }                                      \
                                                         \
   /* module object */                                   \
@@ -121,7 +121,7 @@ steg_config_t *steg_new(const char *name, config_t *cfg);
 #define STEG_CONFIG_DECLARE_METHODS(mod)                \
   mod##_steg_config_t(config_t *);                      \
   virtual ~mod##_steg_config_t();                       \
-  virtual const char *name();                           \
+  virtual const char *name() const;                     \
   virtual steg_t *steg_create(conn_t *)                 \
   /* deliberate absence of semicolon */
 

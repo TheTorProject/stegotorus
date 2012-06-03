@@ -475,7 +475,7 @@ chop_config_t::init(int n_options, const char *const *options)
 }
 
 struct evutil_addrinfo *
-chop_config_t::get_listen_addrs(size_t n)
+chop_config_t::get_listen_addrs(size_t n) const 
 {
   if (mode == LSN_SIMPLE_SERVER) {
     if (n < down_addresses.size())
@@ -488,7 +488,7 @@ chop_config_t::get_listen_addrs(size_t n)
 }
 
 struct evutil_addrinfo *
-chop_config_t::get_target_addrs(size_t n)
+chop_config_t::get_target_addrs(size_t n) const
 {
   if (mode == LSN_SIMPLE_SERVER) {
     if (n == 0)
@@ -497,6 +497,14 @@ chop_config_t::get_target_addrs(size_t n)
     if (n < down_addresses.size())
       return down_addresses[n];
   }
+  return NULL;
+}
+
+const steg_config_t *
+chop_config_t::get_steg(size_t n) const
+{
+  if (n < steg_targets.size())
+    return steg_targets[n];
   return NULL;
 }
 

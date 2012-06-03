@@ -102,7 +102,7 @@ null_config_t::init(int n_options, const char *const *options)
 
 /** Retrieve the 'n'th set of listen addresses for this configuration. */
 struct evutil_addrinfo *
-null_config_t::get_listen_addrs(size_t n)
+null_config_t::get_listen_addrs(size_t n) const
 {
   if (n > 0)
     return 0;
@@ -111,7 +111,7 @@ null_config_t::get_listen_addrs(size_t n)
 
 /* Retrieve the target address for this configuration. */
 struct evutil_addrinfo *
-null_config_t::get_target_addrs(size_t n)
+null_config_t::get_target_addrs(size_t n) const
 {
   if (n > 0)
     return 0;
@@ -287,4 +287,5 @@ null_conn_t::recv_eof()
   return 0;
 }
 
+CONFIG_STEG_STUBS(null);
 CONN_STEG_STUBS(null);

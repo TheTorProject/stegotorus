@@ -10,6 +10,8 @@
 #include "crypt.h"
 #include "listener.h"
 #include "protocol.h"
+#include "steg.h"
+#include "subprocess.h"
 
 #include <vector>
 #include <string>
@@ -35,6 +37,7 @@ using std::string;
 
 static struct event_base *the_event_base;
 static bool allow_kq = false;
+static string registration_helper;
 
 /**
    Puts stegotorus's networking subsystem on "closing time" mode. This
@@ -160,6 +163,59 @@ stdin_detect_eof_cb(evutil_socket_t fd, short, void *arg)
 }
 
 /**
+   APRAdb registration hook.
+*/
+static void
+call_registration_helper(string const& helper)
+{
+  vector<string> env = get_environ("ST_");
+  env.push_back("ST_SERVER_KEY=placeholder_server_key");
+
+  vector<listener_t*> const& listeners = get_all_listeners();
+  vector<listener_t*>::const_iterator el;
+  unsigned int n = 0;
+  char buf[512];
+
+  for (el = listeners.begin(); el != listeners.end(); el++, n++) {
+    const steg_config_t *sc = (*el)->cfg->get_steg((*el)->index);
+    if (!sc)
+      continue;
+
+    // The address is in the form x.y.z.w:port or [a:b:c...]:port.
+    // We want IP and port in separate strings.  Also, in the latter
+    // case, we want to get rid of the square brackets.
+    string ap((*el)->address);
+    size_t colon = ap.rfind(':');
+    string addr(ap, 0, colon);
+    string port(ap, colon+1);
+
+    if (addr[0] == '[') {
+      addr.erase(addr.size()-1, 1);
+      addr.erase(0,1);
+    }
+
+    if (xsnprintf(buf, sizeof buf, "ST_LISTENER_%u=%s,tcp,%s,%s",
+                  n, addr.c_str(), port.c_str(), sc->name()) == -1) {
+      log_warn("listener %u info is too big", n);
+      continue;
+    }
+    env.push_back(buf);
+  }
+
+  vector<string> args;
+  args.push_back(helper);
+  subprocess h = subprocess::call(args, env);
+  if (h.state == CLD_DUMPED) {
+    log_warn("%s: %s (core dumped)", helper.c_str(), strsignal(h.returncode));
+  } else if (h.state == CLD_KILLED) {
+    log_warn("%s: %s", helper.c_str(), strsignal(h.returncode));
+  } else if (h.state == CLD_EXITED && h.returncode != 0) {
+    log_warn("%s: exited unsuccessfully, status %d",
+             helper.c_str(), h.returncode);
+  }
+}
+
+/**
    Prints usage instructions then exits.
 */
 static void ATTR_NORETURN
@@ -200,6 +256,7 @@ handle_generic_args(const char *const *argv)
   bool logsev_set = false;
   bool allow_kq_set = false;
   bool timestamps_set = false;
+  bool registration_helper_set=false;
   int i = 1;
 
   while (argv[i] &&
@@ -250,8 +307,15 @@ handle_generic_args(const char *const *argv)
       }
       allow_kq = true;
       allow_kq_set = true;
+    } else if (!strncmp(argv[i], "--registration-helper=", 22)) {
+      if (registration_helper_set) {
+        fprintf(stderr, "you've already set a registration helper!\n");
+        exit(1);
+      }
+      registration_helper = string(argv[i]+22);
+      registration_helper_set = true;
     } else {
-      fprintf(stderr, "unrecognizable argument '%s'", argv[i]);
+      fprintf(stderr, "unrecognizable argument '%s'\n", argv[i]);
       exit(1);
     }
     i++;
@@ -408,6 +472,9 @@ main(int, const char *const *argv)
     if (!listener_open(the_event_base, *i))
       log_abort("failed to open listeners for configuration %lu",
                 (unsigned long)(i - configs.begin()) + 1);
+
+  if (!registration_helper.empty())
+    call_registration_helper(registration_helper);
 
   /* We are go for launch. As a signal to any monitoring process that may
      be running, close stdout now. */

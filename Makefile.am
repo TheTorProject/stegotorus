@@ -37,6 +37,7 @@ libstegotorus_a_SOURCES = \
 	src/protocol.cc \
 	src/rng.cc \
 	src/socks.cc \
+	src/subprocess-unix.cc \
 	src/steg.cc \
 	src/util.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
