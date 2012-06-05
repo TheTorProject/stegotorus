@@ -9,6 +9,33 @@ const size_t AES_BLOCK_LEN = 16;
 const size_t GCM_TAG_LEN   = 16;
 const size_t SHA256_LEN    = 32;
 
+/**
+ * Initialize cryptography library.  Must be called before anything that
+ * uses any of the APIs below.
+ */
+void init_crypto();
+
+/**
+ * Tear down cryptography library.
+ */
+void free_crypto();
+
+/**
+ * Report a cryptography failure.
+ * @msg should describe the operation that failed.
+ * Always returns -1; this allows you to write
+ * if (some operation failed)
+ *   return log_crypto_warn("some operation");
+ */
+int log_crypto_warn(const char *msg);
+
+/**
+ * Report a cryptography failure which is a fatal error.
+ * @msg should describe the operation that failed.
+ * Does not return.
+ */
+void ATTR_NORETURN log_crypto_abort(const char *msg);
+
 struct key_generator;
 
 struct ecb_encryptor

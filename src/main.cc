@@ -381,6 +381,8 @@ main(int, const char *const *argv)
 
   /* Configurations have been established; proceed with initialization. */
 
+  init_crypto();
+
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
 #ifdef _WIN32
@@ -499,6 +501,7 @@ main(int, const char *const *argv)
   free(stdin_eof);
   event_base_free(the_event_base);
   event_config_free(evcfg);
+  free_crypto();
   log_close();
 
   return 0;

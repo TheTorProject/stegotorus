@@ -16,14 +16,12 @@ dnl with a rationale for each:
 dnl
 dnl Defined by C89, therefore unnecessary to check for nowadays:
 dnl
-dnl   AC_CHECK_FUNCS([atexit floor memset strcasecmp strchr strerror
-dnl                   strrchr strstr strtoul])
+dnl   AC_CHECK_FUNCS([memset strcasecmp strchr strerror strrchr strstr strtoul])
 dnl   AC_CHECK_HEADERS([limits.h stddef.h stdlib.h string.h])
 dnl   AC_CHECK_TYPES([ptrdiff_t])
 dnl   AC_TYPE_SIZE_T
 dnl
-dnl We don't make use of the unspecified-behavior corner cases that
-dnl these pin down:
+dnl Dealt with by our 'xmalloc' and 'xrealloc' wrappers:
 dnl
 dnl   AC_FUNC_MALLOC
 dnl   AC_FUNC_REALLOC
@@ -135,6 +133,11 @@ AC_SUBST(lib_CPPFLAGS)
 # This can't be done with AC_SEARCH_LIBS -- see m4/winsock.m4 for gory details.
 AX_LIB_WINSOCK2
 LIBS="$LIBS $ws32_LIBS"
+
+# We might need to explicitly link -lm for floor().
+AC_SEARCH_LIBS([floor], [m], [], [
+  AC_MSG_ERROR([unable to find 'floor'])
+])
 
 ### System features ###
 

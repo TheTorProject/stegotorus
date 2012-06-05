@@ -35,8 +35,8 @@ sed '
   /^connections last_ckt_serial$/d
   /^connections last_conn_serial$/d
   /^connections shutting_down$/d
-  /^crypt init_crypto()::initialized$/d
-  /^crypt log_crypto()::initialized$/d
+  /^crypt crypto_initialized$/d
+  /^crypt crypto_errs_initialized$/d
   /^main allow_kq$/d
   /^main handle_signal_cb(int, short, void\*)::got_sigint$/d
   /^main registration_helper$/d

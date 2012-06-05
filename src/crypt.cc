@@ -11,30 +11,46 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
-static void
+static bool crypto_initialized = false;
+static bool crypto_errs_initialized = false;
+
+#define REQUIRE_INIT_CRYPTO() \
+  log_assert(crypto_initialized)
+
+void
 init_crypto()
 {
-  static bool initialized = false;
-  if (!initialized) {
-    initialized = true;
-    ENGINE_load_builtin_engines();
-    ENGINE_register_all_complete();
-    atexit(ENGINE_cleanup);
+  log_assert(!crypto_initialized);
 
-    // we don't need to call OpenSSL_add_all_algorithms or EVP_cleanup,
-    // since we never look up ciphers by textual name.
-  }
+  crypto_initialized = true;
+  CRYPTO_set_mem_functions(xmalloc, xrealloc, free);
+  ENGINE_load_builtin_engines();
+  ENGINE_register_all_complete();
+
+  // we don't need to call OpenSSL_add_all_algorithms, since we never
+  // look up ciphers by textual name.
+}
+
+void
+free_crypto()
+{
+  // we don't need to call EVP_cleanup, since we never called
+  // OpenSSL_add_all_algorithms.
+
+  if (crypto_initialized)
+    ENGINE_cleanup();
+  if (crypto_errs_initialized)
+    ERR_free_strings();
 }
 
 static void
 log_crypto()
 {
-  static bool initialized = false;
-  if (!initialized) {
-    initialized = true;
+  if (!crypto_errs_initialized) {
+    crypto_errs_initialized = true;
     ERR_load_crypto_strings();
-    atexit(ERR_free_strings);
   }
+
   unsigned long err;
   while ((err = ERR_get_error()) != 0)
     log_warn("%s: %s: %s",
@@ -43,14 +59,14 @@ log_crypto()
              ERR_reason_error_string(err));
 }
 
-static void ATTR_NORETURN
+void ATTR_NORETURN
 log_crypto_abort(const char *msg)
 {
   log_crypto();
   log_abort("libcrypto error in %s", msg);
 }
 
-static int
+int
 log_crypto_warn(const char *msg)
 {
   log_crypto();
@@ -145,7 +161,7 @@ namespace {
 ecb_encryptor *
 ecb_encryptor::create(const uint8_t *key, size_t keylen)
 {
-  init_crypto();
+  REQUIRE_INIT_CRYPTO();
 
   ecb_encryptor_impl *enc = new ecb_encryptor_impl;
   if (!EVP_EncryptInit_ex(&enc->ctx, aes_ecb_by_size(keylen), 0, key, 0))
@@ -159,7 +175,7 @@ ecb_encryptor::create(const uint8_t *key, size_t keylen)
 ecb_encryptor *
 ecb_encryptor::create(key_generator *gen, size_t keylen)
 {
-  init_crypto();
+  REQUIRE_INIT_CRYPTO();
 
   MemBlock key(keylen);
   size_t got = gen->generate(key, keylen);
@@ -177,7 +193,7 @@ ecb_encryptor::create(key_generator *gen, size_t keylen)
 ecb_decryptor *
 ecb_decryptor::create(const uint8_t *key, size_t keylen)
 {
-  init_crypto();
+  REQUIRE_INIT_CRYPTO();
 
   ecb_decryptor_impl *dec = new ecb_decryptor_impl;
   if (!EVP_DecryptInit_ex(&dec->ctx, aes_ecb_by_size(keylen), 0, key, 0))
@@ -191,7 +207,7 @@ ecb_decryptor::create(const uint8_t *key, size_t keylen)
 ecb_decryptor *
 ecb_decryptor::create(key_generator *gen, size_t keylen)
 {
-  init_crypto();
+  REQUIRE_INIT_CRYPTO();
 
   MemBlock key(keylen);
   size_t got = gen->generate(key, keylen);
@@ -272,7 +288,7 @@ namespace {
 gcm_encryptor *
 gcm_encryptor::create(const uint8_t *key, size_t keylen)
 {
-  init_crypto();
+  REQUIRE_INIT_CRYPTO();
 
   gcm_encryptor_impl *enc = new gcm_encryptor_impl;
   if (!EVP_EncryptInit_ex(&enc->ctx, aes_gcm_by_size(keylen), 0, key, 0))
@@ -284,7 +300,7 @@ gcm_encryptor::create(const uint8_t *key, size_t keylen)
 gcm_encryptor *
 gcm_encryptor::create(key_generator *gen, size_t keylen)
 {
-  init_crypto();
+  REQUIRE_INIT_CRYPTO();
 
   MemBlock key(keylen);
   size_t got = gen->generate(key, keylen);
@@ -300,7 +316,7 @@ gcm_encryptor::create(key_generator *gen, size_t keylen)
 gcm_decryptor *
 gcm_decryptor::create(const uint8_t *key, size_t keylen)
 {
-  init_crypto();
+  REQUIRE_INIT_CRYPTO();
 
   gcm_decryptor_impl *dec = new gcm_decryptor_impl;
   if (!EVP_DecryptInit_ex(&dec->ctx, aes_gcm_by_size(keylen), 0, key, 0))
@@ -312,7 +328,7 @@ gcm_decryptor::create(const uint8_t *key, size_t keylen)
 gcm_decryptor *
 gcm_decryptor::create(key_generator *gen, size_t keylen)
 {
-  init_crypto();
+  REQUIRE_INIT_CRYPTO();
 
   MemBlock key(keylen);
   size_t got = gen->generate(key, keylen);
@@ -430,6 +446,7 @@ key_generator::from_random_secret(const uint8_t *key,  size_t klen,
                                   const uint8_t *ctxt, size_t clen)
 {
   log_assert(klen <= INT_MAX && slen < INT_MAX && clen < INT_MAX);
+  REQUIRE_INIT_CRYPTO();
 
   MemBlock prk(SHA256_LEN);
 
@@ -437,8 +454,6 @@ key_generator::from_random_secret(const uint8_t *key,  size_t klen,
     salt = nosalt;
     slen = SHA256_LEN;
   }
-
-  init_crypto();
 
   if (HMAC(EVP_sha256(), salt, slen, key, klen, prk, 0) == 0)
     log_crypto_abort("key_generator::from_random_secret");
@@ -460,6 +475,7 @@ key_generator::from_passphrase(const uint8_t *phra, size_t plen,
   // salt, then put the result through HKDF-Extract with the salt.
 
   log_assert(plen <= INT_MAX && slen < INT_MAX);
+  REQUIRE_INIT_CRYPTO();
 
   MemBlock prk(SHA256_LEN);
 
@@ -467,8 +483,6 @@ key_generator::from_passphrase(const uint8_t *phra, size_t plen,
     salt = nosalt;
     slen = SHA256_LEN;
   }
-
-  init_crypto();
 
   if (!PKCS5_PBKDF2_HMAC((const char *)phra, plen, salt, slen,
                          10000, EVP_sha256(), SHA256_LEN, prk))

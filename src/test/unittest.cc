@@ -108,6 +108,8 @@ main(int argc, const char **argv)
     log_set_method(LOG_METHOD_NULL, 0);
   }
 
+  init_crypto();
+
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
 #ifdef _WIN32
@@ -118,7 +120,9 @@ main(int argc, const char **argv)
 #endif
 
   rv = tinytest_main(argc, argv, unittest_groups);
+
   conn_start_shutdown(1);
+  free_crypto();
 
   return rv;
 }
