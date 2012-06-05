@@ -8,6 +8,7 @@
 const size_t AES_BLOCK_LEN = 16;
 const size_t GCM_TAG_LEN   = 16;
 const size_t SHA256_LEN    = 32;
+const size_t EC_P224_LEN   = 28;
 
 /**
  * Initialize cryptography library.  Must be called before anything that
@@ -140,6 +141,31 @@ private:
   gcm_decryptor& operator=(const gcm_decryptor&) DELETE_METHOD;
 };
 
+/** Encapsulation of an elliptic curve Diffie-Hellman message
+    (we use NIST P-224).  */
+struct ecdh_message
+{
+  ecdh_message() {}
+  virtual ~ecdh_message();
+
+  /** Generate a new Diffie-Hellman message from randomness. */
+  static ecdh_message *generate();
+
+  /** Encode a Diffie-Hellman message to the wire format.  This
+      produces only the x-coordinate of the chosen curve point.
+      The argument must point to EC_P224_LEN bytes of buffer space. */
+  virtual void encode(uint8_t *xcoord_out) const = 0;
+
+  /** Combine our message with the wire-format message sent by our
+      peer, and produce the raw ECDH shared secret.  |xcoord_other|
+      must point to EC_P224_LEN bytes of data, and |secret_out| must
+      point to the same quantity of buffer space.  Normally you should
+      use key_generator::from_ecdh instead of calling this
+      directly.  */
+  virtual int combine(const uint8_t *xcoord_other, uint8_t *secret_out)
+    const = 0;
+};
+
 /** Generate keying material from an initial key of some kind, a salt
     value, and a context value, all of which are formally bitstrings.
     See http://tools.ietf.org/html/rfc5869 for the requirements on the
@@ -165,6 +191,14 @@ struct key_generator
   static key_generator *from_passphrase(const uint8_t *phra, size_t plen,
                                         const uint8_t *salt, size_t slen,
                                         const uint8_t *ctxt, size_t clen);
+
+  /** Construct a key generator from two (elliptic curve) Diffie-Hellman
+      messages. The salt and context arguments are the same as for
+      from_random_secret. */
+  static key_generator *from_ecdh(const ecdh_message *mine,
+                                  const uint8_t *theirs,
+                                  const uint8_t *salt, size_t slen,
+                                  const uint8_t *ctxt, size_t clen);
 
   /** Write LEN bytes of key material to BUF.  May be called
       repeatedly.  Note that HKDF has a hard upper limit on the total

@@ -8,8 +8,10 @@
 
 #include <openssl/engine.h>
 #include <openssl/err.h>
+#include <openssl/ecdh.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <openssl/objects.h>
 
 static bool crypto_initialized = false;
 static bool crypto_errs_initialized = false;
@@ -410,6 +412,107 @@ gcm_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
   return 0;
 }
 
+// We use the slightly lower-level EC_* / ECDH_* routines for
+// ecdh_message, instead of the EVP_PKEY_* routines, because we don't
+// need algorithmic agility, and it means we only have to puzzle out
+// one layer of completely undocumented APIs instead of two.
+namespace {
+  struct ecdh_message_impl : ecdh_message
+  {
+    EC_KEY *priv;
+    BN_CTX *ctx;
+    ecdh_message_impl(); // generate keypair from randomness
+
+    virtual ~ecdh_message_impl();
+    virtual void encode(uint8_t *xcoord_out) const;
+    virtual int combine(const uint8_t *other, uint8_t *secret_out) const;
+  };
+}
+
+ecdh_message_impl::ecdh_message_impl()
+  : priv(EC_KEY_new_by_curve_name(NID_secp224r1)),
+    ctx(BN_CTX_new())
+{
+  if (!priv || !ctx)
+    log_crypto_abort("ecdh_message::allocate data");
+  if (!EC_KEY_generate_key(priv))
+    log_crypto_abort("ecdh_message::generate priv");
+}
+
+/* static */ ecdh_message *
+ecdh_message::generate()
+{
+  REQUIRE_INIT_CRYPTO();
+  return new ecdh_message_impl();
+}
+
+ecdh_message::~ecdh_message() {}
+ecdh_message_impl::~ecdh_message_impl()
+{
+  EC_KEY_free(priv);
+  BN_CTX_free(ctx);
+}
+
+void
+ecdh_message_impl::encode(uint8_t *xcoord_out) const
+{
+  const EC_POINT *pub = EC_KEY_get0_public_key(priv);
+  const EC_GROUP *grp = EC_KEY_get0_group(priv);
+  if (!pub || !grp)
+    log_crypto_abort("ecdh_message_encode::extract pubkey");
+
+  BIGNUM *x = BN_new();
+  if (!x)
+    log_crypto_abort("ecdh_message_encode::allocate data");
+
+  if (!EC_POINT_get_affine_coordinates_GFp(grp, pub, x, 0, ctx))
+    log_crypto_abort("ecdh_message_encode::extract x-coordinate");
+
+  size_t sbytes = BN_num_bytes(x);
+  log_assert(sbytes <= EC_P224_LEN);
+  if (sbytes < EC_P224_LEN) {
+    memset(xcoord_out, 0, EC_P224_LEN - sbytes);
+    sbytes += EC_P224_LEN - sbytes;
+  }
+  size_t wbytes = BN_bn2bin(x, xcoord_out);
+  log_assert(sbytes == wbytes);
+
+  BN_free(x);
+}
+
+int
+ecdh_message_impl::combine(const uint8_t *xcoord_other,
+                           uint8_t *secret_out) const
+{
+  const EC_GROUP *grp = EC_KEY_get0_group(priv);
+  EC_POINT *pub = EC_POINT_new(grp);
+  if (!grp || !pub)
+    log_crypto_abort("ecdh_message_combine::allocate data");
+
+  int rv = -1;
+  BIGNUM *x = BN_bin2bn(xcoord_other, EC_P224_LEN, 0);
+  if (!x) {
+    log_crypto_warn("ecdh_message_combine::decode their x-coordinate");
+    goto done;
+  }
+
+  if (!EC_POINT_set_compressed_coordinates_GFp(grp, pub, x, 0, ctx)) {
+    log_crypto_warn("ecdh_message_combine::recover their point");
+    goto done;
+  }
+
+  if (!ECDH_compute_key(secret_out, EC_P224_LEN, pub, priv, 0)) {
+    log_crypto_warn("ecdh_message_combine::compute shared secret");
+    goto done;
+  }
+
+    rv = 0;
+ done:
+  BN_free(x);
+  EC_POINT_free(pub);
+  return rv;
+}
+
 namespace {
   struct key_generator_impl : key_generator
   {
@@ -459,6 +562,18 @@ key_generator::from_random_secret(const uint8_t *key,  size_t klen,
     log_crypto_abort("key_generator::from_random_secret");
 
   return new key_generator_impl(prk, ctxt, clen);
+}
+
+key_generator *
+key_generator::from_ecdh(const ecdh_message *mine, const uint8_t *theirs,
+                         const uint8_t *salt, size_t slen,
+                         const uint8_t *ctxt, size_t clen)
+{
+  MemBlock ss(EC_P224_LEN);
+  if (mine->combine(theirs, ss))
+    return 0;
+
+  return from_random_secret(ss, EC_P224_LEN, salt, slen, ctxt, clen);
 }
 
 key_generator *
