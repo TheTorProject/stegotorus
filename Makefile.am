@@ -37,10 +37,15 @@ libstegotorus_a_SOURCES = \
 	src/protocol.cc \
 	src/rng.cc \
 	src/socks.cc \
-	src/subprocess-unix.cc \
 	src/steg.cc \
 	src/util.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
+
+if WINDOWS
+libstegotorus_a_SOURCES += src/subprocess-windows.cc
+else
+libstegotorus_a_SOURCES += src/subprocess-unix.cc
+endif
 
 nodist_libstegotorus_a_SOURCES = protolist.cc steglist.cc
 

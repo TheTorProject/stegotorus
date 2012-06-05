@@ -6,9 +6,8 @@
  * See LICENSE for other credits and copying information.
  */
 
-// N.B. This file will have to be rewritten more-or-less from scratch
-// for the Windows port.  It should be acceptably portable to all Unix
-// implementations still in wide use.
+// This file should be acceptably portable to all Unix implementations
+// still in wide use.
 
 #include "util.h"
 #include "subprocess.h"

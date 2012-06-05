@@ -10,11 +10,74 @@ AC_LANG([C++])
 AM_INIT_AUTOMAKE([foreign nostdinc silent-rules subdir-objects])
 AM_MAINTAINER_MODE([enable])
 
+dnl This script deliberately does not check for a bunch of things
+dnl that 'autoscan' thinks we ought to check for.  Here is the list,
+dnl with a rationale for each:
+dnl
+dnl Defined by C89, therefore unnecessary to check for nowadays:
+dnl
+dnl   AC_CHECK_FUNCS([atexit floor memset strcasecmp strchr strerror
+dnl                   strrchr strstr strtoul])
+dnl   AC_CHECK_HEADERS([limits.h stddef.h stdlib.h string.h])
+dnl   AC_CHECK_TYPES([ptrdiff_t])
+dnl   AC_TYPE_SIZE_T
+dnl
+dnl We don't make use of the unspecified-behavior corner cases that
+dnl these pin down:
+dnl
+dnl   AC_FUNC_MALLOC
+dnl   AC_FUNC_REALLOC
+dnl
+dnl Defined by C++ since cfront, therefore unnecessary to check for
+dnl in a C++ program:
+dnl
+dnl   AC_C_INLINE
+dnl   AC_HEADER_STDBOOL # 'bool', 'true', and 'false', not the header
+dnl
+dnl Defined by Unix98, therefore adequately handled by #ifdef _WIN32
+dnl (FIXME: Windows has not been tested in some time and is likely to
+dnl be broken):
+dnl
+dnl   AC_CHECK_HEADERS([fcntl.h unistd.h arpa/inet.h netinet/in.h
+dnl                     sys/types.h sys/stat.h sys/un.h sys/wait.h])
+dnl   AC_CHECK_FUNCS([gettimeofday])
+dnl   AC_FUNC_FORK
+dnl   AC_TYPE_PID_T
+dnl
+dnl libevent handles for us (FIXME: we probably shouldn't rely on this):
+dnl
+dnl   AC_CHECK_HEADERS([stdint.h])
+dnl   AC_CHECK_FUNCS([socket])
+dnl   AC_TYPE_SSIZE_T
+dnl   AC_TYPE_UINT8_T
+dnl   AC_TYPE_UINT16_T
+dnl   AC_TYPE_UINT32_T
+dnl   AC_TYPE_UINT64_T
+dnl
+dnl The fallback is inappropriate for our use case (it would copy
+dnl several enormous files), it is only required for 'make check'
+dnl in an out-of-tree build, and it's slated to go away RSN anyway:
+dnl
+dnl   AC_PROG_LN_S
+
 ### Compiler and language features ###
 
 AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_CXXCPP
+
+# Make a conditional for whether we're on Windows or not, so we can
+# select the right version of certain files.
+AC_CACHE_CHECK([for Windows], ac_cv_system_windows,
+  [AC_PREPROC_IFELSE([AC_LANG_SOURCE([[
+    /* _WIN32 is defined for both Win32 and Win64 */
+    #ifndef _WIN32
+    #error "this is not Windows"
+    #endif
+  ]])],
+  [ac_cv_system_windows=yes],
+  [ac_cv_system_windows=no])])
+AM_CONDITIONAL(WINDOWS, test $ac_cv_system_windows = yes)
 
 AX_SYS_EXTENSIONS
 AC_SYS_LARGEFILE
