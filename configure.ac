@@ -5,6 +5,7 @@ dnl
 AC_PREREQ([2.61])dnl Possibly earlier will do, but this is what I have
 AC_INIT([stegotorus], [0.0])
 AC_CONFIG_SRCDIR([src/main.cc])
+AC_CONFIG_AUX_DIR([config-aux])
 AC_LANG([C++])
 AM_INIT_AUTOMAKE([foreign nostdinc silent-rules subdir-objects])
 AM_MAINTAINER_MODE([enable])

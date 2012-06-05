@@ -16,7 +16,6 @@
 
 /aclocal.m4
 /autom4te.cache
-/compile
 /config.guess
 /config.h
 /config.h.in
@@ -24,12 +23,12 @@
 /config.status
 /config.sub
 /configure
-/depcomp
-/install-sh
 /Makefile
 /Makefile.in
-/missing
 /stamp-*
+/config-aux/depcomp
+/config-aux/install-sh
+/config-aux/missing
 
 /protolist.c
 /steglist.c

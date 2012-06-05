@@ -2,7 +2,7 @@
 # Copyright 2011, 2012 SRI International
 # See LICENSE for other credits and copying information
 
-ACLOCAL_AMFLAGS = -I m4 --install
+ACLOCAL_AMFLAGS = -I config-aux --install
 
 AM_CXXFLAGS = -Werror -Wall -Wextra -Wformat=2
 AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)

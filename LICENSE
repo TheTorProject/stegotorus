@@ -34,7 +34,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =====
 
-The files in m4/ and scripts/ each have their own individual copyright
-and licensing, which may be more or less permissive than the above
-license.  However, those licenses DO NOT extend to the collective
-work, the generated configure script, or to StegoTorus itself.
+Some files in src/ contain material which is copyright other people
+or organizations, and which may be licensed more permissively than the
+above.  Comments at the top of each file document its precise provenance
+and licensing.
+
+All the files in config-aux/ and scripts/ have their own copyright and
+licensing, indicated in comments at the top of the file; these licenses
+may be more or *less* permissive than the above.  Those licenses DO NOT
+extend to the collective work, the generated configure script, or to
+StegoTorus itself.
