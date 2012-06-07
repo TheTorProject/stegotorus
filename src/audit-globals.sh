@@ -35,6 +35,7 @@ sed '
   /^connections last_ckt_serial$/d
   /^connections last_conn_serial$/d
   /^connections shutting_down$/d
+  /^crypt bctx$/d
   /^crypt crypto_initialized$/d
   /^crypt crypto_errs_initialized$/d
   /^main allow_kq$/d

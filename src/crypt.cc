@@ -15,6 +15,7 @@
 
 static bool crypto_initialized = false;
 static bool crypto_errs_initialized = false;
+static BN_CTX *bctx = 0;
 
 #define REQUIRE_INIT_CRYPTO() \
   log_assert(crypto_initialized)
@@ -28,19 +29,23 @@ init_crypto()
   CRYPTO_set_mem_functions(xmalloc, xrealloc, free);
   ENGINE_load_builtin_engines();
   ENGINE_register_all_complete();
+  bctx = BN_CTX_new();
+  if (!bctx)
+    log_crypto_abort("initialization");
 
-  // we don't need to call OpenSSL_add_all_algorithms, since we never
+  // We don't need to call OpenSSL_add_all_algorithms, since we never
   // look up ciphers by textual name.
 }
 
 void
 free_crypto()
 {
-  // we don't need to call EVP_cleanup, since we never called
-  // OpenSSL_add_all_algorithms.
-
-  if (crypto_initialized)
+  if (crypto_initialized) {
+    // We don't need to call EVP_cleanup, since we never called
+    // OpenSSL_add_all_algorithms.
+    BN_CTX_free(bctx);
     ENGINE_cleanup();
+  }
   if (crypto_errs_initialized)
     ERR_free_strings();
 }
@@ -420,7 +425,6 @@ namespace {
   struct ecdh_message_impl : ecdh_message
   {
     EC_KEY *key;
-    BN_CTX *ctx;
     ecdh_message_impl();
     ecdh_message_impl(const uint8_t *secret);
 
@@ -433,21 +437,19 @@ namespace {
 }
 
 ecdh_message_impl::ecdh_message_impl()
-  : key(EC_KEY_new_by_curve_name(NID_secp224r1)),
-    ctx(BN_CTX_new())
+  : key(EC_KEY_new_by_curve_name(NID_secp224r1))
 {
-  if (!key || !ctx)
+  if (!key)
     log_crypto_abort("ecdh_message::allocate data");
   if (!EC_KEY_generate_key(key))
     log_crypto_abort("ecdh_message::generate key");
 }
 
 ecdh_message_impl::ecdh_message_impl(const uint8_t *secret)
-  : key(EC_KEY_new_by_curve_name(NID_secp224r1)),
-    ctx(BN_CTX_new())
+  : key(EC_KEY_new_by_curve_name(NID_secp224r1))
 {
   BIGNUM *sb = BN_bin2bn(secret, EC_P224_LEN, 0);
-  if (!key || !ctx || !sb)
+  if (!key || !sb)
     log_crypto_abort("ecdh_message::allocate data");
 
   if (!EC_KEY_set_private_key(key, sb))
@@ -476,7 +478,7 @@ ecdh_message_impl::regen_pubkey()
   if (!pub)
     return -1;
 
-  if (!EC_POINT_mul(grp, pub, priv, 0, 0, ctx))
+  if (!EC_POINT_mul(grp, pub, priv, 0, 0, bctx))
     return -1;
 
   EC_KEY_set_public_key(key, pub);
@@ -510,7 +512,6 @@ ecdh_message::~ecdh_message() {}
 ecdh_message_impl::~ecdh_message_impl()
 {
   EC_KEY_free(key);
-  BN_CTX_free(ctx);
 }
 
 void
@@ -525,7 +526,7 @@ ecdh_message_impl::encode(uint8_t *xcoord_out) const
   if (!x)
     log_crypto_abort("ecdh_message_encode::allocate data");
 
-  if (!EC_POINT_get_affine_coordinates_GFp(grp, pub, x, 0, ctx))
+  if (!EC_POINT_get_affine_coordinates_GFp(grp, pub, x, 0, bctx))
     log_crypto_abort("ecdh_message_encode::extract x-coordinate");
 
   size_t sbytes = BN_num_bytes(x);
@@ -559,7 +560,7 @@ ecdh_message_impl::combine(const uint8_t *xcoord_other,
     goto done;
   }
 
-  if (!EC_POINT_set_compressed_coordinates_GFp(grp, pub, x, 0, ctx)) {
+  if (!EC_POINT_set_compressed_coordinates_GFp(grp, pub, x, 0, bctx)) {
     log_crypto_warn("ecdh_message_combine::recover their point");
     goto done;
   }
