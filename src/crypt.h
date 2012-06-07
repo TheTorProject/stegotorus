@@ -151,6 +151,12 @@ struct ecdh_message
   /** Generate a new Diffie-Hellman message from randomness. */
   static ecdh_message *generate();
 
+  /** Generate a new Diffie-Hellman message from a specified secret
+      value (in the form of a big-endian byte string, EC_P224_LEN
+      bytes long).  This is provided for testing purposes only; it
+      should not be used in normal operation. */
+  static ecdh_message *load_secret(const uint8_t *secret);
+
   /** Encode a Diffie-Hellman message to the wire format.  This
       produces only the x-coordinate of the chosen curve point.
       The argument must point to EC_P224_LEN bytes of buffer space. */

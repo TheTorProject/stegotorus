@@ -419,45 +419,105 @@ gcm_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
 namespace {
   struct ecdh_message_impl : ecdh_message
   {
-    EC_KEY *priv;
+    EC_KEY *key;
     BN_CTX *ctx;
-    ecdh_message_impl(); // generate keypair from randomness
+    ecdh_message_impl();
+    ecdh_message_impl(const uint8_t *secret);
 
     virtual ~ecdh_message_impl();
     virtual void encode(uint8_t *xcoord_out) const;
     virtual int combine(const uint8_t *other, uint8_t *secret_out) const;
+
+    int regen_pubkey();
   };
 }
 
 ecdh_message_impl::ecdh_message_impl()
-  : priv(EC_KEY_new_by_curve_name(NID_secp224r1)),
+  : key(EC_KEY_new_by_curve_name(NID_secp224r1)),
     ctx(BN_CTX_new())
 {
-  if (!priv || !ctx)
+  if (!key || !ctx)
     log_crypto_abort("ecdh_message::allocate data");
-  if (!EC_KEY_generate_key(priv))
-    log_crypto_abort("ecdh_message::generate priv");
+  if (!EC_KEY_generate_key(key))
+    log_crypto_abort("ecdh_message::generate key");
 }
 
-/* static */ ecdh_message *
+ecdh_message_impl::ecdh_message_impl(const uint8_t *secret)
+  : key(EC_KEY_new_by_curve_name(NID_secp224r1)),
+    ctx(BN_CTX_new())
+{
+  BIGNUM *sb = BN_bin2bn(secret, EC_P224_LEN, 0);
+  if (!key || !ctx || !sb)
+    log_crypto_abort("ecdh_message::allocate data");
+
+  if (!EC_KEY_set_private_key(key, sb))
+    log_crypto_abort("ecdh_message::set privkey");
+
+  BN_clear_free(sb);
+}
+
+// EC_KEY_set_private_key *does not* regenerate the public key, nor is
+// there any official or unofficial EC_KEY method to do so.  So we have
+// to do it by hand.  This is separate from the constructor so that it
+// can fail by returning -1 (since we still can't use exceptions).
+// Fortunately this is only for testing.
+int
+ecdh_message_impl::regen_pubkey()
+{
+  const EC_GROUP *grp = EC_KEY_get0_group(key);
+  if (!grp)
+    return -1;
+
+  const BIGNUM *priv = EC_KEY_get0_private_key(key);
+  if (!priv)
+    return -1;
+
+  EC_POINT *pub  = EC_POINT_new(grp);
+  if (!pub)
+    return -1;
+
+  if (!EC_POINT_mul(grp, pub, priv, 0, 0, ctx))
+    return -1;
+
+  EC_KEY_set_public_key(key, pub);
+  EC_POINT_clear_free(pub);
+
+  return EC_KEY_check_key(key) ? 0 : -1;
+}
+
+ecdh_message *
 ecdh_message::generate()
 {
   REQUIRE_INIT_CRYPTO();
   return new ecdh_message_impl();
 }
 
+ecdh_message *
+ecdh_message::load_secret(const uint8_t *secret)
+{
+  REQUIRE_INIT_CRYPTO();
+  ecdh_message_impl *imp = new ecdh_message_impl(secret);
+
+  if (imp->regen_pubkey()) {
+    log_crypto_warn("regenerate public key");
+    delete imp;
+    return 0;
+  }
+  return imp;
+}
+
 ecdh_message::~ecdh_message() {}
 ecdh_message_impl::~ecdh_message_impl()
 {
-  EC_KEY_free(priv);
+  EC_KEY_free(key);
   BN_CTX_free(ctx);
 }
 
 void
 ecdh_message_impl::encode(uint8_t *xcoord_out) const
 {
-  const EC_POINT *pub = EC_KEY_get0_public_key(priv);
-  const EC_GROUP *grp = EC_KEY_get0_group(priv);
+  const EC_POINT *pub = EC_KEY_get0_public_key(key);
+  const EC_GROUP *grp = EC_KEY_get0_group(key);
   if (!pub || !grp)
     log_crypto_abort("ecdh_message_encode::extract pubkey");
 
@@ -484,9 +544,12 @@ int
 ecdh_message_impl::combine(const uint8_t *xcoord_other,
                            uint8_t *secret_out) const
 {
-  const EC_GROUP *grp = EC_KEY_get0_group(priv);
+  const EC_GROUP *grp = EC_KEY_get0_group(key);
+  if (!grp)
+    log_crypto_abort("ecdh_message_combine::retrieve curve group");
+
   EC_POINT *pub = EC_POINT_new(grp);
-  if (!grp || !pub)
+  if (!pub)
     log_crypto_abort("ecdh_message_combine::allocate data");
 
   int rv = -1;
@@ -501,7 +564,7 @@ ecdh_message_impl::combine(const uint8_t *xcoord_other,
     goto done;
   }
 
-  if (!ECDH_compute_key(secret_out, EC_P224_LEN, pub, priv, 0)) {
+  if (!ECDH_compute_key(secret_out, EC_P224_LEN, pub, key, 0)) {
     log_crypto_warn("ecdh_message_combine::compute shared secret");
     goto done;
   }
