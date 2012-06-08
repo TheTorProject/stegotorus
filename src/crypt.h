@@ -9,6 +9,7 @@ const size_t AES_BLOCK_LEN = 16;
 const size_t GCM_TAG_LEN   = 16;
 const size_t SHA256_LEN    = 32;
 const size_t EC_P224_LEN   = 28;
+const size_t MKE_MSG_LEN   = 21;
 
 /**
  * Initialize cryptography library.  Must be called before anything that
@@ -41,9 +42,6 @@ struct key_generator;
 
 struct ecb_encryptor
 {
-  ecb_encryptor() {}
-  virtual ~ecb_encryptor();
-
   /** Return a new AES/ECB encryption state using 'key' (of length 'keylen')
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
   static ecb_encryptor *create(const uint8_t *key, size_t keylen);
@@ -57,6 +55,9 @@ struct ecb_encryptor
       write the result to 'out'.  */
   virtual void encrypt(uint8_t *out, const uint8_t *in) = 0;
 
+  virtual ~ecb_encryptor();
+protected:
+  ecb_encryptor() {}
 private:
   ecb_encryptor(const ecb_encryptor&);
   ecb_encryptor& operator=(const ecb_encryptor&);
@@ -64,9 +65,6 @@ private:
 
 struct ecb_decryptor
 {
-  ecb_decryptor() {}
-  virtual ~ecb_decryptor();
-
   /** Return a new AES/ECB decryption state using 'key' (of length 'keylen')
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
   static ecb_decryptor *create(const uint8_t *key, size_t keylen);
@@ -80,6 +78,9 @@ struct ecb_decryptor
       write the result to 'out'.  */
   virtual void decrypt(uint8_t *out, const uint8_t *in) = 0;
 
+  virtual ~ecb_decryptor();
+protected:
+  ecb_decryptor() {}
 private:
   ecb_decryptor(const ecb_decryptor&) DELETE_METHOD;
   ecb_decryptor& operator=(const ecb_decryptor&) DELETE_METHOD;
@@ -88,9 +89,6 @@ private:
 
 struct gcm_encryptor
 {
-  gcm_encryptor() {}
-  virtual ~gcm_encryptor();
-
   /** Return a new AES/GCM encryption state using 'key' (of length 'keylen')
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
   static gcm_encryptor *create(const uint8_t *key, size_t keylen);
@@ -108,6 +106,9 @@ struct gcm_encryptor
   virtual void encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                        const uint8_t *nonce, size_t nlen) = 0;
 
+  virtual ~gcm_encryptor();
+protected:
+  gcm_encryptor() {}
 private:
   gcm_encryptor(const gcm_encryptor&);
   gcm_encryptor& operator=(const gcm_encryptor&);
@@ -115,9 +116,6 @@ private:
 
 struct gcm_decryptor
 {
-  gcm_decryptor() {}
-  virtual ~gcm_decryptor();
-
   /** Return a new AES/GCM decryption state using 'key' (of length 'keylen')
       as the symmetric key.  'keylen' must be 16, 24, or 32 bytes. */
   static gcm_decryptor *create(const uint8_t *key, size_t keylen);
@@ -136,6 +134,9 @@ struct gcm_decryptor
   virtual int decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                       const uint8_t *nonce, size_t nlen) = 0;
 
+  virtual ~gcm_decryptor();
+protected:
+  gcm_decryptor() {}
 private:
   gcm_decryptor(const gcm_decryptor&) DELETE_METHOD;
   gcm_decryptor& operator=(const gcm_decryptor&) DELETE_METHOD;
@@ -145,9 +146,6 @@ private:
     (we use NIST P-224).  */
 struct ecdh_message
 {
-  ecdh_message() {}
-  virtual ~ecdh_message();
-
   /** Generate a new Diffie-Hellman message from randomness. */
   static ecdh_message *generate();
 
@@ -170,7 +168,98 @@ struct ecdh_message
       directly.  */
   virtual int combine(const uint8_t *xcoord_other, uint8_t *secret_out)
     const = 0;
+
+  virtual ~ecdh_message();
+protected:
+  ecdh_message() {}
+private:
+  ecdh_message(const ecdh_message&) DELETE_METHOD;
+  ecdh_message& operator=(const ecdh_message&) DELETE_METHOD;
 };
+
+/** Moeller key encapsulation generator: takes a public key and a source
+    of weak entropy, produces temporary key material and key encapsulation
+    messages.  */
+struct mke_generator
+{
+  /** Return a new encapsulation generator based on the public key
+      'key', which should be a C string of the form produced by
+      'mke_decoder::pubkey()', and a key_generator.  The object
+      retains references to both arguments, so make sure their
+      lifetimes exceed that of this object.  You are encouraged
+      to use key_generator::from_rng() for this.  */
+  static mke_generator *create(const char *pubkey, key_generator *gen);
+
+  /** Retrieve the public key.  This will be the same pointer as was
+      passed to create().  */
+  virtual const char *pubkey() const;
+
+  /** Retrieve the length of the public key (you could call strlen(),
+      but this may be more efficient).  */
+  virtual size_t pklen() const;
+
+  /** Generate temporary key material and an encapsulated key message.
+      This does NOT carry out key derivation; you probably want to use
+      key_generator::from_mke() instead.  The 'message' argument must
+      point to at least MKE_MSG_LEN bytes of storage, and the 'secret'
+      argument must point to at least twice that much storage.  */
+  virtual int generate(uint8_t *secret, uint8_t *message) const;
+
+  /** Extract the padding from a previously-generated encapsulated key
+      message.  Cannot fail.  Do not attempt to interpret the byte
+      returned; just pack it somewhere in the data encrypted with the
+      derived key material, so that the receiver can verify it.  */
+  virtual uint8_t extract_padding(uint8_t *message) const;
+
+  virtual ~mke_generator();
+protected:
+  mke_generator() {}
+private:
+  mke_generator(const mke_generator&) DELETE_METHOD;
+  mke_generator& operator=(const mke_generator&) DELETE_METHOD;
+};
+
+/** Moeller key encapsulation decoder: creates a keypair when
+    instantiated, can be asked to emit the public key, can decode the
+    counterpart's key encapsulation messages into temporary key material. */
+struct mke_decoder
+{
+  /** Return a new encapsulation decoder.  Generates a new keypair
+      from a source of strong entropy.  */
+  static mke_decoder *create();
+
+  /** Emit the public key.  The return value is a C-string.
+      The storage for this string belongs to the mke_decoder object.
+      Its contents are unspecified, but it uses only the characters
+      ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=,
+   */
+  virtual const char *pubkey() const;
+
+  /** Retrieve the length of the public key (you could call strlen(),
+      but this may be more efficient).  */
+  virtual size_t pklen() const;
+
+  /** Decode an encapsulated key message.  This does NOT carry out key
+      derivation; you probably want to use key_generator::from_mke()
+      instead.  The 'message' argument must point to at least
+      MKE_MSG_LEN bytes of data, and the 'secret' argument must point
+      to at least twice that much storage.  */
+  virtual int decode(uint8_t *secret, uint8_t *message) const;
+
+  /** Extract the padding from an encapsulated key message.
+      Cannot fail.  Do not attempt to interpret the byte returned;
+      just verify it by comparing it with a byte somewhere in the
+      data encrypted with the derived key material. */
+  virtual uint8_t extract_padding(uint8_t *message) const;
+
+  virtual ~mke_decoder();
+protected:
+  mke_decoder() {}
+private:
+  mke_decoder(const mke_decoder&) DELETE_METHOD;
+  mke_decoder& operator=(const mke_decoder&) DELETE_METHOD;
+};
+
 
 /** Generate keying material from an initial key of some kind, a salt
     value, and a context value, all of which are formally bitstrings.
@@ -205,6 +294,31 @@ struct key_generator
                                   const uint8_t *theirs,
                                   const uint8_t *salt, size_t slen,
                                   const uint8_t *ctxt, size_t clen);
+
+  /** Construct a key generator from a Moeller key generator, and as a
+      side effect, emit the key encapsulation message.  Will use the
+      public key for the salt.  The 'message_out' argument must point
+      to at least MKE_MSG_LEN bytes of storage.  */
+  static key_generator *from_mke(const mke_generator *gen,
+                                 uint8_t *message_out,
+                                 const uint8_t *ctxt, size_t clen);
+
+  /** Construct a key generator from a Moeller key decoder and a
+      received key encapsulation message.  Will use the public key for
+      the salt.  The 'message' argument must point to at least
+      MKE_MSG_LEN bytes of data.  */
+  static key_generator *from_mke(const mke_decoder *gen,
+                                 uint8_t *message,
+                                 const uint8_t *ctxt, size_t clen);
+
+  /** Construct a key generator from the global random number
+      generator.  This should be used in contexts where a great deal
+      of key material may be required but its strength is not terribly
+      important; it reduces the demand on the entropy source.  Key
+      generators created by this factory will automatically reseed
+      themselves when they hit the HKDF upper limit. */
+  static key_generator *from_rng(const uint8_t *salt, size_t slen,
+                                 const uint8_t *ctxt, size_t clen);
 
   /** Write LEN bytes of key material to BUF.  May be called
       repeatedly.  Note that HKDF has a hard upper limit on the total
