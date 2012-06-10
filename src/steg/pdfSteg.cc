@@ -7,18 +7,20 @@
 #include "connections.h"
 #include "payloads.h"
 #include <event2/buffer.h>
+#include "compression.h"
 
 /* pdfSteg: A PDF-based steganography module */
 
 #define PDF_DELIMITER    '?'
 #define PDF_DELIMITER2   '.'
 
-#define STREAM_BEGIN       ">>stream"
-#define STREAM_BEGIN_SIZE  8
+#define STREAM_BEGIN       "stream"
+#define STREAM_BEGIN_SIZE  6
 #define STREAM_END         "endstream"
 #define STREAM_END_SIZE    9
 
 #define DEBUG
+
 
 /*
  * pdf_add_delimiter processes the input buffer (inbuf) of length
@@ -158,6 +160,38 @@ pdf_remove_delimiter(const char *inbuf, size_t inbuflen,
   return cnt;
 }
 
+
+/*
+ * strInBinaryRewind looks for char array pattern of length patternLen
+ * in a char array blob of length blobLen in the *reverse* direction
+ *
+ * return a pointer for the first occurrence of pattern in blob,
+ * starting from the end of blob, if found; otherwise, return NULL
+ *
+ */
+char *
+strInBinaryRewind (const char *pattern, unsigned int patternLen,
+             const char *blob, unsigned int blobLen) {
+  int found = 0;
+  char *cp;
+
+  if (patternLen < 1 || blobLen < 1) return 0;
+  cp = (char *) blob + blobLen - 1;
+  while (cp >= blob) {
+    if (cp - (patternLen-1) < blob) break;
+    if (*cp == pattern[patternLen-1]) {
+      if (memcmp(cp-(patternLen-1), pattern, patternLen-1) == 0) {
+        found = 1;
+        break;
+      }
+    }
+    cp--;
+  }
+  if (found) return (cp-(patternLen-1));
+  else return NULL;
+}
+
+
 /*
  * pdf_wrap embeds data of length dlen inside the stream objects of the PDF
  * document (length plen) that appears in the body of a HTTP msg, and
@@ -172,29 +206,30 @@ pdf_wrap(const char *data, size_t dlen,
          const char *pdfTemplate, size_t plen,
          char *outbuf, size_t outbufsize)
 {
-  char data2[dlen*2+2];
-  const char *tp, *dp, *plimit;
-  char *op, *streamStart, *streamEnd;
-  size_t data2len, cnt, size, size2;
-  ssize_t rv;
+  int data2size = 2*dlen+10; 
+  // see rfc 1950 for zlib format, in addition to compressed data, we have
+  // 2-byte compression method and flags +
+  // 4-byte dict ID +
+  // 4-byte ADLER32 checksum
+  char data2[data2size];
+  const char *tp, *plimit;
+  char *op, *streamStart, *streamEnd, *filterStart;
+  size_t data2len, size;
+  int np;
 
   if (dlen > SIZE_T_CEILING || plen > SIZE_T_CEILING ||
       outbufsize > SIZE_T_CEILING)
     return -1;
 
-  // assumption: pdf_wrap is length-preserving
-  if (outbufsize < plen) return -1;
-
-  rv = pdf_add_delimiter(data, dlen, data2, HTTP_MSG_BUF_SIZE,
-                               PDF_DELIMITER, PDF_DELIMITER2);
-  if (rv < 1)
+  data2len = compress((const uint8_t *)data, dlen, 
+                      (uint8_t *)data2, data2size, c_format_zlib);
+  if ((int)data2len < 0) {
+    log_warn("compress failed and returned %lu", data2len);
     return -1;
-  data2len = rv;
+  }
 
   op = outbuf;       // current pointer for output buffer
   tp = pdfTemplate;  // current pointer for http msg template
-  dp = data2;        // current pointer for data2
-  cnt = 0;           // number of data char encoded
   plimit = pdfTemplate+plen;
 
   while (tp < plimit) {
@@ -205,43 +240,47 @@ pdf_wrap(const char *data, size_t dlen,
       return -1;
     }
 
-    // copy everything between tp and "stream" (inclusive) to outbuf
-    size = streamStart - tp + STREAM_BEGIN_SIZE;
-    memcpy(op, tp, size);
-    op += size;
-    tp = streamStart + STREAM_BEGIN_SIZE;
-
     streamEnd = strInBinary(STREAM_END, STREAM_END_SIZE, tp, plimit-tp);
     if (streamEnd == NULL) {
       log_warn("Cannot find endstream in pdf");
       return -1;
     }
 
-    // count the number of usable char between tp and streamEnd
-    size = streamEnd-tp;
+    filterStart = strInBinaryRewind(" obj", 4, tp, streamStart-tp);
+    if (filterStart == NULL) {
+      log_warn("Cannot find obj\n");
+      return -1;
+    } else {
+      // copy everything between tp and up and and including "obj" to outbuf
+      size = filterStart - tp + 4;
+      memcpy(op, tp, size);
+      op[size] = 0;
+      op += size;
 
-    // encoding data in the stream obj
-    if (size > 0) {
-        size2 = data2len - cnt;
-        if (size < size2) {
-          memcpy(op, dp, size);
-          op += size; tp += size; dp += size;
-          memcpy(op, tp, STREAM_END_SIZE);
-          op += STREAM_END_SIZE; tp += STREAM_END_SIZE;
-          cnt += size;
-        } else { // done encoding data
-          memcpy(op, dp, size2);
-          op += size2; tp += size2; dp += size2;
-          cnt += size2;
-          break;
-        }
-        log_debug("Encoded %lu bytes in pdf", (unsigned long)size);
-    } else { // empty stream
-      memcpy(op, tp, STREAM_END_SIZE);
-      op += STREAM_END_SIZE; tp += STREAM_END_SIZE;
+      // write meta-data for stream object
+      np = sprintf(op, " <<\n/Length %d\n/Filter /FlateDecode\n>>\nstream\n", (int)data2len);
+      if (np < 0) {
+        log_warn("sprintf failed\n");
+        return -1;
+      }
+      op += np;
+
+      // copy compressed data to outbuf 
+      memcpy(op, data2, data2len);
+      op += data2len;
+
+      // write endstream to outbuf
+      np = sprintf(op, "\nendstream");
+      if (np < 0) {
+        log_warn("sprintf failed\n");
+        return -1;
+      }
+      op += np;
     }
 
-    if (cnt >= data2len) break; // this shouldn't happen ...
+    // done with encoding data
+    tp = streamEnd+STREAM_END_SIZE;
+    break;
   }
 
   // copy the rest of pdfTemplate to outbuf
@@ -261,9 +300,11 @@ pdf_unwrap(const char *data, size_t dlen,
            char *outbuf, size_t outbufsize)
 {
   const char *dp, *dlimit;
-  char *op, *streamStart, *streamEnd, *olimit;
+  char *op, *streamStart, *streamEnd;
   size_t cnt, size, size2;
-  bool endFlag, escape = false;
+
+  int streamObjStartSkip=0;
+  int streamObjEndSkip=0;
 
   if (dlen > SIZE_T_CEILING || outbufsize > SIZE_T_CEILING)
     return -1;
@@ -272,8 +313,8 @@ pdf_unwrap(const char *data, size_t dlen,
   op = outbuf; // current pointer for outbuf
   cnt = 0;     // number of char decoded
   dlimit = data+dlen;
-  olimit = outbuf+outbufsize;
 
+   
   while (dp < dlimit) {
     // find the next stream obj
     streamStart = strInBinary(STREAM_BEGIN, STREAM_BEGIN_SIZE, dp, dlimit-dp);
@@ -283,31 +324,40 @@ pdf_unwrap(const char *data, size_t dlen,
     }
 
     dp = streamStart + STREAM_BEGIN_SIZE;
+
+    // streamObjStartSkip = size of end-of-line (EOL) char(s) after ">>stream"
+    if ( *dp == '\r' && *(dp+1) == '\n' ) { // Windows-style EOL
+      streamObjStartSkip = 2;
+    } else if ( *dp == '\n' ) { // Unix-style EOL
+      streamObjStartSkip = 1;
+    }
+
+    dp = dp + streamObjStartSkip;
+
     streamEnd = strInBinary(STREAM_END, STREAM_END_SIZE, dp, dlimit-dp);
     if (streamEnd == NULL) {
       log_warn("Cannot find endstream in pdf");
       return -1;
     }
 
-    // count the number of usable char between tp and streamEnd
-    size = streamEnd-dp;
+    // streamObjEndSkip = size of end-of-line (EOL) char(s) at the end of stream obj
+    if (*(streamEnd-2) == '\r' && *(streamEnd-1) == '\n') {
+      streamObjEndSkip = 2;
+    } else if (*(streamEnd-1) == '\n') {
+      streamObjEndSkip = 1;
+    }
 
-    if (size > 0) {
-      ssize_t rv = pdf_remove_delimiter(dp, size, op, olimit-op, PDF_DELIMITER,
-                                        &endFlag, &escape);
-      if (rv < 0)
-        return -1;
+    // compute the size of stream obj payload
+    size = (streamEnd-streamObjEndSkip) - dp;
 
-      size2 = rv;
-      cnt += size2;
-      if (endFlag) { // Done decoding
-        break;
-      } else { // Continue decoding
-        op += size2;
-        dp = streamEnd + STREAM_END_SIZE;
-      }
-    } else { // empty stream obj
-      dp = streamEnd + STREAM_END_SIZE;
+    size2 = decompress((const uint8_t *)dp, size, (uint8_t *)op, outbufsize);
+    if ((int)size2 < 0) {
+      log_warn("decompress failed; size2 = %d\n", (int)size2);
+      return -1;
+    } else {
+      op += size2;
+      cnt = size2;
+      break;  // done decoding
     }
   }
 
