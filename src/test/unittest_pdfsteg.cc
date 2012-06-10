@@ -36,8 +36,7 @@ static void
 test_pdf_wrap_unwrap(void *)
 {
   const char *pdf =
-    "[PDFHDR][STUFFS1]>>streamABCDEFGHIJYYendstream"
-    "[STUFFS2]>>streamABCDEFGHIJYYendstream[STUFF3][PDFTRAILER]";
+    "[PDFHDR][STUFFS1]1 0 obj <<\n/Length 12\n/Filter /FlateDecode\n>>\nstream\nABCDEFGHIJYY>>endstream\n[STUFF2][PDFTRAILER]";
 
   const char *const tests[] = {
     "12345",
@@ -61,7 +60,6 @@ test_pdf_wrap_unwrap(void *)
                   out, sizeof out);
     tt_int_op(rv, >, 0);
     r1 = rv;
-    tt_int_op(r1, ==, strlen(pdf));
 
     rv = pdf_unwrap(out, r1, orig, sizeof orig);
     tt_int_op(rv, >, 0);
