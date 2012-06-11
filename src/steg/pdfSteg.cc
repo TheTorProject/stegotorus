@@ -224,7 +224,7 @@ pdf_wrap(const char *data, size_t dlen,
   data2len = compress((const uint8_t *)data, dlen, 
                       (uint8_t *)data2, data2size, c_format_zlib);
   if ((int)data2len < 0) {
-    log_warn("compress failed and returned %lu", data2len);
+    log_warn("compress failed and returned %lu", (unsigned long)data2len);
     return -1;
   }
 

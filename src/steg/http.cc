@@ -329,7 +329,7 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
     return -1;
   }
   log_debug(conn, "cookie input %ld encoded %d final %d",
-            sbuflen, len, cookie_len);
+            (long)sbuflen, len, cookie_len);
   log_debug(conn, "cookie encoded: %s", data2);
   log_debug(conn, "cookie final: %s", cookiebuf);
 

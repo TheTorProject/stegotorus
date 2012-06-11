@@ -196,7 +196,7 @@ int
 null_circuit_t::send()
 {
   log_debug(this, "sending %lu bytes",
-            evbuffer_get_length(bufferevent_get_input(this->up_buffer)));
+            (unsigned long)evbuffer_get_length(bufferevent_get_input(this->up_buffer)));
 
   return evbuffer_add_buffer(this->downstream->outbound(),
                              bufferevent_get_input(this->up_buffer));
@@ -268,7 +268,7 @@ int
 null_conn_t::recv()
 {
   log_assert(this->upstream);
-  log_debug(this, "receiving %lu bytes", evbuffer_get_length(this->inbound()));
+  log_debug(this, "receiving %lu bytes", (unsigned long)evbuffer_get_length(this->inbound()));
   return evbuffer_add_buffer(bufferevent_get_output(this->upstream->up_buffer),
                              this->inbound());
 }
