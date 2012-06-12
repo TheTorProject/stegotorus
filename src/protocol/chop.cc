@@ -428,6 +428,13 @@ chop_config_t::init(int n_options, const char *const *options)
   } else
     goto usage;
 
+  // if in client mode, accept and ignore --server-key=
+  if (mode != LSN_SIMPLE_SERVER &&
+      !strncmp(options[1], "--server-key=", 13)) {
+    options++;
+    n_options--;
+  }
+
   up_address = resolve_address_port(options[1], 1, listen_up, defport);
   if (!up_address) {
     log_warn("chop: invalid up address: %s", options[1]);
