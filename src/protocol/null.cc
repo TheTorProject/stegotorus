@@ -268,7 +268,8 @@ int
 null_conn_t::recv()
 {
   log_assert(this->upstream);
-  log_debug(this, "receiving %lu bytes", (unsigned long)evbuffer_get_length(this->inbound()));
+  log_debug(this, "receiving %lu bytes",
+            (unsigned long)evbuffer_get_length(this->inbound()));
   return evbuffer_add_buffer(bufferevent_get_output(this->upstream->up_buffer),
                              this->inbound());
 }

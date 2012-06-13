@@ -82,14 +82,14 @@ embed_steg_config_t::embed_steg_config_t(config_t *cfg)
   for (vector<trace_t>::iterator p = traces.begin(); p != traces.end(); ++p) {
     int num_pkt;
     if (fscanf(trace_file, "%d", &num_pkt) < 1)
-      log_abort("couldn't read number of packets in trace %li",
+      log_abort("couldn't read number of packets in trace %ld",
                 (long)(p - traces.begin()));
 
     p->pkt_sizes.resize(num_pkt);
     p->pkt_times.resize(num_pkt);
     for (int i = 0; i < num_pkt; i++)
       if (fscanf(trace_file, "%hd %d", &p->pkt_sizes[i], &p->pkt_times[i]) < 1)
-        log_abort("couldn't read trace entry %li/%d",
+        log_abort("couldn't read trace entry %ld/%d",
                   (long)(p - traces.begin()), i);
   }
 
