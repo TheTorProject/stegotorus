@@ -705,14 +705,16 @@ chop_circuit_t::send()
     dead_cycles++;
     log_debug(this, "%u dead cycles", dead_cycles);
 
-    // If there was real data and we didn't make any progress on it,
-    // or if there are no downstream connections at all, and we're the
-    // client, try opening new connections.  If we're the server, we
-    // have to just twiddle our thumbs and hope the client does that.
-    // Note that due to the sliding window of receive blocks, there is
-    // a hard upper limit of 127 outstanding connections (that is,
-    // half the receive window).
-    if ((avail0 > 0 && downstreams.size() < 127) || downstreams.empty()) {
+    // If there was real data or an EOF to send, and we didn't make
+    // any progress on it, or if there are no downstream connections
+    // at all, and we're the client, try opening new connections.  If
+    // we're the server, we have to just twiddle our thumbs and hope
+    // the client does that.  Note that due to the sliding window of
+    // receive blocks, there is a hard upper limit of 127 outstanding
+    // connections (that is, half the receive window).
+    if (downstreams.empty() ||
+        (downstreams.size() < 127 &&
+         (avail0 > 0 || (upstream_eof && !sent_fin)))) {
       if (config->mode != LSN_SIMPLE_SERVER)
         circuit_reopen_downstreams(this);
       else
@@ -1212,6 +1214,11 @@ chop_conn_t::recv()
 {
   if (steg->receive(recv_pending))
     return -1;
+
+  // If that succeeded but did not copy anything into recv_pending,
+  // wait for more data.
+  if (evbuffer_get_length(recv_pending) == 0)
+    return 0;
 
   if (!upstream) {
     // Try to receive a handshake.
