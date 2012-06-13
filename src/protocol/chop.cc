@@ -903,8 +903,19 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
   for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
        i != downstreams.end(); i++) {
     chop_conn_t *conn = *i;
+
+    // We cannot transmit on a connection whose steganography module has
+    // not yet been instantiated.  (This only ever happens server-side.)
     if (!conn->steg) {
       log_debug(conn, "offers 0 bytes (no steg)");
+      continue;
+    }
+
+    // We must not transmit on a connection that has not completed its
+    // TCP handshake.  (This only ever happens client-side.  If we try
+    // it anyway, the transmission gets silently dropped on the floor.)
+    if (!conn->connected) {
+      log_debug(conn, "offers 0 bytes (not connected)");
       continue;
     }
 
