@@ -39,7 +39,9 @@ sed '
   /^crypt crypto_initialized$/d
   /^crypt crypto_errs_initialized$/d
   /^main allow_kq$/d
+  /^main daemon_mode$/d
   /^main handle_signal_cb(int, short, void\*)::got_sigint$/d
+  /^main pidfile_name$/d
   /^main registration_helper$/d
   /^main the_event_base$/d
   /^network listeners$/d

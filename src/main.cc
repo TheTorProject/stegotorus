@@ -37,6 +37,8 @@ using std::string;
 
 static struct event_base *the_event_base;
 static bool allow_kq = false;
+static bool daemon_mode = false;
+static string pidfile_name;
 static string registration_helper;
 
 /**
@@ -234,7 +236,11 @@ usage(void)
           "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
           "--no-log ~ disable logging\n"
           "--timestamp-logs ~ add timestamps to all log messages\n"
-          "--allow-kqueue ~ allow use of kqueue(2) (may be buggy)\n");
+          "--allow-kqueue ~ allow use of kqueue(2) (may be buggy)\n"
+          "--registration-helper=<helper> ~ use <helper> to register with "
+          "a relay database\n"
+          "--pid-file=<file> ~ write process ID to <file> after startup\n"
+          "--daemon ~ run as a daemon");
 
   exit(1);
 }
@@ -256,7 +262,8 @@ handle_generic_args(const char *const *argv)
   bool logsev_set = false;
   bool allow_kq_set = false;
   bool timestamps_set = false;
-  bool registration_helper_set=false;
+  bool registration_helper_set = false;
+  bool pidfile_set = false;
   int i = 1;
 
   while (argv[i] &&
@@ -278,21 +285,19 @@ handle_generic_args(const char *const *argv)
         fprintf(stderr, "you've already set a min. log severity!\n");
         exit(1);
       }
-      if (log_set_min_severity((char *)argv[i]+19) < 0) {
-        fprintf(stderr, "error at setting logging severity");
+      if (log_set_min_severity(argv[i]+19) < 0) {
+        fprintf(stderr, "invalid min. log severity '%s'", argv[i]+19);
         exit(1);
       }
       logsev_set = true;
     } else if (!strcmp(argv[i], "--no-log")) {
-        if (logsev_set) {
-          fprintf(stderr, "you've already set a min. log severity!\n");
+      if (logsev_set || logmethod_set) {
+          fprintf(stderr, "can't ask for both some logs and no logs!\n");
           exit(1);
         }
-        if (log_set_method(LOG_METHOD_NULL, NULL) < 0) {
-          fprintf(stderr, "error at setting logging severity.\n");
-          exit(1);
-        }
-        logsev_set = true;
+      log_set_method(LOG_METHOD_NULL, NULL);
+      logsev_set = true;
+      logmethod_set = true;
     } else if (!strcmp(argv[i], "--timestamp-logs")) {
       if (timestamps_set) {
         fprintf(stderr, "you've already asked for timestamps!\n");
@@ -314,11 +319,30 @@ handle_generic_args(const char *const *argv)
       }
       registration_helper = string(argv[i]+22);
       registration_helper_set = true;
+    } else if (!strncmp(argv[i], "--pid-file=", 11)) {
+      if (pidfile_set) {
+        fprintf(stderr, "you've already set a pid file!\n");
+        exit(1);
+      }
+      pidfile_name = string(argv[i]+11);
+      pidfile_set = true;
+    } else if (!strcmp(argv[i], "--daemon")) {
+      if (daemon_mode) {
+        fprintf(stderr, "you've already requested daemon mode!\n");
+        exit(1);
+      }
+      daemon_mode = true;
     } else {
       fprintf(stderr, "unrecognizable argument '%s'\n", argv[i]);
       exit(1);
     }
     i++;
+  }
+
+  /* Cross-option consistency checks. */
+  if (daemon_mode && !logmethod_set) {
+    log_warn("cannot log to stderr in daemon mode");
+    log_set_method(LOG_METHOD_NULL, NULL);
   }
 
   return i;
@@ -380,6 +404,13 @@ main(int, const char *const *argv)
   log_assert(configs.size() > 0);
 
   /* Configurations have been established; proceed with initialization. */
+  if (daemon_mode)
+    daemonize();
+
+  pidfile pf(pidfile_name);
+  if (!pf)
+    log_warn("failed to create pid-file '%s': %s", pf.pathname().c_str(),
+             pf.errmsg());
 
   init_crypto();
 

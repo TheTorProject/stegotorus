@@ -65,4 +65,43 @@ struct subprocess
 // begins with those characters will be excluded from the result.
 extern std::vector<std::string> get_environ(const char *exclude = 0);
 
+// These are in here because they involve process management 'under the hood',
+// and because (like other process management) their Unix and Windows
+// implementations have to be radically different.
+
+// Turn into a daemon; detach from the parent process and any
+// controlling terminal.  Closes standard I/O streams and reopens them
+// to /dev/null.  If this returns, it succeeded.
+extern void daemonize();
+
+// Instantiating this class causes a file to be created at the specified
+// pathname, which contains the decimal process ID of the current process.
+// On destruction, the file is deleted.
+//
+// If you're going to call daemonize(), you need to do it _before_ creating
+// one of these, because daemonize() changes the process ID.
+
+class pidfile
+{
+public:
+  pidfile(const std::string& p);
+  ~pidfile();
+
+  const std::string& pathname() const { return path; }
+
+  // True if pid-file creation succeeded.
+  operator bool() const;
+
+  // If pid-file creation did *not* succeed, returns the underlying system
+  // error message.  You should combine that with the pathname and some
+  // text to the effect that this is a process ID file for the actual error
+  // message printed to the user.
+  // If pid-file creation *did* succeed, returns NULL.
+  const char *errmsg() const;
+
+private:
+  std::string path;
+  int errcode;
+};
+
 #endif

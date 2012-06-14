@@ -13,6 +13,7 @@
 #include "subprocess.h"
 
 #include <map>
+#include <sstream>
 
 #include <sys/stat.h>
 #include <dirent.h>
@@ -464,4 +465,108 @@ get_environ(const char *exclude)
       result.push_back(*p);
 
   return result;
+}
+
+void
+daemonize()
+{
+  if (getppid() == 1) // already a daemon
+    return;
+
+  // Close standard I/O file descriptors and reopen them on /dev/null.
+  // We do this before forking (a) to avoid any possibility of
+  // double-flushed stdio buffers, and (b) so we can exit
+  // unsuccessfully in the unlikely event of a failure.
+  fflush(NULL); // flush all open stdio buffers
+
+  close(0);
+  if (open("/dev/null", O_RDONLY) != 0)
+    log_abort("/dev/null: %s", strerror(errno));
+
+  close(1);
+  if (open("/dev/null", O_WRONLY) != 1)
+    log_abort("/dev/null: %s", strerror(errno));
+
+  // N.B. log_abort might be writing somewhere other than stderr.
+  // In fact, we rather hope it is, 'cos otherwise all logs from
+  // the child are gonna go to the bit bucket.
+  close(2);
+  if (open("/dev/null", O_WRONLY) != 2)
+    log_abort("/dev/null: %s", strerror(errno));
+
+  pid_t pid = fork();
+  if (pid < 0)
+    log_abort("fork failed: %s", strerror(errno));
+
+  if (pid > 0) // Parent
+    // The use of _exit instead of exit here is deliberate.
+    // It's the process that carries on from this function that
+    // should do atexit cleanups (eventually).
+    _exit(0);
+
+  // Become a session leader, and then fork one more time and exit in
+  // the parent.  (This puts the process that will actually be the
+  // daemon in an orphaned process group.  On some systems, this is
+  // necessary to ensure that the daemon can never acquire a controlling
+  // terminal again.  XXX On some systems will the grandchild receive
+  // an unwanted, probably-fatal SIGHUP when its session leader exits?)
+  setsid();
+  if (fork())
+    _exit(0);
+
+  // For the moment we do not chdir anywhere, because the HTTP steg expects
+  // to find its traces relative to the cwd.  FIXME.
+}
+
+pidfile::pidfile(std::string const& p)
+  : path(p), errcode(0)
+{
+  if (path.empty())
+    return;
+
+  std::ostringstream ss;
+  ss << getpid() << '\n';
+  const char *b = ss.str().c_str();
+  size_t n = ss.str().size();
+
+  int f = open(path.c_str(), O_WRONLY|O_CREAT|O_EXCL, 0666);
+  if (f == -1) {
+    errcode = errno;
+    return;
+  }
+
+  do {
+    ssize_t r = write(f, b, n);
+    if (r < 0) {
+      errcode = errno;
+      close(f);
+      remove(path.c_str());
+      return;
+    }
+    n -= r;
+    b += r;
+  } while (n > 0);
+
+  // Sadly, close() can fail, and in this case it actually matters.
+  if (close(f)) {
+    errcode = errno;
+    remove(path.c_str());
+  }
+}
+
+pidfile::~pidfile()
+{
+  if (!errcode && !path.empty())
+    remove(path.c_str());
+}
+
+pidfile::operator bool() const
+{
+  return !errcode;
+}
+
+const char *
+pidfile::errmsg() const
+{
+  return errcode ? strerror(errcode) : 0;
 }
