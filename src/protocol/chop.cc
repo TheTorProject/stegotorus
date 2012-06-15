@@ -710,10 +710,10 @@ chop_circuit_t::send()
     // at all, and we're the client, try opening new connections.  If
     // we're the server, we have to just twiddle our thumbs and hope
     // the client does that.  Note that due to the sliding window of
-    // receive blocks, there is a hard upper limit of 127 outstanding
+    // receive blocks, there is a hard upper limit of 64 outstanding
     // connections (that is, half the receive window).
     if (downstreams.empty() ||
-        (downstreams.size() < 127 &&
+        (downstreams.size() <= 64 &&
          (avail0 > 0 || (upstream_eof && !sent_fin)))) {
       if (config->mode != LSN_SIMPLE_SERVER)
         circuit_reopen_downstreams(this);
@@ -1260,7 +1260,7 @@ chop_conn_t::recv()
     block_header hdr(recv_pending, *upstream->recv_hdr_crypt);
     if (!hdr.valid(upstream->recv_queue.window())) {
       const uint8_t *c = hdr.cleartext();
-      log_info(this, "invalid block header: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+      log_info(this, "invalid block header: %02x%02x%02x%02x|%02x%02x|%02x%02x|%02x|%02x%02x%02x%02x%02x%02x%02x",
                c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
                c[8], c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
       return -1;
