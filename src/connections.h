@@ -121,9 +121,12 @@ struct circuit_t {
 
   bool                connected : 1;
   bool                flushing : 1;
-  bool                pending_eof : 1;
+  bool                pending_eof_recv : 1;
+  bool                pending_eof_send : 1;
 
-  circuit_t() : connected(false), flushing(false), pending_eof(false) {}
+  circuit_t()
+  : connected(false), flushing(false),
+    pending_eof_recv(false), pending_eof_send(false) {}
   virtual ~circuit_t();
 
   /** Return the configuration that this circuit belongs to. */

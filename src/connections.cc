@@ -247,6 +247,7 @@ circuit_send(circuit_t *ckt)
 void
 circuit_send_eof(circuit_t *ckt)
 {
+  ckt->pending_eof_send = true;
   if (ckt->socks_state) {
     log_debug(ckt, "EOF during SOCKS phase");
     delete ckt;
@@ -271,11 +272,11 @@ circuit_recv_eof(circuit_t *ckt)
       shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
     } else {
       log_debug(ckt, "holding EOF till connection");
-      ckt->pending_eof = 1;
+      ckt->pending_eof_recv = true;
     }
   } else {
     log_debug(ckt, "no buffer, holding EOF till connection");
-    ckt->pending_eof = 1;
+    ckt->pending_eof_recv = true;
   }
 }
 

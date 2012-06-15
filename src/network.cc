@@ -346,9 +346,11 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
       /* Upstream is done sending us data. */
       circuit_send_eof(ckt);
       if (bufferevent_get_enabled(bev) ||
-          evbuffer_get_length(bufferevent_get_input(bev)) > 0) {
+          evbuffer_get_length(bufferevent_get_input(bev)) > 0 ||
+          ckt->pending_eof_send) {
         log_debug(ckt, "acknowledging EOF upstream");
         shutdown(bufferevent_getfd(bev), SHUT_RD);
+        bufferevent_disable(bev, EV_READ);
       } else {
         delete ckt;
       }
@@ -428,11 +430,12 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
 
   if (remain == 0 && ckt->flushing && ckt->connected
       && (!ckt->flush_timer || !evtimer_pending(ckt->flush_timer, NULL))) {
-    bufferevent_disable(bev, EV_WRITE);
     if (bufferevent_get_enabled(bev) ||
-        evbuffer_get_length(bufferevent_get_input(bev)) > 0) {
+        evbuffer_get_length(bufferevent_get_input(bev)) > 0 ||
+        ckt->pending_eof_send) {
       log_debug(ckt, "sending EOF upstream");
       shutdown(bufferevent_getfd(bev), SHUT_WR);
+      bufferevent_disable(bev, EV_WRITE);
     } else {
       delete ckt;
     }
@@ -485,7 +488,7 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
                       upstream_event_cb, ckt);
     bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
     ckt->connected = 1;
-    if (ckt->pending_eof) {
+    if (ckt->pending_eof_recv) {
       /* Try again to process the EOF. */
       circuit_recv_eof(ckt);
     }
@@ -530,7 +533,7 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
       return;
     }
 
-    if (ckt->pending_eof) {
+    if (ckt->pending_eof_recv) {
       /* Try again to process the EOF. */
       circuit_recv_eof(ckt);
     }
@@ -624,7 +627,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
          connection. */
       upstream_read_cb(ckt->up_buffer, ckt);
 
-    if (ckt->pending_eof) {
+    if (ckt->pending_eof_recv) {
       /* Try again to process the EOF. */
       circuit_recv_eof(ckt);
     }

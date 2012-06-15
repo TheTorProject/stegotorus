@@ -569,6 +569,7 @@ chop_circuit_t::~chop_circuit_t()
              sent_fin ? '+' : '-', received_fin ? '+' : '-',
              upstream_eof ? '+' : '-',
              (unsigned long)downstreams.size());
+    *(volatile char *)0 = 0;
   }
 
   for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
@@ -870,9 +871,11 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
   evbuffer_drain(payload, d);
 
   send_seq++;
-  if (f == op_FIN)
+  if (f == op_FIN) {
     sent_fin = true;
-  if ((f == op_DAT || f == op_FIN) && d > 0)
+    pending_eof_send = false;
+  }
+  if ((f == op_DAT && d > 0) || f == op_FIN)
     // We are making forward progress if we are _either_ sending or
     // receiving data.
     dead_cycles = 0;

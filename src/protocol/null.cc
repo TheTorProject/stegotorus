@@ -208,6 +208,7 @@ null_circuit_t::send_eof()
 {
   if (this->downstream)
     conn_send_eof(this->downstream);
+  this->pending_eof_send = false;
   return 0;
 }
 
