@@ -569,7 +569,6 @@ chop_circuit_t::~chop_circuit_t()
              sent_fin ? '+' : '-', received_fin ? '+' : '-',
              upstream_eof ? '+' : '-',
              (unsigned long)downstreams.size());
-    *(volatile char *)0 = 0;
   }
 
   for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
