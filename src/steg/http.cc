@@ -222,7 +222,7 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name)  {
   char buf[128];
 
   hint.ai_flags = AI_CANONNAME;
-  hint.ai_family = 0;
+  hint.ai_family = PF_UNSPEC;
   hint.ai_socktype = 0;
   hint.ai_protocol = 0;
   hint.ai_addrlen = 0;
