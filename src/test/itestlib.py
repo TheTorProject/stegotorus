@@ -45,12 +45,9 @@ def diff(label, expected, received):
 # /dev/tty with useless diagnostics" (the documentation SAYS
 # they go to stderr, but they don't).
 
-# there is an as-yet-not-pinned-down bug, probably in libevent, that
-# causes deadlocks on OSX when kqueue is allowed.
 stegotorus_env = {}
 stegotorus_env.update(os.environ)
 stegotorus_env['MALLOC_CHECK_'] = '2'
-stegotorus_env['EVENT_NOKQUEUE'] = '1'
 
 # check for a grinder
 if 'GRINDER' in stegotorus_env:
