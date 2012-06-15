@@ -604,8 +604,6 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
   char* data;
   int type;
 
-  log_debug("Receive dump:");
-
   do {
     struct evbuffer_ptr s2 = evbuffer_search(source, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
     char *p;
