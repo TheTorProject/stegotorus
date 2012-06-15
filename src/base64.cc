@@ -8,18 +8,25 @@
 const int CHARS_PER_LINE = 72;
 
 static char
-encode1(char v)
+encode1(unsigned int value, char plus, char slash, char eq)
 {
   const char encoding[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                           "abcdefghijklmnopqrstuvwxyz0123456789+/";
-  unsigned int value_in = v;
-  if (value_in > sizeof(encoding)-1) return '=';
-  return encoding[value_in];
+  if (value > sizeof encoding - 1)
+    return eq;
+
+  char rv = encoding[value];
+  if (rv == '+')
+    return plus;
+  else if (rv == '/')
+    return slash;
+  else
+    return rv;
 }
 
 /* assumes ASCII */
 static int
-decode1(char v)
+decode1(unsigned int value, char plus, char slash)
 {
   const signed char decoding[] = {
     //  +   ,   -   .   /   0   1   2   3   4   5   6   7   8   9
@@ -38,11 +45,15 @@ decode1(char v)
        39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51
   };
 
-  unsigned int value_in = v;
-  value_in -= 43;
-  if (value_in > sizeof(decoding))
+  if (value == (unsigned int)plus)
+    value = '+';
+  else if (value == (unsigned int)slash)
+    value = '/';
+
+  value -= 43;
+  if (value > sizeof(decoding))
     return -1;
-  return decoding[value_in];
+  return decoding[value];
 }
 
 namespace base64
@@ -69,7 +80,7 @@ encoder::encode(const char* plaintext_in, size_t length_in, char* code_out)
       }
       fragment = *plainchar++;
       result = (fragment & 0x0fc) >> 2;
-      *codechar++ = encode1(result);
+      *codechar++ = encode1(result, plus, slash, equals);
       result = (fragment & 0x003) << 4;
     case step_B:
       if (plainchar == plaintextend) {
@@ -79,7 +90,7 @@ encoder::encode(const char* plaintext_in, size_t length_in, char* code_out)
       }
       fragment = *plainchar++;
       result |= (fragment & 0x0f0) >> 4;
-      *codechar++ = encode1(result);
+      *codechar++ = encode1(result, plus, slash, equals);
       result = (fragment & 0x00f) << 2;
     case step_C:
       if (plainchar == plaintextend) {
@@ -89,14 +100,16 @@ encoder::encode(const char* plaintext_in, size_t length_in, char* code_out)
       }
       fragment = *plainchar++;
       result |= (fragment & 0x0c0) >> 6;
-      *codechar++ = encode1(result);
+      *codechar++ = encode1(result, plus, slash, equals);
       result  = (fragment & 0x03f) >> 0;
-      *codechar++ = encode1(result);
+      *codechar++ = encode1(result, plus, slash, equals);
 
-      ++(this->stepcount);
-      if (this->stepcount == CHARS_PER_LINE/4) {
-        *codechar++ = '\n';
-        this->stepcount = 0;
+      if (wrap) {
+        ++(this->stepcount);
+        if (this->stepcount == CHARS_PER_LINE/4) {
+          *codechar++ = '\n';
+          this->stepcount = 0;
+        }
       }
     }
   default:
@@ -111,18 +124,20 @@ encoder::encode_end(char* code_out)
 
   switch (this->step) {
   case step_B:
-    *codechar++ = encode1(this->result);
-    *codechar++ = '=';
-    *codechar++ = '=';
+    *codechar++ = encode1(this->result, plus, slash, equals);
+    *codechar++ = equals;
+    *codechar++ = equals;
     break;
   case step_C:
-    *codechar++ = encode1(this->result);
-    *codechar++ = '=';
+    *codechar++ = encode1(this->result, plus, slash, equals);
+    *codechar++ = equals;
     break;
   case step_A:
     break;
   }
-  *codechar++ = '\n';
+  if (wrap)
+    *codechar++ = '\n';
+  *codechar = '\0';
 
   /* reset */
   this->step = step_A;
@@ -149,7 +164,7 @@ decoder::decode(const char* code_in, size_t length_in, char* plaintext_out)
           this->plainchar = *plainchar;
           return plainchar - plaintext_out;
         }
-        fragment = decode1(*codechar++);
+        fragment = decode1(*codechar++, plus, slash);
       } while (fragment < 0);
       *plainchar = (fragment & 0x03f) << 2;
     case step_B:
@@ -159,7 +174,7 @@ decoder::decode(const char* code_in, size_t length_in, char* plaintext_out)
           this->plainchar = *plainchar;
           return plainchar - plaintext_out;
         }
-        fragment = decode1(*codechar++);
+        fragment = decode1(*codechar++, plus, slash);
       } while (fragment < 0);
       *plainchar++ |= (fragment & 0x030) >> 4;
       *plainchar    = (fragment & 0x00f) << 4;
@@ -170,7 +185,7 @@ decoder::decode(const char* code_in, size_t length_in, char* plaintext_out)
           this->plainchar = *plainchar;
           return plainchar - plaintext_out;
         }
-        fragment = decode1(*codechar++);
+        fragment = decode1(*codechar++, plus, slash);
       } while (fragment < 0);
       *plainchar++ |= (fragment & 0x03c) >> 2;
       *plainchar    = (fragment & 0x003) << 6;
@@ -181,7 +196,7 @@ decoder::decode(const char* code_in, size_t length_in, char* plaintext_out)
           this->plainchar = *plainchar;
           return plainchar - plaintext_out;
         }
-        fragment = decode1(*codechar++);
+        fragment = decode1(*codechar++, plus, slash);
       } while (fragment < 0);
       *plainchar++   |= (fragment & 0x03f);
     }

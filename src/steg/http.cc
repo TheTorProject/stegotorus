@@ -262,12 +262,6 @@ int
 http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
                              conn_t *conn)
 {
-
-  /* On the client side, we have to embed the data in a GET query somehow;
-     the only plausible places to put it are the URL and cookies.  This
-     presently uses the URL. And it can't be binary. */
-
-
   struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
   int bufsize = 10000;
@@ -276,23 +270,23 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
   char* data;
   char* data2 = (char*) xmalloc (sbuflen*4);
   char* cookiebuf = (char*) xmalloc (sbuflen*8);
-  int payload_len = 0;
-  int cnt = 0;
-  int cookie_len = 0;
-  int rval;
-  int len = 0;
-  base64::encoder E;
-
-
+  size_t payload_len = 0;
+  size_t cnt = 0;
+  size_t cookie_len = 0;
+  size_t rval;
+  size_t len = 0;
+  // '+' -> '-', '/' -> '_', '=' -> '.' per
+  // RFC4648 "Base 64 encoding with URL and filename safe alphabet"
+  // (which does not replace '=', but dot is an obvious choice; for
+  // this use case, the fact that some file systems don't allow more
+  // than one dot in a filename is irrelevant).
+  base64::encoder E(false, '-', '_', '.');
 
   data = (char*) evbuffer_pullup(source, sbuflen);
-
-  if (data == NULL) {
+  if (!data) {
     log_debug("evbuffer_pullup failed");
     goto err;
   }
-
-
 
   // retry up to 10 times
   while (!payload_len) {
@@ -308,28 +302,15 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
     lookup_peer_name_from_ip(conn->peername, s->peer_dnsname);
 
   memset(data2, 0, sbuflen*4);
-  E.encode((char*) data, sbuflen, (char*) data2);
-  E.encode_end(data2+strlen((char*) data2));
+  len  = E.encode(data, sbuflen, data2);
+  len += E.encode_end(data2+len);
 
-  len = (int) strlen(data2) - 1;
-    // remove trailing newline
-  data2[len] = 0;
-  
-  // substitute / with _, + with ., = with - that maybe inserted anywhere in the middle 
-  sanitize_b64(data2, len);
-
-
-  cookie_len = gen_b64_cookie_field(cookiebuf, data2, len);
+  cookie_len = gen_b64_cookies(cookiebuf, data2, len);
   cookiebuf[cookie_len] = 0;
 
-
-
-  if (cookie_len < 0) {
-    log_debug("cookie generation failed\n");
-    return -1;
-  }
-  log_debug(conn, "cookie input %ld encoded %d final %d",
-            (long)sbuflen, len, cookie_len);
+  log_debug(conn, "cookie input %lu encoded %lu final %lu/%lu",
+            (unsigned long)sbuflen, (unsigned long)len,
+            (unsigned long)cookie_len, strlen(cookiebuf));
   log_debug(conn, "cookie encoded: %s", data2);
   log_debug(conn, "cookie final: %s", cookiebuf);
 
@@ -373,13 +354,11 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
 
 
   rval = evbuffer_add(dest, "\r\n\r\n", 4);
-							     
+
   if (rval) {
     log_warn("error adding terminators \n");
     goto err;
   }
-
-  
 
   evbuffer_drain(source, sbuflen);
   log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
@@ -625,6 +604,8 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
   char* data;
   int type;
 
+  log_debug("Receive dump:");
+
   do {
     struct evbuffer_ptr s2 = evbuffer_search(source, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
     char *p;
@@ -662,6 +643,7 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
     else
       p = data + sizeof "GET /" -1;
 
+    log_debug("Cookie: %s", p);
     pend = strstr(p, "\r\n");
     log_assert(pend);
     if (pend - p > MAX_COOKIE_SIZE * 3/2)
@@ -669,13 +651,10 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
                 (unsigned long)(pend - p), (unsigned long)MAX_COOKIE_SIZE);
 
     memset(outbuf, 0, sizeof(outbuf));
-    int cookielen = unwrap_b64_cookie((char*) p, (char*) outbuf, pend - p);
+    size_t cookielen = unwrap_b64_cookies(outbuf, p, pend - p);
 
-    desanitize_b64(outbuf, cookielen);
-    outbuf[cookielen] = '\n';
+    base64::decoder D('-', '_', '.');
     memset(outbuf2, 0, sizeof(outbuf2));
-
-    base64::decoder D;
     sofar = D.decode(outbuf, cookielen+1, outbuf2);
 
     if (sofar <= 0)

@@ -54,6 +54,7 @@ stegotorus_SOURCES = \
 	src/main.cc
 
 UTGROUPS = \
+	src/test/unittest_base64.cc \
 	src/test/unittest_compression.cc \
 	src/test/unittest_config.cc \
 	src/test/unittest_crypt.cc \

@@ -16,10 +16,18 @@ class encoder
   encode_step step;
   int stepcount;
   char result;
+  char plus;
+  char slash;
+  char equals;
+  bool wrap;
 
 public:
-  encoder()
-    : step(step_A), stepcount(0), result(0)
+  // The optional arguments to the constructor allow you to disable
+  // line-wrapping and/or replace the characters used to encode digits
+  // 62 and 63 and padding (normally '+', '/', and '=' respectively).
+  encoder(bool wr = true, char pl = '+', char sl = '/', char eq = '=')
+    : step(step_A), stepcount(0), result(0),
+      plus(pl), slash(sl), equals(eq), wrap(wr)
   {}
 
   ptrdiff_t encode(const char* plaintext_in, size_t length_in, char* code_out);
@@ -31,10 +39,15 @@ class decoder
   enum decode_step { step_A, step_B, step_C, step_D };
   decode_step step;
   char plainchar;
+  char plus;
+  char slash;
+  char equals;
+  bool wrap;
 
 public:
-  decoder()
-    : step(step_A), plainchar(0)
+  decoder(char pl = '+', char sl = '/', char eq = '=')
+    : step(step_A), plainchar(0),
+      plus(pl), slash(sl), equals(eq)
   {}
 
   ptrdiff_t decode(const char* code_in, size_t length_in, char* plaintext_out);
