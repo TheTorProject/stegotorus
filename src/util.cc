@@ -463,7 +463,6 @@ log_open(const char *filename)
 
   fputs("\nBrand new log:\n", log_dest);
   fflush(log_dest);
-  setvbuf(log_dest, NULL, _IOLBF, 0);
 
   return 0;
 }
@@ -496,7 +495,6 @@ log_set_method(int method, const char *filename)
 
   case LOG_METHOD_STDERR:
     log_dest = stderr;
-    setvbuf(log_dest, NULL, _IOLBF, 0);
     return 0;
 
   case LOG_METHOD_FILE:
@@ -556,6 +554,7 @@ logv(int severity, const char *format, va_list ap)
 
   vfprintf(log_dest, format, ap);
   putc('\n', log_dest);
+  fflush(log_dest);
 }
 
 static bool
