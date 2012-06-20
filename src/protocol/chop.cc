@@ -77,13 +77,28 @@ enum opcode_t
   op_DAT = 0,       // Pass data section along to upstream
   op_FIN = 1,       // No further transmissions (pass data along if any)
   op_RST = 2,       // Protocol error, close circuit now
-  op_RK1 = 3,       // Commence rekeying
-  op_RK2 = 4,       // Continue rekeying
-  op_RK3 = 5,       // Conclude rekeying
-  op_RESERVED0 = 6, // 6 -- 127 reserved for future definition
+  op_RESERVED0 = 3, // 3 -- 127 reserved for future definition
   op_STEG0 = 128,   // 128 -- 255 reserved for steganography modules
   op_LAST = 255
 };
+
+static const char *
+opname(opcode_t o, char fallbackbuf[4])
+{
+  switch (o) {
+  case op_DAT: return "DAT";
+  case op_FIN: return "FIN";
+  case op_RST: return "RST";
+  default: {
+    unsigned int x = o;
+    if (x < op_STEG0)
+      xsnprintf(fallbackbuf, sizeof fallbackbuf, "R%02x", x);
+    else
+      xsnprintf(fallbackbuf, sizeof fallbackbuf, "S%02x", x - op_STEG0);
+    return fallbackbuf;
+  }
+  }
+}
 
 class block_header
 {
@@ -857,9 +872,10 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
     return -1;
   }
 
-  log_debug(conn, "transmitting block %u <d=%lu p=%lu f=%02x>",
+  char fallbackbuf[3];
+  log_debug(conn, "transmitting block %u <d=%lu p=%lu f=%s>",
             hdr.seqno(), (unsigned long)hdr.dlen(), (unsigned long)hdr.plen(),
-            (uint8_t)hdr.opcode());
+            opname(hdr.opcode(), fallbackbuf));
 
   if (conn->send(block)) {
     evbuffer_free(block);
@@ -1016,16 +1032,10 @@ chop_circuit_t::process_queue()
       pending_error = true;
       break;
 
-    case op_RK1:
-    case op_RK2:
-    case op_RK3:
-      log_warn(this, "rekeying not yet implemented");
-      pending_error = true;
-      break;
-
     default:
-      log_warn(this, "protocol error: unknown block opcode %x",
-               (unsigned int)blk.op);
+      char fallbackbuf[4];
+      log_warn(this, "protocol error: unsupported block opcode %s",
+               opname(blk.op, fallbackbuf));
       pending_error = true;
       break;
     }
@@ -1260,9 +1270,14 @@ chop_conn_t::recv()
     block_header hdr(recv_pending, *upstream->recv_hdr_crypt);
     if (!hdr.valid(upstream->recv_queue.window())) {
       const uint8_t *c = hdr.cleartext();
-      log_info(this, "invalid block header: %02x%02x%02x%02x|%02x%02x|%02x%02x|%02x|%02x%02x%02x%02x%02x%02x%02x",
-               c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
-               c[8], c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
+      char fallbackbuf[4];
+      log_info(this, "invalid block header: "
+               "%lu|%lu|%lu|%s|%02x%02x%02x%02x%02x%02x%02x",
+               (unsigned long)hdr.seqno(),
+               (unsigned long)hdr.dlen(),
+               (unsigned long)hdr.plen(),
+               opname(hdr.opcode(), fallbackbuf),
+               c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
       return -1;
     }
     if (avail < hdr.total_len()) {
@@ -1285,9 +1300,10 @@ chop_conn_t::recv()
       return -1;
     }
 
-    log_debug(this, "receiving block %u <d=%lu p=%lu f=%02x>",
+    char fallbackbuf[4];
+    log_debug(this, "receiving block %u <d=%lu p=%lu f=%s>",
               hdr.seqno(), (unsigned long)hdr.dlen(), (unsigned long)hdr.plen(),
-              (unsigned int)hdr.opcode());
+              opname(hdr.opcode(), fallbackbuf));
 
     evbuffer *data = evbuffer_new();
     if (!data || (hdr.dlen() && evbuffer_add(data, decodebuf, hdr.dlen()))) {
