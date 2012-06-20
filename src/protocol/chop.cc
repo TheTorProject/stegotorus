@@ -579,6 +579,15 @@ chop_circuit_t::chop_circuit_t()
 
 chop_circuit_t::~chop_circuit_t()
 {
+  // Attempt to prevent events from firing on partially or completely
+  // torn down circuits.  (This shouldn't happen, but it seems to.)
+  if (this->up_buffer)
+    bufferevent_disable(this->up_buffer, EV_READ|EV_WRITE);
+  if (this->flush_timer)
+    event_del(this->flush_timer);
+  if (this->axe_timer)
+    event_del(this->axe_timer);
+
   if (!sent_fin || !received_fin || !upstream_eof) {
     log_warn(this, "destroying active circuit: fin%c%c eof%c ds=%lu",
              sent_fin ? '+' : '-', received_fin ? '+' : '-',
@@ -1115,12 +1124,17 @@ chop_conn_t::chop_conn_t()
 
 chop_conn_t::~chop_conn_t()
 {
+  // Attempt to prevent events from firing on partially or completely
+  // torn down connections.  (This shouldn't happen, but it seems to.)
+  if (this->buffer)
+    bufferevent_disable(this->buffer, EV_READ|EV_WRITE);
+
+  if (this->must_send_timer)
+    event_free(this->must_send_timer);
   if (upstream)
     upstream->drop_downstream(this);
   if (steg)
     delete steg;
-  if (must_send_timer)
-    event_free(must_send_timer);
   evbuffer_free(recv_pending);
 }
 

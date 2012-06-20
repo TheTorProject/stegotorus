@@ -8,6 +8,7 @@
 #include "protocol.h"
 
 #include <event2/buffer.h>
+#include <event2/event.h>
 
 namespace {
   struct null_config_t : config_t
@@ -134,6 +135,15 @@ null_circuit_t::null_circuit_t()
 
 null_circuit_t::~null_circuit_t()
 {
+  // Attempt to prevent events from firing on partially or completely
+  // torn down circuits.  (This shouldn't happen, but it seems to.)
+  if (this->up_buffer)
+    bufferevent_disable(this->up_buffer, EV_READ|EV_WRITE);
+  if (this->flush_timer)
+    event_del(this->flush_timer);
+  if (this->axe_timer)
+    event_del(this->axe_timer);
+
   if (downstream) {
     /* break the circular reference before deallocating the
        downstream connection */
@@ -232,6 +242,11 @@ null_conn_t::null_conn_t()
 
 null_conn_t::~null_conn_t()
 {
+  // Attempt to prevent events from firing on partially or completely
+  // torn down connections.  (This shouldn't happen, but it seems to.)
+  if (this->buffer)
+    bufferevent_disable(this->buffer, EV_READ|EV_WRITE);
+
   if (this->upstream)
     this->upstream->drop_downstream(this);
 }
