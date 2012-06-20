@@ -324,7 +324,7 @@ downstream_read_cb(struct bufferevent *bev, void *arg)
  */
 
 static void
-upstream_event_cb(struct bufferevent *bev, short what, void *arg)
+upstream_event_cb(struct bufferevent *, short what, void *arg)
 {
   circuit_t *ckt = (circuit_t *)arg;
 
@@ -345,15 +345,8 @@ upstream_event_cb(struct bufferevent *bev, short what, void *arg)
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Upstream is done sending us data. */
       circuit_send_eof(ckt);
-      if (bufferevent_get_enabled(bev) ||
-          evbuffer_get_length(bufferevent_get_input(bev)) > 0 ||
-          ckt->pending_eof_send) {
-        log_debug(ckt, "acknowledging EOF upstream");
-        shutdown(bufferevent_getfd(bev), SHUT_RD);
-        bufferevent_disable(bev, EV_READ);
-      } else {
+      if (ckt->read_eof && ckt->write_eof)
         delete ckt;
-      }
     } else {
       delete ckt;
     }
@@ -396,14 +389,8 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Peer is done sending us data. */
       conn->recv_eof();
-      if (bufferevent_get_enabled(bev) ||
-          evbuffer_get_length(bufferevent_get_input(bev)) > 0 ||
-          evbuffer_get_length(bufferevent_get_output(bev)) > 0) {
-        log_debug(conn, "acknowledging EOF downstream");
-        shutdown(bufferevent_getfd(bev), SHUT_RD);
-      } else {
+      if (conn->read_eof && conn->write_eof)
         delete conn;
-      }
     } else {
       delete conn;
     }
@@ -423,22 +410,20 @@ upstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   circuit_t *ckt = (circuit_t *)arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
-  log_debug(ckt, "%lu bytes still to transmit%s%s",
+  log_debug(ckt, "%lu bytes still to transmit%s%s%s",
             (unsigned long)remain,
             ckt->connected ? "" : " (not connected)",
-            ckt->flushing ? "" : " (not flushing)");
+            ckt->pending_write_eof ? " (received EOF)" : "",
+            ckt->write_eof ? " (at EOF)" : "");
 
-  if (remain == 0 && ckt->flushing && ckt->connected
-      && (!ckt->flush_timer || !evtimer_pending(ckt->flush_timer, NULL))) {
-    if (bufferevent_get_enabled(bev) ||
-        evbuffer_get_length(bufferevent_get_input(bev)) > 0 ||
-        ckt->pending_eof_send) {
+  if (remain == 0 && ckt->connected && ckt->pending_write_eof) {
+    if (!ckt->write_eof) {
       log_debug(ckt, "sending EOF upstream");
       shutdown(bufferevent_getfd(bev), SHUT_WR);
-      bufferevent_disable(bev, EV_WRITE);
-    } else {
-      delete ckt;
+      ckt->write_eof = true;
     }
+    if (ckt->read_eof && ckt->write_eof)
+      delete ckt;
   }
 }
 
@@ -450,22 +435,23 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = (conn_t *)arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
-  log_debug(conn, "%lu bytes still to transmit%s%s%s%s",
+  log_debug(conn, "%lu bytes still to transmit%s%s%s%s%s",
             (unsigned long)remain,
             conn->connected ? "" : " (not connected)",
-            conn->flushing ? "" : " (not flushing)",
+            conn->pending_write_eof ? " (received EOF)" : "",
+            conn->write_eof ? " (at EOF)" : "",
             conn->circuit() ? "" : " (no circuit)",
             conn->ever_received ? "" : " (never received)");
 
-  if (remain == 0 && ((conn->flushing && conn->connected)
+  if (remain == 0 && ((conn->pending_write_eof && conn->connected)
                       || (!conn->circuit() && conn->ever_received))) {
-    bufferevent_disable(bev, EV_WRITE);
-    if (bufferevent_get_enabled(bev)) {
+    if (!conn->write_eof) {
       log_debug(conn, "sending EOF downstream");
       shutdown(bufferevent_getfd(bev), SHUT_WR);
-    } else {
-      delete conn;
+      conn->write_eof = true;
     }
+    if (conn->read_eof && conn->write_eof)
+      delete conn;
   }
 }
 
@@ -488,7 +474,7 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
                       upstream_event_cb, ckt);
     bufferevent_enable(ckt->up_buffer, EV_READ|EV_WRITE);
     ckt->connected = 1;
-    if (ckt->pending_eof_recv) {
+    if (ckt->pending_write_eof) {
       /* Try again to process the EOF. */
       circuit_recv_eof(ckt);
     }
@@ -533,7 +519,7 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
       return;
     }
 
-    if (ckt->pending_eof_recv) {
+    if (ckt->pending_write_eof) {
       /* Try again to process the EOF. */
       circuit_recv_eof(ckt);
     }
@@ -627,7 +613,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
          connection. */
       upstream_read_cb(ckt->up_buffer, ckt);
 
-    if (ckt->pending_eof_recv) {
+    if (ckt->pending_write_eof) {
       /* Try again to process the EOF. */
       circuit_recv_eof(ckt);
     }
@@ -808,7 +794,7 @@ void
 circuit_do_flush(circuit_t *ckt)
 {
   size_t remain = evbuffer_get_length(bufferevent_get_output(ckt->up_buffer));
-  ckt->flushing = 1;
+  ckt->pending_write_eof = true;
 
   /* If 'remain' is already zero, we have to call the flush callback
      manually; libevent won't do it for us. */
@@ -822,7 +808,7 @@ void
 conn_do_flush(conn_t *conn)
 {
   size_t remain = evbuffer_get_length(conn->outbound());
-  conn->flushing = 1;
+  conn->pending_write_eof = true;
 
   /* If 'remain' is already zero, we have to call the flush callback
      manually; libevent won't do it for us. */

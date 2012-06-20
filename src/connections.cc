@@ -135,16 +135,17 @@ conn_t::circuit() const
 void
 conn_send_eof(conn_t *dest)
 {
+  dest->pending_write_eof = true;
   struct evbuffer *outbuf = dest->outbound();
   if (evbuffer_get_length(outbuf)) {
     log_debug(dest, "flushing out %lu bytes",
               (unsigned long) evbuffer_get_length(outbuf));
     conn_do_flush(dest);
-  } else if (bufferevent_get_enabled(dest->buffer) & EV_WRITE) {
+  } else if (!dest->write_eof) {
     log_debug(dest, "sending EOF downstream");
-    bufferevent_disable(dest->buffer, EV_WRITE);
     shutdown(bufferevent_getfd(dest->buffer), SHUT_WR);
-  } /* otherwise, it's already been done */
+    dest->write_eof = true;
+  }
 }
 
 /* Circuits. */
@@ -244,10 +245,15 @@ circuit_send(circuit_t *ckt)
   }
 }
 
+/* N.B. "read_eof" and "write_eof" are relative to _upstream_, and
+   therefore may appear to be backward relative to the function names
+   here.  I find this less confusing than having them appear to be
+   backward relative to the shutdown() calls and buffer drain checks,
+   here and in network.cc. */
 void
 circuit_send_eof(circuit_t *ckt)
 {
-  ckt->pending_eof_send = true;
+  ckt->pending_read_eof = true;
   if (ckt->socks_state) {
     log_debug(ckt, "EOF during SOCKS phase");
     delete ckt;
@@ -260,24 +266,23 @@ circuit_send_eof(circuit_t *ckt)
 void
 circuit_recv_eof(circuit_t *ckt)
 {
-  if (ckt->up_buffer) {
-    struct evbuffer *outbuf = bufferevent_get_output(ckt->up_buffer);
-    size_t outlen = evbuffer_get_length(outbuf);
-    if (outlen) {
-      log_debug(ckt, "flushing %lu bytes to upstream", (unsigned long)outlen);
-      circuit_do_flush(ckt);
-    } else if (ckt->connected) {
-      log_debug(ckt, "sending EOF to upstream");
-      bufferevent_disable(ckt->up_buffer, EV_WRITE);
-      shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
-    } else {
-      log_debug(ckt, "holding EOF till connection");
-      ckt->pending_eof_recv = true;
-    }
-  } else {
-    log_debug(ckt, "no buffer, holding EOF till connection");
-    ckt->pending_eof_recv = true;
+  ckt->pending_write_eof = true;
+  if (!ckt->up_buffer || !ckt->connected) {
+    log_debug(ckt, "holding EOF till connection");
+    return;
   }
+
+  struct evbuffer *outbuf = bufferevent_get_output(ckt->up_buffer);
+  size_t outlen = evbuffer_get_length(outbuf);
+  if (outlen) {
+    log_debug(ckt, "flushing %lu bytes to upstream", (unsigned long)outlen);
+    circuit_do_flush(ckt);
+    return;
+  }
+
+  log_debug(ckt, "sending EOF to upstream");
+  ckt->write_eof = true;
+  shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
 }
 
 void

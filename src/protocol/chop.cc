@@ -872,7 +872,7 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
   send_seq++;
   if (f == op_FIN) {
     sent_fin = true;
-    pending_eof_send = false;
+    read_eof = true;
   }
   if ((f == op_DAT && d > 0) || f == op_FIN)
     // We are making forward progress if we are _either_ sending or

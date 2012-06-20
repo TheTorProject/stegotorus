@@ -19,10 +19,21 @@ struct conn_t {
   struct bufferevent *buffer;
   unsigned int        serial;
   bool                connected : 1;
-  bool                flushing : 1;
   bool                ever_received : 1;
+  bool                read_eof : 1;
+  bool                write_eof : 1;
+  bool                pending_write_eof : 1;
 
-  conn_t() : connected(false), flushing(false), ever_received(false) {}
+  conn_t()
+    : peername(0)
+    , buffer(0)
+    , serial(0)
+    , connected(false)
+    , ever_received(false)
+    , read_eof(false)
+    , write_eof(false)
+    , pending_write_eof(false)
+  {}
 
   /** Close and deallocate a connection.  If the connection is part of a
       circuit, disconnect it from the circuit; this may cause the circuit
@@ -120,13 +131,24 @@ struct circuit_t {
   unsigned int        serial;
 
   bool                connected : 1;
-  bool                flushing : 1;
-  bool                pending_eof_recv : 1;
-  bool                pending_eof_send : 1;
+  bool                read_eof : 1;
+  bool                write_eof : 1;
+  bool                pending_read_eof : 1;
+  bool                pending_write_eof : 1;
 
   circuit_t()
-  : connected(false), flushing(false),
-    pending_eof_recv(false), pending_eof_send(false) {}
+    : flush_timer(0)
+    , axe_timer(0)
+    , up_buffer(0)
+    , up_peer(0)
+    , socks_state(0)
+    , serial(0)
+    , connected(false)
+    , read_eof(false)
+    , write_eof(false)
+    , pending_read_eof(false)
+    , pending_write_eof(false)
+  {}
   virtual ~circuit_t();
 
   /** Return the configuration that this circuit belongs to. */
