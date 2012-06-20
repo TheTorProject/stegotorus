@@ -1324,7 +1324,7 @@ chop_conn_t::recv_eof()
   // cover protocol does not need us to send a reply (i.e. the
   // must_send_timer is not pending).
   if (upstream && (upstream->sent_fin || no_more_transmissions) &&
-      !must_send_p())
+      !must_send_p() && evbuffer_get_length(outbound()) == 0)
     upstream->drop_downstream(this);
 
   return 0;
