@@ -387,6 +387,7 @@ struct chop_config_t : config_t
   vector<struct evutil_addrinfo *> down_addresses;
   vector<steg_config_t *> steg_targets;
   chop_circuit_table circuits;
+  bool trace_packets;
 
   CONFIG_DECLARE_METHODS(chop);
 };
@@ -396,6 +397,7 @@ struct chop_config_t : config_t
 chop_config_t::chop_config_t()
 {
   ignore_socks_destination = true;
+  trace_packets = false;
 }
 
 chop_config_t::~chop_config_t()
@@ -448,6 +450,13 @@ chop_config_t::init(int n_options, const char *const *options)
       !strncmp(options[1], "--server-key=", 13)) {
     options++;
     n_options--;
+  }
+
+  if (!strcmp(options[1], "--trace-packets")) {
+    options++;
+    n_options--;
+    trace_packets = true;
+    log_enable_timestamps();
   }
 
   up_address = resolve_address_port(options[1], 1, listen_up, defport);
@@ -881,9 +890,19 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
     return -1;
   }
 
-  char fallbackbuf[3];
+  char fallbackbuf[4];
   log_debug(conn, "transmitting block %u <d=%lu p=%lu f=%s>",
             hdr.seqno(), (unsigned long)hdr.dlen(), (unsigned long)hdr.plen(),
+            opname(hdr.opcode(), fallbackbuf));
+
+  if (config->trace_packets)
+    fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: send %lu <d=%lu p=%lu f=%s>\n",
+            log_get_timestamp(), this->serial,
+            this->recv_queue.window(),
+              (unsigned long)evbuffer_get_length(bufferevent_get_input(this->up_buffer)),
+            (unsigned long)hdr.seqno(),
+            (unsigned long)hdr.dlen(),
+            (unsigned long)hdr.plen(),
             opname(hdr.opcode(), fallbackbuf));
 
   if (conn->send(block)) {
@@ -1292,6 +1311,19 @@ chop_conn_t::recv()
                (unsigned long)hdr.plen(),
                opname(hdr.opcode(), fallbackbuf),
                c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
+
+      if (config->trace_packets)
+        fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv-error "
+                "%lu <d=%lu p=%lu f=%s c=%02x%02x%02x%02x%02x%02x%02x>\n",
+                log_get_timestamp(), upstream->serial,
+                upstream->recv_queue.window(),
+                (unsigned long)evbuffer_get_length(bufferevent_get_input(upstream->up_buffer)),
+                (unsigned long)hdr.seqno(),
+                (unsigned long)hdr.dlen(),
+                (unsigned long)hdr.plen(),
+                opname(hdr.opcode(), fallbackbuf),
+                c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
+
       return -1;
     }
     if (avail < hdr.total_len()) {
@@ -1317,6 +1349,16 @@ chop_conn_t::recv()
     char fallbackbuf[4];
     log_debug(this, "receiving block %u <d=%lu p=%lu f=%s>",
               hdr.seqno(), (unsigned long)hdr.dlen(), (unsigned long)hdr.plen(),
+              opname(hdr.opcode(), fallbackbuf));
+
+    if (config->trace_packets)
+      fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv %lu <d=%lu p=%lu f=%s>\n",
+              log_get_timestamp(), upstream->serial,
+              upstream->recv_queue.window(),
+              (unsigned long)evbuffer_get_length(bufferevent_get_input(upstream->up_buffer)),
+              (unsigned long)hdr.seqno(),
+              (unsigned long)hdr.dlen(),
+              (unsigned long)hdr.plen(),
               opname(hdr.opcode(), fallbackbuf));
 
     evbuffer *data = evbuffer_new();

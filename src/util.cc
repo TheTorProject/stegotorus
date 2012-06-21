@@ -461,8 +461,8 @@ log_open(const char *filename)
   if (!log_dest)
     return -1;
 
+  setvbuf(log_dest, 0, _IONBF, 0);
   fputs("\nBrand new log:\n", log_dest);
-  fflush(log_dest);
 
   return 0;
 }
@@ -494,6 +494,7 @@ log_set_method(int method, const char *filename)
     return 0;
 
   case LOG_METHOD_STDERR:
+    setvbuf(stderr, 0, _IONBF, 0);
     log_dest = stderr;
     return 0;
 
@@ -525,8 +526,20 @@ log_set_min_severity(const char* sev_string)
 void
 log_enable_timestamps()
 {
-  log_timestamps = true;
-  gettimeofday(&log_ts_base, 0);
+  if (!log_timestamps) {
+    log_timestamps = true;
+    gettimeofday(&log_ts_base, 0);
+  }
+}
+
+/** Get a timestamp, as a floating-point number of seconds. */
+double
+log_get_timestamp()
+{
+  struct timeval now, delta;
+  gettimeofday(&now, 0);
+  timeval_subtract(&now, &log_ts_base, &delta);
+  return delta.tv_sec + double(delta.tv_usec) / 1e6;
 }
 
 /** True if the minimum log severity is "debug".  Used in a few places
@@ -554,7 +567,6 @@ logv(int severity, const char *format, va_list ap)
 
   vfprintf(log_dest, format, ap);
   putc('\n', log_dest);
-  fflush(log_dest);
 }
 
 static bool
@@ -567,13 +579,8 @@ logpfx(int severity, const char *fn)
   if (!log_dest || severity < log_min_sev)
     return false;
 
-  if (log_timestamps) {
-    struct timeval now, delta;
-    gettimeofday(&now, 0);
-    timeval_subtract(&now, &log_ts_base, &delta);
-    fprintf(log_dest, "%.4f ",
-            delta.tv_sec + double(delta.tv_usec) / 1e6);
-  }
+  if (log_timestamps)
+    fprintf(log_dest, "%.4f ", log_get_timestamp());
 
   fprintf(log_dest, "[%s] ", sev_to_string(severity));
   if (log_min_sev == LOG_SEV_DEBUG && fn)

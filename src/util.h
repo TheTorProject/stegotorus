@@ -178,6 +178,10 @@ int log_set_min_severity(const char* sev_string);
 /** Request timestamps on all log messages. */
 void log_enable_timestamps();
 
+/** Get a timestamp consistent with the timestamps used for log messages.
+    You must have called log_enable_timestamps to use this.  */
+double log_get_timestamp();
+
 /** True if debug messages are being logged. Guard expensive debugging
     checks with this, to avoid doing useless work when the messages are
     just going to be thrown away anyway. */
