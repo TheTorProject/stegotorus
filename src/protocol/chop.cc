@@ -388,6 +388,7 @@ struct chop_config_t : config_t
   vector<steg_config_t *> steg_targets;
   chop_circuit_table circuits;
   bool trace_packets;
+  bool encryption;
 
   CONFIG_DECLARE_METHODS(chop);
 };
@@ -398,6 +399,7 @@ chop_config_t::chop_config_t()
 {
   ignore_socks_destination = true;
   trace_packets = false;
+  encryption = true;
 }
 
 chop_config_t::~chop_config_t()
@@ -445,18 +447,24 @@ chop_config_t::init(int n_options, const char *const *options)
   } else
     goto usage;
 
-  // if in client mode, accept and ignore --server-key=
-  if (mode != LSN_SIMPLE_SERVER &&
-      !strncmp(options[1], "--server-key=", 13)) {
+  while (options[1][0] == '-') {
+    if (!strncmp(options[1], "--server-key=", 13)) {
+      // accept and ignore (for now) client only
+      if (mode == LSN_SIMPLE_SERVER) {
+        log_warn("chop: --server-key option is not valid in server mode");
+        goto usage;
+      }
+    } else if (!strcmp(options[1], "--trace-packets")) {
+      trace_packets = true;
+      log_enable_timestamps();
+    } else if (!strcmp(options[1], "--disable-encryption")) {
+      encryption = false;
+    } else {
+      log_warn("chop: unrecognized option '%s'", options[1]);
+      goto usage;
+    }
     options++;
     n_options--;
-  }
-
-  if (!strcmp(options[1], "--trace-packets")) {
-    options++;
-    n_options--;
-    trace_packets = true;
-    log_enable_timestamps();
   }
 
   up_address = resolve_address_port(options[1], 1, listen_up, defport);
@@ -550,21 +558,37 @@ chop_config_t::circuit_create(size_t)
   chop_circuit_t *ckt = new chop_circuit_t;
   ckt->config = this;
 
-  key_generator *kgen =
-    key_generator::from_passphrase((const uint8_t *)passphrase,
-                                   sizeof(passphrase) - 1,
-                                   0, 0, 0, 0);
+  key_generator *kgen = 0;
+
+  if (encryption)
+    kgen = key_generator::from_passphrase((const uint8_t *)passphrase,
+                                          sizeof(passphrase) - 1,
+                                          0, 0, 0, 0);
 
   if (mode == LSN_SIMPLE_SERVER) {
-    ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
-    ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 16);
-    ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
-    ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 16);
+    if (encryption) {
+      ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
+      ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 16);
+      ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
+      ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 16);
+    } else {
+      ckt->send_crypt     = gcm_encryptor::create_noop();
+      ckt->send_hdr_crypt = ecb_encryptor::create_noop();
+      ckt->recv_crypt     = gcm_decryptor::create_noop();
+      ckt->recv_hdr_crypt = ecb_decryptor::create_noop();
+    }
   } else {
-    ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
-    ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 16);
-    ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
-    ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 16);
+    if (encryption) {
+      ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
+      ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 16);
+      ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
+      ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 16);
+    } else {
+      ckt->recv_crypt     = gcm_decryptor::create_noop();
+      ckt->recv_hdr_crypt = ecb_decryptor::create_noop();
+      ckt->send_crypt     = gcm_encryptor::create_noop();
+      ckt->send_hdr_crypt = ecb_encryptor::create_noop();
+    }
 
     std::pair<chop_circuit_table::iterator, bool> out;
     do {

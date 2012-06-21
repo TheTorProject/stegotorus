@@ -156,11 +156,25 @@ namespace {
     virtual void encrypt(uint8_t *out, const uint8_t *in);
   };
 
+  struct ecb_encryptor_noop_impl : ecb_encryptor
+  {
+    ecb_encryptor_noop_impl() {}
+    virtual ~ecb_encryptor_noop_impl();
+    virtual void encrypt(uint8_t *out, const uint8_t *in);
+  };
+
   struct ecb_decryptor_impl : ecb_decryptor
   {
     EVP_CIPHER_CTX ctx;
     ecb_decryptor_impl() { EVP_CIPHER_CTX_init(&ctx); }
     virtual ~ecb_decryptor_impl();
+    virtual void decrypt(uint8_t *out, const uint8_t *in);
+  };
+
+  struct ecb_decryptor_noop_impl : ecb_decryptor
+  {
+    ecb_decryptor_noop_impl() {}
+    virtual ~ecb_decryptor_noop_impl();
     virtual void decrypt(uint8_t *out, const uint8_t *in);
   };
 }
@@ -197,6 +211,12 @@ ecb_encryptor::create(key_generator *gen, size_t keylen)
   return enc;
 }
 
+ecb_encryptor *
+ecb_encryptor::create_noop()
+{
+  return new ecb_encryptor_noop_impl;
+}
+
 ecb_decryptor *
 ecb_decryptor::create(const uint8_t *key, size_t keylen)
 {
@@ -229,13 +249,23 @@ ecb_decryptor::create(key_generator *gen, size_t keylen)
   return dec;
 }
 
+ecb_decryptor *
+ecb_decryptor::create_noop()
+{
+  return new ecb_decryptor_noop_impl;
+}
+
 ecb_encryptor::~ecb_encryptor() {}
 ecb_encryptor_impl::~ecb_encryptor_impl()
 { EVP_CIPHER_CTX_cleanup(&ctx); }
+ecb_encryptor_noop_impl::~ecb_encryptor_noop_impl()
+{}
 
 ecb_decryptor::~ecb_decryptor() {}
 ecb_decryptor_impl::~ecb_decryptor_impl()
 { EVP_CIPHER_CTX_cleanup(&ctx); }
+ecb_decryptor_noop_impl::~ecb_decryptor_noop_impl()
+{}
 
 void
 ecb_encryptor_impl::encrypt(uint8_t *out, const uint8_t *in)
@@ -247,12 +277,24 @@ ecb_encryptor_impl::encrypt(uint8_t *out, const uint8_t *in)
 }
 
 void
+ecb_encryptor_noop_impl::encrypt(uint8_t *out, const uint8_t *in)
+{
+  memcpy(out, in, AES_BLOCK_LEN);
+}
+
+void
 ecb_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in)
 {
   int olen;
   if (!EVP_DecryptUpdate(&ctx, out, &olen, in, AES_BLOCK_LEN) ||
       size_t(olen) != AES_BLOCK_LEN)
     log_crypto_abort("ecb_decryptor::decrypt");
+}
+
+void
+ecb_decryptor_noop_impl::decrypt(uint8_t *out, const uint8_t *in)
+{
+  memcpy(out, in, AES_BLOCK_LEN);
 }
 
 namespace {
@@ -265,11 +307,27 @@ namespace {
                          const uint8_t *nonce, size_t nlen);
   };
 
+  struct gcm_encryptor_noop_impl : gcm_encryptor
+  {
+    gcm_encryptor_noop_impl() {}
+    virtual ~gcm_encryptor_noop_impl();
+    virtual void encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                         const uint8_t *nonce, size_t nlen);
+  };
+
   struct gcm_decryptor_impl : gcm_decryptor
   {
     EVP_CIPHER_CTX ctx;
     gcm_decryptor_impl() { EVP_CIPHER_CTX_init(&ctx); }
     virtual ~gcm_decryptor_impl();
+    virtual int decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                        const uint8_t *nonce, size_t nlen);
+  };
+
+  struct gcm_decryptor_noop_impl : gcm_decryptor
+  {
+    gcm_decryptor_noop_impl() {}
+    virtual ~gcm_decryptor_noop_impl();
     virtual int decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                         const uint8_t *nonce, size_t nlen);
   };
@@ -320,6 +378,12 @@ gcm_encryptor::create(key_generator *gen, size_t keylen)
   return enc;
 }
 
+gcm_encryptor *
+gcm_encryptor::create_noop()
+{
+  return new gcm_encryptor_noop_impl;
+}
+
 gcm_decryptor *
 gcm_decryptor::create(const uint8_t *key, size_t keylen)
 {
@@ -348,12 +412,23 @@ gcm_decryptor::create(key_generator *gen, size_t keylen)
   return dec;
 }
 
+gcm_decryptor *
+gcm_decryptor::create_noop()
+{
+  return new gcm_decryptor_noop_impl;
+}
+
 gcm_encryptor::~gcm_encryptor() {}
 gcm_encryptor_impl::~gcm_encryptor_impl()
 { EVP_CIPHER_CTX_cleanup(&ctx); }
+gcm_encryptor_noop_impl::~gcm_encryptor_noop_impl()
+{}
+
 gcm_decryptor::~gcm_decryptor() {}
 gcm_decryptor_impl::~gcm_decryptor_impl()
 { EVP_CIPHER_CTX_cleanup(&ctx); }
+gcm_decryptor_noop_impl::~gcm_decryptor_noop_impl()
+{}
 
 void
 gcm_encryptor_impl::encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
@@ -380,6 +455,14 @@ gcm_encryptor_impl::encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
 
   if (!EVP_CIPHER_CTX_ctrl(&ctx, EVP_CTRL_GCM_GET_TAG, 16, out + inlen))
     log_crypto_abort("gcm_encryptor::write tag");
+}
+
+void
+gcm_encryptor_noop_impl::encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                                 const uint8_t *, size_t)
+{
+  memcpy(out, in, inlen);
+  memset(out + inlen, 0, 16);
 }
 
 int
@@ -414,6 +497,14 @@ gcm_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
     return log_crypto_warn("gcm_decryptor::check tag");
   }
 
+  return 0;
+}
+
+int
+gcm_decryptor_noop_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
+                                 const uint8_t *, size_t)
+{
+  memcpy(out, in, inlen - 16);
   return 0;
 }
 

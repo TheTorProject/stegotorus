@@ -51,6 +51,11 @@ struct ecb_encryptor
       16, 24, or 32 bytes. */
   static ecb_encryptor *create(key_generator *gen, size_t keylen);
 
+  /** Return a new AES/ECB encryption state that doesn't actually
+      encrypt anything -- it just copies its input to its output.
+      For testing purposes only.  */
+  static ecb_encryptor *create_noop();
+
   /** Encrypt exactly AES_BLOCK_LEN bytes of data in the buffer 'in' and
       write the result to 'out'.  */
   virtual void encrypt(uint8_t *out, const uint8_t *in) = 0;
@@ -73,6 +78,11 @@ struct ecb_decryptor
       length 'keylen' from the key generator 'gen'.  'keylen' must be
       16, 24, or 32 bytes. */
   static ecb_decryptor *create(key_generator *gen, size_t keylen);
+
+  /** Return a new AES/ECB decryption state that doesn't actually
+      decrypt anything -- it just copies its input to its output.
+      For testing purposes only.  */
+  static ecb_decryptor *create_noop();
 
   /** Decrypt exactly AES_BLOCK_LEN bytes of data in the buffer 'in' and
       write the result to 'out'.  */
@@ -97,6 +107,11 @@ struct gcm_encryptor
       length 'keylen' from the key generator 'gen'.  'keylen' must be
       16, 24, or 32 bytes. */
   static gcm_encryptor *create(key_generator *gen, size_t keylen);
+
+  /** Return a new AES/GCM encryption state that doesn't actually
+      encrypt anything -- it just copies its input to its output.
+      For testing purposes only.  */
+  static gcm_encryptor *create_noop();
 
   /** Encrypt 'inlen' bytes of data in the buffer 'in', writing the
       result plus an authentication tag to the buffer 'out', whose
@@ -124,6 +139,11 @@ struct gcm_decryptor
       length 'keylen' from the key generator 'gen'.  'keylen' must be
       16, 24, or 32 bytes. */
   static gcm_decryptor *create(key_generator *gen, size_t keylen);
+
+  /** Return a new AES/GCM decryption state that doesn't actually
+      decrypt anything -- it just copies its input to its output.
+      For testing purposes only.  */
+  static gcm_decryptor *create_noop();
 
   /** Decrypt 'inlen' bytes of data in the buffer 'in'; the last 16
       bytes of this buffer are assumed to be the authentication tag.
