@@ -35,10 +35,14 @@ struct conn_t {
     , pending_write_eof(false)
   {}
 
-  /** Close and deallocate a connection.  If the connection is part of a
-      circuit, disconnect it from the circuit; this may cause the circuit
-      to close as well. */
+  /** Deallocate a connection.  Normally should not be invoked directly,
+      use close() instead. */
   virtual ~conn_t();
+
+  /** Close a connection and schedule it for deallocation.  If the
+      connection is part of a circuit, disconnect it from the circuit;
+      this may cause the circuit to close as well. */
+  virtual void close();
 
   /** Return the upstream circuit for this connection, if there is one.
       NOTE: this is *not* a pure virtual method because it can be called
@@ -53,15 +57,23 @@ struct conn_t {
   struct evbuffer *outbound()
   { return this->buffer ? bufferevent_get_output(this->buffer) : 0; }
 
-  /** Create an upstream circuit for this connection, if it is
-      possible to do so without receiving data from the downstream
-      peer.  If data must be received first, this method should do
-      nothing (but return success), and the |recv| method is
-      responsible for creating the upstream circuit when appropriate.
-      Must return 0 on success, -1 on failure. */
+  /** Called immediately after the TCP handshake completes, for
+      incoming connections to server mode.
+
+      If it is possible to do so without receiving data from the
+      downstream peer, create an upstream circuit for this connection
+      here.  If data must be received first, this method should do
+      nothing (but return success), and the |recv| method should
+      create the upstream circuit when appropriate.  */
   virtual int maybe_open_upstream() = 0;
 
-  /** Perform a connection handshake. Not all protocols have a handshake. */
+  /** Called immediately after the TCP handshake completes, for
+      outgoing connections from client mode.
+
+      If it is necessary to transmit something immediately on new
+      connections, do so from this method.  (It may be more
+      appropriate to wait until the first time the associated circuit
+      wishes to transmit data on this connection.)  */
   virtual int handshake() = 0;
 
   /** Receive data from 'source' and pass it upstream (to the circuit). */
@@ -91,6 +103,9 @@ struct conn_t {
       and send it.  */
   virtual void transmit_soon(unsigned long timeout) = 0;
 };
+
+/** Prepare global connection-related state.  Succeeds or crashes.  */
+void conn_global_init(struct event_base *);
 
 /** When all currently-open connections and circuits are closed, stop
     the main event loop and exit the program.  If 'barbaric' is true,
@@ -149,7 +164,14 @@ struct circuit_t {
     , pending_read_eof(false)
     , pending_write_eof(false)
   {}
+
+  /** Deallocate a circuit.  Normally should not be invoked directly,
+      use close() instead.  */
   virtual ~circuit_t();
+
+  /** Close a circuit and schedule it for deallocation.  Will also
+      disconnect and close all connections that belong to this circuit. */
+  virtual void close();
 
   /** Return the configuration that this circuit belongs to. */
   virtual config_t *cfg() const;

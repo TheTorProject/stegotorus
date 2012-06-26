@@ -56,11 +56,9 @@ stegotorus_SOURCES = \
 UTGROUPS = \
 	src/test/unittest_base64.cc \
 	src/test/unittest_compression.cc \
-	src/test/unittest_config.cc \
 	src/test/unittest_crypt.cc \
 	src/test/unittest_pdfsteg.cc \
-	src/test/unittest_socks.cc \
-	src/test/unittest_transfer.cc
+	src/test/unittest_socks.cc
 
 unittests_SOURCES = \
 	src/test/tinytest.cc \
@@ -75,7 +73,6 @@ noinst_HEADERS = \
 	src/connections.h \
 	src/crypt.h \
 	src/listener.h \
-	src/main.h \
 	src/protocol.h \
 	src/rng.h \
 	src/socks.h \

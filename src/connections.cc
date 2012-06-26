@@ -5,7 +5,6 @@
 
 #include "util.h"
 #include "connections.h"
-#include "main.h"
 #include "protocol.h"
 #include "socks.h"
 
@@ -16,75 +15,147 @@
 
 using std::tr1::unordered_set;
 
-/** All active connections.  */
-static unordered_set<conn_t *> connections;
+static void close_cleanup_cb(evutil_socket_t, short, void *);
 
-/** All active circuits.  */
-static unordered_set<circuit_t *> circuits;
+namespace {
+struct conn_global_state
+{
+  /** All active connections.  */
+  unordered_set<conn_t *> connections;
 
-/** Most recently assigned serial numbers for connections and circuits.
-    Note that serial number 0 is never used. These are only used for
-    debugging messages, so we don't worry about them wrapping around. */
-static unsigned int last_conn_serial = 0;
-static unsigned int last_ckt_serial = 0;
+  /** Connections which are to be deallocated after we return to the
+      event loop. */
+  unordered_set<conn_t *> closed_connections;
 
-/** True when stegotorus is shutting down: no further connections or
-    circuits may be created, and we break out of the event loop when
-    the last one (of either) is closed. */
-static bool shutting_down;
+  /** All active circuits.  */
+  unordered_set<circuit_t *> circuits;
 
-/** True in the middle of a barbaric connection shutdown; prevents
-    maybe_finish_shutdown from shutting down too early. */
-static bool closing_all_connections;
+  /** Circuits which are to be deallocated after we return to the
+      event loop. */
+  unordered_set<circuit_t *> closed_circuits;
+
+  /** The one and only event base used by this program.
+      Not owned by this object. */
+  struct event_base *the_event_base;
+
+  /** Low-priority event which fires when there are connections or
+      circuits waiting to be deallocated, and all other pending events
+      have been processed.  This ensures that we don't deallocate
+      connections that have pending events. */
+  struct event *close_cleanup;
+
+  /** Most recently assigned serial numbers for connections and circuits.
+      Note that serial number 0 is never used. These are only used for
+      debugging messages, so we don't worry about them wrapping around. */
+  unsigned int last_conn_serial;
+  unsigned int last_ckt_serial;
+
+  /** True when stegotorus is shutting down: no further connections or
+      circuits may be created, and we break out of the event loop when
+      the last one (of either) is closed. */
+  bool shutting_down;
+
+  conn_global_state(struct event_base *evbase);
+  ~conn_global_state();
+};
+
+conn_global_state::conn_global_state(struct event_base *evbase)
+  : the_event_base(evbase),
+    close_cleanup(0),
+    last_conn_serial(0), last_ckt_serial(0),
+    shutting_down(false)
+{
+  close_cleanup = evtimer_new(evbase, close_cleanup_cb, this);
+  log_assert(close_cleanup);
+  if (event_priority_set(close_cleanup, 1))
+    log_abort("failed to demote priority of close-cleanup event");
+}
+
+conn_global_state::~conn_global_state()
+{
+  log_assert(shutting_down);
+  log_assert(connections.empty());
+  log_assert(closed_connections.empty());
+  log_assert(circuits.empty());
+  log_assert(closed_circuits.empty());
+
+  event_free(close_cleanup);
+}
+
+} // anonymous namespace
 
 static void
-maybe_finish_shutdown(void)
+close_cleanup_cb(evutil_socket_t, short, void *arg)
 {
-  if (!shutting_down || closing_all_connections ||
-      !circuits.empty() || !connections.empty())
+  conn_global_state *cgs = (conn_global_state *)arg;
+
+  if (!cgs->closed_circuits.empty()) {
+    unordered_set<circuit_t *> v;
+    v.swap(cgs->closed_circuits);
+    for (unordered_set<circuit_t *>::iterator i = v.begin();
+         i != v.end(); i++)
+      delete *i;
+  }
+  if (!cgs->closed_connections.empty()) {
+    unordered_set<conn_t *> v;
+    v.swap(cgs->closed_connections);
+    for (unordered_set<conn_t *>::iterator i = v.begin();
+         i != v.end(); i++)
+      delete *i;
+  }
+
+  if (!cgs->shutting_down ||
+      !cgs->circuits.empty() ||
+      !cgs->connections.empty())
     return;
 
-  finish_shutdown();
+  log_debug("finishing shutdown");
+  event_base_loopexit(cgs->the_event_base, NULL);
+  delete cgs;
+  cgs = 0;
+}
+
+static conn_global_state *cgs;
+
+void
+conn_global_init(struct event_base *evbase)
+{
+  cgs = new conn_global_state(evbase);
 }
 
 void
 conn_start_shutdown(int barbaric)
 {
-  shutting_down = true;
+  cgs->shutting_down = true;
 
   if (barbaric) {
-    closing_all_connections = true;
-
-    if (!circuits.empty()) {
+    if (!cgs->circuits.empty()) {
       unordered_set<circuit_t *> v;
-      v.swap(circuits);
+      v.swap(cgs->circuits);
       for (unordered_set<circuit_t *>::iterator i = v.begin();
            i != v.end(); i++)
-        delete *i;
+        (*i)->close();
     }
-    if (!connections.empty()) {
+    if (!cgs->connections.empty()) {
       unordered_set<conn_t *> v;
-      v.swap(connections);
+      v.swap(cgs->connections);
       for (unordered_set<conn_t *>::iterator i = v.begin();
            i != v.end(); i++)
-        delete *i;
+        (*i)->close();
     }
-    closing_all_connections = false;
   }
-
-  maybe_finish_shutdown();
 }
 
 size_t
 conn_count(void)
 {
-  return connections.size();
+  return cgs->connections.size();
 }
 
 size_t
 circuit_count(void)
 {
-  return circuits.size();
+  return cgs->circuits.size();
 }
 
 /**
@@ -96,13 +167,13 @@ conn_create(config_t *cfg, size_t index,
 {
   conn_t *conn;
 
-  log_assert(!shutting_down);
+  log_assert(!cgs->shutting_down);
 
   conn = cfg->conn_create(index);
   conn->buffer = buf;
   conn->peername = peername;
-  conn->serial = ++last_conn_serial;
-  connections.insert(conn);
+  conn->serial = ++cgs->last_conn_serial;
+  cgs->connections.insert(conn);
   log_debug(conn, "new connection");
   return conn;
 }
@@ -112,16 +183,32 @@ conn_create(config_t *cfg, size_t index,
 */
 conn_t::~conn_t()
 {
-  connections.erase(this);
-  log_debug(this, "closing connection; %lu remaining",
-            (unsigned long) connections.size());
-
   if (this->peername)
     free((void *)this->peername);
   if (this->buffer)
     bufferevent_free(this->buffer);
+}
 
-  maybe_finish_shutdown();
+void
+conn_t::close()
+{
+  log_debug(this, "closing connection; %lu remaining",
+            (unsigned long) cgs->connections.size());
+  if (this->buffer)
+    bufferevent_disable(this->buffer, EV_READ|EV_WRITE);
+
+  bool need_event_add =
+    cgs->closed_connections.empty() && cgs->closed_circuits.empty();
+
+  cgs->connections.erase(this);
+  cgs->closed_connections.insert(this);
+
+  if (need_event_add) {
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    event_add(cgs->close_cleanup, &tv);
+  }
 }
 
 /** Potentially called during connection construction or destruction. */
@@ -173,11 +260,7 @@ axe_timer_cb(evutil_socket_t, short, void *arg)
   circuit_t *ckt = (circuit_t *)arg;
   log_warn(ckt, "timeout waiting for new connections");
 
-  if (ckt->connected &&
-      evbuffer_get_length(bufferevent_get_output(ckt->up_buffer)) > 0)
-    circuit_do_flush(ckt);
-  else
-    delete ckt;
+  circuit_do_flush(ckt);
 }
 
 circuit_t *
@@ -185,25 +268,21 @@ circuit_create(config_t *cfg, size_t index)
 {
   circuit_t *ckt;
 
-  log_assert(!shutting_down);
+  log_assert(!cgs->shutting_down);
 
   ckt = cfg->circuit_create(index);
-  ckt->serial = ++last_ckt_serial;
+  ckt->serial = ++cgs->last_ckt_serial;
 
   if (cfg->mode == LSN_SOCKS_CLIENT)
     ckt->socks_state = socks_state_new();
 
-  circuits.insert(ckt);
+  cgs->circuits.insert(ckt);
   log_debug(ckt, "new circuit");
   return ckt;
 }
 
 circuit_t::~circuit_t()
 {
-  circuits.erase(this);
-  log_debug(this, "closing circuit; %lu remaining",
-            (unsigned long)circuits.size());
-
   if (this->up_buffer)
     bufferevent_free(this->up_buffer);
   if (this->up_peer)
@@ -214,8 +293,33 @@ circuit_t::~circuit_t()
     event_free(this->flush_timer);
   if (this->axe_timer)
     event_free(this->axe_timer);
+}
 
-  maybe_finish_shutdown();
+void
+circuit_t::close()
+{
+  log_debug(this, "closing circuit; %lu remaining",
+            (unsigned long)cgs->circuits.size());
+
+  if (this->up_buffer)
+    bufferevent_disable(this->up_buffer, EV_READ|EV_WRITE);
+  if (this->flush_timer)
+    event_del(this->flush_timer);
+  if (this->axe_timer)
+    event_del(this->axe_timer);
+
+  bool need_event_add =
+    cgs->closed_connections.empty() && cgs->closed_circuits.empty();
+
+  cgs->circuits.erase(this);
+  cgs->closed_circuits.insert(this);
+
+  if (need_event_add) {
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    event_add(cgs->close_cleanup, &tv);
+  }
 }
 
 config_t *
@@ -241,7 +345,7 @@ circuit_send(circuit_t *ckt)
 {
   if (ckt->send()) {
     log_info(ckt, "error during transmit");
-    delete ckt;
+    ckt->close();
   }
 }
 
@@ -256,10 +360,10 @@ circuit_send_eof(circuit_t *ckt)
   ckt->pending_read_eof = true;
   if (ckt->socks_state) {
     log_debug(ckt, "EOF during SOCKS phase");
-    delete ckt;
+    ckt->close();
   } else if (ckt->send_eof()) {
     log_info(ckt, "error during transmit");
-    delete ckt;
+    ckt->close();
   }
 }
 

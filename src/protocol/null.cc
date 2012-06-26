@@ -135,24 +135,20 @@ null_circuit_t::null_circuit_t()
 
 null_circuit_t::~null_circuit_t()
 {
-  // Attempt to prevent events from firing on partially or completely
-  // torn down circuits.  (This shouldn't happen, but it seems to.)
-  if (this->up_buffer)
-    bufferevent_disable(this->up_buffer, EV_READ|EV_WRITE);
-  if (this->flush_timer)
-    event_del(this->flush_timer);
-  if (this->axe_timer)
-    event_del(this->axe_timer);
+}
 
+void
+null_circuit_t::close()
+{
   if (downstream) {
     /* break the circular reference before deallocating the
        downstream connection */
     downstream->upstream = NULL;
-    if (evbuffer_get_length(downstream->outbound()) > 0)
-      conn_do_flush(downstream);
-    else
-      delete downstream;
+    conn_do_flush(downstream);
+    downstream = NULL;
   }
+
+  circuit_t::close();
 }
 
 config_t *
@@ -192,13 +188,7 @@ null_circuit_t::drop_downstream(conn_t *cn)
             this->serial, conn->serial, conn->peername);
   this->downstream = NULL;
   conn->upstream = NULL;
-
-  if (evbuffer_get_length(bufferevent_get_output(this->up_buffer)) > 0)
-    /* this may already have happened, but there's no harm in
-       doing it again */
-    circuit_do_flush(this);
-  else
-    delete this;
+  circuit_do_flush(this);
 }
 
 /* Send data from the upstream buffer. */
@@ -206,7 +196,8 @@ int
 null_circuit_t::send()
 {
   log_debug(this, "sending %lu bytes",
-            (unsigned long)evbuffer_get_length(bufferevent_get_input(this->up_buffer)));
+            (unsigned long)
+            evbuffer_get_length(bufferevent_get_input(this->up_buffer)));
 
   return evbuffer_add_buffer(this->downstream->outbound(),
                              bufferevent_get_input(this->up_buffer));
@@ -242,13 +233,15 @@ null_conn_t::null_conn_t()
 
 null_conn_t::~null_conn_t()
 {
-  // Attempt to prevent events from firing on partially or completely
-  // torn down connections.  (This shouldn't happen, but it seems to.)
-  if (this->buffer)
-    bufferevent_disable(this->buffer, EV_READ|EV_WRITE);
+}
 
+void
+null_conn_t::close()
+{
   if (this->upstream)
     this->upstream->drop_downstream(this);
+
+  conn_t::close();
 }
 
 /* Only used by connection callbacks */

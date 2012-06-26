@@ -612,15 +612,15 @@ chop_circuit_t::chop_circuit_t()
 
 chop_circuit_t::~chop_circuit_t()
 {
-  // Attempt to prevent events from firing on partially or completely
-  // torn down circuits.  (This shouldn't happen, but it seems to.)
-  if (this->up_buffer)
-    bufferevent_disable(this->up_buffer, EV_READ|EV_WRITE);
-  if (this->flush_timer)
-    event_del(this->flush_timer);
-  if (this->axe_timer)
-    event_del(this->axe_timer);
+  delete send_crypt;
+  delete send_hdr_crypt;
+  delete recv_crypt;
+  delete recv_hdr_crypt;
+}
 
+void
+chop_circuit_t::close()
+{
   if (!sent_fin || !received_fin || !upstream_eof) {
     log_warn(this, "destroying active circuit: fin%c%c eof%c ds=%lu",
              sent_fin ? '+' : '-', received_fin ? '+' : '-',
@@ -632,16 +632,9 @@ chop_circuit_t::~chop_circuit_t()
        i != downstreams.end(); i++) {
     chop_conn_t *conn = *i;
     conn->upstream = NULL;
-    if (evbuffer_get_length(conn->outbound()) > 0)
-      conn_do_flush(conn);
-    else
-      delete conn;
+    conn_do_flush(conn);
   }
-
-  delete send_crypt;
-  delete send_hdr_crypt;
-  delete recv_crypt;
-  delete recv_hdr_crypt;
+  downstreams.clear();
 
   // The IDs for old circuits are preserved for a while (at present,
   // indefinitely; FIXME: purge them on a timer) against the
@@ -657,6 +650,8 @@ chop_circuit_t::~chop_circuit_t()
   log_assert(out != config->circuits.end());
   log_assert(out->second == this);
   out->second = NULL;
+
+  circuit_t::close();
 }
 
 config_t *
@@ -707,12 +702,7 @@ chop_circuit_t::drop_downstream(chop_conn_t *conn)
   // to enable further transmissions from the server.
   if (downstreams.empty()) {
     if (sent_fin && received_fin) {
-      if (evbuffer_get_length(bufferevent_get_output(up_buffer)) > 0)
-        // this may already have happened, but there's no harm in
-        // doing it again
-        circuit_do_flush(this);
-      else
-        delete this;
+      circuit_do_flush(this);
     } else if (config->mode == LSN_SIMPLE_SERVER) {
       circuit_arm_axe_timer(this, axe_interval());
     } else {
@@ -1126,6 +1116,7 @@ chop_circuit_t::check_for_eof()
   // If we're at EOF both ways, close all connections, sending first
   // if necessary.
   if (sent_fin && received_fin) {
+    log_debug(this, "sent and received FIN");
     circuit_disarm_flush_timer(this);
     for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
          i != downstreams.end(); i++) {
@@ -1138,8 +1129,12 @@ chop_circuit_t::check_for_eof()
 
   // If we're the client we have to keep trying to talk as long as we
   // haven't both sent and received a FIN, or we might deadlock.
-  else if (config->mode != LSN_SIMPLE_SERVER)
+  else if (config->mode != LSN_SIMPLE_SERVER) {
+    log_debug(this, "client arming flush timer%s%s",
+              sent_fin ? " (sent FIN)" : "",
+              received_fin ? " (received FIN)": "");
     circuit_arm_flush_timer(this, flush_interval());
+  }
 
   return 0;
 }
@@ -1167,18 +1162,23 @@ chop_conn_t::chop_conn_t()
 
 chop_conn_t::~chop_conn_t()
 {
-  // Attempt to prevent events from firing on partially or completely
-  // torn down connections.  (This shouldn't happen, but it seems to.)
-  if (this->buffer)
-    bufferevent_disable(this->buffer, EV_READ|EV_WRITE);
-
   if (this->must_send_timer)
     event_free(this->must_send_timer);
-  if (upstream)
-    upstream->drop_downstream(this);
   if (steg)
     delete steg;
   evbuffer_free(recv_pending);
+}
+
+void
+chop_conn_t::close()
+{
+  if (this->must_send_timer)
+    event_del(this->must_send_timer);
+
+  if (upstream)
+    upstream->drop_downstream(this);
+
+  conn_t::close();
 }
 
 circuit_t *
@@ -1266,7 +1266,7 @@ chop_conn_t::recv_handshake()
     }
     if (circuit_open_upstream(ck)) {
       log_warn(this, "failed to begin upstream connection");
-      delete ck;
+      ck->close();
       return -1;
     }
     log_debug(this, "created new circuit to %s", ck->up_peer);
@@ -1290,7 +1290,19 @@ chop_conn_t::recv()
     return 0;
 
   if (!upstream) {
-    // Try to receive a handshake.
+    if (config->mode != LSN_SIMPLE_SERVER) {
+      // We're the client.  Client connections start out attached to a
+      // circuit; therefore this is a server-to-client message that
+      // crossed with the teardown of the circuit it belonged to, and
+      // we don't have the decryption keys for it anymore.
+      // By construction it must be chaff, so just throw it away.
+      log_debug(this, "discarding chaff after circuit closed");
+      log_assert(!must_send_p());
+      conn_do_flush(this);
+      return 0;
+    }
+
+    // We're the server. Try to receive a handshake.
     if (recv_handshake())
       return -1;
 
@@ -1304,7 +1316,6 @@ chop_conn_t::recv()
     // connection, possibly sending a response if the cover protocol
     // requires one.
     if (!upstream) {
-      evbuffer_drain(recv_pending, evbuffer_get_length(recv_pending));
       if (must_send_p())
         send();
       conn_do_flush(this);

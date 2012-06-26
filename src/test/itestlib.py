@@ -97,9 +97,10 @@ class Stegotorus(subprocess.Popen):
     def check_completion(self, label, force_stderr=False):
         self.stdin.close()
         self.communicator.join()
-        self.timeout.cancel()
+        if self.poll() is not None:
+            self.timeout.cancel()
         self.timeout.join()
-        self.poll()
+        self.wait()
 
         report = ""
 

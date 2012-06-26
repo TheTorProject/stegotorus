@@ -128,6 +128,7 @@ extern const proto_module *const supported_protos[];
 #define CONN_DECLARE_METHODS(mod)                       \
   mod##_conn_t();                                       \
   virtual ~mod##_conn_t();                              \
+  virtual void close();                                 \
   virtual circuit_t *circuit() const;                   \
   virtual int  maybe_open_upstream();                   \
   virtual int  handshake();                             \
@@ -149,6 +150,7 @@ extern const proto_module *const supported_protos[];
 #define CIRCUIT_DECLARE_METHODS(mod)            \
   mod##_circuit_t();                            \
   virtual ~mod##_circuit_t();                   \
+  virtual void close();                         \
   virtual config_t *cfg() const;                \
   virtual void add_downstream(conn_t *);        \
   virtual void drop_downstream(conn_t *);       \

@@ -4,7 +4,6 @@
  */
 
 #include "util.h"
-#include "main.h"
 
 #include "connections.h"
 #include "crypt.h"
@@ -35,7 +34,6 @@
 using std::vector;
 using std::string;
 
-static struct event_base *the_event_base;
 static bool allow_kq = false;
 static bool daemon_mode = false;
 static string pidfile_name;
@@ -63,15 +61,6 @@ start_shutdown(int barbaric, const char *label)
 
   listener_close_all();          /* prevent further connections */
   conn_start_shutdown(barbaric); /* possibly break existing connections */
-}
-
-/** Stop stegotorus's event loop. Final cleanup happens in main().
-    Called by conn_start_shutdown and/or conn_free (see connections.c). */
-void
-finish_shutdown(void)
-{
-  log_debug("finishing shutdown");
-  event_base_loopexit(the_event_base, NULL);
 }
 
 /**
@@ -440,9 +429,17 @@ main(int, const char *const *argv)
   /* Possibly worth doing in the future: activating Windows IOCP and
      telling it how many CPUs to use. */
 
-  the_event_base = event_base_new_with_config(evcfg);
+  struct event_base *the_event_base = event_base_new_with_config(evcfg);
   if (!the_event_base)
     log_abort("failed to initialize networking (evbase)");
+
+  /* Most events are processed at the default priority (0), but
+     connection cleanup events are processed at low priority (1)
+     to ensure that all pending I/O is handled first.  */
+  if (event_base_priority_init(the_event_base, 2))
+    log_abort("failed to initialize networking (priority queues)");
+
+  conn_global_init(the_event_base);
 
   /* ASN should this happen only when SOCKS is enabled? */
   if (init_evdns_base(the_event_base))

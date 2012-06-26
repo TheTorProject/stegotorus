@@ -29,12 +29,7 @@ sed '
 
   /^compression ZLIB_CEILING$/d
   /^compression ZLIB_UINT_MAX$/d
-  /^connections circuits$/d
-  /^connections closing_all_connections$/d
-  /^connections connections$/d
-  /^connections last_ckt_serial$/d
-  /^connections last_conn_serial$/d
-  /^connections shutting_down$/d
+  /^connections cgs$/d
   /^crypt bctx$/d
   /^crypt crypto_initialized$/d
   /^crypt crypto_errs_initialized$/d
