@@ -389,6 +389,7 @@ downstream_event_cb(struct bufferevent *bev, short what, void *arg)
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Peer is done sending us data. */
       conn->recv_eof();
+      conn->read_eof = true;
       if (conn->read_eof && conn->write_eof)
         conn->close();
     } else {
@@ -435,11 +436,12 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *conn = (conn_t *)arg;
   size_t remain = evbuffer_get_length(bufferevent_get_output(bev));
-  log_debug(conn, "%lu bytes still to transmit%s%s%s%s%s",
+  log_debug(conn, "%lu bytes still to transmit%s%s%s%s%s%s",
             (unsigned long)remain,
             conn->connected ? "" : " (not connected)",
-            conn->pending_write_eof ? " (received EOF)" : "",
-            conn->write_eof ? " (at EOF)" : "",
+            conn->pending_write_eof ? " (reached EOF)" : "",
+            conn->write_eof ? " (sent EOF)" : "",
+            conn->read_eof ? " (received EOF)" : "",
             conn->circuit() ? "" : " (no circuit)",
             conn->ever_received ? "" : " (never received)");
 

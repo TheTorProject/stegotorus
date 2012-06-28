@@ -89,6 +89,10 @@ close_cleanup_cb(evutil_socket_t, short, void *arg)
 {
   conn_global_state *cgs = (conn_global_state *)arg;
 
+  log_debug("cleaning up %lu circuits and %lu connections",
+            (unsigned long)cgs->closed_circuits.size(),
+            (unsigned long)cgs->closed_connections.size());
+
   if (!cgs->closed_circuits.empty()) {
     unordered_set<circuit_t *> v;
     v.swap(cgs->closed_circuits);
@@ -197,18 +201,14 @@ conn_t::close()
   if (this->buffer)
     bufferevent_disable(this->buffer, EV_READ|EV_WRITE);
 
-  bool need_event_add =
+  bool need_event =
     cgs->closed_connections.empty() && cgs->closed_circuits.empty();
 
   cgs->connections.erase(this);
   cgs->closed_connections.insert(this);
 
-  if (need_event_add) {
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-    event_add(cgs->close_cleanup, &tv);
-  }
+  if (need_event)
+    event_active(cgs->close_cleanup, 0, 0);
 }
 
 /** Potentially called during connection construction or destruction. */
@@ -308,18 +308,14 @@ circuit_t::close()
   if (this->axe_timer)
     event_del(this->axe_timer);
 
-  bool need_event_add =
+  bool need_event =
     cgs->closed_connections.empty() && cgs->closed_circuits.empty();
 
   cgs->circuits.erase(this);
   cgs->closed_circuits.insert(this);
 
-  if (need_event_add) {
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-    event_add(cgs->close_cleanup, &tv);
-  }
+  if (need_event)
+    event_active(cgs->close_cleanup, 0, 0);
 }
 
 config_t *
