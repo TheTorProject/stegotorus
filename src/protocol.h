@@ -14,7 +14,7 @@ struct steg_config_t;
     private subclass of this type that implements all the methods
     below, plus a descendant constructor.  The subclass must have the
     name MODULE_config_t where MODULE is the module name you use in
-    PROTO_DEFINE_MODULE.  Use CONFIG_DECLARE_METHODS in the
+    PROTO_DEFINE_MODULE. Use CONFIG_DECLARE_METHODS in the
     declaration. */
 
 struct config_t
