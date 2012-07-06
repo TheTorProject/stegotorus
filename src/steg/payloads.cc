@@ -1298,7 +1298,8 @@ init_PDF_payload_pool(payloads& pl, int len, int type, int minCapacity)
       // cap = minCapacity+1;
       cap = capacityPDF(msgbuf, p->length);
       if (cap > minCapacity) {
-	pl.typePayloadCap[contentType][cnt] = (cap-PDF_DELIMITER_SIZE)/2;
+	log_debug("pdf (index %d) greater than mincapacity %d", cnt, minCapacity);
+	pl.ypePayloadCap[contentType][cnt] = (cap-PDF_DELIMITER_SIZE)/2;
 	pl.typePayload[contentType][cnt] = r;
 	cnt++;
 	
