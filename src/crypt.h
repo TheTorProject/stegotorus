@@ -354,6 +354,5 @@ private:
   key_generator& operator=(const key_generator&) DELETE_METHOD;
 };
 
-viod sha256(unsigned char *buffer, size_t n, unsigned char *md);
-unsigned char *SHA256(const unsigned char *d, size_t n,unsigned char *md);
+void sha256(const unsigned char *buffer, size_t n, unsigned char *md);
 #endif

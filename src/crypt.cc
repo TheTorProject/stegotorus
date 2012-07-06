@@ -823,15 +823,12 @@ key_generator_impl::~key_generator_impl()
     Computes sha256 of buffer of size n and store the result 
     in md. If md == NULL it allocate the memory.
 */
-
-void sha256(unsigned char *buffer, size_t n, unsigned char *md)
+void sha256(const unsigned char *buffer, size_t n, unsigned char *md)
 {
   if (md == NULL)
-    md = new char*[20];
+    md = new unsigned char[20];
+  
+  SHA256(buffer, n, md);
 
-  if (md == NULL)
-    log_crypto_abort("out of memory");
-    
-    SHA256(const unsigned char *d, size_t n,unsigned char *md);
 }
 
