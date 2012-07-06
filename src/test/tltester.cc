@@ -36,8 +36,10 @@
    P number       - pause for |number| milliseconds
    > text         - transmit |text| on the near socket
    < text         - transmit |text| on the far socket
-   ]              - signal EOF on the near socket
-   [              - signal EOF on the far socket
+   ]              - signal EOF on the near socket, this tells the near to 
+                    shutdown the socket which triggers socket_event_cb on far
+   [              - signal EOF on the far socket, this makes far to shutdown
+                    the socket which triggers socket_event_cb on near
 
    It is an error if > appears after ], or < appears after [.  The end
    of the script implicitly supplies whichever of ] and [ have not yet
@@ -78,6 +80,8 @@
    reason, it is skipped but copied to the transcript, with a ! at the
    beginning of the line.  (These will all be at the very beginning.) */
 
+#define TL_TIMEOUT 0
+
 struct tstate
 {
   struct bufferevent *near;
@@ -93,6 +97,9 @@ struct tstate
 
   struct evconnlistener *listener;
   struct event *pause_timer;
+  struct event *timeout_timer; 
+  //stop the program in case of communication
+  //error
   struct event_base *base;
 
   bool rcvd_eof_near : 1;
@@ -202,8 +209,18 @@ static void
 socket_read_cb(struct bufferevent *bev, void *arg)
 {
   tstate *st = (tstate *)arg;
+  /* print out the data for the sake of debug */
+  /* first we need the size of the buffer */
+  size_t buffer_size = evbuffer_get_length(bufferevent_get_input(bev));
+  char* debug_buf = new char[buffer_size];
+  evbuffer_copyout(bufferevent_get_input(bev), (void*) debug_buf, sizeof(char)* buffer_size);
+  fprintf(stderr, "Received on %s: %s", bev == st->near ? "near" : "far", debug_buf);
+  
+
   evbuffer_add_buffer(bev == st->near ? st->neartext : st->fartext,
                       bufferevent_get_input(bev));
+  
+  
   script_next_action(st);
 }
 
@@ -241,7 +258,10 @@ socket_event_cb(struct bufferevent *bev, short what, void *arg)
     if (what & BEV_EVENT_EOF) {
       what &= ~BEV_EVENT_EOF;
       if (reading)
-        evbuffer_add_printf(log, "%c\n", near ? '[' : ']');
+        {
+          evbuffer_add_printf(log, "%c\n", near ? '[' : ']');
+          fprintf(stderr,"%c\n", near ? '[' : ']');
+        }
       else
         evbuffer_add_printf(log, "%c S\n", near ? '{' : '}');
     }
@@ -292,6 +312,26 @@ pause_expired_cb(evutil_socket_t, short, void *arg)
 {
   tstate *st = (tstate *)arg;
   script_next_action(st);
+}
+
+/* Stop the loop print what ever you have */
+static void
+timeout_cb(evutil_socket_t, short, void *arg)
+{
+  fprintf(stderr, "Communitation timed out...");
+  tstate *st = (tstate *)arg;
+
+  evutil_socket_t fd = bufferevent_getfd(st->near);
+  bufferevent_disable(st->near, EV_WRITE);
+  if (fd != -1)
+    shutdown(fd, SHUT_WR);
+
+  fd = bufferevent_getfd(st->far);
+  bufferevent_disable(st->far, EV_WRITE);
+  if (fd != -1)
+    shutdown(fd, SHUT_WR);
+
+  event_base_loopexit(st->base, 0);
 }
 
 /* Script processing */
@@ -617,10 +657,21 @@ main(int argc, char **argv)
     return 1;
   }
   st.pause_timer = evtimer_new(st.base, pause_expired_cb, &st);
-  if (!st.pause_timer) {
-    fprintf(stderr, "creating pause timer: %s\n", strerror(errno));
+  st.timeout_timer = evtimer_new(st.base, timeout_cb, &st); //to end the 
+  //program in the case of communication  problem
+  if (!st.pause_timer || !st.timeout_timer) {
+    fprintf(stderr, "creating pause timer or timeout timer: %s\n", strerror(errno));
     return 1;
   }
+
+  if (TL_TIMEOUT)
+    {
+      struct timeval tv;
+      tv.tv_sec = TL_TIMEOUT;
+      tv.tv_usec = 0;
+      evtimer_add(st.timeout_timer, &tv);
+
+    }
 
   if (argc == 1)
     init_sockets_internal(&st);
