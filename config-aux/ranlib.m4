@@ -59,7 +59,7 @@ if test x$RANLIB != x:; then
           [ac_cv_prog_RANLIB_necessary=yes],
           [AC_MSG_ERROR([test link failed with and without ranlib])])])
 
-     rm -f conftest$ac_exeext conft[ABC].$ac_objext conftest.a
+     rm -f conftest$ac_exeext conft@<:@ABC@:>@.$ac_objext conftest.a
      AC_LANG_POP([C])
   ])
   if test $ac_cv_prog_RANLIB_necessary = no; then

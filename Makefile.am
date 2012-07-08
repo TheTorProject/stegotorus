@@ -54,6 +54,9 @@ nodist_libstegotorus_a_SOURCES = protolist.cc steglist.cc
 stegotorus_SOURCES = \
 	src/main.cc
 
+# prevent stegotorus from being linked if s-a-g fails
+stegotorus_DEPENDENCIES = $(LDADD) stamp-audit-globals
+
 UTGROUPS = \
 	src/test/unittest_base64.cc \
 	src/test/unittest_compression.cc \
@@ -115,11 +118,11 @@ AGLOB = $(SHELL) $(srcdir)/src/audit-globals.sh
 
 AM_V_gs   = $(AM_V_gs_$(V))
 AM_V_gs_  = $(AM_V_gs_$(AM_DEFAULT_VERBOSITY))
-AM_V_gs_0 = @echo "  GEN   " $(patsubst stamp-%,%.cc,$@);
+AM_V_gs_0 = @echo "  GEN     " $(patsubst stamp-%,%.cc,$@);
 
 AM_V_ag   = $(AM_V_ag_$(V))
 AM_V_ag_  = $(AM_V_ag_$(AM_DEFAULT_VERBOSITY))
-AM_V_ag_0 = @echo "  AGLOB ";
+AM_V_ag_0 = @echo "  AGLOB";
 
 protolist.cc: stamp-protolist ;
 stamp-protolist: $(PROTOCOLS) Makefile src/genmodtable.sh
@@ -140,9 +143,6 @@ stamp-audit-globals: src/audit-globals.sh Makefile \
   $(libstegotorus_a_OBJECTS) $(stegotorus_OBJECTS)
 	$(AM_V_ag) $(AGLOB) $(libstegotorus_a_OBJECTS) $(stegotorus_OBJECTS)
 	$(AM_V_at) touch stamp-audit-globals
-
-# prevent stegotorus from being linked if s-a-g fails
-EXTRA_stegotorus_DEPENDENCIES = stamp-audit-globals
 
 # Testing
 check-local:
