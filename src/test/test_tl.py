@@ -57,7 +57,7 @@ class TimelineTest(object):
             "127.0.0.1:5010","nosteg",
             ))
 
-    def test_chop_null2(self):
+    def test_chop_nosteg2(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
             "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
