@@ -148,6 +148,11 @@ conn_start_shutdown(int barbaric)
         (*i)->close();
     }
   }
+
+  /* Make sure close_cleanup_cb is called at least once after this
+     point; if there were no connections to tear down it might not
+     otherwise happen.  */
+  event_active(cgs->close_cleanup, 0, 0);
 }
 
 size_t
