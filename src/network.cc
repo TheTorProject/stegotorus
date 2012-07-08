@@ -447,11 +447,7 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 
   if (remain == 0 && ((conn->pending_write_eof && conn->connected)
                       || (!conn->circuit() && conn->ever_received))) {
-    if (!conn->write_eof) {
-      log_debug(conn, "sending EOF downstream");
-      shutdown(bufferevent_getfd(bev), SHUT_WR);
-      conn->write_eof = true;
-    }
+    conn->write_eof = true;
     if (conn->read_eof && conn->write_eof)
       conn->close();
   }
@@ -501,7 +497,15 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
      connection, and replace this callback with the regular event_cb */
   if (what & BEV_EVENT_CONNECTED) {
     circuit_t *ckt = conn->circuit();
-    log_assert(ckt);
+    if (!ckt) {
+      // This can happen if the 3-way handshake for a new connection
+      // began while the circuit was still active but ended after the
+      // circuit was closed.  Just drop the connection.
+      log_debug(conn, "successful connection for stale circuit");
+      conn->close();
+      return;
+    }
+
     log_assert(ckt->up_peer);
     log_assert(conn->buffer == bev);
 

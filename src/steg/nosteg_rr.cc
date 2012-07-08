@@ -104,9 +104,10 @@ nosteg_rr_steg_t::receive(struct evbuffer *dest)
     return -1;
   }
 
-  if (config->cfg->mode != LSN_SIMPLE_SERVER) {
-    conn->expect_close();
-  } else if (!did_transmit) {
+  // Note: we can't call expect_close here because we don't know whether
+  // there's more data coming.
+
+  if (config->cfg->mode == LSN_SIMPLE_SERVER && !did_transmit) {
     can_transmit = true;
     conn->transmit_soon(100);
   }

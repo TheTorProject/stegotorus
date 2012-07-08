@@ -445,9 +445,11 @@ chop_circuit_t::send()
   struct evbuffer *xmit_pending = bufferevent_get_input(up_buffer);
   size_t avail = evbuffer_get_length(xmit_pending);
   size_t avail0 = avail;
+  bool no_target_connection = false;
 
   if (downstreams.empty()) {
     log_debug(this, "no downstream connections");
+    no_target_connection = true;
   } else {
     // Send at least one block, even if there is no real data to send.
     do {
@@ -458,6 +460,7 @@ chop_circuit_t::send()
         // this is not an error; it can happen e.g. when the server has
         // something to send immediately and the client hasn't spoken yet
         log_debug(this, "no target connection available");
+        no_target_connection = true;
         break;
       }
 
@@ -472,16 +475,10 @@ chop_circuit_t::send()
     dead_cycles++;
     log_debug(this, "%u dead cycles", dead_cycles);
 
-    // If there was real data or an EOF to send, and we didn't make
-    // any progress on it, or if there are no downstream connections
-    // at all, and we're the client, try opening new connections.  If
-    // we're the server, we have to just twiddle our thumbs and hope
-    // the client does that.  Note that due to the sliding window of
-    // receive blocks, there is a hard upper limit of 64 outstanding
-    // connections (that is, half the receive window).
-    if (downstreams.empty() ||
-        (downstreams.size() <= 64 &&
-         (avail0 > 0 || (upstream_eof && !sent_fin)))) {
+    // If we're the client and we had no target connection, try
+    // reopening new connections.  If we're the server, we have to
+    // just twiddle our thumbs and hope the client does that.
+    if (no_target_connection) {
       if (config->mode != LSN_SIMPLE_SERVER)
         circuit_reopen_downstreams(this);
       else
@@ -1160,8 +1157,7 @@ chop_conn_t::recv_eof()
 void
 chop_conn_t::expect_close()
 {
-  // We currently don't need to do anything here.
-  // FIXME: figure out if this hook is _ever_ useful, and if not, remove it.
+  read_eof = true;
 }
 
 void
