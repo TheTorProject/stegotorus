@@ -14,6 +14,7 @@ bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \
 	src/protocol/chop.cc \
+	src/protocol/chop_blk.cc \
 	src/protocol/null.cc
 
 STEGANOGRAPHERS = \
@@ -78,6 +79,7 @@ noinst_HEADERS = \
 	src/socks.h \
 	src/steg.h \
 	src/util.h \
+	src/protocol/chop_blk.h \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h \
 	src/test/unittest.h

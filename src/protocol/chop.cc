@@ -1,10 +1,10 @@
-/* Copyright 2011, SRI International
+/* Copyright 2011, 2012 SRI International
  * See LICENSE for other credits and copying information
  */
 
 #include "util.h"
+#include "chop_blk.h"
 #include "connections.h"
-#include "crypt.h"
 #include "protocol.h"
 #include "rng.h"
 #include "steg.h"
@@ -14,7 +14,6 @@
 #include <vector>
 
 #include <event2/event.h>
-#include <event2/buffer.h>
 
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
@@ -25,286 +24,7 @@ using std::tr1::unordered_set;
 using std::vector;
 using std::make_pair;
 
-namespace
-{
-
-/* Packets on the wire have a 16-byte header, consisting of a 32-bit
-   sequence number, two 16-bit length fields ("D" and "P"), an 8-bit
-   opcode ("F"), and a 56-bit check field.  All numbers in this header
-   are serialized in network byte order.
-
-   | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | A | B | C | D | E | F |
-   |Sequence Number|   D   |   P   | F |           Check           |
-
-   The header is encrypted with AES in ECB mode: this is safe because
-   the header is exactly one AES block long, the sequence number is
-   never repeated, the header-encryption key is not used for anything
-   else, and the high 24 bits of the sequence number, plus the check
-   field, constitute an 80-bit MAC.  The receiver maintains a
-   256-element sliding window of acceptable sequence numbers, which
-   begins one after the highest sequence number so far _processed_
-   (not received).  If the sequence number is outside this window, or
-   the check field is not all-bits-zero, the packet is discarded.  An
-   attacker's odds of being able to manipulate the D, P, or F fields
-   or the low bits of the sequence number are therefore less than one
-   in 2^80.  Unlike TCP, our sequence numbers always start at zero on
-   a new (or freshly rekeyed) circuit, and increment by one per
-   _block_, not per byte of data.  Furthermore, they do not wrap: a
-   rekeying cycle (which resets the sequence number) is required to
-   occur before the highest-received sequence number reaches 2^32.
-
-   Following the header are two variable-length payload sections,
-   "data" and "padding", whose length in bytes are given by the D and
-   P fields, respectively.  These sections are encrypted, using a
-   different key, with AES in GCM mode.  The *encrypted* packet header
-   doubles as the GCM nonce.  The semantics of the "data" section's
-   contents, if any, are defined by the opcode F.  The "padding"
-   section SHOULD be filled with zeroes by the sender; regardless, its
-   contents MUST be ignored by the receiver.  Following these sections
-   is a 16-byte GCM authentication tag, computed over the data and
-   padding sections only, NOT the message header.  */
-
-const size_t HEADER_LEN = 16;
-const size_t TRAILER_LEN = 16;
-const size_t SECTION_LEN = UINT16_MAX;
-const size_t MIN_BLOCK_SIZE = HEADER_LEN + TRAILER_LEN;
-const size_t MAX_BLOCK_SIZE = MIN_BLOCK_SIZE + SECTION_LEN*2;
-
-const size_t HANDSHAKE_LEN = sizeof(uint32_t);
-
-enum opcode_t
-{
-  op_DAT = 0,       // Pass data section along to upstream
-  op_FIN = 1,       // No further transmissions (pass data along if any)
-  op_RST = 2,       // Protocol error, close circuit now
-  op_RESERVED0 = 3, // 3 -- 127 reserved for future definition
-  op_STEG0 = 128,   // 128 -- 255 reserved for steganography modules
-  op_LAST = 255
-};
-
-static const char *
-opname(opcode_t o, char fallbackbuf[4])
-{
-  switch (o) {
-  case op_DAT: return "DAT";
-  case op_FIN: return "FIN";
-  case op_RST: return "RST";
-  default: {
-    unsigned int x = o;
-    if (x < op_STEG0)
-      xsnprintf(fallbackbuf, sizeof fallbackbuf, "R%02x", x);
-    else
-      xsnprintf(fallbackbuf, sizeof fallbackbuf, "S%02x", x - op_STEG0);
-    return fallbackbuf;
-  }
-  }
-}
-
-class block_header
-{
-  uint8_t clear[16];
-  uint8_t ciphr[16];
-
-public:
-  block_header(uint32_t s, uint16_t d, uint16_t p, opcode_t f,
-               ecb_encryptor &ec)
-  {
-    if (f > op_LAST || (f >= op_RESERVED0 && f < op_STEG0)) {
-      memset(clear, 0xFF, sizeof clear); // invalid!
-      memset(ciphr, 0xFF, sizeof ciphr);
-      return;
-    }
-
-    // sequence number
-    clear[0] = (s >> 24) & 0xFF;
-    clear[1] = (s >> 16) & 0xFF;
-    clear[2] = (s >>  8) & 0xFF;
-    clear[3] = (s      ) & 0xFF;
-
-    // D field
-    clear[4] = (d >>  8) & 0xFF;
-    clear[5] = (d      ) & 0xFF;
-
-    // P field
-    clear[6] = (p >>  8) & 0xFF;
-    clear[7] = (p      ) & 0xFF;
-
-    // F field
-    clear[8] = uint8_t(f);
-
-    // Check field
-    memset(clear + 9, 0, 7);
-
-    ec.encrypt(ciphr, clear);
-  }
-
-  block_header(evbuffer *buf, ecb_decryptor &dc)
-  {
-    if (evbuffer_copyout(buf, ciphr, sizeof ciphr) != sizeof ciphr) {
-      memset(clear, 0xFF, sizeof clear);
-      memset(ciphr, 0xFF, sizeof ciphr);
-      return;
-    }
-    dc.decrypt(clear, ciphr);
-  }
-
-  uint32_t seqno() const
-  {
-    return ((uint32_t(clear[0]) << 24) |
-            (uint32_t(clear[1]) << 16) |
-            (uint32_t(clear[2]) <<  8) |
-            (uint32_t(clear[3])      ));
-
-  }
-
-  size_t dlen() const
-  {
-    return ((uint16_t(clear[4]) << 8) |
-            (uint16_t(clear[5])     ));
-  }
-
-  size_t plen() const
-  {
-    return ((uint16_t(clear[6]) << 8) |
-            (uint16_t(clear[7])     ));
-  }
-
-  size_t total_len() const
-  {
-    return HEADER_LEN + TRAILER_LEN + dlen() + plen();
-  }
-
-  opcode_t opcode() const
-  {
-    return opcode_t(clear[8]);
-  }
-
-  bool valid(uint64_t window) const
-  {
-    // This check must run in constant time.
-    uint8_t ck = (clear[ 9] | clear[10] | clear[11] | clear[12] |
-                  clear[13] | clear[14] | clear[15]);
-    uint32_t delta = seqno() - window;
-    ck |= !!(delta & ~uint32_t(0xFF));
-    return !ck;
-  }
-
-  const uint8_t *nonce() const
-  {
-    return ciphr;
-  }
-
-  const uint8_t *cleartext() const
-  {
-    return clear;
-  }
-};
-
-/* Most of a block's header information is processed before it reaches
-   the reassembly queue; the only things the queue needs to record are
-   the sequence number (which is stored implictly), the opcode, and an
-   evbuffer holding the data section.  Zero-data blocks still get an
-   evbuffer, for simplicity's sake: a reassembly queue element holds a
-   received block if and only if its data pointer is non-null.
-
-   The reassembly queue is a 256-element circular buffer of
-   'reassembly_elt' structs.  This corresponds to the 256-element
-   sliding window of sequence numbers which may legitimately be
-   received at any time.  */
-
-struct reassembly_elt
-{
-  evbuffer *data;
-  opcode_t op;
-};
-
-class reassembly_queue
-{
-  reassembly_elt cbuf[256];
-  uint32_t next_to_process;
-
-  reassembly_queue(const reassembly_queue&) DELETE_METHOD;
-  reassembly_queue& operator=(const reassembly_queue&) DELETE_METHOD;
-
-public:
-  reassembly_queue()
-    : next_to_process(0)
-  {
-    memset(cbuf, 0, sizeof cbuf);
-  }
-
-  ~reassembly_queue()
-  {
-    for (int i = 0; i < 256; i++)
-      if (cbuf[i].data)
-        evbuffer_free(cbuf[i].data);
-  }
-
-  // Remove the next block to be processed from the reassembly queue
-  // and return it.  If we are out of blocks or the next block to
-  // process has not yet arrived, return an empty reassembly_elt.
-  // Caller is responsible for freeing the evbuffer in the
-  // reassembly_elt, if any.
-  reassembly_elt
-  remove_next()
-  {
-    reassembly_elt rv = { 0, op_DAT };
-    uint8_t front = next_to_process & 0xFF;
-    log_debug("next_to_process=%d data=%p op=%02x",
-              next_to_process, cbuf[front].data, cbuf[front].op);
-    if (cbuf[front].data) {
-      rv = cbuf[front];
-      cbuf[front].data = 0;
-      cbuf[front].op   = op_DAT;
-      next_to_process++;
-    }
-    return rv;
-  }
-
-  // Insert a block into the reassembly queue at sequence number
-  // SEQNO, with opcode OP and data section DATA.  Returns true if the
-  // block was successfully added to the queue, false if it is either
-  // outside the acceptable window or duplicates a block already on
-  // the queue (both of these cases indicate protocol errors).
-  // DATA is consumed no matter what the return value is.
-  bool
-  insert(uint32_t seqno, opcode_t op, evbuffer *data, conn_t *conn)
-  {
-    if (seqno - window() > 255) {
-      log_info(conn, "block outside receive window");
-      evbuffer_free(data);
-      return false;
-    }
-    uint8_t front = next_to_process & 0xFF;
-    uint8_t pos = front + (seqno - window());
-    if (cbuf[pos].data) {
-      log_info(conn, "duplicate block");
-      evbuffer_free(data);
-      return false;
-    }
-
-    cbuf[pos].data = data;
-    cbuf[pos].op   = op;
-    return true;
-  }
-
-  // Return the current lowest acceptable sequence number in the
-  // receive window. This is the value to be passed to
-  // block_header::valid().
-  uint32_t window() const { return next_to_process; }
-
-  // As the last step of a rekeying cycle, the expected next sequence number
-  // is reset to zero.
-  void reset()
-  {
-    for (int i = 0; i < 256; i++) {
-      log_assert(!cbuf[i].data);
-    }
-    next_to_process = 0;
-  }
-};
-
-// Protocol objects
+using namespace chop_blk;
 
 struct chop_config_t;
 struct chop_circuit_t;
@@ -883,7 +603,7 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
   }
   v.iov_len = blocksize;
 
-  block_header hdr(send_seq, d, p, f, *send_hdr_crypt);
+  header hdr(send_seq, d, p, f, *send_hdr_crypt);
   log_assert(hdr.valid(send_seq));
   memcpy(v.iov_base, hdr.nonce(), HEADER_LEN);
 
@@ -1335,7 +1055,7 @@ chop_conn_t::recv()
       break;
     }
 
-    block_header hdr(recv_pending, *upstream->recv_hdr_crypt);
+    header hdr(recv_pending, *upstream->recv_hdr_crypt);
     if (!hdr.valid(upstream->recv_queue.window())) {
       const uint8_t *c = hdr.cleartext();
       char fallbackbuf[4];
@@ -1542,8 +1262,6 @@ chop_conn_t::must_send_timeout(evutil_socket_t, short, void *arg)
 {
   static_cast<chop_conn_t *>(arg)->send();
 }
-
-} // anonymous namespace
 
 PROTO_DEFINE_MODULE(chop);
 
