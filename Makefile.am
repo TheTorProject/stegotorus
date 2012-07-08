@@ -71,15 +71,25 @@ nodist_unittests_SOURCES = unitgrplist.cc
 tltester_SOURCES = src/test/tltester.cc
 
 noinst_HEADERS = \
+	src/base64.h \
+	src/compression.h \
 	src/connections.h \
 	src/crypt.h \
 	src/listener.h \
+	src/mkem.h \
 	src/protocol.h \
 	src/rng.h \
 	src/socks.h \
+	src/subprocess.h \
 	src/steg.h \
 	src/util.h \
 	src/protocol/chop_blk.h \
+	src/steg/b64cookies.h \
+	src/steg/cookies.h \
+	src/steg/jsSteg.h \
+	src/steg/payloads.h \
+	src/steg/pdfSteg.h \
+	src/steg/swfSteg.h \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h \
 	src/test/unittest.h
@@ -96,7 +106,8 @@ EXTRA_DIST = doc \
 
 # Generated source files
 CLEANFILES = protolist.cc steglist.cc unitgrplist.cc \
-	stamp-protolist stamp-steglist stamp-unitgrplist
+	stamp-protolist stamp-steglist stamp-unitgrplist \
+	stamp-audit-globals
 
 GMOD  = $(SHELL) $(srcdir)/src/genmodtable.sh
 GUNIT = $(SHELL) $(srcdir)/src/test/genunitgrps.sh
