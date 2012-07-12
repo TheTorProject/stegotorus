@@ -46,7 +46,7 @@ sed '
   /^util log_min_sev$/d
   /^util log_timestamps$/d
   /^util log_ts_base$/d
-  /^util the_evdns_base$/d
+  /^util-net the_evdns_base$/d
 ')
 
 if [ -n "$symbols" ]; then
