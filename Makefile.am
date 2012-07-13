@@ -62,6 +62,15 @@ stegotorus_DEPENDENCIES = libstegotorus.a stamp-audit-globals
 
 ## payload trace generators
 
+bin_PROGRAMS += pgen_fake
+pgen_fake_SOURCES = \
+	src/pgen_fake.cc \
+	src/util.cc \
+	src/rng.cc \
+	src/base64.cc
+
+pgen_fake_LDADD = $(libcrypto_LIBS)
+
 # pgen_pcap is only built if we have libpcap
 if HAVE_PCAP
 bin_PROGRAMS += pgen_pcap
@@ -171,7 +180,15 @@ check-local:
 	$(AM_V_at) ./unittests
 if INTEGRATION_TESTS
 	@echo --- Integration tests ---
-	[ -e traces ] || ln -s $(srcdir)/traces .
+	@set -ex; if [ ! -e traces ]; then \
+	  if [ -e $(srcdir)/../steg-traces ]; then \
+	    ln -s $(srcdir)/../steg-traces traces; \
+	  elif [ -e $(srcdir)/traces ]; then \
+	    ln -s $(srcdir)/traces traces; \
+	  else \
+	    mkdir traces && ./pgen_fake; \
+	  fi; \
+	fi
 	$(AM_V_at) $(PYTHON) -m unittest discover -s $(srcdir)/src/test -p 'test_*.py' -v
 else
 	@echo !!! Integration tests skipped !!!

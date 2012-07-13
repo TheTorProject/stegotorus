@@ -14,8 +14,10 @@
 /* struct for reading in the payload_gen dump file */
 struct pentry_header {
   uint16_t ptype;
+  uint8_t  pad1[2];
   uint32_t length;
   uint16_t port; /* network format */
+  uint8_t  pad2[2];
 };
 
 #endif
