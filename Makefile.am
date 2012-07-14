@@ -186,10 +186,15 @@ if INTEGRATION_TESTS
 	  elif [ -e $(srcdir)/traces ]; then \
 	    ln -s $(srcdir)/traces traces; \
 	  else \
-	    mkdir traces && ./pgen_fake; \
+	    mkdir traces && touch traces/.faked && ./pgen_fake; \
 	  fi; \
 	fi
 	$(AM_V_at) $(PYTHON) -m unittest discover -s $(srcdir)/src/test -p 'test_*.py' -v
 else
 	@echo !!! Integration tests skipped !!!
+endif
+
+if INTEGRATION_TESTS
+clean-local:
+	[ ! -f traces/.faked ] || rm -r traces
 endif
