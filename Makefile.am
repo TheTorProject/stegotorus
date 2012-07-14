@@ -6,7 +6,6 @@ ACLOCAL_AMFLAGS = -I config-aux --install
 
 AM_CXXFLAGS = -Werror -Wall -Wextra -Wformat=2
 AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
-LDADD       = libstegotorus.a
 
 noinst_LIBRARIES = libstegotorus.a
 noinst_PROGRAMS  = unittests tltester
@@ -41,6 +40,7 @@ libstegotorus_a_SOURCES = \
 	src/socks.cc \
 	src/steg.cc \
 	src/util.cc \
+	src/util-net.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
 
 if WINDOWS
@@ -54,8 +54,34 @@ nodist_libstegotorus_a_SOURCES = protolist.cc steglist.cc
 stegotorus_SOURCES = \
 	src/main.cc
 
+stegotorus_LDADD = libstegotorus.a $(lib_LIBS)
+
 # prevent stegotorus from being linked if s-a-g fails
-stegotorus_DEPENDENCIES = $(LDADD) stamp-audit-globals
+# it is known that $(lib_LIBS) contains nothing that needs to be depended upon
+stegotorus_DEPENDENCIES = libstegotorus.a stamp-audit-globals
+
+## payload trace generators
+
+bin_PROGRAMS += pgen_fake
+pgen_fake_SOURCES = \
+	src/pgen_fake.cc \
+	src/util.cc \
+	src/rng.cc \
+	src/base64.cc
+
+pgen_fake_LDADD = $(libcrypto_LIBS)
+
+# pgen_pcap is only built if we have libpcap
+if HAVE_PCAP
+bin_PROGRAMS += pgen_pcap
+
+pgen_pcap_SOURCES = \
+	src/pgen_pcap.cc \
+	src/compression.cc \
+	src/util.cc
+
+pgen_pcap_LDADD = $(pcap_LIBS) $(libz_LIBS)
+endif
 
 UTGROUPS = \
 	src/test/unittest_base64.cc \
@@ -71,7 +97,10 @@ unittests_SOURCES = \
 
 nodist_unittests_SOURCES = unitgrplist.cc
 
-tltester_SOURCES = src/test/tltester.cc
+unittests_LDADD = libstegotorus.a $(lib_LIBS)
+
+tltester_SOURCES = src/test/tltester.cc src/util.cc src/util-net.cc
+tltester_LDADD   = $(libevent_LIBS)
 
 noinst_HEADERS = \
 	src/base64.h \
@@ -80,6 +109,7 @@ noinst_HEADERS = \
 	src/crypt.h \
 	src/listener.h \
 	src/mkem.h \
+	src/pgen.h \
 	src/protocol.h \
 	src/rng.h \
 	src/socks.h \
@@ -150,8 +180,21 @@ check-local:
 	$(AM_V_at) ./unittests
 if INTEGRATION_TESTS
 	@echo --- Integration tests ---
-	[ -e traces ] || ln -s $(srcdir)/traces .
+	@set -ex; if [ ! -e traces ]; then \
+	  if [ -e $(srcdir)/../steg-traces ]; then \
+	    ln -s $(srcdir)/../steg-traces traces; \
+	  elif [ -e $(srcdir)/traces ]; then \
+	    ln -s $(srcdir)/traces traces; \
+	  else \
+	    mkdir traces && touch traces/.faked && ./pgen_fake; \
+	  fi; \
+	fi
 	$(AM_V_at) $(PYTHON) -m unittest discover -s $(srcdir)/src/test -p 'test_*.py' -v
 else
 	@echo !!! Integration tests skipped !!!
+endif
+
+if INTEGRATION_TESTS
+clean-local:
+	[ ! -f traces/.faked ] || rm -r traces
 endif

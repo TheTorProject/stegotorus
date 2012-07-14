@@ -1297,9 +1297,7 @@ init_PDF_payload_pool(payloads& pl, int len, int type, int minCapacity)
       // can encode in the pdf doc 
       // cap = minCapacity+1;
       cap = capacityPDF(msgbuf, p->length);
-      log_debug("got pdf (index %d) with capacity %d", r, cap);
       if (cap > minCapacity) {
-	log_debug("pdf (index %d) greater than mincapacity %d", cnt, minCapacity);
 	pl.typePayloadCap[contentType][cnt] = (cap-PDF_DELIMITER_SIZE)/2;
 	pl.typePayload[contentType][cnt] = r;
 	cnt++;

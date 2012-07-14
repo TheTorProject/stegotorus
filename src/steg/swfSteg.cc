@@ -86,30 +86,31 @@ swf_wrap(payloads& pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
 
 
 
-unsigned int 
-swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz) {
-  char* tmp_buf;
+unsigned int
+swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz)
+{
   int inf_len;
+  size_t tmp_len = in_len * 32;
+  char* tmp_buf = (char *)xmalloc(tmp_len);
 
-  tmp_buf = (char *)xmalloc(in_len * 8);
+  for (;;) {
+    inf_len = decompress((const uint8_t *)inbuf + 8, in_len - 8,
+                         (uint8_t *)tmp_buf, tmp_len);
+    if (inf_len != -2)
+      break;
+    tmp_len *= 2;
+    tmp_buf = (char *)xrealloc(tmp_buf, tmp_len);
+  }
 
-  inf_len = decompress((const uint8_t *)inbuf + 8, in_len - 8,
-                       (uint8_t *)tmp_buf, in_len * 8); 
-
-  //  fprintf(stderr, "in_swf_len = %d\n", in_len -8 );
-
-
-  if (inf_len < 0 || out_sz < inf_len - SWF_SAVE_HEADER_LEN - SWF_SAVE_FOOTER_LEN) {
+  if (inf_len < 0 ||
+      out_sz < inf_len - SWF_SAVE_HEADER_LEN - SWF_SAVE_FOOTER_LEN) {
     fprintf(stderr, "inf_len = %d\n", inf_len);
     free(tmp_buf);
-    //    buf_dump((unsigned char*) (inbuf+8), in_len -8, stderr);
-    
-
-
     return -1;
   }
 
-  memcpy(outbuf, tmp_buf + SWF_SAVE_HEADER_LEN, inf_len - SWF_SAVE_HEADER_LEN - SWF_SAVE_FOOTER_LEN);
+  memcpy(outbuf, tmp_buf + SWF_SAVE_HEADER_LEN,
+         inf_len - SWF_SAVE_HEADER_LEN - SWF_SAVE_FOOTER_LEN);
   return inf_len - SWF_SAVE_HEADER_LEN - SWF_SAVE_FOOTER_LEN;
 }
 

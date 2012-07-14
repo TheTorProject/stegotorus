@@ -91,6 +91,10 @@ decompress(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen)
   strm.avail_out = dlen;
 
   ret = inflate(&strm, Z_FINISH);
+  if (ret == Z_BUF_ERROR) {
+    inflateEnd(&strm);
+    return -2; // need more space
+  }
   if (ret != Z_STREAM_END) {
     log_warn("decompression failure: %s", strm.msg);
     inflateEnd(&strm);

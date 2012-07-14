@@ -125,8 +125,6 @@ PKG_CHECK_MODULES([libevent], [libevent >= 2.0])
 PKG_CHECK_MODULES([libz], [zlib >= 1.2.3.4])
 
 LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS"
-lib_CPPFLAGS="$libevent_CFLAGS $libcrypto_CFLAGS $libz_CFLAGS"
-AC_SUBST(lib_CPPFLAGS)
 
 # ntohl and a bunch of related functions require a special library on Windows.
 # It is possible that libevent or libcrypto has hooked us up already.
@@ -138,6 +136,31 @@ LIBS="$LIBS $ws32_LIBS"
 AC_SEARCH_LIBS([floor], [m], [], [
   AC_MSG_ERROR([unable to find 'floor'])
 ])
+
+lib_LIBS="$LIBS"
+lib_CPPFLAGS="$libevent_CFLAGS $libcrypto_CFLAGS $libz_CFLAGS"
+LIBS=
+AC_SUBST(lib_LIBS)
+AC_SUBST(lib_CPPFLAGS)
+
+# pgen_pcap needs libpcap.
+pcap_LIBS=
+HAVE_PCAP=no
+AC_SEARCH_LIBS([pcap_open_offline], [pcap],
+  [AC_CACHE_CHECK([whether libpcap is usable], ac_cv_libpcap_usable,
+    [AC_LINK_IFELSE([AC_LANG_PROGRAM(
+      [[#include <pcap/pcap.h>]],
+      [[char f;
+        pcap_t *p = pcap_open_offline("",&f);]])],
+      [ac_cv_libpcap_usable=yes], [ac_cv_libpcap_usable=no])])
+   if test $ac_cv_libpcap_usable = yes; then
+     HAVE_PCAP=yes
+     pcap_LIBS="$LIBS"
+   fi],
+   [])
+LIBS=
+AC_SUBST(pcap_LIBS)
+AM_CONDITIONAL(HAVE_PCAP, test $HAVE_PCAP = yes)
 
 ### System features ###
 
