@@ -325,11 +325,11 @@ pdf_unwrap(const char *data, size_t dlen,
 
     dp = streamStart + STREAM_BEGIN_SIZE;
 
-    // streamObjStartSkip = size of end-of-line (EOL) char(s) after ">>stream"
-    if ( *dp == '\r' && *(dp+1) == '\n' ) { // Windows-style EOL
-      streamObjStartSkip = 2;
-    } else if ( *dp == '\n' ) { // Unix-style EOL
+    // streamObjStartSkip = size of end-of-line (EOL) char(s) after the stream keyword
+    if ( *dp == '\n' ) {
       streamObjStartSkip = 1;
+    } else {
+      log_debug("Cannot find linefeed after the stream keyword");
     }
 
     dp = dp + streamObjStartSkip;
@@ -341,10 +341,10 @@ pdf_unwrap(const char *data, size_t dlen,
     }
 
     // streamObjEndSkip = size of end-of-line (EOL) char(s) at the end of stream obj
-    if (*(streamEnd-2) == '\r' && *(streamEnd-1) == '\n') {
-      streamObjEndSkip = 2;
-    } else if (*(streamEnd-1) == '\n') {
+    if (*(streamEnd-1) == '\n') {
       streamObjEndSkip = 1;
+    } else {
+      log_debug("Cannot find linefeed before the endstream keyword");
     }
 
     // compute the size of stream obj payload
