@@ -6,12 +6,16 @@
 #include "pgen.h"
 #include "compression.h"
 
+#include <dirent.h>
+#include <signal.h>
+#include <unistd.h>
 #include <pcap/pcap.h>
+
+#define __FAVOR_BSD 1
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
-#include <dirent.h>
 
 #define NUM_FLOWS 1000
 #define NUM_LISTS 1000
