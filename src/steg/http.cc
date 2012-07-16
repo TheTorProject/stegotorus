@@ -588,7 +588,13 @@ http_steg_t::transmit(struct evbuffer *source)
       break;
     }
 
-    if (rval == 0) have_transmitted = 1;
+    if (rval == 0) {
+      have_transmitted = 1;
+      // FIXME: should decide whether or not to do this based on the
+      // Connection: header.  (Needs additional changes elsewhere, esp.
+      // in transmit_room.)
+      conn->cease_transmission();
+    }
     return rval;
   }
 }
@@ -670,6 +676,11 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
 
   s->have_received = 1;
   s->type = type;
+
+  // FIXME: should decide whether or not to do this based on the
+  // Connection: header.  (Needs additional changes elsewhere, esp.
+  // in transmit_room.)
+  conn->expect_close();
 
   conn->transmit_soon(100);
   return RECV_GOOD;

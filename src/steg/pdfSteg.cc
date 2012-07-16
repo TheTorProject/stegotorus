@@ -464,8 +464,6 @@ http_server_PDF_transmit(payloads &pl, struct evbuffer *source,
   }
 
   evbuffer_drain(source, sbuflen);
-
-  conn->cease_transmission();
   return 0;
 }
 

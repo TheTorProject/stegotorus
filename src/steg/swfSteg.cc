@@ -152,9 +152,6 @@ http_server_SWF_transmit(payloads& pl, struct evbuffer *source, conn_t *conn)
     return -1;
   }
 
-    
-  conn->cease_transmission();
-
   free(inbuf);
   free(outbuf);
   return 0;

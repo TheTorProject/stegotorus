@@ -479,7 +479,8 @@ chop_circuit_t::send()
     // reopening new connections.  If we're the server, we have to
     // just twiddle our thumbs and hope the client does that.
     if (no_target_connection) {
-      if (config->mode != LSN_SIMPLE_SERVER)
+      if (config->mode != LSN_SIMPLE_SERVER &&
+          downstreams.size() < 64)
         circuit_reopen_downstreams(this);
       else
         circuit_arm_axe_timer(this, axe_interval());

@@ -893,8 +893,6 @@ http_server_JS_transmit (payloads& pl, struct evbuffer *source, conn_t *conn,
   evbuffer_drain(source, sbuflen);
 
   free(outbuf2);
-  conn->cease_transmission();
-  //  downcast_steg(s)->have_transmitted = 1;
   return 0;
 }
 
