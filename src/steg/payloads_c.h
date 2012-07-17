@@ -17,8 +17,6 @@
 #define RECV_INCOMPLETE 0
 #define RECV_BAD -1
 
-
-
 #define CONN_DATA_REQUEST 1  /* payload packet sent by client */
 #define CONN_DATA_REPLY 2    /* payload packet sent by server */
 
