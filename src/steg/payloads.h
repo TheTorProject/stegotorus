@@ -164,4 +164,10 @@ int find_uri_type(char* buf, int size);
 int gen_response_header(char* content_type, int gzip, int length,
                         char* buf, int buflen);
 
+/* These are added to make payload_scraper works for now.
+   The plan is to make each type of steg payload a class
+*/
+unsigned int capacityJS(char* buf, int len);
+unsigned int capacitySWF(char* buf, int len);
+
 #endif
