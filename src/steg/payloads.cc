@@ -1623,3 +1623,23 @@ int main() {
 }
  *****/
 
+/*
+ * capacitySWF is just mock function 
+  returning the len just for the sake of harmonizing
+  the capacity computation. We need to make payload
+  types as a children of all classes.
+ */
+unsigned int capacitySWF(char* buf, int len)
+{
+  (void)buf;
+  return len;
+}
+
+/*
+ * capacityJS is designed to call capacityJS3 
+ */
+unsigned int capacityJS (char* buf, int len) {
+
+  (void)buf;
+  return capacityJS3(buf, len, CONTENT_HTML_JAVASCRIPT); //just randomly choose a mode for now to check the scraper.
+}
