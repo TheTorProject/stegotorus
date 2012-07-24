@@ -18,6 +18,7 @@ sed '
   / [DBdb] /!d
 
   s/^src\///
+  s/^src/steg\///
   s/\.o: */ /
   s/\.obj: */ /
   s/ [0-9a-fA-F][0-9a-fA-F]* [DBdb] / /
@@ -47,6 +48,7 @@ sed '
   /^util log_timestamps$/d
   /^util log_ts_base$/d
   /^util-net the_evdns_base$/d
+  /^apache_payload_server std::__ioinit$/d
 ')
 
 if [ -n "$symbols" ]; then

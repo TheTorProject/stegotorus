@@ -96,7 +96,7 @@ class PayloadInfo{
   unsigned int type;
   unsigned int capacity;
   unsigned int length;
-  unsigned int url;
+  string url;
 
   /**
      constructor fills up the elements  
