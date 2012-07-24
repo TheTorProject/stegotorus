@@ -197,9 +197,12 @@ write_inflate_msg(flow *f, FILE *file, pentry_header *ph)
   }
 
   ph->length = htonl(outlen+hdrlen);
-  fwrite(ph, sizeof(pentry_header), 1, file);
-  fwrite(hdr, hdrlen, 1, file);
-  fwrite(outbuf, outlen, 1, file);
+  if (fwrite(ph, sizeof(pentry_header), 1, file)!= sizeof(pentry_header))
+      log_debug("Error writing data");
+  if (fwrite(hdr, hdrlen, 1, file)!= (unsigned int)hdrlen)
+      log_debug("Error writing data");
+  if (fwrite(outbuf, outlen, 1, file)!= (unsigned int)outlen)
+      log_debug("Error writing data");
   free(buf);
   free(outbuf);
   free(hdr);
@@ -222,10 +225,13 @@ write_msg_chains(flow *f, FILE *file, pentry_header *ph)
       strstr((char*) m->buf, "Content-Encoding: gzip"))
     return write_inflate_msg(f, file, ph);
 
-  fwrite(ph, sizeof(pentry_header), 1, file);
+  if (fwrite(ph, sizeof(pentry_header), 1, file) != sizeof(pentry_header))
+      log_debug("Error writing data");
 
   while (m) {
-    fwrite(m->buf, m->len, 1, file);
+    if (fwrite(m->buf, m->len, 1, file) != m->len)
+      log_debug("Error writing data");
+
     cnt += m->len;
     m = m->next_msg;
   }
