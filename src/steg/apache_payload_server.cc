@@ -12,8 +12,8 @@ using namespace std;
   The constructor reads the payload database prepared by scraper
   and initialize the payload table.
 */
-ApachePayloadServer::ApachePayloadServer(string database_filename)
-  :_database_filename(database_filename)
+ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_filename)
+  :PayloadServer(init_side),_database_filename(database_filename)
 {
 
   /* First we read all the payload info from the db file  */
@@ -51,9 +51,8 @@ ApachePayloadServer::ApachePayloadServer(string database_filename)
     log_abort("Failed to initiate the curl object");
 
 }
-unsigned int ApachePayloadServer::find_client_payload(payloads& pl, char* buf, int len, int type)
+unsigned int ApachePayloadServer::find_client_payload(char* buf, int len, int type)
 {
-  (void)pl;  
   (void)buf; 
   (void)len; 
   (void)type;
@@ -62,10 +61,9 @@ unsigned int ApachePayloadServer::find_client_payload(payloads& pl, char* buf, i
 }
 
 
-int ApachePayloadServer::get_payload (payloads& pl, int contentType, int cap, char** buf, int* size)
+int ApachePayloadServer::get_payload ( int contentType, int cap, char** buf, int* size)
 {
   int found = 0, numCandidate = 0;
-  (void) pl;
 
   //log_debug("contentType = %d, initTypePayload = %d, typePayloadCount = %d",
   //            contentType, pl.initTypePayload[contentType],
@@ -160,3 +158,4 @@ unsigned long ApachePayloadServer::fetch_url_raw(string url, unsigned long paylo
 
     return actual_length;
 }
+

@@ -5,11 +5,9 @@
 #ifndef _PDFSTEG_H
 #define _PDFSTEG_H
 
-struct payloads;
-
 // These are the public interface.
 
-int http_server_PDF_transmit(payloads &pl, struct evbuffer *source,
+int http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source,
                              conn_t *conn);
 int http_handle_client_PDF_receive(steg_t *s, conn_t *conn,
                                    struct evbuffer *dest,

@@ -3,9 +3,9 @@
  */
 
 #include "util.h"
+#include "payload_server.h"
 #include "pdfSteg.h"
 #include "connections.h"
-#include "payloads.h"
 #include <event2/buffer.h>
 #include "compression.h"
 
@@ -365,7 +365,7 @@ pdf_unwrap(const char *data, size_t dlen,
 }
 
 int
-http_server_PDF_transmit(payloads &pl, struct evbuffer *source,
+http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source,
                          conn_t *conn)
 {
   struct evbuffer *dest = conn->outbound();
@@ -406,7 +406,8 @@ http_server_PDF_transmit(payloads &pl, struct evbuffer *source,
 
   log_debug("SERVER sbuflen = %d; cnt = %d", (int)sbuflen, cnt);
 
-  mpdf = pl.max_PDF_capacity;
+  //TODO: this need to be investigated, we might need two functions
+  mpdf = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_PDF);
 
   if (mpdf <= 0) {
     log_warn("SERVER ERROR: No pdfTemplate found\n");
@@ -419,7 +420,7 @@ http_server_PDF_transmit(payloads &pl, struct evbuffer *source,
     return -1;
   }
 
-  if (get_payload(pl, HTTP_CONTENT_PDF, sbuflen, &pdfTemplate,
+  if (pl->get_payload(HTTP_CONTENT_PDF, sbuflen, &pdfTemplate,
                   &pdfTemplateSize) == 1) {
     log_debug("SERVER found the next HTTP response template with size %d",
               pdfTemplateSize);
