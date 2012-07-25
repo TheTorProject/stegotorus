@@ -5,26 +5,6 @@
 
 #include "payload_server.h"
 
-
-class PayloadScraper; /* Just tell ApachePayloadServer that such a
-                        class exists */
-
-class URIEntry
-{
-  public:
-    string URL;
-    bool accept_param = true; /*This is to discriminate between types like html
-                                vs cgi, js, etc, but for now I'm not using it
-                              */
-    URIEntry(string init_URL)
-      :URL(init_URL)
-      {
-        
-      }
-};
-
-typedef vector<URIEntry> URIDict;
-
 class ApachePayloadServer: public PayloadServer
 {
   friend PayloadScraper; /* We need the url retrieving capabilities in
