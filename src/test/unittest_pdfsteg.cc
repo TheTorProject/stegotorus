@@ -4,6 +4,7 @@
 
 #include "util.h"
 #include "unittest.h"
+#include "../steg/payload_server.h"
 #include "../steg/pdfSteg.h"
 
 static void

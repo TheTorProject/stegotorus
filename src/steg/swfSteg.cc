@@ -2,10 +2,10 @@
  * See LICENSE for other credits and copying information
  */
 #include "util.h"
+#include "payload_server.h"
 #include "swfSteg.h"
 #include "compression.h"
 #include "connections.h"
-#include "payloads.h"
 
 #include <event2/buffer.h>
 
@@ -18,7 +18,7 @@ static const char http_response_1[] =
   "Content-Length: ";
 
 unsigned int
-swf_wrap(payloads& pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
+swf_wrap(PayloadServer* pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
 
   char* swf;
   int in_swf_len;
@@ -36,7 +36,7 @@ swf_wrap(payloads& pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
   
 
 
-  if (!get_payload(pl, HTTP_CONTENT_SWF, -1, &resp, &resp_len)) {
+  if (!pl->get_payload(HTTP_CONTENT_SWF, -1, &resp, &resp_len)) {
     log_warn("swfsteg: no suitable payload found\n");
     return -1;
   }
@@ -115,7 +115,7 @@ swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz)
 }
 
 int
-http_server_SWF_transmit(payloads& pl, struct evbuffer *source, conn_t *conn)
+http_server_SWF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *conn)
 {
 
   struct evbuffer *dest = conn->outbound();

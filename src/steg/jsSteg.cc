@@ -3,7 +3,7 @@
  */
 
 #include "util.h"
-#include "payloads.h"
+#include "payload_server.h"
 #include "jsSteg.h"
 #include "cookies.h"
 #include "compression.h"
@@ -598,19 +598,16 @@ int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
   return decCnt;
 }
 
-
-
-
-
-void printerr(int errno) {
-  if (errno == INVALID_BUF_SIZE) {
+void printerr(int err_no) /* name errno had conflict with other vars so I changed it to err_no */
+ {
+  if (err_no == INVALID_BUF_SIZE) {
     printf ("Error: Output buffer too small\n");
   }
-  else if (errno == INVALID_DATA_CHAR) {
+  else if (err_no == INVALID_DATA_CHAR) {
     printf ("Error: Non-hex char in data\n");
   }
   else {
-    printf ("Unknown error: %i\n", errno);
+    printf ("Unknown error: %i\n", err_no);
   }
 }
 
@@ -627,7 +624,7 @@ int testEncode(char *data, char *js, char *outBuf, unsigned int dlen, unsigned i
   printf ("js len       = %i\n", jslen);
   r = encode (data, js, outBuf, dlen, jslen, outBufLen);
   if (r < 0) {
-    printerr(r);
+    printerr(r); 
   } else {
     printf ("\nOutput:\n");
     printf ("%i char of data embedded in outBuf\n", r);
@@ -725,7 +722,7 @@ int testDecode2(char *inBuf, char *outBuf,
 
 
 int
-http_server_JS_transmit (payloads& pl, struct evbuffer *source, conn_t *conn,
+http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *conn,
                          unsigned int content_type)
 {
 
@@ -762,9 +759,9 @@ http_server_JS_transmit (payloads& pl, struct evbuffer *source, conn_t *conn,
   }
 
   if (content_type == HTTP_CONTENT_JAVASCRIPT) {
-    mjs = pl.max_JS_capacity;
+    mjs = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT);
   } else if (content_type == HTTP_CONTENT_HTML) {
-    mjs = pl.max_HTML_capacity;
+    mjs = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML);
   }
 
   if (mjs <= 0) {
@@ -799,7 +796,7 @@ http_server_JS_transmit (payloads& pl, struct evbuffer *source, conn_t *conn,
   //log_debug("SERVER encoded data in hex string (len %d):", datalen);
   //    buf_dump((unsigned char*)data, datalen, stderr);
 
-  if (get_payload(pl, content_type, datalen, &jsTemplate, &jsLen) == 1) {
+  if (pl->get_payload(content_type, datalen, &jsTemplate, &jsLen) == 1) {
     log_debug("SERVER found the applicable HTTP response template with size %d", jsLen);
   } else {
     log_warn("SERVER couldn't find the applicable HTTP response template");

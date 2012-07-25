@@ -5,8 +5,6 @@
 #ifndef _JSSTEG_H
 #define _JSSTEG_H
 
-struct payloads;
-
 int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
                    unsigned int jtlen, unsigned int jdlen, int mode);
 
@@ -32,7 +30,7 @@ int decode (char *jData, char *dataBuf, unsigned int jdlen,
 int decode2 (char *jData, char *dataBuf, unsigned int jdlen,
              unsigned int dataBufSize, int *fin );
 
-void printerr(int errno);
+void printerr(int err_no);
 
 int testEncode(char *data, char *js, char *outBuf,
                unsigned int dlen, unsigned int jslen,
@@ -52,7 +50,7 @@ int testDecode2(char *inBuf, char *outBuf,
 
 
 int
-http_server_JS_transmit (payloads& pl, struct evbuffer *source,
+http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source,
                          conn_t *conn, unsigned int content_type);
 
 int
