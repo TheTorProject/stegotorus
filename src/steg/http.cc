@@ -2,13 +2,23 @@
  * See LICENSE for other credits and copying information
  */
 
+#include <event2/buffer.h>
+#include <curl/curl.h>
+
 #include "util.h"
 #include "connections.h"
 #include "protocol.h"
 #include "steg.h"
 #include "rng.h"
 
-#include "payloads.h"
+/** here we initiate our payload strategy (it should be)based on the config 
+    file so I include all available payload servers. The global object is of
+    PayloadServer type though
+*/
+#include "payload_server.h"
+#include "trace_payload_server.h"
+#include "apache_payload_server.h"
+
 #include "cookies.h"
 #include "swfSteg.h"
 #include "pdfSteg.h"
@@ -16,7 +26,6 @@
 #include "base64.h"
 #include "b64cookies.h"
 
-#include <event2/buffer.h>
 
 #define MIN_COOKIE_SIZE 24
 #define MAX_COOKIE_SIZE 1024
@@ -32,7 +41,7 @@ namespace {
   struct http_steg_config_t : steg_config_t
   {
     bool is_clientside : 1;
-    payloads pl;
+    PayloadServer* payload_server;
 
     STEG_CONFIG_DECLARE_METHODS(http);
   };
@@ -58,21 +67,23 @@ http_steg_config_t::http_steg_config_t(config_t *cfg)
   : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
-
+  /** for now we hard code the payload server type but later it should be up 
+      to the config file to decide what type of payload server we need
+  */
+  string payload_filename;
   if (is_clientside)
-    load_payloads(this->pl, "traces/client.out");
-  else {
-    load_payloads(this->pl, "traces/server.out");
-    init_JS_payload_pool(this->pl, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
-    //   init_JS_payload_pool(this, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE, HTTP_CONTENT_HTML);
-    init_HTML_payload_pool(this->pl, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
-    init_PDF_payload_pool(this->pl, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE);
-    init_SWF_payload_pool(this->pl, HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
-  }
+    payload_filename = "traces/client.out";
+  else
+    payload_filename = "traces/server.out";
+  
+  payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
+
 }
 
 http_steg_config_t::~http_steg_config_t()
 {
+  //delete payload_server; maybe we don't need it
+
 }
 
 steg_t *
@@ -81,14 +92,12 @@ http_steg_config_t::steg_create(conn_t *conn)
   return new http_steg_t(this, conn);
 }
 
-
 int http_client_uri_transmit (http_steg_t *s, struct evbuffer *source, conn_t *conn);
 int http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source, conn_t *conn);
 
 void evbuffer_dump(struct evbuffer *buf, FILE *out);
 void buf_dump(unsigned char* buf, int len, FILE *out);
 int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen);
-
 
 void
 evbuffer_dump(struct evbuffer *buf, FILE *out)
@@ -116,10 +125,6 @@ evbuffer_dump(struct evbuffer *buf, FILE *out)
   }
   putc('|', out);
 }
-
-
-
-
 
 void
 buf_dump(unsigned char* buf, int len, FILE *out)
@@ -179,31 +184,34 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
       hi = MAX_COOKIE_SIZE*3/4;
   }
   else {
-    if (!have_received)
-      return 0;
+    switch (type)
+      {
+      case HTTP_CONTENT_SWF:
+        if (hi >= 1024)
+          hi = 1024;
+        break;
 
-    switch (type) {
-    case HTTP_CONTENT_SWF:
-      if (hi >= 1024)
-        hi = 1024;
-      break;
+      case HTTP_CONTENT_JAVASCRIPT:
+        if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2)
+          hi = config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2;
+        break;
 
-    case HTTP_CONTENT_JAVASCRIPT:
-      if (hi >= config->pl.max_JS_capacity / 2)
-        hi = config->pl.max_JS_capacity / 2;
-      break;
+      case HTTP_CONTENT_HTML:
+        if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML) / 2)
+          hi = config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML) / 2;
+        break;
 
-    case HTTP_CONTENT_HTML:
-      if (hi >= config->pl.max_HTML_capacity / 2)
-        hi = config->pl.max_HTML_capacity / 2;
-      break;
+      case HTTP_CONTENT_PDF:
+        if (hi >= PDF_MIN_AVAIL_SIZE)
+          hi = PDF_MIN_AVAIL_SIZE;
+        break;
 
-    case HTTP_CONTENT_PDF:
-      if (hi >= PDF_MIN_AVAIL_SIZE)
-        hi = PDF_MIN_AVAIL_SIZE;
-      break;
-    }
+            }
+      
   }
+
+  if (!have_received)
+    return 0;
 
   if (hi < lo)
     /* cannot satisfy this request */
@@ -212,7 +220,8 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
 }
 
 int
-lookup_peer_name_from_ip(const char* p_ip, char* p_name)  {
+lookup_peer_name_from_ip(const char* p_ip, char* p_name)  
+{
   struct addrinfo* ailist;
   struct addrinfo* aip;
   struct addrinfo hint;
@@ -231,7 +240,6 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name)  {
   strcpy(buf, p_ip);
   buf[strchr(buf, ':') - buf] = 0;
 
-
   if ((res = getaddrinfo(buf, NULL, &hint, &ailist))) {
     log_warn("getaddrinfo(%s) failed: %s", p_ip, gai_strerror(res));
     return 0;
@@ -248,13 +256,6 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name)  {
 
   return 0;
 }
-
-
-
-
-
-
-
 
 int
 http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
@@ -274,7 +275,7 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
   size_t rval;
   size_t len = 0;
   // '+' -> '-', '/' -> '_', '=' -> '.' per
-  // RFC4648 "Base 64 encoding with URL and filename safe alphabet"
+  // RFC4648 "Base 64 encoding with RL and filename safe alphabet"
   // (which does not replace '=', but dot is an obvious choice; for
   // this use case, the fact that some file systems don't allow more
   // than one dot in a filename is irrelevant).
@@ -288,7 +289,7 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
 
   // retry up to 10 times
   while (!payload_len) {
-    payload_len = find_client_payload(s->config->pl, buf, bufsize,
+    payload_len = s->config->payload_server->find_client_payload(buf, bufsize,
                                       TYPE_HTTP_REQUEST);
     if (cnt++ == 10) {
       goto err;
@@ -362,7 +363,7 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
   log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
   conn->cease_transmission();
 
-  s->type = find_uri_type(buf, bufsize);
+  s->type = s->config->payload_server->find_uri_type(buf, bufsize);
   s->have_transmitted = true;
 
 
@@ -376,9 +377,6 @@ err:
   return -1;
 
 }
-
-
-
 
 int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
   unsigned int so_far = 0;
@@ -501,7 +499,7 @@ http_client_uri_transmit (http_steg_t *s,
 
   // retry up to 10 times
   while (!len) {
-    len = find_client_payload(s->config->pl, buf, sizeof(buf),
+    len = s->config->payload_server->find_client_payload( buf, sizeof(buf),
                               TYPE_HTTP_REQUEST);
     if (cnt++ == 10) return -1;
   }
@@ -520,7 +518,7 @@ http_client_uri_transmit (http_steg_t *s,
 
   evbuffer_drain(source, slen);
   conn->cease_transmission();
-  s->type = find_uri_type(outbuf, sizeof(outbuf));
+  s->type = s->config->payload_server->find_uri_type(outbuf, sizeof(outbuf));
   s->have_transmitted = 1;
   return 0;
 
@@ -569,20 +567,20 @@ http_steg_t::transmit(struct evbuffer *source)
     int rval = -1;
     switch(type) {
 
-    case HTTP_CONTENT_SWF:
-      rval = http_server_SWF_transmit(this->config->pl, source, conn);
+    case HTTP_CONTENT_SWF:                    
+      rval = http_server_SWF_transmit(config->payload_server, source, conn);
       break;
 
     case HTTP_CONTENT_JAVASCRIPT:
-      rval = http_server_JS_transmit(this->config->pl, source, conn, HTTP_CONTENT_JAVASCRIPT);
+      rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_JAVASCRIPT);
       break;
 
     case HTTP_CONTENT_HTML:
-      rval = http_server_JS_transmit(this->config->pl, source, conn, HTTP_CONTENT_HTML);
+      rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_HTML);
       break;
 
     case HTTP_CONTENT_PDF:
-      rval = http_server_PDF_transmit(this->config->pl, source, conn);
+      rval = http_server_PDF_transmit(config->payload_server, source, conn);
       break;
     }
 
@@ -596,11 +594,6 @@ http_steg_t::transmit(struct evbuffer *source)
     return rval;
   }
 }
-
-
-
-
-
 
 int
 http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
@@ -617,7 +610,6 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
     char outbuf2[MAX_COOKIE_SIZE];
     int sofar = 0;
     //int cookie_mode = 0;
-
 
     if (s2.pos == -1) {
       log_debug(conn, "Did not find end of request %d",
@@ -636,7 +628,7 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
 
     data[s2.pos+3] = 0;
 
-    type = find_uri_type((char *)data, s2.pos+4);
+    type = s->config->payload_server->find_uri_type((char *)data, s2.pos+4);
 
     if (strstr((char*) data, "Cookie") != NULL) {
       p = strstr((char*) data, "Cookie:") + sizeof "Cookie: "-1;
