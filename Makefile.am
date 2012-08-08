@@ -21,7 +21,6 @@ STEGANOGRAPHERS = \
 	src/steg/cookies.cc \
 	src/steg/embed.cc \
 	src/steg/http.cc \
-	src/steg/http_trace.cc \
 	src/steg/http_apache.cc \
 	src/steg/jsSteg.cc \
 	src/steg/nosteg.cc \
