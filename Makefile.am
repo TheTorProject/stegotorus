@@ -21,6 +21,8 @@ STEGANOGRAPHERS = \
 	src/steg/cookies.cc \
 	src/steg/embed.cc \
 	src/steg/http.cc \
+	src/steg/http_trace.cc \
+	src/steg/http_apache.cc \
 	src/steg/jsSteg.cc \
 	src/steg/nosteg.cc \
 	src/steg/nosteg_rr.cc \
@@ -125,6 +127,7 @@ noinst_HEADERS = \
 	src/steg/payloads.h \
 	src/steg/pdfSteg.h \
 	src/steg/swfSteg.h \
+	src/steg/http.h \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h \
 	src/test/unittest.h

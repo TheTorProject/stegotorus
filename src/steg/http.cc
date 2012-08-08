@@ -4,6 +4,9 @@
 
 #include <event2/buffer.h>
 #include <curl/curl.h>
+#include <vector>
+
+using namespace std;
 
 #include "util.h"
 #include "connections.h"
@@ -26,45 +29,12 @@
 #include "base64.h"
 #include "b64cookies.h"
 
-
-#define MIN_COOKIE_SIZE 24
-#define MAX_COOKIE_SIZE 1024
-
-int
-http_server_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
-
-int
-lookup_peer_name_from_ip(const char* p_ip, char* p_name);
-
-
-namespace {
-  struct http_steg_config_t : steg_config_t
-  {
-    bool is_clientside : 1;
-    PayloadServer* payload_server;
-
-    STEG_CONFIG_DECLARE_METHODS(http);
-  };
-
-  struct http_steg_t : steg_t
-  {
-    http_steg_config_t *config;
-    conn_t *conn;
-    char peer_dnsname[512];
-
-    bool have_transmitted : 1;
-    bool have_received : 1;
-    int type;
-
-    http_steg_t(http_steg_config_t *cf, conn_t *cn);
-    STEG_DECLARE_METHODS(http);
-  };
-}
+#include "http.h"
 
 STEG_DEFINE_MODULE(http);
 
 http_steg_config_t::http_steg_config_t(config_t *cfg)
-  : steg_config_t(cfg),
+   : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
   /** for now we hard code the payload server type but later it should be up 
@@ -91,9 +61,6 @@ http_steg_config_t::steg_create(conn_t *conn)
 {
   return new http_steg_t(this, conn);
 }
-
-int http_client_uri_transmit (http_steg_t *s, struct evbuffer *source, conn_t *conn);
-int http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source, conn_t *conn);
 
 void evbuffer_dump(struct evbuffer *buf, FILE *out);
 void buf_dump(unsigned char* buf, int len, FILE *out);
@@ -142,7 +109,6 @@ buf_dump(unsigned char* buf, int len, FILE *out)
   putc('\n', out);
 }
 
-
 http_steg_t::http_steg_t(http_steg_config_t *cf, conn_t *cn)
   : config(cf), conn(cn),
     have_transmitted(false), have_received(false)
@@ -160,8 +126,8 @@ http_steg_t::cfg()
   return config;
 }
 
-static size_t
-clamp(size_t val, size_t lo, size_t hi)
+size_t
+http_steg_t::clamp(size_t val, size_t lo, size_t hi)
 {
   if (val < lo) return lo;
   if (val > hi) return hi;
@@ -184,6 +150,9 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
       hi = MAX_COOKIE_SIZE*3/4;
   }
   else {
+    if (!have_received)
+      return 0;
+
     switch (type)
       {
       case HTTP_CONTENT_SWF:
@@ -206,12 +175,9 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
           hi = PDF_MIN_AVAIL_SIZE;
         break;
 
-            }
+      }
       
   }
-
-  if (!have_received)
-    return 0;
 
   if (hi < lo)
     /* cannot satisfy this request */
@@ -258,8 +224,7 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name)
 }
 
 int
-http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
-                             conn_t *conn)
+http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
 {
   struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
@@ -289,7 +254,7 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
 
   // retry up to 10 times
   while (!payload_len) {
-    payload_len = s->config->payload_server->find_client_payload(buf, bufsize,
+    payload_len = config->payload_server->find_client_payload(buf, bufsize,
                                       TYPE_HTTP_REQUEST);
     if (cnt++ == 10) {
       goto err;
@@ -297,8 +262,8 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
   }
   buf[payload_len] = 0;
 
-  if (s->peer_dnsname[0] == '\0')
-    lookup_peer_name_from_ip(conn->peername, s->peer_dnsname);
+  if (peer_dnsname[0] == '\0')
+    lookup_peer_name_from_ip(conn->peername, peer_dnsname);
 
   memset(data2, 0, sbuflen*4);
   len  = E.encode(data, sbuflen, data2);
@@ -326,12 +291,11 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
     goto err;
   }
 
-  rval = evbuffer_add(dest, s->peer_dnsname, strlen(s->peer_dnsname));
+  rval = evbuffer_add(dest, peer_dnsname, strlen(peer_dnsname));
   if (rval) {
     log_warn("error adding peername field\n");
     goto err;
   }
-
 
   rval = evbuffer_add(dest, strstr(buf, "\r\n"), payload_len - (unsigned int) (strstr(buf, "\r\n") - buf));
   if (rval) {
@@ -351,7 +315,6 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
     goto err;
   }
 
-
   rval = evbuffer_add(dest, "\r\n\r\n", 4);
 
   if (rval) {
@@ -363,9 +326,8 @@ http_client_cookie_transmit (http_steg_t *s, struct evbuffer *source,
   log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
   conn->cease_transmission();
 
-  s->type = s->config->payload_server->find_uri_type(buf, bufsize);
-  s->have_transmitted = true;
-
+  type = config->payload_server->find_uri_type(buf, bufsize);
+  have_transmitted = true;
 
   free(buf);
   free(data2);
@@ -440,17 +402,12 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 
 
 
-
-
 int
-http_client_uri_transmit (http_steg_t *s,
-                          struct evbuffer *source, conn_t *conn)
+http_steg_t::http_client_uri_transmit (evbuffer *source, conn_t *conn)
 {
 
 
   struct evbuffer *dest = conn->outbound();
-
-
   struct evbuffer_iovec *iv;
   int i, nv;
 
@@ -466,8 +423,8 @@ http_client_uri_transmit (http_steg_t *s,
   int len =0;
   char buf[10000];
 
-  if (s->peer_dnsname[0] == '\0')
-    lookup_peer_name_from_ip(conn->peername, s->peer_dnsname);
+  if (peer_dnsname[0] == '\0')
+    lookup_peer_name_from_ip(conn->peername, peer_dnsname);
 
   nv = evbuffer_peek(source, slen, NULL, NULL, 0);
   iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
@@ -488,60 +445,33 @@ http_client_uri_transmit (http_steg_t *s,
   }
   free(iv);
 
-
-
   do {
     datalen = gen_uri_field(outbuf, sizeof(outbuf), data, datalen);
   } while (datalen == 0);
 
-
-
-
   // retry up to 10 times
   while (!len) {
-    len = s->config->payload_server->find_client_payload( buf, sizeof(buf),
+    len = config->payload_server->find_client_payload( buf, sizeof(buf),
                               TYPE_HTTP_REQUEST);
     if (cnt++ == 10) return -1;
   }
 
-
   if (evbuffer_add(dest, outbuf, datalen)  ||  // add uri field
       evbuffer_add(dest, "HTTP/1.1\r\nHost: ", 19) ||
-      evbuffer_add(dest, s->peer_dnsname, strlen(s->peer_dnsname)) ||
+      evbuffer_add(dest, peer_dnsname, strlen(peer_dnsname)) ||
       evbuffer_add(dest, strstr(buf, "\r\n"), len - (unsigned int) (strstr(buf, "\r\n") - buf))  ||  // add everything but first line
       evbuffer_add(dest, "\r\n", 2)) {
       log_debug("error ***********************");
       return -1;
   }
 
-
-
   evbuffer_drain(source, slen);
   conn->cease_transmission();
-  s->type = s->config->payload_server->find_uri_type(outbuf, sizeof(outbuf));
-  s->have_transmitted = 1;
+  type = config->payload_server->find_uri_type(outbuf, sizeof(outbuf));
+  have_transmitted = 1;
   return 0;
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 int
 http_steg_t::transmit(struct evbuffer *source)
@@ -561,7 +491,7 @@ http_steg_t::transmit(struct evbuffer *source)
     */
 
  //@@
-    return http_client_cookie_transmit(this, source, conn); //@@
+    return http_client_cookie_transmit(source, conn); //@@
   }
   else {
     int rval = -1;
@@ -596,7 +526,7 @@ http_steg_t::transmit(struct evbuffer *source)
 }
 
 int
-http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
+http_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
 
   char* data;
   int type;
@@ -628,7 +558,7 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
 
     data[s2.pos+3] = 0;
 
-    type = s->config->payload_server->find_uri_type((char *)data, s2.pos+4);
+    type = config->payload_server->find_uri_type((char *)data, s2.pos+4);
 
     if (strstr((char*) data, "Cookie") != NULL) {
       p = strstr((char*) data, "Cookie:") + sizeof "Cookie: "-1;
@@ -664,8 +594,8 @@ http_server_receive(http_steg_t *s, conn_t *conn, struct evbuffer *dest, struct 
     evbuffer_drain(source, s2.pos + sizeof("\r\n\r\n") - 1);
   } while (evbuffer_get_length(source));
 
-  s->have_received = 1;
-  s->type = type;
+  have_received = 1;
+  type = type;
 
   // FIXME: should decide whether or not to do this based on the
   // Connection: header.  (Needs additional changes elsewhere, esp.
@@ -704,9 +634,8 @@ http_steg_t::receive(struct evbuffer *dest)
     if (rval == RECV_GOOD) have_received = 1;
     return rval;
 
-  } else {
-    return http_server_receive(this, conn, dest, source);
-  }
+  } 
 
+  return http_server_receive(conn, dest, source);
 
 }

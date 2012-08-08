@@ -112,6 +112,8 @@ class PayloadInfo{
 
 };
 
+typedef map<string, PayloadInfo> PayloadDict;
+
 /** 
     The initiation process needs to fill up the
     fields of this class
@@ -149,7 +151,7 @@ class PayloadDatabase{
   //unsigned int max_PDF_capacity;
 
   //pentry_header payload_hdrs[MAX_PAYLOADS];
-  map<string, PayloadInfo> payloads;
+  PayloadDict payloads;
   map<unsigned int, TypeDetail> type_detail;
 
   /**
@@ -211,21 +213,21 @@ class PayloadServer
 
   }
 
-  unsigned int capacityJS3 (char* buf, int len, int mode);
-  unsigned int get_max_JS_capacity(void);
-  unsigned int get_max_HTML_capacity(void);
+  static unsigned int capacityJS3 (char* buf, int len, int mode);
+  static unsigned int get_max_JS_capacity(void);
+  static unsigned int get_max_HTML_capacity(void);
 
 
-  unsigned int capacityPDF (char* buf, int len);
-  unsigned int get_max_PDF_capacity(void);
+  static unsigned int capacityPDF (char* buf, int len);
+  static unsigned int get_max_PDF_capacity(void);
   int find_uri_type(char* buf, int size);
 
 
   /* These are added to make payload_scraper works for now.
      The plan is to make each type of steg payload a class
   */
-  unsigned int capacityJS(char* buf, int len);
-  unsigned int capacitySWF(char* buf, int len);
+  static unsigned int capacityJS(char* buf, int len);
+  static unsigned int capacitySWF(char* buf, int len);
 
 };
 

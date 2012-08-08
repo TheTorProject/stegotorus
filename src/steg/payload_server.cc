@@ -1028,6 +1028,17 @@ unsigned int PayloadServer::capacitySWF(char* buf, int len)
  */
 unsigned int PayloadServer::capacityJS (char* buf, int len) {
 
-  (void)buf;
-  return capacityJS3(buf, len, CONTENT_HTML_JAVASCRIPT); //just randomly choose a mode for now to check the scraper.
+  int mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_JAVASCRIPT);
+  if (mode != CONTENT_JAVASCRIPT)
+    mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_HTML);
+  
+  if (mode != CONTENT_HTML_JAVASCRIPT && mode != CONTENT_JAVASCRIPT)
+    return 0;
+
+  size_t cap = capacityJS3(buf, len, mode);
+
+  if (cap <  JS_DELIMITER_SIZE)
+    return 0;
+    
+  return (cap - JS_DELIMITER_SIZE)/2;
 }
