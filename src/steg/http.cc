@@ -155,6 +155,9 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
       hi = MAX_COOKIE_SIZE*3/4;
   }
   else {
+    if (!have_received)
+      return 0;
+
     switch (type)
       {
       case HTTP_CONTENT_SWF:

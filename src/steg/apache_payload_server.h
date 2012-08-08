@@ -5,6 +5,25 @@
 
 #include "payload_server.h"
 
+class PayloadScraper; /* Just tell ApachePayloadServer that such a
+                        class exists */
+
+class URIEntry
+{
+  public:
+    string URL;
+    bool accept_param = true; /*This is to discriminate between types like html
+                                vs cgi, js, etc, but for now I'm not using it
+                              */
+    URIEntry(string init_URL)
+      :URL(init_URL)
+      {
+        
+      }
+};
+
+typedef vector<URIEntry> URIDict;
+
 class ApachePayloadServer: public PayloadServer
 {
   friend PayloadScraper; /* We need the url retrieving capabilities in
@@ -13,7 +32,7 @@ class ApachePayloadServer: public PayloadServer
   string _database_filename;
   string _apache_host_name = "127.0.0.1";
   
-  const unsigned long c_max_buffer_size = 1000000;
+  const unsigned long c_max_buffer_size = 10000000;
   CURL* _curl_obj; //this is used to communicate with http server
 
   //This is too keep the dict in sync between client and server
