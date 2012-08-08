@@ -123,8 +123,10 @@ PKG_CHECK_MODULES([libevent], [libevent >= 2.0])
 # there's no good reason not to require the latest zlib, which is
 # from 2009
 PKG_CHECK_MODULES([libz], [zlib >= 1.2.3.4])
+# the test libcurl by which the program is tested
+PKG_CHECK_MODULES([libcurl], [libcurl >= 7.26.0])
 
-LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS"
+LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS $libcurl_LIBS"
 
 # libraries needed for tester proxy
 PKG_CHECK_MODULES([libevent_openssl], [libevent_openssl >= 2.0])
