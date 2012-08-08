@@ -6,6 +6,7 @@
  */
 #ifndef CURL_UTIL_H
 #define CURL_UTIL_H
+#include <curl/curl.h>
 
 int wait_on_socket(curl_socket_t sockfd, int for_recv, long timeout_ms);
 

@@ -1105,7 +1105,8 @@ chop_conn_t::recv()
               opname(hdr.opcode(), fallbackbuf));
 
     if (config->trace_packets)
-      fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv %lu <d=%lu p=%lu f=%s>\n",
+      {
+        fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv %lu <d=%lu p=%lu f=%s>\n",
               log_get_timestamp(), upstream->serial,
               upstream->recv_queue.window(),
               (unsigned long)evbuffer_get_length(bufferevent_get_input(upstream->up_buffer)),
@@ -1113,7 +1114,17 @@ chop_conn_t::recv()
               (unsigned long)hdr.dlen(),
               (unsigned long)hdr.plen(),
               opname(hdr.opcode(), fallbackbuf));
-
+         // vmon: I need the content of the packet as well.
+        if (hdr.dlen())
+          {
+            char* data_4_log =  new char[hdr.dlen() + 1];
+            memcpy(data_4_log, decodebuf, hdr.dlen());
+            data_4_log[hdr.dlen()] = '\n';
+            log_info("Data received: %s",  data_4_log);
+            
+          }
+      }
+    
     evbuffer *data = evbuffer_new();
     if (!data || (hdr.dlen() && evbuffer_add(data, decodebuf, hdr.dlen()))) {
       log_warn(this, "failed to extract data from decode buffer");
