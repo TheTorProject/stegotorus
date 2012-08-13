@@ -57,6 +57,10 @@ struct conn_t {
   struct evbuffer *outbound()
   { return this->buffer ? bufferevent_get_output(this->buffer) : 0; }
 
+  /** Retrieve the socket opened for this connection. */
+  evutil_socket_t socket()
+  { return this->buffer ? bufferevent_getfd(buffer) : 0; }
+
   /** Called immediately after the TCP handshake completes, for
       incoming connections to server mode.
 

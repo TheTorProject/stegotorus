@@ -1,5 +1,5 @@
 /* Copyright 2011 SRI International
- * See LICENSE for other credits and copying information
+ * See ICENSE for other credits and copying information
  */
 
 #include "util.h"
@@ -80,7 +80,8 @@
    reason, it is skipped but copied to the transcript, with a ! at the
    beginning of the line.  (These will all be at the very beginning.) */
 
-#define TL_TIMEOUT 0
+#define TL_TIMEOUT 60
+#define LOGGING true
 
 struct tstate
 {
@@ -211,16 +212,19 @@ socket_read_cb(struct bufferevent *bev, void *arg)
   tstate *st = (tstate *)arg;
   /* print out the data for the sake of debug */
   /* first we need the size of the buffer */
-  size_t buffer_size = evbuffer_get_length(bufferevent_get_input(bev));
-  char* debug_buf = new char[buffer_size];
-  evbuffer_copyout(bufferevent_get_input(bev), (void*) debug_buf, sizeof(char)* buffer_size);
-  fprintf(stderr, "Received on %s: %s", bev == st->near ? "near" : "far", debug_buf);
-  
+  if (LOGGING)
+    {
+      size_t buffer_size = evbuffer_get_length(bufferevent_get_input(bev));
+      char* debug_buf = new char[buffer_size+1];
+      evbuffer_copyout(bufferevent_get_input(bev), (void*) debug_buf, sizeof(char)* buffer_size);
+      debug_buf[buffer_size] = '\0';
+      fprintf(stderr, "Received on %s: %s\n", bev == st->near ? "near" : "far", debug_buf);
 
+    }
+  
   evbuffer_add_buffer(bev == st->near ? st->neartext : st->fartext,
                       bufferevent_get_input(bev));
-  
-  
+    
   script_next_action(st);
 }
 

@@ -38,8 +38,15 @@
 /stegotorus
 /tltester
 /unittests
+/pgen_fake
+/pgen_pcap
 
 /build/
 /build-*/
 /bench/
 /bench-*/
+
+/src/test/testbuf/
+/gdb_emacs/
+/apache_payload/*
+/traces/*

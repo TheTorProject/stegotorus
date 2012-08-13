@@ -31,6 +31,27 @@ struct steg_config_t
   /** Create an extended 'steg_t' object (see below) from this
       configuration, associated with connection CONN.  */
   virtual steg_t *steg_create(conn_t *conn) = 0;
+
+  /** provides the data that the steg protocol needs
+      to communicate to its peer. Chop needs to check this buffer
+      before serving the user data as these data have proirities.
+      returns the size of data block.
+  */
+  evbuffer* protocol_data_in;
+  evbuffer* protocol_data_out;
+
+  /** If chop receives protocol related data, then it writes
+      it in protocol_data then call this function to process it.
+      
+      @returns the number of data it writes in protocol_data to 
+      send as a result of processing
+
+  */
+  virtual size_t process_protocol_data()
+  {
+    return 0;
+  }
+
 };
 
 /** A 'steg_t' object handles the actual steganography for one
@@ -82,6 +103,7 @@ struct steg_t
       method to not consume any data or write anything to DEST in a
       failure situation. */
   virtual int receive(struct evbuffer *dest) = 0;
+
 };
 
 /** STEG_DEFINE_MODULE defines an object with this type, plus the

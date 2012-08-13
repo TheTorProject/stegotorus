@@ -38,7 +38,7 @@ using namespace std;
 
 #define HTML_MIN_AVAIL_SIZE 1026
 
-#define HTTP_MSG_BUF_SIZE 100000
+#define HTTP_MSG_BUF_SIZE 1000000
 
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
@@ -78,6 +78,7 @@ using namespace std;
 // typePayloadCap[x][] specifies the capacity for typePayload[x][]
 
 #define MAX_CONTENT_TYPE		11
+#define NO_CONTENT_TYPES                 5
 
 typedef int SID;
 typedef short PacketType;
@@ -206,6 +207,8 @@ class PayloadServer
 
   virtual int get_payload (int contentType, int cap, char** buf, int* size) = 0;
 
+  virtual int find_uri_type(const char* buf, int size);
+
   /** return the side for which, the payload_server is initialized */
   MachineSide side()
   {
@@ -220,7 +223,6 @@ class PayloadServer
 
   static unsigned int capacityPDF (char* buf, int len);
   static unsigned int get_max_PDF_capacity(void);
-  int find_uri_type(char* buf, int size);
 
 
   /* These are added to make payload_scraper works for now.
