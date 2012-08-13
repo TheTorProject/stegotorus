@@ -12,7 +12,10 @@
 
 #include <tr1/unordered_map>
 #include <sstream>
+
+#include <tr1/unordered_set>
 #include <vector>
+#include <algorithm>
 
 #include <event2/event.h>
 #include <event2/buffer.h>
@@ -25,6 +28,7 @@ using std::tr1::unordered_map;
 using std::tr1::unordered_set;
 using std::vector;
 using std::make_pair;
+using std::min;
 
 using namespace chop_blk;
 
@@ -87,6 +91,23 @@ struct chop_circuit_t : circuit_t
                     struct evbuffer *payload);
   int maybe_send_ack();
 
+  /** 
+      check all conn for steg protocol data and send them
+      if there's any
+  */
+  int send_all_steg_data();
+  /** the same as send targeted but it reads the data from
+      conn->steg->cfg()->protocol_data and set opcode = op_STEG0
+  */
+  int send_targeted_steg_data(chop_conn_t *conn, size_t blocksize);
+
+  /**
+     check the steg module of all connection to see if they have
+     protocol data to send
+     
+     @return the first connection whose steg has data to send
+  */
+  chop_conn_t* check_for_steg_protocol_data();
   chop_conn_t *pick_connection(size_t desired, size_t minimum,
                                size_t *blocksize);
 
@@ -455,6 +476,12 @@ chop_circuit_t::send()
 {
   circuit_disarm_flush_timer(this);
 
+  //First we check if there's steg data that we need to send
+  if (send_all_steg_data())
+    {
+      log_debug("Error in transmiting steg protocol data");
+    }
+
   struct evbuffer *xmit_pending = bufferevent_get_input(up_buffer);
   size_t avail = evbuffer_get_length(xmit_pending);
   size_t avail0 = avail;
@@ -557,6 +584,105 @@ chop_circuit_t::send()
 }
 
 int
+chop_circuit_t::send_all_steg_data()
+{
+
+  if (downstreams.empty()) {
+      log_debug(this, "no downstream connections");
+      return 0;
+  }
+
+  bool no_target_connection = true;
+
+  for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
+       i != downstreams.end(); i++) {
+    chop_conn_t *target = *i;
+
+    // We cannot transmit on a connection whose steganography module has
+    // not yet been instantiated.  (This only ever happens server-side.)
+    if (!target->steg) {
+      log_debug(target, "offers 0 bytes (no steg)");
+      continue;
+    }
+
+    // We must not transmit on a connection that has not completed its
+    // TCP handshake.  (This only ever happens client-side.  If we try
+    // it anyway, the transmission gets silently dropped on the floor.)
+    if (!target->connected) {
+      log_debug(target, "offers 0 bytes (not connected)");
+      continue;
+    }
+
+    size_t avail0;
+
+    //Now we check if the protocol_data has any data
+    size_t avail = evbuffer_get_length(target->steg->cfg()->protocol_data_out);
+    //we try to send all data
+    while(avail > 0) {
+      size_t desired;
+      if (avail > SECTION_LEN)
+        desired = SECTION_LEN;
+      else
+        desired = avail;
+
+      desired += MIN_BLOCK_SIZE;
+
+      size_t lo = MIN_BLOCK_SIZE + (desired == MIN_BLOCK_SIZE ? 0 : 1);
+
+      log_debug(this, "target block size %lu bytes", (unsigned long)desired);
+
+      log_debug(this, "%lu bytes to send", (unsigned long)avail);
+      size_t shake = target->sent_handshake ? 0 : HANDSHAKE_LEN;
+      size_t room = target->steg->transmit_room(desired + shake, lo + shake,
+                                                  MAX_BLOCK_SIZE + shake);
+      if (room != 0) {
+        if (room < lo + shake || room >= MAX_BLOCK_SIZE + shake)
+          log_abort(target, "steg size request (%lu) out of range [%lu, %lu]",
+                    (unsigned long)room,
+                    (unsigned long)(lo + shake),
+                    (unsigned long)(MAX_BLOCK_SIZE + shake));
+
+        log_debug(target, "offers %lu bytes (%s)", (unsigned long)room,
+                  target->steg->cfg()->name());
+
+        if (send_targeted_steg_data(target, room))
+          return -1;
+      }
+      else {
+        log_debug(target, "offers 0 bytes (%s)",
+                  target->steg->cfg()->name());
+      }
+
+      avail0 = avail;
+      avail = evbuffer_get_length(target->steg->cfg()->protocol_data_out);
+
+      if (avail0 == avail) { // no forward progress
+        dead_cycles++;
+        log_debug(this, "%u dead cycles", dead_cycles);
+        break;
+      }
+      else {
+        no_target_connection = false;
+      }
+    } //while(avail > 0)
+  } //for all targets
+
+  // If we're the client and we had no target connection, try
+  // reopening new connections.  If we're the server, we have to
+  // just twiddle our thumbs and hope the client does that.
+  if (no_target_connection) {
+    if (config->mode != LSN_SIMPLE_SERVER &&
+        downstreams.size() < 64)
+      circuit_reopen_downstreams(this);
+    else
+      circuit_arm_axe_timer(this, axe_interval());
+  }
+
+  return 0;
+}
+
+
+int
 chop_circuit_t::send_eof()
 {
   upstream_eof = true;
@@ -654,7 +780,14 @@ chop_circuit_t::send_special(opcode_t f, struct evbuffer *payload)
 int
 chop_circuit_t::send_targeted(chop_conn_t *conn)
 {
-  size_t avail = evbuffer_get_length(bufferevent_get_input(up_buffer));
+  //Priority with steg data
+  bool steg_data_available = false;
+  size_t avail = evbuffer_get_length(conn->steg->cfg()->protocol_data_out);
+  if (avail > 0)
+    steg_data_available = true;
+  else
+    avail = evbuffer_get_length(bufferevent_get_input(up_buffer));
+
   if (avail == 0 && !(upstream_eof && !sent_fin) && config->retransmit) {
     // Consider retransmission if we have nothing new to send.
     evbuffer *block = evbuffer_new();
@@ -732,7 +865,9 @@ chop_circuit_t::send_targeted(chop_conn_t *conn)
   log_debug(conn, "requests %lu bytes (%s)", (unsigned long)room,
             conn->steg->cfg()->name());
 
-  return send_targeted(conn, room);
+  return steg_data_available ? 
+    send_targeted_steg_data(conn, room) :
+    send_targeted(conn, room);
 }
 
 int
@@ -760,6 +895,26 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t blocksize)
 
   return send_targeted(conn, avail, (blocksize - lo) - avail,
                        op, xmit_pending);
+}
+
+int
+chop_circuit_t::send_targeted_steg_data(chop_conn_t *conn, size_t blocksize)
+{
+  size_t lo = MIN_BLOCK_SIZE, hi = MAX_BLOCK_SIZE;
+  if (!conn->sent_handshake) {
+    lo += HANDSHAKE_LEN;
+    hi += HANDSHAKE_LEN;
+  }
+  log_assert(blocksize >= lo && blocksize <= hi);
+
+  size_t avail = evbuffer_get_length(conn->steg->cfg()->protocol_data_out);
+  opcode_t op = op_STEG0;
+
+  if ((avail > (blocksize - lo)) || (avail > SECTION_LEN))
+    avail = min(blocksize - lo, SECTION_LEN);
+
+  return send_targeted(conn, avail, (blocksize - lo) - avail,
+                       op, conn->steg->cfg()->protocol_data_out);
 }
 
 int
@@ -934,6 +1089,39 @@ chop_circuit_t::pick_connection(size_t desired, size_t minimum,
   }
 }
 
+chop_conn_t* chop_circuit_t::check_for_steg_protocol_data()
+{
+  for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
+       i != downstreams.end(); i++) {
+    chop_conn_t *conn = *i;
+
+    // We cannot transmit on a connection whose steganography module has
+    // not yet been instantiated.  (This only ever happens server-side.)
+    if (!conn->steg) {
+      log_debug(conn, "offers 0 bytes (no steg)");
+      continue;
+    }
+
+    // We must not transmit on a connection that has not completed its
+    // TCP handshake.  (This only ever happens client-side.  If we try
+    // it anyway, the transmission gets silently dropped on the floor.)
+    if (!conn->connected) {
+      log_debug(conn, "offers 0 bytes (not connected)");
+      continue;
+    }
+
+    //Now we check if the protocol_data has any data
+    if (evbuffer_get_length(conn->steg->cfg()->protocol_data_out))
+        return conn;
+
+  }
+
+  //nothing to send
+  return NULL;
+
+}
+
+
 int
 chop_circuit_t::maybe_send_ack()
 {
@@ -1037,6 +1225,21 @@ chop_circuit_t::process_queue()
       }
       break;
 
+    case op_STEG0:
+      //write it to steg protocol data
+      //FIX ME I need to check if the conn is still 
+      //alive/valid
+      if (evbuffer_get_length(blk.data))
+        evbuffer_add_buffer(((chop_conn_t*)blk.conn)->steg->cfg()->protocol_data_in, blk.data);
+      
+      //now ask the steg to process the data
+      ((chop_conn_t*)blk.conn)->steg->cfg()->process_protocol_data();
+      //if steg needs to reply to the data it writes it to the same 
+      //buffer and we need to send them
+      if (evbuffer_get_length(((chop_conn_t*)blk.conn)->steg->cfg()->protocol_data_out))
+          send();
+      break;
+      
     // no other opcodes should get this far
     default:
       char fallbackbuf[4];
@@ -1361,33 +1564,23 @@ chop_conn_t::recv()
               opname(hdr.opcode(), fallbackbuf),
               hdr.rcount());
 
-    if (config->trace_packets)
-<<<<<<< variant A
+    if (config->trace_packets) {
       fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv %lu <d=%lu p=%lu f=%s r=%u>\n",
->>>>>>> variant B
-      {
-        fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv %lu <d=%lu p=%lu f=%s>\n",
-####### Ancestor
-      fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv %lu <d=%lu p=%lu f=%s>\n",
-======= end
               log_get_timestamp(), upstream->serial,
               upstream->recv_queue.window(),
               (unsigned long)evbuffer_get_length(bufferevent_get_input(upstream->up_buffer)),
               (unsigned long)hdr.seqno(),
               (unsigned long)hdr.dlen(),
               (unsigned long)hdr.plen(),
-<<<<<<< variant A
               opname(hdr.opcode(), fallbackbuf),
               hdr.rcount());
 
->>>>>>> variant B
-              opname(hdr.opcode(), fallbackbuf));
          // vmon: I need the content of the packet as well.
         if (hdr.dlen())
           {
             char* data_4_log =  new char[hdr.dlen() + 1];
             memcpy(data_4_log, decodebuf, hdr.dlen());
-            data_4_log[hdr.dlen()] = '\n';
+            data_4_log[hdr.dlen()] = '\0';
             log_info("Data received: %s",  data_4_log);
             
           }

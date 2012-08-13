@@ -311,15 +311,13 @@ int parse_client_headers(char* inbuf, char* outbuf, int len) {
 }
 
 
-
-
 /* first line is of the form....
    GET /XX/XXXX.swf[?YYYY] HTTP/1.1\r\n
 */
 
 
 int 
-PayloadServer::find_uri_type(char* buf_orig, int buflen) {
+PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
 
   char* uri;
   char* ext;
@@ -327,43 +325,37 @@ PayloadServer::find_uri_type(char* buf_orig, int buflen) {
   char* buf = (char *)xmalloc(buflen+1);
   char* uri_end;
 
-
   memcpy(buf, buf_orig, buflen);
   buf[buflen] = 0;
 
-  
   if (strncmp(buf, "GET", 3) != 0
       && strncmp(buf, "POST", 4) != 0) {
-    fprintf(stderr, "HERE %s\n", buf);
+    log_debug("Unable to determine URI type. Not a GET/POST requests.\n");
     return -1;
   }
-  
-
 
   uri = strchr(buf, ' ') + 1;
 
   if (uri == NULL) {
-    fprintf(stderr, "Invalid URL\n");
+    log_debug("Invalid URL\n");
     return -1;
   }
 
-  uri_end = strchr(uri, ' ');
+  if (!(uri_end = strchr(uri, '?')))
+    uri_end = strchr(uri, ' ');
+  
 
   if (uri_end == NULL) {
-    fprintf(stderr, "unterminated uri\n");
+    log_debug("unterminated uri\n");
     return -1;
   }
 
   uri_end[0] = 0;
-  
-
-
-
 
   ext = strrchr(uri, '/');
 
   if (ext == NULL) {
-    fprintf(stderr, "no / in url: find_uri_type...");
+    log_debug("no / in url: find_uri_type...");
     return -1;
   }
 
@@ -373,7 +365,6 @@ PayloadServer::find_uri_type(char* buf_orig, int buflen) {
   if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
       || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))
     return HTTP_CONTENT_HTML;
-
 
   if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
     return HTTP_CONTENT_JAVASCRIPT;

@@ -354,5 +354,9 @@ private:
   key_generator& operator=(const key_generator&) DELETE_METHOD;
 };
 
+/** 
+    Computes sha256 of buffer of size n and store the result 
+    in md. If md == NULL it allocate the memory.
+*/
 void sha256(const unsigned char *buffer, size_t n, unsigned char *md);
 #endif

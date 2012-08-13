@@ -25,7 +25,7 @@ steg_new(const char *name, config_t *cfg)
   for (s = supported_stegs; *s; s++)
     if (!strcmp(name, (**s).name))
       return (**s).new_(cfg);
- return 0;
+  return 0;
 }
 
 /* Define these here rather than in the class definition so that the

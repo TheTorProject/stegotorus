@@ -5,6 +5,7 @@
 #include <event2/buffer.h>
 #include <curl/curl.h>
 #include <vector>
+#include <sstream>
 
 using namespace std;
 
@@ -34,20 +35,24 @@ using namespace std;
 STEG_DEFINE_MODULE(http);
 
 http_steg_config_t::http_steg_config_t(config_t *cfg)
+  : http_steg_config_t(cfg, true)
+{
+
+}
+
+http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
    : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
-  /** for now we hard code the payload server type but later it should be up 
-      to the config file to decide what type of payload server we need
-  */
-  string payload_filename;
-  if (is_clientside)
-    payload_filename = "traces/client.out";
-  else
-    payload_filename = "traces/server.out";
+  if (init_payload_server) {
+    string payload_filename;
+    if (is_clientside)
+      payload_filename = "traces/client.out";
+    else
+      payload_filename = "traces/server.out";
   
-  payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
-
+    payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
+  }
 }
 
 http_steg_config_t::~http_steg_config_t()
@@ -175,6 +180,8 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
           hi = PDF_MIN_AVAIL_SIZE;
         break;
 
+      case HTTP_CONTENT_ENCRYPTEDZIP: //We need to prevent this
+        return 0;
       }
       
   }
@@ -595,7 +602,7 @@ http_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, struct evb
   } while (evbuffer_get_length(source));
 
   have_received = 1;
-  type = type;
+  this->type = type;
 
   // FIXME: should decide whether or not to do this based on the
   // Connection: header.  (Needs additional changes elsewhere, esp.

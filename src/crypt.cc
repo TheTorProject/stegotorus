@@ -819,10 +819,6 @@ key_generator::~key_generator() {}
 key_generator_impl::~key_generator_impl()
 { HMAC_CTX_cleanup(&expander); }
 
-/** 
-    Computes sha256 of buffer of size n and store the result 
-    in md. If md == NULL it allocate the memory.
-*/
 void sha256(const unsigned char *buffer, size_t n, unsigned char *md)
 {
   if (md == NULL)

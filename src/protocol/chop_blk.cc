@@ -22,7 +22,7 @@ namespace chop_blk
 {
 
 const char *
-opname(unsigned int o, char fallbackbuf[4])
+opname(opcode_t o, char fallbackbuf[4])
 {
   switch (o) {
   case op_XXX: return "XXX";
@@ -369,7 +369,7 @@ reassembly_queue::~reassembly_queue()
 reassembly_elt
 reassembly_queue::remove_next()
 {
-  reassembly_elt rv = { 0, op_DAT };
+  reassembly_elt rv = { 0, op_DAT, NULL };
   uint8_t front = next_to_process & 0xFF;
   char fallbackbuf[4];
 
@@ -405,7 +405,12 @@ reassembly_queue::insert(uint32_t seqno, opcode_t op, evbuffer *data)
 
   cbuf[pos].data = data;
   cbuf[pos].op   = op;
+<<<<<<< variant A
   count++;
+>>>>>>> variant B
+  cbuf[pos].conn = conn;
+####### Ancestor
+======= end
   return true;
 }
 

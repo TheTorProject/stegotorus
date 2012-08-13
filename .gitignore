@@ -36,13 +36,17 @@
 
 /libstegotorus.a
 /stegotorus
-/pgen_fake
-/pgen_pcap
 /tltester
 /unittests
+/pgen_fake
+/pgen_pcap
 
 /build/
 /build-*/
 /bench/
 /bench-*/
-/traces/
+
+/src/test/testbuf/
+/gdb_emacs/
+/apache_payload/*
+/traces/*
