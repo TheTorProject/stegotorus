@@ -1,5 +1,5 @@
 /* Copyright 2011 SRI International
- * See LICENSE for other credits and copying information
+ * See ICENSE for other credits and copying information
  */
 
 #include "util.h"

@@ -269,6 +269,71 @@ ApachePayloadServer::store_dict(char* dict_buf, size_t dict_buf_size)
   return true;
 }
 
+bool ApachePayloadServer::init_uri_dict(istream& dict_stream)
+{
+  uri_dict.clear();
+  uri_decode_book.clear();
+
+  string cur_url;
+  for (size_t i = 0; dict_stream >> cur_url; i++) {
+    uri_dict.push_back(URIEntry(cur_url));
+    uri_decode_book[cur_url] = i;
+
+  }
+
+  log_debug("Stored uri dictionary loaded with %lu entries", uri_dict.size());
+
+  compute_uri_dict_mac();
+  if (!dict_stream.bad()) 
+    return true;
+
+  log_debug("crrupted dictionary buffer");
+  return false;
+  
+}
+
+void ApachePayloadServer::export_dict(iostream& dict_stream)
+{
+  URIDict::iterator itr_uri;
+  for(itr_uri = uri_dict.begin(); itr_uri != uri_dict.end(); itr_uri++)
+    {
+      dict_stream << itr_uri->URL.c_str() << endl;
+    }
+  
+}
+
+const unsigned char* ApachePayloadServer::compute_uri_dict_mac()
+{
+  stringstream dict_str_stream;
+  export_dict(dict_str_stream);
+  
+  sha256((const unsigned char*)dict_str_stream.str().c_str(), dict_str_stream.str().size(), _uri_dict_mac);
+
+  return _uri_dict_mac;
+
+}
+
+bool ApachePayloadServer::store_dict(char* dict_buf, size_t dict_buf_size)
+{
+
+  ofstream dict_file(_database_filename);
+
+  if (!dict_file.is_open()){
+    log_debug("Fail i nopenning file:%s to store the uri dict", _database_filename.c_str());
+    return false;
+  }
+
+  dict_file.write(dict_buf, dict_buf_size);
+  if (dict_file.bad()){
+    log_debug("Error in storing the uri dict");
+    dict_file.close();
+    return false;
+  }
+
+  dict_file.close();
+  return true;
+}
+
 ApachePayloadServer::~ApachePayloadServer()
 {
     /* always cleanup */ 

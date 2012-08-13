@@ -5,6 +5,7 @@
 
 #include "payload_server.h"
 
+
 class PayloadScraper; /* Just tell ApachePayloadServer that such a
                         class exists */
 
