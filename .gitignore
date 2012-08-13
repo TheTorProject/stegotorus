@@ -48,6 +48,8 @@
 /build-*/
 /bench/
 /bench-*/
-/traces/*
+
+/src/test/testbuf/
+/gdb_emacs/
 /apache_payload/*
-/gdb_emacs/*
+/traces/*

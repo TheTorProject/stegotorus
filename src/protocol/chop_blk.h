@@ -188,6 +188,7 @@ struct reassembly_elt
 {
   evbuffer *data;
   opcode_t op;
+  conn_t* conn;
 };
 
 class reassembly_queue
