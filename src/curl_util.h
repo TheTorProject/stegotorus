@@ -10,4 +10,5 @@
 
 int wait_on_socket(curl_socket_t sockfd, int for_recv, long timeout_ms);
 
+size_t discard_data(char *ptr, size_t size, size_t nmemb, void *userdata);
 #endif

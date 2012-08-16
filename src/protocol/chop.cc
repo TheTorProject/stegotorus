@@ -697,11 +697,15 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t blocksize)
   struct evbuffer *xmit_pending = bufferevent_get_input(up_buffer);
   size_t avail = evbuffer_get_length(xmit_pending);
   opcode_t op = op_DAT;
-
-  if (avail > blocksize - lo)
+  
+  //The original code 
+  /*if (avail > blocksize - lo)
     avail = blocksize - lo;
-  else if (avail > SECTION_LEN)
-    avail = SECTION_LEN;
+    else if (avail > SECTION_LEN)
+    avail = SECTION_LEN;*/
+
+  if (avail > blocksize - lo || avail > SECTION_LEN)
+    avail = min(blocksize - lo, SECTION_LEN);
   else if (upstream_eof && !sent_fin)
     // this block will carry the last byte of real data to be sent in
     // this direction; mark it as such
@@ -724,8 +728,12 @@ chop_circuit_t::send_targeted_steg_data(chop_conn_t *conn, size_t blocksize)
   size_t avail = evbuffer_get_length(conn->steg->cfg()->protocol_data_out);
   opcode_t op = op_STEG0;
 
-  if ((avail > (blocksize - lo)) || (avail > SECTION_LEN))
+  if (avail > blocksize - lo || avail > SECTION_LEN)
     avail = min(blocksize - lo, SECTION_LEN);
+  else if (upstream_eof && !sent_fin)
+    // this block will carry the last byte of real data to be sent in
+    // this direction; mark it as such
+    op = op_STEG_FIN;
 
   return send_targeted(conn, avail, (blocksize - lo) - avail,
                        op, conn->steg->cfg()->protocol_data_out);
@@ -799,11 +807,14 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
   evbuffer_drain(payload, d);
 
   send_seq++;
-  if (f == op_FIN) {
+  if (f == op_FIN || f == op_STEG_FIN) {
     sent_fin = true;
     read_eof = true;
   }
-  if ((f == op_DAT && d > 0) || f == op_FIN)
+  if ((f == op_DAT && d > 0) || 
+      (f == op_STEG0 && d > 0) ||
+      f == op_FIN ||
+      f == op_STEG_FIN)
     // We are making forward progress if we are _either_ sending or
     // receiving data.
     dead_cycles = 0;
@@ -972,6 +983,15 @@ chop_circuit_t::process_queue()
       }
       break;
 
+    case op_STEG_FIN:
+      if (received_fin) {
+        log_info(this, "protocol error: duplicate FIN");
+        pending_error = true;
+        break;
+      }
+      log_debug(this, "received (STEG) FIN");
+      pending_fin = true;
+      // fall through - block may have data
     case op_STEG0:
       //write it to steg protocol data
       //FIX ME I need to check if the conn is still 
@@ -1010,7 +1030,7 @@ chop_circuit_t::process_queue()
     if (pending_error && !sent_error) {
       // there's no point sending an RST in response to an RST or a
       // duplicate FIN
-      if (blk.op != op_RST && blk.op != op_FIN)
+      if (blk.op != op_RST && blk.op != op_FIN && blk.op != op_STEG_FIN)
         send_special(op_RST, 0);
       sent_error = true;
     }

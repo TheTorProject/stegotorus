@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include "util.h"
+#include "curl_util.h"
 #include "connections.h"
 #include "protocol.h"
 #include "steg.h"
@@ -61,21 +62,8 @@ namespace  {
 
      */
      bool init_uri_dict();
-       
-     /**
-        A function for testing purpose that reads the uri dictionary 
-        from a local file. In real life, the dictionary should be 
-        passed using the steg channel on the net. returns 0 in case of no 
-        error.
 
-        @param uri_dict_filename name of the file that containt the
-               info locally. This is simply list of 
-               file names on the server
-     */
-     int load_uri_dict(string uri_dict_filename);
-
-        //Dictionary communications
-    
+    //Dictionary communications
     virtual size_t process_protocol_data();
     /** Writes the SHA256 mac of the uri_dict into
         the porotocol_buffer to send it to the peep
@@ -128,6 +116,9 @@ namespace  {
                                 curlsocktype purpose,
                                          struct curl_sockaddr *address);
 
+    static int sockopt_callback(void *clientp, curl_socket_t curlfd,
+                                curlsocktype purpose);
+
   };
 
 }
@@ -147,14 +138,16 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
   
   payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename);
 
-  if (!(_curl_multi_handle = curl_multi_init()))
-    log_abort("Failed to initiate curl multi object.");
+  if (!is_clientside) {//on server side the dictionary is ready to be used
+    size_t no_of_uris = ((ApachePayloadServer*)payload_server)->uri_dict.size();
+    for(uri_byte_cut = 0; (no_of_uris /=256) > 0; uri_byte_cut++);
+  }
 
-  protocol_data_in = evbuffer_new();
-  protocol_data_out = evbuffer_new();
+  if (!(_curl_multi_handle = curl_multi_init()))
+    log_abort("failed to initiate curl multi object.");
 
   if (!(protocol_data_in || protocol_data_out))
-    log_abort("Failed to allocate evbuffer for protocol data");
+    log_abort("failed to allocate evbuffer for protocol data");
 
 }
 
@@ -177,25 +170,26 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
 {
 
   if (!_apache_config->payload_server)
-    log_abort("Payload server is not initialized.");
+    log_abort("payload server is not initialized.");
 
   //we need to use a fresh curl easy object because we might have
   //multiple connection at a time. FIX ME:It might be a way to re-
   //cycle these objects
   _curl_easy_handle = curl_easy_init();
   if (!_curl_easy_handle)
-    log_abort("Failed to initiate curl");
+    log_abort("failed to initiate curl");
 
   curl_easy_setopt(_curl_easy_handle, CURLOPT_HEADER, 1L);
   curl_easy_setopt(_curl_easy_handle, CURLOPT_HTTP_CONTENT_DECODING, 0L);
   curl_easy_setopt(_curl_easy_handle, CURLOPT_HTTP_TRANSFER_DECODING, 0L);
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_VERBOSE, 1L);
   //curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION, read_data_cb);
   //Libevent should be able to take care of this we might need to
   //discard data if it starts writing on stdout
   curl_easy_setopt(_curl_easy_handle, CURLOPT_OPENSOCKETFUNCTION, get_conn_socket);
   curl_easy_setopt(_curl_easy_handle, CURLOPT_OPENSOCKETDATA, conn);
-
-  curl_multi_add_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
+  //tells curl the socket is already connected
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
 
   /** setup the buffer we communicate with chop */
   //Every connection checks if the dict is valid
@@ -253,11 +247,11 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   
     chosen_url= ((ApachePayloadServer*)_apache_config->payload_server)->uri_dict[url_index].URL;
   }
-  log_debug("%s is chosen as the url", chosen_url.c_str());
-  
+
   type = ((ApachePayloadServer*)_apache_config->payload_server)->find_url_type(chosen_url.c_str());
 
   string uri_to_send("http://");
+  string test_uri("http://127.0.0.1");
   if (sbuflen > _apache_config->uri_byte_cut)
     {
       sbuflen -= _apache_config->uri_byte_cut;
@@ -272,6 +266,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
 
       uri_to_send += conn->peername;
       uri_to_send += "/"+ chosen_url + "?q=" + data2;
+      test_uri += "/" + chosen_url + "?q=" + data2;
 
       if (uri_to_send.size() > c_max_uri_length)
         {
@@ -290,18 +285,49 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
 
     }
   
-
   //now we are using curl to send the request
   curl_easy_setopt(_curl_easy_handle, CURLOPT_URL, uri_to_send.c_str());
+  //cuarl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION,   discard_data);
+  //curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEDATA,       conn);
 
-  CURLMcode res = curl_multi_perform(_apache_config->_curl_multi_handle, &_apache_config->_curl_running_handle);
+  CURLMcode res = curl_multi_add_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
 
-  //FIX ME I need to clean-up the easy handle but I don't 
-  //Where should I do it. If I keep track of all easy handle
-  //and recycle them it also will help with clean-up. Meanwhile
-  //There's probably a big memory leak here.
+  if (res != CURLM_OK) {
+    log_debug(conn,"error in adding curl handle. CURL Error %s", curl_multi_strerror(res));
+  }
+
+  res = curl_multi_perform(_apache_config->_curl_multi_handle, &_apache_config->_curl_running_handle);
+  
+  log_debug(conn, "%u handles are still running",_apache_config->_curl_running_handle);
+
+  CURL *curl;
+  CURLcode res_test;
+ 
+  curl = NULL;//curl_easy_init();
+  if(curl) {
+    curl_easy_setopt(curl, CURLOPT_URL, test_uri.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,   discard_data);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA,       NULL);
+
+ 
+    /* Perform the request, res will get the return code */ 
+    res_test = curl_easy_perform(curl);
+    /* Check for errors */ 
+    if(res_test != CURLE_OK)
+      fprintf(stderr, "curl_easy_perform() failed: %s\n",
+              curl_easy_strerror(res_test));
+    else
+      fprintf(stderr, "curl_easy_perform() URL is OK!");
+ 
+    /* always cleanup */ 
+    curl_easy_cleanup(curl);
+  }
+  //FIX ME I need to clean-up the easy handle but I don't know
+  //where should I do it. If I keep track of all easy handle
+  //and recycle them it also will help with clean-up.
   if (res == CURLM_OK)
     {
+      log_debug(conn, "curl is fetching %s", uri_to_send.c_str());
       evbuffer_drain(source, sbuflen);
       conn->cease_transmission();
       have_transmitted = 1;
@@ -309,7 +335,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
     }
   else
     {
-      log_debug("Error in requesting the uri. CURL Error %s", curl_multi_strerror(res));
+      log_debug(conn,"error in requesting the uri. CURL Error %s", curl_multi_strerror(res));
       return -1;
     }
 }
@@ -434,13 +460,17 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
     string extracted_url = string(p, url_end - p);
     unsigned long url_code = 0;
     size_t url_meaning_length = 0;
+    bool param_valid_load = true;
     if (extracted_url != "") { 
        //Otherwise the uri_dict sync hasn't been verified so 
       //we can't use it
       url_code = ((ApachePayloadServer*)_apache_config->payload_server)->uri_decode_book[extracted_url];
 
-      if (*(url_end + sizeof("?") - 1) == 'p')
+      if (*(url_end + sizeof("?") - 1) == 'p') { //all info are coded in url
+        
         url_meaning_length = atoi(url_end + sizeof("?p") -1);
+        param_valid_load = false;
+      }
       else
         url_meaning_length = _apache_config->uri_byte_cut;
     }
@@ -451,7 +481,7 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
       url_code /= 256;
     }
 
-    if (url_meaning_length == _apache_config->uri_byte_cut)
+    if (param_valid_load)
       {
         char* param_val_begin = url_end+sizeof("?q=")-1;
 
@@ -470,7 +500,7 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
       }
 
     if (evbuffer_add(dest, outbuf2, sofar)) {
-      log_debug(conn, "Failed to transfer buffer");
+      log_debug(conn, "failed to transfer buffer");
       return RECV_BAD;
     }
 
@@ -479,8 +509,8 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
 
 http_apache_steg_t::~http_apache_steg_t()
 {
-
-    curl_easy_cleanup(_curl_easy_handle);
+  curl_multi_remove_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
+  curl_easy_cleanup(_curl_easy_handle);
 
 }
 
@@ -506,7 +536,7 @@ http_apache_steg_t::cfg()
 size_t
 http_apache_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
 {
-  log_debug("Computing available room of type %u", type);
+  log_debug("computing available room of type %u", type);
   if (have_transmitted)
     /* can't send any more on this connection */
     return 0;
@@ -602,11 +632,17 @@ size_t http_apache_steg_config_t::process_protocol_data()
     }
     return 0; //not enough bytes
   case op_STEG_DICT_UP2DATE:
-    //client side
-    uri_dict_up2date = true;
-    _cur_operation = op_STEG_NO_OP;
-    log_debug("Peer's uri dict is synced with ours");
-    return 0;
+    {
+      //client side
+      uri_dict_up2date = true;
+
+      size_t no_of_uris = ((ApachePayloadServer*)payload_server)->uri_dict.size();
+      for(uri_byte_cut = 0; (no_of_uris /=256) > 0; uri_byte_cut++);
+
+      _cur_operation = op_STEG_NO_OP;
+      log_debug("peer's uri dict is synced with ours");
+      return 0;
+    }
         
   case op_STEG_DICT_UPDATE:
     //client side
@@ -628,6 +664,10 @@ size_t http_apache_steg_config_t::process_protocol_data()
           
           //We need a way to inform server that we got updated.
           uri_dict_up2date = true;
+
+          size_t no_of_uris = ((ApachePayloadServer*)payload_server)->uri_dict.size();
+          for(uri_byte_cut = 0; (no_of_uris /=256) > 0; uri_byte_cut++);
+
           log_debug("uri dict updated"); 
           _cur_operation = op_STEG_NO_OP;
           
@@ -636,7 +676,7 @@ size_t http_apache_steg_config_t::process_protocol_data()
     return 0;
         
   default:
-    log_debug("Unrecognizable op_STEG code");
+    log_debug("unrecognizable op_STEG code");
 
   }
 
@@ -660,7 +700,7 @@ size_t http_apache_steg_config_t::send_dict_to_peer()
   _cur_operation = op_STEG_NO_OP;
   size_t dict_buf_size =  evbuffer_get_length(protocol_data_out);
 
-  log_debug("Updating peer's uri dict. need to transmit %lu bytes", dict_buf_size);
+  log_debug("updating peer's uri dict. need to transmit %lu bytes", dict_buf_size);
 
   return dict_buf_size;
 
@@ -674,5 +714,17 @@ curl_socket_t http_apache_steg_t::get_conn_socket(void *conn,
   //We just igonre the address because the connection has been established
   //before hand.
   (void)address;
-  return ((conn_t*)conn)->socket();
+  curl_socket_t test_sock = (curl_socket_t)((conn_t*)conn)->socket();
+  log_debug((conn_t*)conn, "socket no: %u", test_sock);
+  return test_sock; //(curl_socket_t)((conn_t*)conn)->socket();
+}
+
+int http_apache_steg_t::sockopt_callback(void *clientp, curl_socket_t curlfd,
+                            curlsocktype purpose)
+{
+  (void)clientp;
+  (void)curlfd;
+  (void)purpose;
+  /* This return code was added in libcurl 7.21.5 */ 
+  return CURL_SOCKOPT_ALREADY_CONNECTED;
 }
