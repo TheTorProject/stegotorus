@@ -988,7 +988,15 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
             (unsigned long)p,
             opname(f, fallbackbuf));
 
+<<<<<<< variant A
   if (f == op_FIN) {
+>>>>>>> variant B
+  send_seq++;
+  if (f == op_FIN || f == op_STEG_FIN) {
+####### Ancestor
+  send_seq++;
+  if (f == op_FIN) {
+======= end
     sent_fin = true;
     read_eof = true;
   }
