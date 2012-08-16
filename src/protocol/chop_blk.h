@@ -62,6 +62,7 @@ enum opcode_t
   op_RST = 2,       // Protocol error, close circuit now
   op_RESERVED0 = 3, // 3 -- 127 reserved for future definition
   op_STEG0 = 128,   // 128 -- 255 reserved for steganography modules
+  op_STEG_FIN = 129,
   op_LAST = 255
 };
 

@@ -80,8 +80,8 @@
    reason, it is skipped but copied to the transcript, with a ! at the
    beginning of the line.  (These will all be at the very beginning.) */
 
-#define TL_TIMEOUT 60
-#define LOGGING true
+#define TL_TIMEOUT 0
+#define LOGGING false
 
 struct tstate
 {
@@ -264,7 +264,10 @@ socket_event_cb(struct bufferevent *bev, short what, void *arg)
       if (reading)
         {
           evbuffer_add_printf(log, "%c\n", near ? '[' : ']');
-          fprintf(stderr,"%c\n", near ? '[' : ']');
+          if (LOGGING)
+              {
+                fprintf(stderr,"%c\n", near ? '[' : ']');
+              }
         }
       else
         evbuffer_add_printf(log, "%c S\n", near ? '{' : '}');
