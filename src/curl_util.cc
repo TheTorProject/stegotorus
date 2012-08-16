@@ -6,7 +6,10 @@
  */
 #include <curl/curl.h>
 
+#include "util.h"
+#include "connections.h"
 #include "curl_util.h"
+
 
 int wait_on_socket(curl_socket_t sockfd, int for_recv, long timeout_ms)
 {
@@ -35,4 +38,12 @@ int wait_on_socket(curl_socket_t sockfd, int for_recv, long timeout_ms)
   /* select() returns the number of signalled sockets or -1 */ 
   res = select(sockfd + 1, &infd, &outfd, &errfd, &tv);
   return res;
+}
+
+size_t
+discard_data(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
+  (void) ptr;
+  log_debug((conn_t*) userdata, "discarder received %lu bytes", size * nmemb);
+  return size * nmemb;
 }

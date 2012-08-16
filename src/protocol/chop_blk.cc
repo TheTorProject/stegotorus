@@ -19,6 +19,8 @@ opname(opcode_t o, char fallbackbuf[4])
   case op_DAT: return "DAT";
   case op_FIN: return "FIN";
   case op_RST: return "RST";
+  case op_STEG0: return "STEG DAT";
+  case op_STEG_FIN: return "STEG FIN";
   default: {
     unsigned int x = o;
     if (x < op_STEG0)
