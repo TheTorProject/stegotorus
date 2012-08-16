@@ -30,6 +30,8 @@ opname(opcode_t o, char fallbackbuf[4])
   case op_FIN: return "FIN";
   case op_RST: return "RST";
   case op_ACK: return "ACK";
+  case op_STEG0: return "STEG DAT";
+  case op_STEG_FIN: return "STEG FIN";
   default:
     if (o > op_LAST)
       return "^^^";
@@ -405,12 +407,7 @@ reassembly_queue::insert(uint32_t seqno, opcode_t op, evbuffer *data)
 
   cbuf[pos].data = data;
   cbuf[pos].op   = op;
-<<<<<<< variant A
   count++;
->>>>>>> variant B
-  cbuf[pos].conn = conn;
-####### Ancestor
-======= end
   return true;
 }
 

@@ -21,7 +21,8 @@ struct steg_config_t
 {
   struct config_t *cfg;
 
-  steg_config_t(config_t *c) : cfg(c) {}
+  steg_config_t(config_t *c);
+  
   virtual ~steg_config_t();
 
   /** Report the name of this steg module.  You do not have to define
