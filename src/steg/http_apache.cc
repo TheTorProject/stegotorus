@@ -1,8 +1,12 @@
 #include <event2/buffer.h>
+#include <event2/bufferevent.h>
+#include <event2/event.h>
 #include <curl/curl.h>
 #include <vector>
 #include <iostream>
 #include <sstream>
+
+using namespace std;
 
 #include "util.h"
 #include "curl_util.h"
@@ -24,8 +28,6 @@
 #include "b64cookies.h"
 
 #include "http.h"
-
-using namespace std;
 
 enum op_apache_steg_code
   {
@@ -119,6 +121,10 @@ namespace  {
     static int sockopt_callback(void *clientp, curl_socket_t curlfd,
                                 curlsocktype purpose);
 
+    static int ignore_close(void *clientp, curl_socket_t curlfd);
+
+    static void curl_socket_event_cb(int fd, short kind,  void *userp);
+
   };
 
 }
@@ -191,6 +197,8 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
   //tells curl the socket is already connected
   curl_easy_setopt(_curl_easy_handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
 
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETFUNCTION, ignore_close);
+
   /** setup the buffer we communicate with chop */
   //Every connection checks if the dict is valid
   if (_apache_config->is_clientside && !_apache_config->uri_dict_up2date
@@ -226,6 +234,10 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
     return -1;
   }
 
+  //Extra log info in case the decryption fails
+ /*string hex_data; buf2hex((unsigned char*)data, sbuflen, hex_data);
+    log_debug(conn, "Enc data to send: %s", hex_data.c_str());*/
+
   /*First we need to cut the first few bytes into the url */
   string chosen_url;
   //If the uri dict has no element we always can request / uri 
@@ -243,8 +255,9 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
       {
         url_index *=256;
         url_index += (unsigned char) data[i];
+        log_debug("uri index so far %lu", url_index);
       }
-  
+    
     chosen_url= ((ApachePayloadServer*)_apache_config->payload_server)->uri_dict[url_index].URL;
   }
 
@@ -273,7 +286,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
           log_debug("%lu too big to be send in uri", uri_to_send.size());
             return -1;
         }
-      
+   
     }
   else
     {
@@ -287,8 +300,6 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   
   //now we are using curl to send the request
   curl_easy_setopt(_curl_easy_handle, CURLOPT_URL, uri_to_send.c_str());
-  //cuarl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION,   discard_data);
-  //curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEDATA,       conn);
 
   CURLMcode res = curl_multi_add_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
 
@@ -296,48 +307,22 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
     log_debug(conn,"error in adding curl handle. CURL Error %s", curl_multi_strerror(res));
   }
 
-  res = curl_multi_perform(_apache_config->_curl_multi_handle, &_apache_config->_curl_running_handle);
-  
+  bufferevent_disable(conn->buffer, EV_WRITE);
+  event* write_url_event = event_new(bufferevent_get_base(conn->buffer), conn->socket(), EV_WRITE, curl_socket_event_cb, this);
+  event_add(write_url_event, NULL);
+
+  log_debug(conn, "curl is fetching %s", uri_to_send.c_str());
   log_debug(conn, "%u handles are still running",_apache_config->_curl_running_handle);
 
-  CURL *curl;
-  CURLcode res_test;
- 
-  curl = NULL;//curl_easy_init();
-  if(curl) {
-    curl_easy_setopt(curl, CURLOPT_URL, test_uri.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,   discard_data);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA,       NULL);
+   have_transmitted = 1;
 
- 
-    /* Perform the request, res will get the return code */ 
-    res_test = curl_easy_perform(curl);
-    /* Check for errors */ 
-    if(res_test != CURLE_OK)
-      fprintf(stderr, "curl_easy_perform() failed: %s\n",
-              curl_easy_strerror(res_test));
-    else
-      fprintf(stderr, "curl_easy_perform() URL is OK!");
- 
-    /* always cleanup */ 
-    curl_easy_cleanup(curl);
-  }
   //FIX ME I need to clean-up the easy handle but I don't know
   //where should I do it. If I keep track of all easy handle
   //and recycle them it also will help with clean-up.
-  if (res == CURLM_OK)
-    {
-      log_debug(conn, "curl is fetching %s", uri_to_send.c_str());
-      evbuffer_drain(source, sbuflen);
-      conn->cease_transmission();
-      have_transmitted = 1;
-      return 0;
-    }
-  else
-    {
-      log_debug(conn,"error in requesting the uri. CURL Error %s", curl_multi_strerror(res));
-      return -1;
-    }
+  // while((res = curl_multi_perform(_apache_config->_curl_multi_handle, &_apache_config->_curl_running_handle)) == CURLM_CALL_MULTI_PERFORM);
+
+   return 0;
+
 }
 
 int
@@ -465,6 +450,7 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
        //Otherwise the uri_dict sync hasn't been verified so 
       //we can't use it
       url_code = ((ApachePayloadServer*)_apache_config->payload_server)->uri_decode_book[extracted_url];
+      log_debug("url code %lu", url_code);
 
       if (*(url_end + sizeof("?") - 1) == 'p') { //all info are coded in url
         
@@ -477,6 +463,7 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
         
     for(size_t i = 0; i < url_meaning_length; i++)
     {
+      log_debug("url byte %u", (unsigned char)(url_code % 256));
       outbuf2[i] = (unsigned char)(url_code % 256);
       url_code /= 256;
     }
@@ -499,7 +486,11 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
           log_abort(conn, "uri decode buffer overflow\n");
       }
 
-    if (evbuffer_add(dest, outbuf2, sofar)) {
+    //Extra logging in the case decryption failure
+    /*string hex_data; buf2hex((unsigned char*)outbuf2, sofar+url_meaning_length, hex_data);
+      log_debug(conn, "Enc data received: %s", hex_data.c_str());*/
+
+    if (evbuffer_add(dest, outbuf2, sofar+url_meaning_length)) {
       log_debug(conn, "failed to transfer buffer");
       return RECV_BAD;
     }
@@ -509,7 +500,6 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
 
 http_apache_steg_t::~http_apache_steg_t()
 {
-  curl_multi_remove_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
   curl_easy_cleanup(_curl_easy_handle);
 
 }
@@ -714,9 +704,9 @@ curl_socket_t http_apache_steg_t::get_conn_socket(void *conn,
   //We just igonre the address because the connection has been established
   //before hand.
   (void)address;
-  curl_socket_t test_sock = (curl_socket_t)((conn_t*)conn)->socket();
-  log_debug((conn_t*)conn, "socket no: %u", test_sock);
-  return test_sock; //(curl_socket_t)((conn_t*)conn)->socket();
+  curl_socket_t conn_sock = (curl_socket_t)((conn_t*)conn)->socket();//In case Zack doesn't like the idea of adding function to conn_t: (curl_socket_t)(bufferevent_getfd(((conn_t*)conn)->buffer));
+  log_debug((conn_t*)conn, "socket no: %u", conn_sock);
+  return conn_sock;
 }
 
 int http_apache_steg_t::sockopt_callback(void *clientp, curl_socket_t curlfd,
@@ -727,4 +717,47 @@ int http_apache_steg_t::sockopt_callback(void *clientp, curl_socket_t curlfd,
   (void)purpose;
   /* This return code was added in libcurl 7.21.5 */ 
   return CURL_SOCKOPT_ALREADY_CONNECTED;
+}
+
+int http_apache_steg_t::ignore_close(void *clientp, curl_socket_t curlfd)
+{
+  (void) clientp;
+  (void) curlfd;
+  return 0;
+}
+
+/* Called by libevent when we get action on a multi socket */ 
+void http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
+{
+  http_apache_steg_t*  steg_mod = (http_apache_steg_t*) userp;
+  CURLMcode rc;
+  
+  log_debug(steg_mod->conn, "socket is ready for %s", kind & EV_READ ? "read" : (kind & EV_WRITE ? "write" : "unknow op"));
+  if (kind & EV_READ)
+    {
+      bufferevent_flush(steg_mod->conn->buffer, EV_READ, BEV_NORMAL);
+    }
+
+  int action =
+    (kind & EV_READ ? CURL_CSELECT_IN : 0) |
+    (kind & EV_WRITE ? CURL_CSELECT_OUT : 0);
+ 
+  if (action & CURL_CSELECT_OUT) {
+    rc = curl_multi_socket_action(steg_mod->_apache_config->_curl_multi_handle, fd, action, &steg_mod->_apache_config->_curl_running_handle);
+
+  if (rc == CURLM_OK)
+    {
+      curl_multi_remove_handle(steg_mod->_apache_config->_curl_multi_handle, steg_mod->_curl_easy_handle);
+
+      bufferevent_enable(steg_mod->conn->buffer, EV_READ|EV_WRITE);
+
+      steg_mod->conn->cease_transmission();
+    }
+  else
+    {
+      log_abort(steg_mod->conn, "error in requesting the uri. CURL Error %s", curl_multi_strerror(rc));
+    }
+
+  }
+
 }

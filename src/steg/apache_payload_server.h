@@ -33,28 +33,11 @@ class ApachePayloadServer: public PayloadServer
   string _database_filename;
   string _apache_host_name = "127.0.0.1";
   
-  const unsigned long c_max_buffer_size = 10000000;
+  const unsigned long c_max_buffer_size = 1000000;
   CURL* _curl_obj; //this is used to communicate with http server
 
   //This is too keep the dict in sync between client and server
   unsigned char _uri_dict_mac[SHA256_DIGEST_LENGTH];
-
-  /** 
-      Uses curl to fetch the raw POST body from Apache to be used as payload.
-      return the actual length of the payload or zero in the case of error.
-
-      @param url the url of the requested file
-      @param payload_length the length of the requested file this is equal to
-      the size of allocated memory for the buf
-      @param buf the alocated memory to store the POST reply
-   */
-  unsigned long fetch_url_raw(string url, unsigned long payload_length, stringstream& buf);
-
-  /**
-     The call back function that is called when curl request a file from
-     the webserver (libcurl calls it write_data for some reason). It has to be static to be able to send it as cb
-  */
-  static size_t read_data_cb(void *buffer, size_t size, size_t nmemb, void *userp);
 
   /**
      re-computes the sha256 of the uri_dict and store it in _uri_dict_mac

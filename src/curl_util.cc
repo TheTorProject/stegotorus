@@ -5,10 +5,17 @@
  * usage of curl library
  */
 #include <curl/curl.h>
+#include <event2/buffer.h>
+#include <string>
+#include <sstream>
+
+using namespace std;
 
 #include "util.h"
 #include "connections.h"
 #include "curl_util.h"
+
+extern void downstream_read_cb(struct bufferevent *bev, void *arg);
 
 
 int wait_on_socket(curl_socket_t sockfd, int for_recv, long timeout_ms)
@@ -43,7 +50,63 @@ int wait_on_socket(curl_socket_t sockfd, int for_recv, long timeout_ms)
 size_t
 discard_data(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
+
   (void) ptr;
+
   log_debug((conn_t*) userdata, "discarder received %lu bytes", size * nmemb);
+  conn_t *down = (conn_t *)userdata;
+
+  down->ever_received = 1;
+  log_debug(down, "%lu bytes available but are going to be discarded",
+            (unsigned long)size*nmemb);
+
   return size * nmemb;
+}
+
+/** 
+    Uses curl to fetch the raw POST body from Apache to be used as payload.
+    return the actual length of the payload or zero in the case of error.
+
+    @param url the url of the requested file
+    @param payload_length the length of the requested file this is equal to
+    the size of allocated memory for the buf
+    @param buf the alocated memory to store the POST reply
+*/
+unsigned long fetch_url_raw(CURL* curl_obj, string& url,  stringstream& buf)
+{
+  CURLcode res;
+  pair<unsigned long, char*> res_payload;
+
+  log_assert(curl_obj);
+
+  curl_easy_setopt(curl_obj, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl_obj, CURLOPT_WRITEDATA, (void*)&buf);
+
+  /* Perform the request, res will get the return code */ 
+  res = curl_easy_perform(curl_obj);
+  /* Check for errors */ 
+  if(res != CURLE_OK) {
+    log_debug("curl_easy_perform() failed: %s\n",
+            curl_easy_strerror(res));
+    return 0;
+  }
+
+  log_debug("read total bytes of : %lu:", buf.str().size());
+  return buf.tellp();
+
+}
+
+size_t curl_read_data_cb(void *buffer, size_t size, size_t nmemb, void *userp)
+{
+  //accumulate everything in a streamstring buffer
+  size_t no_bytes_2_read = size * nmemb;
+  log_debug("curl received %lu bytes", no_bytes_2_read);
+  ((stringstream*)userp)->write((char*) buffer, size * no_bytes_2_read);
+  if( ((stringstream*)userp)->bad()){
+    log_debug("Error reading data from curl");
+    return 0;
+  }
+
+  return no_bytes_2_read;
+
 }

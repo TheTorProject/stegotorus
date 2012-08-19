@@ -2,14 +2,17 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <boost/filesystem.hpp>
 
 using namespace std;
+using namespace boost::filesystem;
 
 #include "util.h"
 #include "curl_util.h"
 #include "crypt.h"
 #include "rng.h"
 #include "apache_payload_server.h"
+#include "payload_scraper.h"
 
 /**
   The constructor reads the payload database prepared by scraper
@@ -25,8 +28,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
   //(_side == server_side) {
   /* First we read all the payload info from the db file  */
   ifstream payload_info_stream;
-    
-  payload_info_stream.open(_database_filename, ifstream::in);
+
 
   if (_side == server_side) {
     //Initializing type specific data, we initiate with max_capacity = 0, count = 0
@@ -37,6 +39,17 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
 
     _payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(0, 0);
 
+    if (!boost::filesystem::exists(_database_filename))
+      {
+        log_debug("payload database does not exists.");
+        log_debug("scarping payloads to create the database...");
+
+        PayloadScraper my_scraper(_database_filename);
+        my_scraper.scrape();
+
+      }
+    
+    payload_info_stream.open(_database_filename, ifstream::in);
     if (!payload_info_stream.is_open())
         {
           log_abort("Cannot open payload info file.");
@@ -72,7 +85,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
     init_uri_dict();
   }
   else{ //client side
-      
+    payload_info_stream.open(_database_filename, ifstream::in);
     if (!(payload_info_stream.is_open())) //on client side it is not a fatal error
       log_debug("payload info file doesn't exists. I need to request it from server ");
     else {
@@ -90,7 +103,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
   curl_easy_setopt(_curl_obj, CURLOPT_HEADER, 1L);
   curl_easy_setopt(_curl_obj, CURLOPT_HTTP_CONTENT_DECODING, 0L);
   curl_easy_setopt(_curl_obj, CURLOPT_HTTP_TRANSFER_DECODING, 0L);
-  curl_easy_setopt(_curl_obj, CURLOPT_WRITEFUNCTION, read_data_cb);
+  curl_easy_setopt(_curl_obj, CURLOPT_WRITEFUNCTION, curl_read_data_cb);
 
 }
 
@@ -120,7 +133,7 @@ int ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int*
   while(numCandidate < MAX_CANDIDATE_PAYLOADS) {
     itr_payloads = _payload_database.payloads.begin();
     advance(itr_payloads, rng_int(_payload_database.payloads.size()));
-    if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType)
+    if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType || (*itr_payloads).second.length > c_max_buffer_size)
       continue;
 
     found = true;
@@ -142,62 +155,24 @@ int ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int*
                 numCandidate);
       stringstream tmp_stream_buf;
       string payload_uri = "http://" + _apache_host_name + "/" + (*itr_best).second.url;
-      *size = fetch_url_raw(payload_uri, (*itr_best).second.length, tmp_stream_buf);
-    if (*size == 0)
+
+      *size = fetch_url_raw(_curl_obj, payload_uri, tmp_stream_buf);
+      if (*size == 0)
       {
          log_abort("Failed fetch the url %s", (*itr_best).second.url.c_str());
          return 0;
       }
 
-    *buf = new char[*size];
-    tmp_stream_buf.read(*buf, *size);
-    return 1;
-  } else {
-    return 0;
-  }
-
+      *buf = new char[*size];
+      tmp_stream_buf.read(*buf, *size);
+      return 1;
+      
+    } 
+  
+  /*not found*/
+  return 0;
 }
 
-unsigned long ApachePayloadServer::fetch_url_raw(string url, unsigned long payload_length, stringstream& buf)
-{
-  CURLcode res;
-  pair<unsigned long, char*> res_payload;
- 
-  if (payload_length > c_max_buffer_size)
-    {
-      log_debug("Too big of a payload");
-      return 0;
-    }
-
-  curl_easy_setopt(_curl_obj, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(_curl_obj, CURLOPT_WRITEDATA, (void*)&buf);
-
-  /* Perform the request, res will get the return code */ 
-  res = curl_easy_perform(_curl_obj);
-  /* Check for errors */ 
-  if(res != CURLE_OK)
-    fprintf(stderr, "curl_easy_perform() failed: %s\n",
-            curl_easy_strerror(res));
-
-  log_debug("read total bytes of : %lu:", buf.str().size());
-  return buf.tellp();
-
-}
-
-size_t ApachePayloadServer::read_data_cb(void *buffer, size_t size, size_t nmemb, void *userp)
-{
-  //accumulate everything in a streamstring buffer
-  size_t no_bytes_2_read = size * nmemb;
-  log_debug("curl received %lu bytes", no_bytes_2_read);
-  ((stringstream*)userp)->write((char*) buffer, size * no_bytes_2_read);
-  if( ((stringstream*)userp)->bad()){
-    log_debug("Error reading data from curl");
-    return 0;
-  }
-
-  return no_bytes_2_read;
-
-}
 
 bool ApachePayloadServer::init_uri_dict()
 {
