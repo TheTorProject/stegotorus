@@ -196,7 +196,6 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
   curl_easy_setopt(_curl_easy_handle, CURLOPT_OPENSOCKETDATA, conn);
   //tells curl the socket is already connected
   curl_easy_setopt(_curl_easy_handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
-
   curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETFUNCTION, ignore_close);
 
   /** setup the buffer we communicate with chop */
@@ -300,6 +299,8 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   
   //now we are using curl to send the request
   curl_easy_setopt(_curl_easy_handle, CURLOPT_URL, uri_to_send.c_str());
+  //cuarl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION,   discard_data);
+  //curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEDATA,       conn);
 
   CURLMcode res = curl_multi_add_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
 
@@ -322,7 +323,6 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   // while((res = curl_multi_perform(_apache_config->_curl_multi_handle, &_apache_config->_curl_running_handle)) == CURLM_CALL_MULTI_PERFORM);
 
    return 0;
-
 }
 
 int

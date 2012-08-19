@@ -15,9 +15,6 @@ using namespace std;
 #include "connections.h"
 #include "curl_util.h"
 
-extern void downstream_read_cb(struct bufferevent *bev, void *arg);
-
-
 int wait_on_socket(curl_socket_t sockfd, int for_recv, long timeout_ms)
 {
   struct timeval tv;
