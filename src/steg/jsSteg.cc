@@ -926,6 +926,10 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
     }
 
   log_debug("CLIENT received response header with len %d", (int)s2.pos);
+  char* buf2print = new char[s2.pos+2];
+  evbuffer_copyout(source, (void*) buf2print, sizeof(char)* (s2.pos+1));
+  buf2print[s2.pos+1] = '\0';
+  log_debug("header: %s", buf2print);
 
   response_len = 0;
   hdrLen = s2.pos + strlen("\r\n\r\n");

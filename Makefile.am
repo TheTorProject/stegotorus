@@ -27,6 +27,7 @@ STEGANOGRAPHERS = \
 	src/steg/nosteg_rr.cc \
 	src/steg/payload_server.cc \
 	src/steg/trace_payload_server.cc \
+	src/steg/payload_scraper.cc \
 	src/steg/apache_payload_server.cc \
 	src/steg/pdfSteg.cc \
 	src/steg/swfSteg.cc

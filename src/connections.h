@@ -52,7 +52,7 @@ struct conn_t {
   /** Retrieve the inbound evbuffer for this connection. */
   struct evbuffer *inbound() const
   { return this->buffer ? bufferevent_get_input(this->buffer) : 0; }
-
+  
   /** Retrieve the outbound evbuffer for this connection. */
   struct evbuffer *outbound()
   { return this->buffer ? bufferevent_get_output(this->buffer) : 0; }

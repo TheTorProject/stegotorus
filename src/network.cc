@@ -34,7 +34,7 @@ static void server_listener_cb(struct evconnlistener *evcl, evutil_socket_t fd,
                                void *closure);
 
 static void upstream_read_cb(struct bufferevent *bev, void *arg);
-static void downstream_read_cb(struct bufferevent *bev, void *arg);
+void downstream_read_cb(struct bufferevent *bev, void *arg);
 static void socks_read_cb(struct bufferevent *bev, void *arg);
 
 static void upstream_flush_cb(struct bufferevent *bev, void *arg);
@@ -302,13 +302,12 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
    traffic coming in from our remote peer that needs to be deobfuscated
    and passed to the upstream client or server.
  */
-static void
+void
 downstream_read_cb(struct bufferevent *bev, void *arg)
 {
   conn_t *down = (conn_t *)arg;
 
   down->ever_received = 1;
-
   log_debug(down, "%lu bytes available",
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 

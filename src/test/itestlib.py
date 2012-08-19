@@ -13,7 +13,7 @@ import subprocess
 import threading
 import time
 
-TIMEOUT_LEN = 5 # seconds
+TIMEOUT_LEN = 15 # seconds
 
 # Helper: stick "| " at the beginning of each line of |s|.
 
