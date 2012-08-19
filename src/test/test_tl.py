@@ -112,7 +112,7 @@ class TimelineTest(object):
             "127.0.0.1:5010","http","127.0.0.1:5011","http",
             ))
 
-    def test_apache_http(self):
+    def test_http_apache(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
             "127.0.0.1:5010","http","127.0.0.1:5011","http_apache",

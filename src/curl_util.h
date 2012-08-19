@@ -11,4 +11,15 @@
 int wait_on_socket(curl_socket_t sockfd, int for_recv, long timeout_ms);
 
 size_t discard_data(char *ptr, size_t size, size_t nmemb, void *userdata);
+
+unsigned long fetch_url_raw(CURL* curl_obj, string& url,  stringstream& buf);
+
+
+/**
+   The call back function that is called when curl request a file from
+   the webserver (libcurl calls it write_data for some reason). It has to be static to be able to send it as cb
+
+*/
+size_t curl_read_data_cb(void *buffer, size_t size, size_t nmemb, void *userp);
+
 #endif

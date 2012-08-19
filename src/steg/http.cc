@@ -620,7 +620,6 @@ http_steg_t::receive(struct evbuffer *dest)
   // unsigned int type;
   int rval = RECV_BAD;
 
-
   if (config->is_clientside) {
     switch(type) {
 

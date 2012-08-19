@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 
 #include <new>
 
@@ -42,6 +43,7 @@ struct evbuffer;
 struct evconnlistener;
 struct evdns_base;
 struct event_base;
+
 
 /***** Type annotations. *****/
 
@@ -287,6 +289,9 @@ void log_debug(conn_t *conn,const char *format, ...)
                 __FILE__, __LINE__, #expr);             \
   } while (0)
 
+/** Converts the char* buffer data to pretty hex string 
+    to be printed for debugging reason */
+void buf2hex(unsigned char* buf, size_t len, std::string& res);
 /***** Time. *****/
 
 /** Compute x - y and store the value result. Returns 1 if the difference is

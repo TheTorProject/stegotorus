@@ -2,12 +2,17 @@
  * Copyright 2011, 2012 SRI International
  * See LICENSE for other credits and copying information
  */
+#include <string>
+#include <sstream>
+
 #include "util.h"
 #include "connections.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+using namespace std;
 
 /**************************** Memory Allocation ******************************/
 
@@ -582,6 +587,19 @@ void
   logfmt(LOG_SEV_DEBUG, format);
 }
 
+void  buf2hex(unsigned char* buf, size_t len, std::string& res)
+{
+  log_assert(buf); log_assert(len);
+  stringstream res_stream;
+  for(unsigned char* i = buf; i < buf + len - 1; i++)
+    res_stream << hex << (int)*i << " ";
+
+  res_stream << hex << (int)*(buf+len -1);
+  
+  res = res_stream.str();
+}
+
+  
 /************************* Time Functions **************************/
 
 int timeval_subtract(struct timeval *x, struct timeval *y,
