@@ -291,7 +291,7 @@ void log_debug(conn_t *conn,const char *format, ...)
 
 /** Converts the char* buffer data to pretty hex string 
     to be printed for debugging reason */
-void buf2hex(unsigned char* buf, size_t len, std::string& res);
+void buf2hex(uint8_t* buf, size_t len, std::string& res);
 /***** Time. *****/
 
 /** Compute x - y and store the value result. Returns 1 if the difference is

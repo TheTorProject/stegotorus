@@ -235,7 +235,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   }
 
   //Extra log info in case the decryption fails
- /*string hex_data; buf2hex((unsigned char*)data, sbuflen, hex_data);
+ /*string hex_data; buf2hex((uint8_t*)data, sbuflen, hex_data);
     log_debug(conn, "Enc data to send: %s", hex_data.c_str());*/
 
   /*First we need to cut the first few bytes into the url */
@@ -254,7 +254,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
     for(unsigned int i = 0; i < _apache_config->uri_byte_cut && i < sbuflen; i++)
       {
         url_index *=256;
-        url_index += (unsigned char) data[i];
+        url_index += (uint8_t) data[i];
         log_debug("uri index so far %lu", url_index);
       }
     
@@ -388,7 +388,8 @@ http_apache_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, str
   return RECV_GOOD;
 }
 
-int http_apache_steg_t::http_server_receive_cookie(char* p, evbuffer* dest)
+int
+http_apache_steg_t::http_server_receive_cookie(char* p, evbuffer* dest)
 {
     char outbuf[MAX_COOKIE_SIZE * 3/2];
     char outbuf2[MAX_COOKIE_SIZE];
@@ -425,7 +426,8 @@ int http_apache_steg_t::http_server_receive_cookie(char* p, evbuffer* dest)
 
 }
 
-int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
+int
+http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
 {
     char outbuf[MAX_COOKIE_SIZE * 3/2];
     char outbuf2[MAX_COOKIE_SIZE];
@@ -463,8 +465,8 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
         
     for(size_t i = 0; i < url_meaning_length; i++)
     {
-      log_debug("url byte %u", (unsigned char)(url_code % 256));
-      outbuf2[i] = (unsigned char)(url_code % 256);
+      log_debug("url byte %u", (uint8_t)(url_code % 256));
+      outbuf2[i] = (uint8_t)(url_code % 256);
       url_code /= 256;
     }
 
@@ -487,7 +489,7 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
       }
 
     //Extra logging in the case decryption failure
-    /*string hex_data; buf2hex((unsigned char*)outbuf2, sofar+url_meaning_length, hex_data);
+    /*string hex_data; buf2hex((uint8_t*)outbuf2, sofar+url_meaning_length, hex_data);
       log_debug(conn, "Enc data received: %s", hex_data.c_str());*/
 
     if (evbuffer_add(dest, outbuf2, sofar+url_meaning_length)) {
@@ -556,7 +558,7 @@ http_apache_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
   //FIX: TODO This I need to make client detect the type based 
   //on received content, for now we need to stick to clients
   //request
-  /*for(unsigned char no_tries = 0; no_tries < NO_CONTENT_TYPES; no_tries++)
+  /*for(uint8_t no_tries = 0; no_tries < NO_CONTENT_TYPES; no_tries++)
     {
       if ((cur_type_room = http_steg_t::transmit_room(pref,  lo, hi)))
           return cur_type_room;
@@ -589,7 +591,8 @@ http_apache_steg_t::receive(struct evbuffer *dest)
   return http_steg_t::receive(dest);
 }
 
-size_t http_apache_steg_config_t::process_protocol_data()
+size_t
+http_apache_steg_config_t::process_protocol_data()
 {
   char status_to_send;
   size_t avail = evbuffer_get_length(protocol_data_in);
@@ -673,7 +676,8 @@ size_t http_apache_steg_config_t::process_protocol_data()
   return 0;
 }
 
-size_t http_apache_steg_config_t::send_dict_to_peer()
+size_t
+http_apache_steg_config_t::send_dict_to_peer()
 {
   //we send the dictionary as a multiline buffer 
   char status_to_send = op_STEG_DICT_UPDATE;
@@ -696,7 +700,8 @@ size_t http_apache_steg_config_t::send_dict_to_peer()
 
 }
 
-curl_socket_t http_apache_steg_t::get_conn_socket(void *conn,
+curl_socket_t
+http_apache_steg_t::get_conn_socket(void *conn,
                                      curlsocktype purpose,
                                          struct curl_sockaddr *address)
 {
@@ -709,7 +714,8 @@ curl_socket_t http_apache_steg_t::get_conn_socket(void *conn,
   return conn_sock;
 }
 
-int http_apache_steg_t::sockopt_callback(void *clientp, curl_socket_t curlfd,
+int
+http_apache_steg_t::sockopt_callback(void *clientp, curl_socket_t curlfd,
                             curlsocktype purpose)
 {
   (void)clientp;
@@ -719,7 +725,8 @@ int http_apache_steg_t::sockopt_callback(void *clientp, curl_socket_t curlfd,
   return CURL_SOCKOPT_ALREADY_CONNECTED;
 }
 
-int http_apache_steg_t::ignore_close(void *clientp, curl_socket_t curlfd)
+int
+http_apache_steg_t::ignore_close(void *clientp, curl_socket_t curlfd)
 {
   (void) clientp;
   (void) curlfd;
@@ -727,7 +734,8 @@ int http_apache_steg_t::ignore_close(void *clientp, curl_socket_t curlfd)
 }
 
 /* Called by libevent when we get action on a multi socket */ 
-void http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
+void
+http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
 {
   http_apache_steg_t*  steg_mod = (http_apache_steg_t*) userp;
   CURLMcode rc;

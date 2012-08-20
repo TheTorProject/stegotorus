@@ -107,7 +107,8 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
 
 }
 
-unsigned int ApachePayloadServer::find_client_payload(char* buf, int len, int type)
+unsigned int
+ApachePayloadServer::find_client_payload(char* buf, int len, int type)
 {
   (void)buf; 
   (void)len;
@@ -117,8 +118,8 @@ unsigned int ApachePayloadServer::find_client_payload(char* buf, int len, int ty
   return 0;
 }
 
-
-int ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* size)
+int
+ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* size)
 {
   int found = 0, numCandidate = 0;
 
@@ -174,7 +175,8 @@ int ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int*
 }
 
 
-bool ApachePayloadServer::init_uri_dict()
+bool
+ApachePayloadServer::init_uri_dict()
 {
   if (_payload_database.payloads.size() == 0)
     {
@@ -199,7 +201,8 @@ bool ApachePayloadServer::init_uri_dict()
 
 }
 
-bool ApachePayloadServer::init_uri_dict(istream& dict_stream)
+bool
+ApachePayloadServer::init_uri_dict(istream& dict_stream)
 {
   uri_dict.clear();
   uri_decode_book.clear();
@@ -222,7 +225,8 @@ bool ApachePayloadServer::init_uri_dict(istream& dict_stream)
   
 }
 
-void ApachePayloadServer::export_dict(iostream& dict_stream)
+void
+ApachePayloadServer::export_dict(iostream& dict_stream)
 {
   URIDict::iterator itr_uri;
   for(itr_uri = uri_dict.begin(); itr_uri != uri_dict.end(); itr_uri++)
@@ -232,18 +236,20 @@ void ApachePayloadServer::export_dict(iostream& dict_stream)
   
 }
 
-const unsigned char* ApachePayloadServer::compute_uri_dict_mac()
+const uint8_t*
+ApachePayloadServer::compute_uri_dict_mac()
 {
   stringstream dict_str_stream;
   export_dict(dict_str_stream);
   
-  sha256((const unsigned char*)dict_str_stream.str().c_str(), dict_str_stream.str().size(), _uri_dict_mac);
+  sha256((const uint8_t*)dict_str_stream.str().c_str(), dict_str_stream.str().size(), _uri_dict_mac);
 
   return _uri_dict_mac;
 
 }
 
-bool ApachePayloadServer::store_dict(char* dict_buf, size_t dict_buf_size)
+bool
+ApachePayloadServer::store_dict(char* dict_buf, size_t dict_buf_size)
 {
 
   ofstream dict_file(_database_filename);
@@ -272,7 +278,8 @@ ApachePayloadServer::~ApachePayloadServer()
 }
 
 int 
-ApachePayloadServer::find_url_type(const char* uri) {
+ApachePayloadServer::find_url_type(const char* uri)
+{
 
   const char* ext = strrchr(uri, '.');
 

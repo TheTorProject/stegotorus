@@ -355,8 +355,13 @@ private:
 };
 
 /** 
-    Computes sha256 of buffer of size n and store the result 
-    in md. If md == NULL it allocate the memory.
+    Computes sha256 of buffer of size n and stores the result 
+    in md. If md == NULL it allocates the memory.
+
+    @param buffer the data to be hashed
+    @param size   the size of the data to be hashed in no of bytes
+    @param md     the buffer that will contains the sha256 hash, if NULL, the function will allocate the necessay 32 bytes.
+    @return       pointer to the buffer containing the SHA256 hash
 */
-void sha256(const unsigned char *buffer, size_t n, unsigned char *md);
+uint8_t* sha256(const uint8_t* buffer, size_t n, uint8_t* md);
 #endif
