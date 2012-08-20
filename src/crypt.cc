@@ -819,12 +819,14 @@ key_generator::~key_generator() {}
 key_generator_impl::~key_generator_impl()
 { HMAC_CTX_cleanup(&expander); }
 
-void sha256(const unsigned char *buffer, size_t n, unsigned char *md)
+uint8_t* 
+sha256(const uint8_t* buffer, size_t n, uint8_t* md)
 {
   if (md == NULL)
-    md = new unsigned char[20];
+    md = (uint8_t*) xmalloc(SHA256_DIGEST_LENGTH);
   
   SHA256(buffer, n, md);
 
+  return md;
 }
 

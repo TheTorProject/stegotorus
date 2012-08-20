@@ -11,6 +11,221 @@
 #include <time.h>
 
 /*
+ * capacityJS3 is the next iteration for capacityJS
+ */
+unsigned int
+PayloadServer::capacityJS3 (char* buf, int len, int mode) {
+  char *hEnd, *bp, *jsStart, *jsEnd;
+  int cnt=0;
+  int j;
+
+  // jump to the beginning of the body of the HTTP message
+  hEnd = strstr(buf, "\r\n\r\n");
+  if (hEnd == NULL) {
+    // cannot find the separator between HTTP header and HTTP body
+    return 0;
+  }
+  bp = hEnd + 4;
+
+
+  if (mode == CONTENT_JAVASCRIPT) {
+    j = offset2Hex(bp, (buf+len)-bp, 0);
+    while (j != -1) {
+      cnt++;
+      if (j == 0) {
+        bp = bp+1;
+      } else {
+        bp = bp+j+1;
+      }
+
+      if (len < buf + len - bp) {
+	fprintf(stderr, "HERE\n");
+      }
+      j = offset2Hex(bp, (buf+len)-bp, 1);
+    } // while
+    return cnt;
+  } else if (mode == CONTENT_HTML_JAVASCRIPT) {
+     while (bp < (buf+len)) {
+       jsStart = strstr(bp, "<script type=\"text/javascript\">");
+       if (jsStart == NULL) break;
+       bp = jsStart+31;
+       jsEnd = strstr(bp, "</script>");
+       if (jsEnd == NULL) break;
+       // count the number of usable hex char between jsStart+31 and jsEnd
+
+       j = offset2Hex(bp, jsEnd-bp, 0);
+       while (j != -1) {
+         cnt++;
+         if (j == 0) {
+           bp = bp+1;
+         } else {
+           bp = bp+j+1;
+         }
+
+	 if (len < jsEnd - buf || len < jsEnd - bp) {
+	   fprintf(stderr, "HERE2\n");
+	 }
+
+
+         j = offset2Hex(bp, jsEnd-bp, 1);
+       } // while (j != -1)
+
+       if (buf + len < bp + 9) {
+	 fprintf(stderr, "HERE3\n");
+       }
+
+
+       bp += 9;
+     } // while (bp < (buf+len))
+     return cnt;
+  } else {
+    fprintf(stderr, "Unknown mode (%d) for capacityJS() ... \n", mode);
+    return 0;
+  }
+}
+
+unsigned int
+PayloadServer::capacityPDF (char* buf, int len) {
+  char *hEnd, *bp, *streamStart, *streamEnd;
+  int cnt=0;
+  int size;
+
+  // jump to the beginning of the body of the HTTP message
+  hEnd = strstr(buf, "\r\n\r\n");
+  if (hEnd == NULL) {
+    // cannot find the separator between HTTP header and HTTP body
+    return 0;
+  }
+  bp = hEnd + 4;
+
+  while (bp < (buf+len)) {
+     streamStart = strInBinary("stream", 6, bp, (buf+len)-bp);
+     if (streamStart == NULL) break;
+     bp = streamStart+6;
+     streamEnd = strInBinary("endstream", 9, bp, (buf+len)-bp);
+     if (streamEnd == NULL) break;
+     // count the number of char between streamStart+6 and streamEnd
+     size = streamEnd - (streamStart+6) - 2; // 2 for \r\n before streamEnd
+     if (size > 0) {
+       cnt = cnt + size;
+       // log_debug("capacity of pdf increase by %d", size);
+     }
+     bp += 9;
+  }
+  return cnt;
+}
+
+
+/*
+ * capacitySWF is just mock function 
+  returning the len just for the sake of harmonizing
+  the capacity computation. We need to make payload
+  types as a children of all classes.
+ */
+unsigned int 
+PayloadServer::capacitySWF(char* buf, int len)
+{
+  (void)buf;
+  return len;
+}
+
+/*
+ * capacityJS is designed to call capacityJS3 
+ */
+unsigned int 
+PayloadServer::capacityJS (char* buf, int len) {
+
+  int mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_JAVASCRIPT);
+  if (mode != CONTENT_JAVASCRIPT)
+    mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_HTML);
+  
+  if (mode != CONTENT_HTML_JAVASCRIPT && mode != CONTENT_JAVASCRIPT)
+    return 0;
+
+  size_t cap = capacityJS3(buf, len, mode);
+
+  if (cap <  JS_DELIMITER_SIZE)
+    return 0;
+    
+  return (cap - JS_DELIMITER_SIZE)/2;
+}
+
+
+
+/* first line is of the form....
+   GET /XX/XXXX.swf[?YYYY] HTTP/1.1\r\n
+*/
+
+
+int 
+PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
+
+  char* uri;
+  char* ext;
+
+  char* buf = (char *)xmalloc(buflen+1);
+  char* uri_end;
+
+  memcpy(buf, buf_orig, buflen);
+  buf[buflen] = 0;
+
+  if (strncmp(buf, "GET", 3) != 0
+      && strncmp(buf, "POST", 4) != 0) {
+    log_debug("Unable to determine URI type. Not a GET/POST requests.\n");
+    return -1;
+  }
+
+  uri = strchr(buf, ' ') + 1;
+
+  if (uri == NULL) {
+    log_debug("Invalid URL\n");
+    return -1;
+  }
+
+  if (!(uri_end = strchr(uri, '?')))
+    uri_end = strchr(uri, ' ');
+  
+
+  if (uri_end == NULL) {
+    log_debug("unterminated uri\n");
+    return -1;
+  }
+
+  uri_end[0] = 0;
+
+  ext = strrchr(uri, '/');
+
+  if (ext == NULL) {
+    log_debug("no / in url: find_uri_type...");
+    return -1;
+  }
+
+  ext = strchr(ext, '.');
+
+
+  if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
+      || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))
+    return HTTP_CONTENT_HTML;
+
+  if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
+    return HTTP_CONTENT_JAVASCRIPT;
+
+  if (!strncmp(ext, ".pdf", 4) || !strncmp(ext, ".PDF", 4))
+    return HTTP_CONTENT_PDF;
+
+
+  if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
+    return HTTP_CONTENT_SWF;
+
+
+
+  free(buf);
+  return -1;
+  
+}
+
+
+/*
  * fixContentLen corrects the Content-Length for an HTTP msg that
  * has been ungzipped, and removes the "Content-Encoding: gzip"
  * field from the header.
@@ -29,7 +244,8 @@
  * bufLen - length of buf
  * 
  */
-int fixContentLen (char* payload, int payloadLen, char *buf, int bufLen) {
+int
+fixContentLen (char* payload, int payloadLen, char *buf, int bufLen) {
 
   int gzipFlag=0, clFlag=0, clZeroFlag=0;
   char* ptr = payload;
@@ -184,19 +400,22 @@ log_debug("new: hdrLen = %d, bodyLen = %d, payloadLen = %d", hdrLen, bodyLen, hd
   return -1;
 }
 
-void gen_rfc_1123_date(char* buf, int buf_size) {
+void
+gen_rfc_1123_date(char* buf, int buf_size) {
   time_t t = time(NULL);
   struct tm *my_tm = gmtime(&t);
   strftime(buf, buf_size, "Date: %a, %d %b %Y %H:%M:%S GMT\r\n", my_tm);
 }
 
-void gen_rfc_1123_expiry_date(char* buf, int buf_size) {
+void
+gen_rfc_1123_expiry_date(char* buf, int buf_size) {
   time_t t = time(NULL) + rand() % 10000;
   struct tm *my_tm = gmtime(&t);
   strftime(buf, buf_size, "Expires: %a, %d %b %Y %H:%M:%S GMT\r\n", my_tm);
 }
 
-int gen_response_header(char* content_type, int gzip, int length, char* buf, int buflen) {
+int
+gen_response_header(char* content_type, int gzip, int length, char* buf, int buflen) {
   char* ptr;
 
   // conservative assumption here.... 
@@ -267,7 +486,8 @@ int gen_response_header(char* content_type, int gzip, int length, char* buf, int
 
 
 
-int parse_client_headers(char* inbuf, char* outbuf, int len) {
+int
+parse_client_headers(char* inbuf, char* outbuf, int len) {
   // client-side
   // remove Host: field
   // remove referrer fields?
@@ -311,129 +531,6 @@ int parse_client_headers(char* inbuf, char* outbuf, int len) {
 }
 
 
-/* first line is of the form....
-   GET /XX/XXXX.swf[?YYYY] HTTP/1.1\r\n
-*/
-
-
-int 
-PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
-
-  char* uri;
-  char* ext;
-
-  char* buf = (char *)xmalloc(buflen+1);
-  char* uri_end;
-
-  memcpy(buf, buf_orig, buflen);
-  buf[buflen] = 0;
-
-  if (strncmp(buf, "GET", 3) != 0
-      && strncmp(buf, "POST", 4) != 0) {
-    log_debug("Unable to determine URI type. Not a GET/POST requests.\n");
-    return -1;
-  }
-
-  uri = strchr(buf, ' ') + 1;
-
-  if (uri == NULL) {
-    log_debug("Invalid URL\n");
-    return -1;
-  }
-
-  if (!(uri_end = strchr(uri, '?')))
-    uri_end = strchr(uri, ' ');
-  
-
-  if (uri_end == NULL) {
-    log_debug("unterminated uri\n");
-    return -1;
-  }
-
-  uri_end[0] = 0;
-
-  ext = strrchr(uri, '/');
-
-  if (ext == NULL) {
-    log_debug("no / in url: find_uri_type...");
-    return -1;
-  }
-
-  ext = strchr(ext, '.');
-
-
-  if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
-      || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))
-    return HTTP_CONTENT_HTML;
-
-  if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
-    return HTTP_CONTENT_JAVASCRIPT;
-
-  if (!strncmp(ext, ".pdf", 4) || !strncmp(ext, ".PDF", 4))
-    return HTTP_CONTENT_PDF;
-
-
-  if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
-    return HTTP_CONTENT_SWF;
-
-
-
-  free(buf);
-  return -1;
-  
-}
-
-/*
-int 
-find_uri_type(char* buf) {
-
-  char* uri;
-  int uri_len;
-  char* ext;
-
-  if (strncmp(buf, "GET", 3) != 0 && strncmp(buf, "POST", 4) != 0) 
-    return -1;
-
-  buf = strchr(buf, ' ') + 1;
-  uri_len = strchr(buf, ' ') - buf;
-  uri = xmalloc(uri_len + 1);
-
-  strncpy(uri, buf, uri_len);
-  uri[uri_len] = 0;
-
-  if (strchr(uri, '?'))
-    ext = strchr(uri, '?') - 4;
-  else
-    ext = uri + uri_len - 4;
-
-
-  if (!strncmp(ext, ".pdf", 4) || !strncmp(ext, ".PDF", 4))
-    return HTTP_CONTENT_PDF;
-
-  if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
-    return HTTP_CONTENT_SWF;
-
-  if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
-    return HTTP_CONTENT_JAVASCRIPT;
-
-  if (!strncmp(ext-1, "html", 4) || !strncmp(ext, "htm", 3) || strchr(ext-1, '.') == NULL)
-    return HTTP_CONTENT_HTML;
-
-  // default type
-  return HTTP_CONTENT_HTML;
-  // return HTTP_CONTENT_JAVASCRIPT;
-  return -1;
-  
-}
-
-*/
-
-
-
-
-
-
-
 
 
 /*
@@ -447,7 +544,8 @@ find_uri_type(char* buf) {
 
 
 
-int skipJSPattern(char *cp, int len) {
+int
+skipJSPattern(char *cp, int len) {
   int i,j;
 
 
@@ -495,12 +593,14 @@ int skipJSPattern(char *cp, int len) {
 
 
 
-int isalnum_ (char c) {
+int
+isalnum_ (char c) {
   if (isalnum(c) || c == '_') return 1;
   else return 0;
 }
 
-int offset2Alnum_ (char *p, int range) {
+int
+offset2Alnum_ (char *p, int range) {
   char *cp = p;
 
   while ((cp < (p+range)) && !isalnum_(*cp)) {
@@ -538,7 +638,8 @@ int offset2Alnum_ (char *p, int range) {
  * otherwise, it returns -1
  *
  */
-int offset2Hex (char *p, int range, int isLastCharHex) {
+int
+offset2Hex (char *p, int range, int isLastCharHex) {
   char *cp = p;
   int i,j;
   int isFirstWordChar = 1;
@@ -595,79 +696,6 @@ int offset2Hex (char *p, int range, int isLastCharHex) {
  
 }
 
-/*
- * capacityJS3 is the next iteration for capacityJS
- */
-unsigned int PayloadServer::capacityJS3 (char* buf, int len, int mode) {
-  char *hEnd, *bp, *jsStart, *jsEnd;
-  int cnt=0;
-  int j;
-
-  // jump to the beginning of the body of the HTTP message
-  hEnd = strstr(buf, "\r\n\r\n");
-  if (hEnd == NULL) {
-    // cannot find the separator between HTTP header and HTTP body
-    return 0;
-  }
-  bp = hEnd + 4;
-
-
-  if (mode == CONTENT_JAVASCRIPT) {
-    j = offset2Hex(bp, (buf+len)-bp, 0);
-    while (j != -1) {
-      cnt++;
-      if (j == 0) {
-        bp = bp+1;
-      } else {
-        bp = bp+j+1;
-      }
-
-      if (len < buf + len - bp) {
-	fprintf(stderr, "HERE\n");
-      }
-      j = offset2Hex(bp, (buf+len)-bp, 1);
-    } // while
-    return cnt;
-  } else if (mode == CONTENT_HTML_JAVASCRIPT) {
-     while (bp < (buf+len)) {
-       jsStart = strstr(bp, "<script type=\"text/javascript\">");
-       if (jsStart == NULL) break;
-       bp = jsStart+31;
-       jsEnd = strstr(bp, "</script>");
-       if (jsEnd == NULL) break;
-       // count the number of usable hex char between jsStart+31 and jsEnd
-
-       j = offset2Hex(bp, jsEnd-bp, 0);
-       while (j != -1) {
-         cnt++;
-         if (j == 0) {
-           bp = bp+1;
-         } else {
-           bp = bp+j+1;
-         }
-
-	 if (len < jsEnd - buf || len < jsEnd - bp) {
-	   fprintf(stderr, "HERE2\n");
-	 }
-
-
-         j = offset2Hex(bp, jsEnd-bp, 1);
-       } // while (j != -1)
-
-       if (buf + len < bp + 9) {
-	 fprintf(stderr, "HERE3\n");
-       }
-
-
-       bp += 9;
-     } // while (bp < (buf+len))
-     return cnt;
-  } else {
-    fprintf(stderr, "Unknown mode (%d) for capacityJS() ... \n", mode);
-    return 0;
-  }
-}
-
 
 /*
  * strInBinary looks for char array pattern of length patternLen in a char array
@@ -720,7 +748,8 @@ strInBinary (const char *pattern, unsigned int patternLen,
 // 2) application/x-pdf
 // 
 
-int has_eligible_HTTP_content (char* buf, int len, int type) {
+int 
+has_eligible_HTTP_content (char* buf, int len, int type) {
   char* ptr = buf;
   char* matchptr;
   int tjFlag=0, thFlag=0, ceFlag=0, teFlag=0, http304Flag=0, clZeroFlag=0, pdfFlag=0, swfFlag=0; //, gzipFlag=0; // compiler under Ubuntu complains about unused vars, so commenting out until we need it
@@ -843,36 +872,6 @@ int has_eligible_HTTP_content (char* buf, int len, int type) {
 
 
 
-unsigned int PayloadServer::capacityPDF (char* buf, int len) {
-  char *hEnd, *bp, *streamStart, *streamEnd;
-  int cnt=0;
-  int size;
-
-  // jump to the beginning of the body of the HTTP message
-  hEnd = strstr(buf, "\r\n\r\n");
-  if (hEnd == NULL) {
-    // cannot find the separator between HTTP header and HTTP body
-    return 0;
-  }
-  bp = hEnd + 4;
-
-  while (bp < (buf+len)) {
-     streamStart = strInBinary("stream", 6, bp, (buf+len)-bp);
-     if (streamStart == NULL) break;
-     bp = streamStart+6;
-     streamEnd = strInBinary("endstream", 9, bp, (buf+len)-bp);
-     if (streamEnd == NULL) break;
-     // count the number of char between streamStart+6 and streamEnd
-     size = streamEnd - (streamStart+6) - 2; // 2 for \r\n before streamEnd
-     if (size > 0) {
-       cnt = cnt + size;
-       // log_debug("capacity of pdf increase by %d", size);
-     }
-     bp += 9;
-  }
-  return cnt;
-}
-
 int
 find_content_length (char *hdr, int /*hlen*/) {
   char *clStart;
@@ -905,131 +904,3 @@ find_content_length (char *hdr, int /*hlen*/) {
   return contentLen;
 }
 
-/*
-
-void testOffset2Alnum_skipJSPattern () {
-  char s1[] = "for (i=0; i<10; i++) { print i; }";
-
-  char s2[] = "***abcde*****";
-  int d, i;
-
-  printf("s1 = %s\n", s1);
-  printf("s2 = %s\n", s2);
-
-
-  d = offset2Alnum_(s1, strlen(s1));
-  printf ("offset2Alnum_ for s1 = %d\n", d);
-  d = offset2Alnum_(s2, strlen(s2));
-  printf ("offset2Alnum_ for s2 = %d\n", d);
-
-  i = skipJSPattern (s1, strlen(s1));
-  printf ("skipJSPattern for s1 = %d\n", i);
-  i = skipJSPattern (s2, strlen(s2));
-  printf ("skipJSPattern for s2 = %d\n", i);
-}
-
-
-
-
-void testOffset2Hex () {
-  int d;
-  char s3[] = "for (bc=0; bc<10; bc++) { ad=2*bc+ad; }";
-  printf("len(s3)=%d; s3 = |%s|\n", (int)strlen(s3), s3);
-
-  d = offset2Alnum_(s3, strlen(s3));
-  printf ("offset2Alnum_ for s3 = %d\n", d);
-  d = offset2Hex(s3, strlen(s3), 0);
-  printf ("offset2Hex for s3 = %d\n", d);
-}
-
-
-void testCapacityJS () {
-  int d;
-  char s4[] = "\r\n\r\n abc = abc + 1;";
-  char s6[] = "\r\n\r\n <script type=\"text/javascript\">abc = abc + 1;</script>";
-
-  printf("\nTest for CONTENT_JAVASCRIPT:\n");
-  printf("len(s4)=%d; s4 = |%s|\n", (int)strlen(s4), s4);
-
-  d = offset2Alnum_(s4, strlen(s4));
-  printf ("offset2Alnum_ for s4 = %d\n", d);
-  d = offset2Hex(s4, strlen(s4), 0);
-  printf ("offset2Hex for s4 = %d\n", d);
-
-  printf("capacityJS  (JS) returns %d\n", capacityJS(s4, strlen(s4), CONTENT_JAVASCRIPT));
-  printf("capacityJS3 (JS) returns %d\n", capacityJS3(s4, strlen(s4), CONTENT_JAVASCRIPT));
-
-  printf("\nTest for CONTENT_HTML_JAVASCRIPT:\n");
-  printf("len(s6)=%d; s6 = |%s|\n", (int)strlen(s6), s6);
-
-  d = offset2Alnum_(s6, strlen(s6));
-  printf ("offset2Alnum_ for s6 = %d\n", d);
-  d = offset2Hex(s6, strlen(s6), 0);
-  printf ("offset2Hex for s6 = %d\n", d);
-
-  printf("capacityJS  (HTML) returns %d\n", capacityJS(s6, strlen(s6), CONTENT_HTML_JAVASCRIPT));
-  printf("capacityJS3 (HTML) returns %d\n", capacityJS3(s6, strlen(s6), CONTENT_HTML_JAVASCRIPT));
-}
-*/
-
-
-/*****
-int main() {
-  char buf[HTTP_MSG_BUF_SIZE];
-  memset(buf, 0, sizeof(buf));
-  // test for TYPE_HTTP_REQUEST
-  // load_payloads("../../traces/client.out");
-  // int len = find_client_payload(buf, 10000, TYPE_HTTP_REQUEST);
-  // printf("%s\n", buf);
-
-  // test for TYPE_HTTP_RESPONSE
-  // load_payloads("../../traces/server-cnn-nogzip.out");
-  // load_payloads("../../traces/server-portals.out"); // ptype==1?
-
-  // testOffset2Alnum_skipJSPattern();
-  // testOffset2Hex();
-  // testCapacityJS();
-  
-  load_payloads("../../traces/server.out");
-  // int r;
-  // r = find_server_payload(&buf, sizeof(buf), TYPE_HTTP_RESPONSE, HTTP_CONTENT_JAVASCRIPT);
-  // if (r > 0) {
-  //   printf("Available payload capablity %d\n", r);
-  // }
-  // return r;
-
-  return 0;
-}
- *****/
-
-/*
- * capacitySWF is just mock function 
-  returning the len just for the sake of harmonizing
-  the capacity computation. We need to make payload
-  types as a children of all classes.
- */
-unsigned int PayloadServer::capacitySWF(char* buf, int len)
-{
-  (void)buf;
-  return len;
-}
-
-/*
- * capacityJS is designed to call capacityJS3 
- */
-unsigned int PayloadServer::capacityJS (char* buf, int len) {
-
-  int mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_JAVASCRIPT);
-  if (mode != CONTENT_JAVASCRIPT)
-    mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_HTML);
-  
-  if (mode != CONTENT_HTML_JAVASCRIPT && mode != CONTENT_JAVASCRIPT)
-    return 0;
-
-  size_t cap = capacityJS3(buf, len, mode);
-
-  if (cap <  JS_DELIMITER_SIZE)
-    return 0;
-    
-  return (cap - JS_DELIMITER_SIZE)/2;
-}

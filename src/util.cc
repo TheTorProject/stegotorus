@@ -587,7 +587,7 @@ void
   logfmt(LOG_SEV_DEBUG, format);
 }
 
-void  buf2hex(unsigned char* buf, size_t len, std::string& res)
+void  buf2hex(uint8_t* buf, size_t len, std::string& res)
 {
   log_assert(buf); log_assert(len);
   stringstream res_stream;

@@ -40,6 +40,7 @@
 /unittests
 /pgen_fake
 /pgen_pcap
+/tester_proxy
 
 /build/
 /build-*/
@@ -50,3 +51,4 @@
 /gdb_emacs/
 /apache_payload/*
 /traces/*
+/src/test/tester_proxy/*
