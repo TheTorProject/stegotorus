@@ -13,6 +13,8 @@
 */.dirstamp
 */*/.deps/
 */*/.dirstamp
+*/*/*/.deps/
+*/*/*/.dirstamp
 
 /aclocal.m4
 /autom4te.cache
@@ -30,16 +32,22 @@
 /config-aux/install-sh
 /config-aux/missing
 
-/protolist.c
-/steglist.c
-/unitgrplist.c
+/protolist.cc
+/steglist.cc
+/unitgrplist.cc
 
 /libstegotorus.a
 /stegotorus
 /tltester
 /unittests
+/pgen_fake
+/pgen_pcap
+/tester_proxy
 
 /build/
 /build-*/
 /bench/
 /bench-*/
+/traces/*
+/apache_payload/*
+/gdb_emacs/*
