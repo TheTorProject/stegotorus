@@ -53,3 +53,4 @@
 /gdb_emacs/
 /apache_payload/*
 /traces/*
+/src/test/tester_proxy/*

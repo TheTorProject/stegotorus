@@ -80,7 +80,7 @@
    reason, it is skipped but copied to the transcript, with a ! at the
    beginning of the line.  (These will all be at the very beginning.) */
 
-#define TL_TIMEOUT 0
+#define TL_TIMEOUT 30
 #define LOGGING false
 
 struct tstate
@@ -325,20 +325,11 @@ pause_expired_cb(evutil_socket_t, short, void *arg)
 static void
 timeout_cb(evutil_socket_t, short, void *arg)
 {
-  fprintf(stderr, "Communitation timed out...");
+  fprintf(stderr, "Communication timed out...");
   tstate *st = (tstate *)arg;
 
-  evutil_socket_t fd = bufferevent_getfd(st->near);
-  bufferevent_disable(st->near, EV_WRITE);
-  if (fd != -1)
-    shutdown(fd, SHUT_WR);
-
-  fd = bufferevent_getfd(st->far);
-  bufferevent_disable(st->far, EV_WRITE);
-  if (fd != -1)
-    shutdown(fd, SHUT_WR);
-
   event_base_loopexit(st->base, 0);
+
 }
 
 /* Script processing */

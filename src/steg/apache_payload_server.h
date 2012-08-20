@@ -37,7 +37,7 @@ class ApachePayloadServer: public PayloadServer
   CURL* _curl_obj; //this is used to communicate with http server
 
   //This is too keep the dict in sync between client and server
-  unsigned char _uri_dict_mac[SHA256_DIGEST_LENGTH];
+  uint8_t _uri_dict_mac[SHA256_DIGEST_LENGTH];
 
   /**
      re-computes the sha256 of the uri_dict and store it in _uri_dict_mac
@@ -45,7 +45,7 @@ class ApachePayloadServer: public PayloadServer
      @return a pointer to the sha256 hash buffer
      
   */
-  const unsigned char* compute_uri_dict_mac();
+  const uint8_t* compute_uri_dict_mac();
 
  public:
   /*These are used for client side communication. They are 
@@ -54,7 +54,7 @@ class ApachePayloadServer: public PayloadServer
   URIDict uri_dict;
   map<string, unsigned long> uri_decode_book;
 
-  const unsigned char* uri_dict_mac()
+  const uint8_t* uri_dict_mac()
   {
     return _uri_dict_mac;
   }
