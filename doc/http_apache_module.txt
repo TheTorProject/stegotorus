@@ -1,0 +1,36 @@
+http_apache steg module protocol 
+
+Version 0.0.1
+2012-08-20
+
+The http_apache steg module is very similar to, and in fact is inherited from, http steg module. The module's goal is to address following shortcoming of http steg module:
+
+     - Relying on payloads stored in a constant trace files.
+     - Overusing the cookies as the client-to-server transport.
+
+Providing Payloads
+
+On server side, http_apache, uses PayloadScaper class to check for the "Document Root" directory of Apache HTTP server and analyzes its content. Its stores a list of files that it can uses for payloads in "./apache_payload/server_list.txt".
+
+On client side, http_apache, uses libcurl to generate the http GET requests which carries the client to server chop packets.
+
+Avoiding cookies:
+
+The client is using the both the url and the parameters of uri as client-to-server transport. Although if a GET request contains cookie then on the server side, it is the cookie that is considered as the container of the chop packet. 
+
+Protocol details:
+
+Server side:
+Beside using the payload provided by the Web server instead of referring to trace file, there is no significant difference between server side of http and http_steg.
+
+Client side:
+The client codes information using the url and the uri's parameters. However, when a client start communicating with a st server for the first time, it does not know about the url list on the server. 
+
+Hence, the first task of the client is to request for the url list. Meanwhile, the client always request the homepage of the server with different parameters to communicate with server until it obtains the url list.
+
+The client software at its initialization checks for ./apache_payload/client_list.txt and compute the SHA256 hash of the file. Then it sends a request with chop op_code op_STEG0 containing 33 bytes: one byte of op_STEG_DICT_MAC indicating the request to verify the hash and 32 bytes of SHA256 hash.
+
+The server compares url list hashes. If they are the same then it sends a op_STEG0 chop package containing 1 bytes of op_STEG_DICT_UP2DATE. Otherwise it sends the whole url list following op_STEG_DICT_UPDATE byte. It ends with "\r\n".
+
+After that the client will index the url dictionary from 1 to n-1, n being the number of urls. It will store [log_2(n)/8] bytes of the chop's block in the url and the rest in the "q" parameter of the uri in base64 format. If the [log_2(n)/8] > length of chop block (this never happens in practice) then parameter "p" contains the length of the block.
+ 
