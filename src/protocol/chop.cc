@@ -4,6 +4,7 @@
 
 #include "util.h"
 #include "chop_blk.h"
+#include "crypt.h"
 #include "connections.h"
 #include "protocol.h"
 #include "rng.h"
@@ -14,6 +15,7 @@
 #include <vector>
 
 #include <event2/event.h>
+#include <event2/buffer.h>
 
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still

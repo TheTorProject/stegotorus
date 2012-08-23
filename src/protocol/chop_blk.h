@@ -5,8 +5,8 @@
 #ifndef CHOP_BLK_H
 #define CHOP_BLK_H
 
-#include "crypt.h"
-#include <event2/buffer.h>
+class ecb_encryptor;
+class ecb_decryptor;
 
 namespace chop_blk
 {
@@ -60,7 +60,8 @@ enum opcode_t
   op_DAT = 0,       // Pass data section along to upstream
   op_FIN = 1,       // No further transmissions (pass data along if any)
   op_RST = 2,       // Protocol error, close circuit now
-  op_RESERVED0 = 3, // 3 -- 127 reserved for future definition
+  op_ACK = 3,       // Acknowledge data received
+  op_RESERVED0 = 4, // 4 -- 127 reserved for future definition
   op_STEG0 = 128,   // 128 -- 255 reserved for steganography modules
   op_LAST = 255
 };
@@ -78,46 +79,8 @@ class header
   uint8_t ciphr[16];
 
 public:
-  header(uint32_t s, uint16_t d, uint16_t p, opcode_t f, ecb_encryptor &ec)
-  {
-    if (f > op_LAST || (f >= op_RESERVED0 && f < op_STEG0)) {
-      memset(clear, 0xFF, sizeof clear); // invalid!
-      memset(ciphr, 0xFF, sizeof ciphr);
-      return;
-    }
-
-    // sequence number
-    clear[0] = (s >> 24) & 0xFF;
-    clear[1] = (s >> 16) & 0xFF;
-    clear[2] = (s >>  8) & 0xFF;
-    clear[3] = (s      ) & 0xFF;
-
-    // D field
-    clear[4] = (d >>  8) & 0xFF;
-    clear[5] = (d      ) & 0xFF;
-
-    // P field
-    clear[6] = (p >>  8) & 0xFF;
-    clear[7] = (p      ) & 0xFF;
-
-    // F field
-    clear[8] = uint8_t(f);
-
-    // Check field
-    memset(clear + 9, 0, 7);
-
-    ec.encrypt(ciphr, clear);
-  }
-
-  header(evbuffer *buf, ecb_decryptor &dc)
-  {
-    if (evbuffer_copyout(buf, ciphr, sizeof ciphr) != sizeof ciphr) {
-      memset(clear, 0xFF, sizeof clear);
-      memset(ciphr, 0xFF, sizeof ciphr);
-      return;
-    }
-    dc.decrypt(clear, ciphr);
-  }
+  header(uint32_t s, uint16_t d, uint16_t p, opcode_t f, ecb_encryptor &ec);
+  header(evbuffer *buf, ecb_decryptor &dc);
 
   uint32_t seqno() const
   {
@@ -171,6 +134,105 @@ public:
   }
 };
 
+/**
+ * An ACK payload begins with a 32-bit number (network byte order as
+ * usual) which is the highest sequence number so far processed
+ * (henceforth HSN).  After that are up to 32 octets of bitmask, laid
+ * out in *little*-endian order, corresponding to the 256-element
+ * block receive window.  Bits set in this bitmask indicate blocks
+ * past the HSN that have in fact been received.  If the bitmask is
+ * shorter than 32 octets it is implicitly zero-filled out to its
+ * maximum size.  By construction, the lowest bit in the bitmask will
+ * always be zero, because if block HSN+1 had been received, HSN would
+ * be higher; but it is transmitted anyway.
+ */
+class ack_payload
+{
+  uint32_t hsn_;
+  uint32_t maxusedbyte;
+  uint8_t  window[32];
+
+public:
+  /**
+   * Create a new ack_payload object, specifying its HSN.  For the
+   * sake of testing, this *can* be used to create an explicitly
+   * invalid ack_payload (by passing uint32_t(-1)), unlike set_hsn()
+   * below.
+   */
+  ack_payload(uint32_t h) : hsn_(h), maxusedbyte(0)
+  { memset(window, 0, sizeof window); }
+
+  /**
+   * Decode an ack_payload from the wire format.  HFLOOR is a lower
+   * bound on the expected HSN.  Before doing anything else with the
+   * object constructed, you must check whether valid() returns true;
+   * all the other functions will trigger a fatal assertion if called
+   * on an invalid ack_payload.
+   */
+  ack_payload(evbuffer *wire, uint32_t hfloor);
+
+  /**
+   * Serialize this ack_payload to the wire format.
+   */
+  evbuffer *serialize() const;
+
+  /**
+   * Report whether a wire-decoded ack_payload is valid.
+   */
+  bool valid() const { return hsn_ != uint32_t(-1); }
+
+  /**
+   * Returns the HSN for this ack_payload object.
+   */
+  uint32_t hsn() const
+  {
+    log_assert(valid());
+    return hsn_;
+  }
+
+  /**
+   * Change the HSN for this ack_payload object.
+   * This cannot be used to make an ack_payload invalid.
+   */
+  void set_hsn(uint32_t h)
+  {
+    log_assert(valid() && h != uint32_t(-1));
+    hsn_ = h;
+  }
+
+  /**
+   * Report whether the block with sequence number SEQ has been successfully
+   * received, according to the data in this ack_payload.
+   */
+  bool block_received(uint32_t seq) const
+  {
+    log_assert(valid());
+
+    if (seq <= hsn_)
+      return true;
+
+    uint32_t delta = (seq - hsn_) - 1;
+    if (delta >= 256)
+      return false;
+
+    return window[delta / 8] & (1 << (delta % 8));
+  }
+
+  /**
+   * Mark the block with sequence number SEQ (which must be in the range
+   * [hsn+1, hsn+256]) as having been received.
+   */
+  void set_block_received(uint32_t seq)
+  {
+    log_assert(valid());
+
+    uint32_t delta = (seq - hsn_) - 1;
+    log_assert(delta < 256);
+    window[delta/8] |= (1 << (delta % 8));
+    if (delta/8 + 1 > maxusedbyte)
+      maxusedbyte = delta/8 + 1;
+  }
+};
 
 /* Most of a block's header information is processed before it reaches
    the reassembly queue; the only things the queue needs to record are
@@ -233,6 +295,12 @@ public:
    * be empty.  This is done as the last step of a rekeying cycle.
    */
   void reset();
+
+  /**
+   * Generate an acknowledgment payload corresponding to the present
+   * contents of the queue.
+   */
+  evbuffer *gen_ack() const;
 };
 
 } // namespace chop_blk
