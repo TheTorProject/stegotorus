@@ -5,8 +5,6 @@
 #include "util.h"
 #include "chop_blk.h"
 #include "crypt.h"
-#include "connections.h"
-#include "protocol.h"
 #include "rng.h"
 #include "steg.h"
 
@@ -27,30 +25,7 @@ using std::make_pair;
 
 using namespace chop_blk;
 
-struct chop_config_t;
-struct chop_circuit_t;
-
 typedef unordered_map<uint32_t, chop_circuit_t *> chop_circuit_table;
-
-struct chop_conn_t : conn_t
-{
-  chop_config_t *config;
-  chop_circuit_t *upstream;
-  steg_t *steg;
-  struct evbuffer *recv_pending;
-  struct event *must_send_timer;
-  bool sent_handshake : 1;
-  bool no_more_transmissions : 1;
-
-  CONN_DECLARE_METHODS(chop);
-
-  int recv_handshake();
-  int send(struct evbuffer *block);
-
-  void send();
-  bool must_send_p() const;
-  static void must_send_timeout(evutil_socket_t, short, void *arg);
-};
 
 struct chop_circuit_t : circuit_t
 {
@@ -603,7 +578,6 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
   v.iov_len = blocksize;
 
   header hdr(send_seq, d, p, f, *send_hdr_crypt);
-  log_assert(hdr.valid(send_seq));
   memcpy(v.iov_base, hdr.nonce(), HEADER_LEN);
 
   uint8_t encodebuf[SECTION_LEN*2];

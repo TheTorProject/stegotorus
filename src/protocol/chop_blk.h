@@ -6,9 +6,13 @@
 #define CHOP_BLK_H
 
 #include <tr1/unordered_set>
+#include "connections.h"
+#include "crypt.h"
+#include "protocol.h"
 
-class ecb_encryptor;
-class ecb_decryptor;
+struct chop_conn_t;
+struct chop_config_t;
+struct chop_circuit_t;
 
 namespace chop_blk
 {
@@ -33,12 +37,15 @@ namespace chop_blk
    is outside this window, or the check field is not all-bits-zero,
    the packet is discarded.  An attacker's odds of being able to
    manipulate the D, P, F, or R fields or the low bits of the sequence
-   number are therefore less than one in 2^72.  Unlike TCP, our
-   sequence numbers always start at zero on a new (or freshly rekeyed)
-   circuit, and increment by one per _block_, not per byte of data.
-   Furthermore, they do not wrap: a rekeying cycle (which resets the
-   sequence number) is required to occur before the highest-received
-   sequence number reaches 2^32.
+   number are therefore less than one in 2^72.  (This is weak compared
+   to our default security parameter of 2^128, but should be sufficient
+   for the protection of this small amount of data.)
+
+   Unlike TCP, our sequence numbers always start at zero on a new (or
+   freshly rekeyed) circuit, and increment by one per _block_, not per
+   byte of data.  Furthermore, they do not wrap: a rekeying cycle
+   (which resets the sequence number) is required to occur before the
+   highest-received sequence number reaches 2^32.
 
    Following the header are two variable-length payload sections,
    "data" and "padding", whose length in bytes are given by the D and
@@ -133,14 +140,22 @@ public:
   // to retransmit the block.
   bool prepare_retransmit(uint16_t new_plen, ecb_encryptor &ec);
 
+  // True if the check field is all-bits-zero.
+  // Note: must run in constant time (hence the binary ors).
+  bool check() const
+  {
+    return !(clear[10] | clear[11] | clear[12] |
+             clear[13] | clear[14] | clear[15]);
+  }
+
+  // True if the header is valid overall.
+  // Note: must run in constant time.
   bool valid(uint64_t window) const
   {
-    // This check must run in constant time.
-    uint8_t ck = (clear[10] | clear[11] | clear[12] |
-                  clear[13] | clear[14] | clear[15]);
     uint32_t delta = seqno() - window;
-    ck |= !!(delta & ~uint32_t(0xFF));
-    return !ck;
+    bool deltaOK = !(delta & ~uint32_t(0xFF));
+    bool checkOK = check();
+    return checkOK & deltaOK;
   }
 
   const uint8_t *nonce() const
@@ -315,7 +330,8 @@ public:
     * fail: returns -1 for failure or 0 for success.  Regardless of
     * success or failure, consumes DATA.
     */
-   int queue_and_send(header const& hdr, evbuffer *data, conn_t *conn);
+   int queue_and_send(header const& hdr, evbuffer *data,
+                      chop_conn_t *conn, gcm_encryptor& gc);
 
    /**
     * Process an acknowledgment, advancing the last_fully_acked
@@ -329,12 +345,21 @@ public:
    /**
     * Retransmit as many blocks as possible given the present state of
     * the connections in DOWNSTREAMS.  No-op if there is nothing to be
-    * retransmitted at this time.  Returns -1 if there was material to
-    * retransmit but we did not manage to retransmit any of it, 0
-    * otherwise.
+    * retransmitted at this time.  Returns false if there was material
+    * to retransmit but we did not manage to retransmit any of it,
+    * true otherwise.
     */
-   int retransmit(std::tr1::unordered_set<conn_t *> &downstreams);
- };
+   bool retransmit(std::tr1::unordered_set<conn_t *> &downstreams);
+
+ private:
+   /**
+    * Attempt to retransmit the block described by ELT on one of the
+    * connections in DOWNSTREAMS.  Returns true if the block has been
+    * retransmitted, false otherwise.
+    */
+   bool retransmit_one(transmit_elt &elt,
+                       std::tr1::unordered_set<conn_t *> &downstreams);
+};
 
 /* Most of a block's header information is processed before it reaches
    the reassembly queue; the only things the queue needs to record are
@@ -405,6 +430,26 @@ public:
 };
 
 } // namespace chop_blk
+
+struct chop_conn_t : conn_t
+{
+  chop_config_t *config;
+  chop_circuit_t *upstream;
+  steg_t *steg;
+  struct evbuffer *recv_pending;
+  struct event *must_send_timer;
+  bool sent_handshake : 1;
+  bool no_more_transmissions : 1;
+
+  CONN_DECLARE_METHODS(chop);
+
+  int recv_handshake();
+  int send(struct evbuffer *block);
+
+  void send();
+  bool must_send_p() const;
+  static void must_send_timeout(evutil_socket_t, short, void *arg);
+};
 
 #endif /* chop_blk.h */
 

@@ -5,12 +5,15 @@
 #include "util.h"
 #include "chop_blk.h"
 #include "crypt.h"
+#include "connections.h"
 
 #include <event2/buffer.h>
 
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
    being implemented, and may change incompatibly.  */
+
+using std::tr1::unordered_set;
 
 namespace chop_blk
 {
@@ -60,8 +63,16 @@ header::header(uint32_t s, uint16_t d, uint16_t p, opcode_t f,
   // F field
   clear[8] = uint8_t(f);
 
+  // R field
+  clear[9] = 0;
+
   // Check field
-  memset(clear + 9, 0, 7);
+  clear[10] = 0;
+  clear[11] = 0;
+  clear[12] = 0;
+  clear[13] = 0;
+  clear[14] = 0;
+  clear[15] = 0;
 
   ec.encrypt(ciphr, clear);
 }
@@ -74,6 +85,24 @@ header::header(evbuffer *buf, ecb_decryptor &dc)
     return;
   }
   dc.decrypt(clear, ciphr);
+}
+
+bool
+header::prepare_retransmit(uint16_t new_plen, ecb_encryptor &ec)
+{
+  log_assert(check());
+  if (clear[9] == 255)
+    return false;
+
+  // R field
+  clear[9]++;
+
+  // P field
+  clear[6] = (new_plen >>  8) & 0xFF;
+  clear[7] = (new_plen      ) & 0xFF;
+
+  ec.encrypt(ciphr, clear);
+  return true;
 }
 
 ack_payload::ack_payload(evbuffer *wire, uint32_t hfloor)
@@ -145,9 +174,122 @@ transmit_queue::~transmit_queue()
 }
 
 int
-transmit_queue::queue_and_send(header const& /*hdr*/, evbuffer */*data*/, conn_t */*conn*/)
+transmit_queue::queue_and_send(header const& hdr, evbuffer *data,
+                               chop_conn_t *conn,
+                               gcm_encryptor& gc)
 {
+  log_assert(!full());
+  log_assert(hdr.seqno() == next_to_send);
+  log_assert(!cbuf[next_to_send & 0xFF].data);
+
+  struct evbuffer *block = evbuffer_new();
+  if (!block) {
+    log_warn(conn, "memory allocation failure");
+    evbuffer_free(data);
+    return -1;
+  }
+
+  size_t d = hdr.dlen();
+  size_t p = hdr.plen();
+  size_t blocksize = d + p + MIN_BLOCK_SIZE;
+  struct evbuffer_iovec v;
+  if (evbuffer_reserve_space(block, blocksize, &v, 1) != 1 ||
+      v.iov_len < blocksize) {
+    log_warn(conn, "memory allocation failure");
+    evbuffer_free(block);
+    evbuffer_free(data);
+    return -1;
+  }
+  v.iov_len = blocksize;
+
+  memcpy(v.iov_base, hdr.nonce(), HEADER_LEN);
+
+  uint8_t encodebuf[SECTION_LEN*2];
+  if (evbuffer_copyout(data, encodebuf, d) != (ssize_t)d) {
+    log_warn(conn, "failed to extract data");
+    evbuffer_free(block);
+    evbuffer_free(data);
+    return -1;
+  }
+  memset(encodebuf + d, 0, p);
+  gc.encrypt((uint8_t *)v.iov_base + HEADER_LEN,
+             encodebuf, d + p, hdr.nonce(), HEADER_LEN);
+  if (evbuffer_commit_space(block, &v, 1)) {
+    log_warn(conn, "failed to commit block buffer");
+    evbuffer_free(block);
+    evbuffer_free(data);
+    return -1;
+  }
+
+  if (conn->send(block)) {
+    evbuffer_free(block);
+    evbuffer_free(data);
+    return -1;
+  }
+
+  cbuf[next_to_send & 0xFF].hdr = hdr;
+  cbuf[next_to_send & 0xFF].data = data;
+  next_to_send++;
+
+  evbuffer_free(block);
   return 0;
+}
+
+int
+transmit_queue::process_ack(evbuffer *data)
+{
+  ack_payload ack(data, last_fully_acked);
+  if (!ack.valid()) return -1;
+
+  uint32_t hsn = ack.hsn();
+  if (hsn > next_to_send) return -1;
+
+  for (; last_fully_acked <= hsn; last_fully_acked++) {
+    uint8_t j = last_fully_acked & 0xFF;
+    if (cbuf[j].data) {
+      evbuffer_free(cbuf[j].data);
+      cbuf[j].data = 0;
+    }
+  }
+  last_fully_acked--;
+
+  if (last_fully_acked == next_to_send - 1)
+    return 0;
+
+  for (uint32_t i = last_fully_acked + 1; i < next_to_send; i++) {
+    uint8_t j = i & 0xFF;
+    if (cbuf[j].data && ack.block_received(i)) {
+      evbuffer_free(cbuf[j].data);
+      cbuf[j].data = 0;
+    }
+  }
+
+  return 0;
+}
+
+bool
+transmit_queue::retransmit(unordered_set<conn_t *> &downstreams)
+{
+  bool something_to_retransmit = false;
+  bool retransmitted = false;
+
+  for (uint32_t seq = last_fully_acked + 1; seq < next_to_send; seq++) {
+    uint8_t j = seq & 0xFF;
+    if (cbuf[j].data) {
+      something_to_retransmit = true;
+      if (retransmit_one(cbuf[j], downstreams))
+        retransmitted = true;
+    }
+  }
+
+  return something_to_retransmit ? retransmitted : true;
+}
+
+bool
+transmit_queue::retransmit_one(transmit_elt & /*elt*/,
+                               unordered_set<conn_t *> & /*downstreams*/)
+{
+  return false;
 }
 
 reassembly_queue::reassembly_queue()
