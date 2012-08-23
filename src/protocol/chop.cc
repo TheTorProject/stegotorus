@@ -11,7 +11,6 @@
 #include "steg.h"
 
 #include <tr1/unordered_map>
-#include <tr1/unordered_set>
 #include <vector>
 
 #include <event2/event.h>

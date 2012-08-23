@@ -84,6 +84,7 @@ ack_payload::ack_payload(evbuffer *wire, uint32_t hfloor)
   uint8_t hsnwire[4];
   if (evbuffer_remove(wire, hsnwire, 4) != 4) {
     // invalid payload
+    evbuffer_free(wire);
     return;
   }
   hsn_ = (uint32_t(hsnwire[0]) << 24 |
@@ -98,6 +99,8 @@ ack_payload::ack_payload(evbuffer *wire, uint32_t hfloor)
   if (evbuffer_get_length(wire) > 0 ||
       hsn_ < hfloor || hsn_ >= hfloor+256)
     hsn_ = -1; // invalidate
+
+  evbuffer_free(wire);
 }
 
 evbuffer *
@@ -127,6 +130,24 @@ ack_payload::serialize() const
     return 0;
   }
   return wire;
+}
+
+transmit_queue::transmit_queue()
+  : last_fully_acked(0), next_to_send(0)
+{
+}
+
+transmit_queue::~transmit_queue()
+{
+  for (int i = 0; i < 256; i++)
+    if (cbuf[i].data)
+      evbuffer_free(cbuf[i].data);
+}
+
+int
+transmit_queue::queue_and_send(header const& /*hdr*/, evbuffer */*data*/, conn_t */*conn*/)
+{
+  return 0;
 }
 
 reassembly_queue::reassembly_queue()

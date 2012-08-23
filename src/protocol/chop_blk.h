@@ -5,6 +5,8 @@
 #ifndef CHOP_BLK_H
 #define CHOP_BLK_H
 
+#include <tr1/unordered_set>
+
 class ecb_encryptor;
 class ecb_decryptor;
 
@@ -13,28 +15,30 @@ namespace chop_blk
 
 /* Packets on the wire have a 16-byte header, consisting of a 32-bit
    sequence number, two 16-bit length fields ("D" and "P"), an 8-bit
-   opcode ("F"), and a 56-bit check field.  All numbers in this header
-   are serialized in network byte order.
+   opcode ("F"), an 8-bit retransmit count ("R"), and a 48-bit check
+   field.  All numbers in this header are serialized in network byte
+   order.
 
    | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | A | B | C | D | E | F |
-   |Sequence Number|   D   |   P   | F |           Check           |
+   |Sequence Number|   D   |   P   | F | R |       Check           |
 
    The header is encrypted with AES in ECB mode: this is safe because
-   the header is exactly one AES block long, the sequence number is
-   never repeated, the header-encryption key is not used for anything
-   else, and the high 24 bits of the sequence number, plus the check
-   field, constitute an 80-bit MAC.  The receiver maintains a
-   256-element sliding window of acceptable sequence numbers, which
-   begins one after the highest sequence number so far _processed_
-   (not received).  If the sequence number is outside this window, or
-   the check field is not all-bits-zero, the packet is discarded.  An
-   attacker's odds of being able to manipulate the D, P, or F fields
-   or the low bits of the sequence number are therefore less than one
-   in 2^80.  Unlike TCP, our sequence numbers always start at zero on
-   a new (or freshly rekeyed) circuit, and increment by one per
-   _block_, not per byte of data.  Furthermore, they do not wrap: a
-   rekeying cycle (which resets the sequence number) is required to
-   occur before the highest-received sequence number reaches 2^32.
+   the header is exactly one AES block long, the sequence number +
+   retransmit count is never repeated, the header-encryption key is
+   not used for anything else, and the high 24 bits of the sequence
+   number, plus the check field, constitute an 72-bit MAC.  The
+   receiver maintains a 256-element sliding window of acceptable
+   sequence numbers, which begins one after the highest sequence
+   number so far _processed_ (not received).  If the sequence number
+   is outside this window, or the check field is not all-bits-zero,
+   the packet is discarded.  An attacker's odds of being able to
+   manipulate the D, P, F, or R fields or the low bits of the sequence
+   number are therefore less than one in 2^72.  Unlike TCP, our
+   sequence numbers always start at zero on a new (or freshly rekeyed)
+   circuit, and increment by one per _block_, not per byte of data.
+   Furthermore, they do not wrap: a rekeying cycle (which resets the
+   sequence number) is required to occur before the highest-received
+   sequence number reaches 2^32.
 
    Following the header are two variable-length payload sections,
    "data" and "padding", whose length in bytes are given by the D and
@@ -79,6 +83,12 @@ class header
   uint8_t ciphr[16];
 
 public:
+  header()
+  {
+    memset(clear, 0xFF, sizeof clear);
+    memset(ciphr, 0xFF, sizeof ciphr);
+  }
+
   header(uint32_t s, uint16_t d, uint16_t p, opcode_t f, ecb_encryptor &ec);
   header(evbuffer *buf, ecb_decryptor &dc);
 
@@ -113,10 +123,20 @@ public:
     return opcode_t(clear[8]);
   }
 
+  uint8_t rcount() const
+  {
+    return clear[9];
+  }
+
+  // Returns false if incrementing the retransmit count has caused it
+  // to wrap around to zero.  If this happens, we have to stop trying
+  // to retransmit the block.
+  bool prepare_retransmit(uint16_t new_plen, ecb_encryptor &ec);
+
   bool valid(uint64_t window) const
   {
     // This check must run in constant time.
-    uint8_t ck = (clear[ 9] | clear[10] | clear[11] | clear[12] |
+    uint8_t ck = (clear[10] | clear[11] | clear[12] |
                   clear[13] | clear[14] | clear[15]);
     uint32_t delta = seqno() - window;
     ck |= !!(delta & ~uint32_t(0xFF));
@@ -234,6 +254,88 @@ public:
   }
 };
 
+/* The transmit queue holds blocks that we have transmitted at least
+   once but do not know have been received.  It is a 256-element circular
+   buffer of 'transmit_elt' structs, corresponding to the 256-element
+   sliding window of sequence numbers which may legitimately be
+   transmitted at any time.
+
+   Once a block is on the transmit queue, its payload length cannot
+   change, but it can be repadded if necessary.  Zero-data blocks
+   still get an evbuffer, for simplicity's sake: a transmit queue
+   element holds a pending block if and only if its data pointer is
+   non-null. */
+
+ struct transmit_elt
+ {
+   header hdr;
+   evbuffer *data;
+
+   transmit_elt() : hdr(), data(0) {}
+ };
+
+ class transmit_queue
+ {
+   transmit_elt cbuf[256];
+   uint32_t last_fully_acked;
+   uint32_t next_to_send;
+
+   transmit_queue(const transmit_queue&) DELETE_METHOD;
+   transmit_queue& operator=(const transmit_queue&) DELETE_METHOD;
+
+ public:
+   transmit_queue();
+   ~transmit_queue();
+
+   /**
+    * Return the sequence number to use for the next block to be
+    * transmitted.
+    */
+   uint32_t next_seqno() const { return next_to_send; }
+
+   /**
+    * True if the transmit queue is full, i.e. we cannot transmit
+    * anything right now.  (This does not necessarily mean that all
+    * 256 slots are occupied; selective acknowledgment may have
+    * cleared some of them.)
+    */
+   bool full() const
+   { return next_to_send - last_fully_acked > 255; }
+
+   /**
+    * True if we ought to rekey soon, i.e. the sequence number is in
+    * danger of wrapping around.
+    */
+   bool should_rekey() const { return next_to_send >= (1U<<31); }
+
+   /**
+    * Push a block (defined by header HDR and data payload DATA) on
+    * the end of the transmit queue, and immediately transmit it on
+    * connection CONN.  May not be called when full() is true.  Can
+    * fail: returns -1 for failure or 0 for success.  Regardless of
+    * success or failure, consumes DATA.
+    */
+   int queue_and_send(header const& hdr, evbuffer *data, conn_t *conn);
+
+   /**
+    * Process an acknowledgment, advancing the last_fully_acked
+    * counter and discarding blocks that have definitely been received
+    * on the far side.  Returns -1 for failure or 0 for success:
+    * failure indicates an ill-formed ack payload on the wire.
+    * Consumes DATA regardless of success or failure.
+    */
+   int process_ack(evbuffer *data);
+
+   /**
+    * Retransmit as many blocks as possible given the present state of
+    * the connections in DOWNSTREAMS.  No-op if there is nothing to be
+    * retransmitted at this time.  Returns -1 if there was material to
+    * retransmit but we did not manage to retransmit any of it, 0
+    * otherwise.
+    */
+   int retransmit(std::tr1::unordered_set<conn_t *> &downstreams);
+ };
+
 /* Most of a block's header information is processed before it reaches
    the reassembly queue; the only things the queue needs to record are
    the sequence number (which is stored implictly), the opcode, and an
@@ -241,10 +343,9 @@ public:
    evbuffer, for simplicity's sake: a reassembly queue element holds a
    received block if and only if its data pointer is non-null.
 
-   The reassembly queue is a 256-element circular buffer of
-   'reassembly_elt' structs.  This corresponds to the 256-element
-   sliding window of sequence numbers which may legitimately be
-   received at any time.  */
+   The reassembly queue is also a 256-element circular buffer, of
+   'reassembly_elt' structs, following the same logic as the transmit
+   queue. */
 
 struct reassembly_elt
 {
