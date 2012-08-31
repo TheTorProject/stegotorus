@@ -1,4 +1,3 @@
-#include <iostream>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -255,13 +254,13 @@ ApachePayloadServer::store_dict(char* dict_buf, size_t dict_buf_size)
   ofstream dict_file(_database_filename);
 
   if (!dict_file.is_open()){
-    log_debug("Fail i nopenning file:%s to store the uri dict", _database_filename.c_str());
+    log_warn("error in openning file:%s to store the uri dict: %s", _database_filename.c_str(), strerror(errno));
     return false;
   }
 
   dict_file.write(dict_buf, dict_buf_size);
   if (dict_file.bad()){
-    log_debug("Error in storing the uri dict");
+    log_warn("error in storing the uri dict: %s",strerror(errno));
     dict_file.close();
     return false;
   }

@@ -3,7 +3,6 @@
 #include <event2/event.h>
 #include <curl/curl.h>
 #include <vector>
-#include <iostream>
 #include <sstream>
 
 using namespace std;
@@ -196,7 +195,6 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
   curl_easy_setopt(_curl_easy_handle, CURLOPT_OPENSOCKETDATA, conn);
   //tells curl the socket is already connected
   curl_easy_setopt(_curl_easy_handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
-
   curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETFUNCTION, ignore_close);
 
   /** setup the buffer we communicate with chop */
@@ -300,6 +298,8 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   
   //now we are using curl to send the request
   curl_easy_setopt(_curl_easy_handle, CURLOPT_URL, uri_to_send.c_str());
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION,   discard_data);
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEDATA,       conn);
 
   CURLMcode res = curl_multi_add_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
 
@@ -433,9 +433,9 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
     char outbuf2[MAX_COOKIE_SIZE];
     char *uri_end;
 
-    size_t sofar;
+    size_t sofar = 0;
 
-    log_debug("uri: %s", p);
+    log_debug(conn, "uri: %s", p);
     uri_end = strchr(p, ' ');
     log_assert(uri_end);
     if ((size_t)(uri_end - p) > c_max_uri_length * 3/2)
@@ -452,7 +452,7 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
        //Otherwise the uri_dict sync hasn't been verified so 
       //we can't use it
       url_code = ((ApachePayloadServer*)_apache_config->payload_server)->uri_decode_book[extracted_url];
-      log_debug("url code %lu", url_code);
+      log_debug(conn, "url code %lu", url_code);
 
       if (*(url_end + sizeof("?") - 1) == 'p') { //all info are coded in url
         
@@ -465,7 +465,7 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
         
     for(size_t i = 0; i < url_meaning_length; i++)
     {
-      log_debug("url byte %u", (uint8_t)(url_code % 256));
+      log_debug(conn, "url byte %u", (uint8_t)(url_code % 256));
       outbuf2[i] = (uint8_t)(url_code % 256);
       url_code /= 256;
     }
@@ -750,7 +750,7 @@ http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
     (kind & EV_READ ? CURL_CSELECT_IN : 0) |
     (kind & EV_WRITE ? CURL_CSELECT_OUT : 0);
  
-  if (action & CURL_CSELECT_OUT) {
+  if (action == CURL_CSELECT_OUT) {
     rc = curl_multi_socket_action(steg_mod->_apache_config->_curl_multi_handle, fd, action, &steg_mod->_apache_config->_curl_running_handle);
 
   if (rc == CURLM_OK)
@@ -767,5 +767,7 @@ http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
     }
 
   }
+  else
+    log_abort(steg_mod->conn, "We are not supposed to be here, only write action is acceptable for libcur");
 
 }
