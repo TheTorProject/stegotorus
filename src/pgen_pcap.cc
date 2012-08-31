@@ -198,11 +198,11 @@ write_inflate_msg(flow *f, FILE *file, pentry_header *ph)
 
   ph->length = htonl(outlen+hdrlen);
   if (fwrite(ph, sizeof(pentry_header), 1, file)!= sizeof(pentry_header))
-      log_debug("Error writing data");
+    log_warn("error writing data: %s", strerror(errno));
   if (fwrite(hdr, hdrlen, 1, file)!= (unsigned int)hdrlen)
-      log_debug("Error writing data");
+    log_warn("error writing data: %s", strerror(errno));
   if (fwrite(outbuf, outlen, 1, file)!= (unsigned int)outlen)
-      log_debug("Error writing data");
+    log_warn("error writing data: %s", strerror(errno));
   free(buf);
   free(outbuf);
   free(hdr);
@@ -226,11 +226,11 @@ write_msg_chains(flow *f, FILE *file, pentry_header *ph)
     return write_inflate_msg(f, file, ph);
 
   if (fwrite(ph, sizeof(pentry_header), 1, file) != sizeof(pentry_header))
-      log_debug("Error writing data");
+    log_warn("error writing data: %s", strerror(errno));
 
   while (m) {
     if (fwrite(m->buf, m->len, 1, file) != m->len)
-      log_debug("Error writing data");
+      log_warn("error writing data: %s", strerror(errno));
 
     cnt += m->len;
     m = m->next_msg;

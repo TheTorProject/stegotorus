@@ -645,10 +645,10 @@ gen_traces(unsigned long n, const char *fname,
     string const& o = os.str();
     pe.length = htonl(o.size());
     if (fwrite(&pe, sizeof(pentry_header), 1, fp) != sizeof(pentry_header))
-      log_debug("Error writing data");
+      log_warn("error writing data: %s", strerror(errno));
 
     if (fwrite(o.data(), o.size(), 1, fp)!= sizeof(pentry_header))
-      log_debug("Error writing data");
+      log_warn("error writing data: %s", strerror(errno));
 
   }
 
