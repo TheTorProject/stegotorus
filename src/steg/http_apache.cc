@@ -197,8 +197,6 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
   curl_easy_setopt(_curl_easy_handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
   curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETFUNCTION, ignore_close);
 
-  curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETFUNCTION, ignore_close);
-
   /** setup the buffer we communicate with chop */
   //Every connection checks if the dict is valid
   if (_apache_config->is_clientside && !_apache_config->uri_dict_up2date
@@ -324,7 +322,6 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   // while((res = curl_multi_perform(_apache_config->_curl_multi_handle, &_apache_config->_curl_running_handle)) == CURLM_CALL_MULTI_PERFORM);
 
    return 0;
-
 }
 
 int

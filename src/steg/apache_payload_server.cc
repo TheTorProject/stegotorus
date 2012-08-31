@@ -325,7 +325,7 @@ bool ApachePayloadServer::store_dict(char* dict_buf, size_t dict_buf_size)
 
   dict_file.write(dict_buf, dict_buf_size);
   if (dict_file.bad()){
-    log_debug("Error in storing the uri dict");
+    log_warn("error in storing the uri dict: %s",strerror(errno));
     dict_file.close();
     return false;
   }
