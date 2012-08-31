@@ -2,7 +2,6 @@
    See LICENSE for other credits and copying information
 */
 
-#include <iostream>
 #include <sstream>
 #include <algorithm> //removing quotes from path
 #include <fstream> 
@@ -117,14 +116,14 @@ int PayloadScraper::scrape()
 
   if (!_payload_db.is_open())
     {
-      fprintf(stderr, "Error opening the payload database file.");
+      log_warn("error opening the payload database file: %s",strerror(errno));
       return -1;
     }
 
   /* look for doc root dir */
   if (apache_conf_parser())
     {
-      fprintf(stderr, "Error in retrieving apache doc root.\n");
+      log_warn("error in retrieving apache doc root: %s",strerror(errno));
       _payload_db.close();
       return -1;
     }
@@ -133,7 +132,7 @@ int PayloadScraper::scrape()
   path dir_path(_apache_doc_root);
   if (scrape_dir(dir_path) < 0)
     {
-      fprintf(stderr, "Error in retrieving payload dir.\n");
+      log_warn("error in retrieving payload dir: %s",strerror(errno));
       _payload_db.close();
       return -1;
     }
@@ -156,7 +155,7 @@ int PayloadScraper::apache_conf_parser()
   apache_conf = fopen(_apache_conf_filename.c_str(), "rb");
   if (apache_conf == NULL)
     {
-      fprintf(stderr, "Error opening apache config file.");
+      log_warn("error in opening apache config file: %s",strerror(errno));
       return 0;
     }
 
