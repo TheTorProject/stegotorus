@@ -8,65 +8,144 @@
 #include "connections.h"
 
 #include <event2/buffer.h>
+#include <iomanip>
 
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
    being implemented, and may change incompatibly.  */
 
 using std::tr1::unordered_set;
+using std::numeric_limits;
 
 namespace chop_blk
 {
 
 const char *
-opname(opcode_t o, char fallbackbuf[4])
+opname(unsigned int o, char fallbackbuf[4])
 {
   switch (o) {
+  case op_XXX: return "XXX";
   case op_DAT: return "DAT";
   case op_FIN: return "FIN";
   case op_RST: return "RST";
   case op_ACK: return "ACK";
-  default: {
-    unsigned int x = o;
-    if (x < op_STEG0)
-      xsnprintf(fallbackbuf, sizeof fallbackbuf, "R%02x", x);
+  default:
+    if (o > op_LAST)
+      return "^^^";
+
+    if (o < op_STEG0)
+      xsnprintf(fallbackbuf, sizeof fallbackbuf, "R%02x", o);
     else
-      xsnprintf(fallbackbuf, sizeof fallbackbuf, "S%02x", x - op_STEG0);
+      xsnprintf(fallbackbuf, sizeof fallbackbuf, "S%02x", o - op_STEG0);
     return fallbackbuf;
-  }
   }
 }
 
-header::header(uint32_t s, uint16_t d, uint16_t p, opcode_t f,
-               ecb_encryptor &ec)
+void
+debug_ack_contents(evbuffer *payload, std::ostream& os)
 {
-  if (f > op_LAST || (f >= op_RESERVED0 && f < op_STEG0)) {
-    memset(clear, 0xFF, sizeof clear); // invalid!
-    memset(ciphr, 0xFF, sizeof ciphr);
+  size_t len = evbuffer_get_length(payload);
+  os << "length " << len << "; ";
+  if (len < 4) {
+    os << "too short";
     return;
   }
 
-  // sequence number
-  clear[0] = (s >> 24) & 0xFF;
-  clear[1] = (s >> 16) & 0xFF;
-  clear[2] = (s >>  8) & 0xFF;
-  clear[3] = (s      ) & 0xFF;
+  uint8_t *buf = evbuffer_pullup(payload, len);
+  log_assert(buf);
 
-  // D field
-  clear[4] = (d >>  8) & 0xFF;
-  clear[5] = (d      ) & 0xFF;
+  uint32_t hsn = ((uint32_t(buf[0]) << 24) |
+                  (uint32_t(buf[1]) << 16) |
+                  (uint32_t(buf[2]) <<  8) |
+                  (uint32_t(buf[3])      ));
+  os << "through " << hsn;
+  if (len == 4)
+    return;
 
-  // P field
-  clear[6] = (p >>  8) & 0xFF;
-  clear[7] = (p      ) & 0xFF;
+  size_t i;
+  for (i = 0; i < 32; i++) {
+    if (i + 4 >= len)
+      break;
 
-  // F field
-  clear[8] = uint8_t(f);
+    uint8_t c = buf[i+4];
+    for (int j = 0; j < 8; j++)
+      if (c & (1 << j))
+        os << ", " << (hsn + 1 + i*8 + j);
+  }
+  if (i + 4 == len)
+    return;
 
-  // R field
-  clear[9] = 0;
+  os << "; trailing junk: " << std::hex << std::setw(2) << std::setfill('0');
 
-  // Check field
+  for (i += 4; i < len; i++)
+    os << (unsigned int)buf[i];
+}
+
+// Note: this function must take exactly the same amount of time to
+// execute regardless of its inputs.
+header::header(const uint8_t *ciphr, ecb_decryptor &dc, uint32_t window)
+{
+  uint8_t clear[16];
+  dc.decrypt(clear, ciphr);
+
+  uint32_t s_ = ((uint32_t(clear[0]) << 24) |
+                 (uint32_t(clear[1]) << 16) |
+                 (uint32_t(clear[2]) <<  8) |
+                 (uint32_t(clear[3])      ));
+
+  uint16_t d_ = ((uint16_t(clear[4]) <<  8) |
+                 (uint16_t(clear[5])      ));
+  uint16_t p_ = ((uint16_t(clear[6]) <<  8) |
+                 (uint16_t(clear[7])      ));
+
+  uint8_t f_  = clear[8];
+  uint8_t r_  = clear[9];
+
+  bool checkOK = !(clear[10] | clear[11] | clear[12] |
+                   clear[13] | clear[14] | clear[15]);
+
+  uint32_t delta = s_ - window;
+  bool deltaOK = !(delta & ~uint32_t(0xFF));
+
+  bool fOK = ((f >= op_RESERVED0) & (f < op_STEG0));
+
+  bool ok = (checkOK | deltaOK | fOK);
+
+  if (ok) {
+    s = s_;
+    d = d_;
+    p = p_;
+    f = f_;
+    r = r_;
+  } else {
+    s = 0;
+    d = 0;
+    p = 0;
+    f = op_XXX;
+    r = 0;
+  }
+}
+
+void
+header::encode(uint8_t *ciphr, ecb_encryptor &ec) const
+{
+  uint8_t clear[16];
+
+  clear[ 0] = (s >> 24) & 0xFF;
+  clear[ 1] = (s >> 16) & 0xFF;
+  clear[ 2] = (s >>  8) & 0xFF;
+  clear[ 3] = (s      ) & 0xFF;
+
+  clear[ 4] = (d >>  8) & 0xFF;
+  clear[ 5] = (d      ) & 0xFF;
+
+  clear[ 6] = (p >>  8) & 0xFF;
+  clear[ 7] = (p      ) & 0xFF;
+
+  clear[ 8] = uint8_t(f);
+
+  clear[ 9] = r;
+
   clear[10] = 0;
   clear[11] = 0;
   clear[12] = 0;
@@ -77,31 +156,13 @@ header::header(uint32_t s, uint16_t d, uint16_t p, opcode_t f,
   ec.encrypt(ciphr, clear);
 }
 
-header::header(evbuffer *buf, ecb_decryptor &dc)
-{
-  if (evbuffer_copyout(buf, ciphr, sizeof ciphr) != sizeof ciphr) {
-    memset(clear, 0xFF, sizeof clear);
-    memset(ciphr, 0xFF, sizeof ciphr);
-    return;
-  }
-  dc.decrypt(clear, ciphr);
-}
-
 bool
-header::prepare_retransmit(uint16_t new_plen, ecb_encryptor &ec)
+header::prepare_retransmit(uint16_t new_plen)
 {
-  log_assert(check());
-  if (clear[9] == 255)
+  if (r == 255)
     return false;
-
-  // R field
-  clear[9]++;
-
-  // P field
-  clear[6] = (new_plen >>  8) & 0xFF;
-  clear[7] = (new_plen      ) & 0xFF;
-
-  ec.encrypt(ciphr, clear);
+  r++;
+  p = new_plen;
   return true;
 }
 
@@ -123,10 +184,13 @@ ack_payload::ack_payload(evbuffer *wire, uint32_t hfloor)
 
   maxusedbyte = evbuffer_remove(wire, window, sizeof window);
 
-  // there shouldn't be any _more_ data than that, and the hsn should
-  // be in the range [hfloor, hfloor+256).
+  // there shouldn't be any _more_ data than that, the hsn should
+  // be in the range [hfloor-1, hfloor+256), and the first bit of the
+  // window should be zero.
   if (evbuffer_get_length(wire) > 0 ||
-      hsn_ < hfloor || hsn_ >= hfloor+256)
+      (hfloor >= 1 && hsn_ < hfloor-1) ||
+      hsn_ >= hfloor+256 ||
+      block_received(hsn_ + 1))
     hsn_ = -1; // invalidate
 
   evbuffer_free(wire);
@@ -162,7 +226,7 @@ ack_payload::serialize() const
 }
 
 transmit_queue::transmit_queue()
-  : last_fully_acked(0), next_to_send(0)
+  : next_to_ack(0), next_to_send(0)
 {
 }
 
@@ -173,90 +237,110 @@ transmit_queue::~transmit_queue()
       evbuffer_free(cbuf[i].data);
 }
 
-int
-transmit_queue::queue_and_send(header const& hdr, evbuffer *data,
-                               chop_conn_t *conn,
-                               gcm_encryptor& gc)
+uint32_t
+transmit_queue::enqueue(opcode_t f, evbuffer *data, uint16_t padding)
 {
+  log_assert(opcode_valid(f));
+  log_assert(evbuffer_get_length(data) <= numeric_limits<uint16_t>::max());
   log_assert(!full());
-  log_assert(hdr.seqno() == next_to_send);
-  log_assert(!cbuf[next_to_send & 0xFF].data);
+
+  uint32_t seqno = next_to_send;
+  transmit_elt &elt = cbuf[seqno & 0xFF];
+  elt.hdr = header(seqno, evbuffer_get_length(data), padding, f);
+  elt.data = data;
+
+  next_to_send++;
+  return seqno;
+}
+
+int
+transmit_queue::transmit(transmit_elt &elt,
+                         evbuffer *output,
+                         ecb_encryptor &ec,
+                         gcm_encryptor &gc)
+{
+  log_assert(elt.data);
 
   struct evbuffer *block = evbuffer_new();
   if (!block) {
-    log_warn(conn, "memory allocation failure");
-    evbuffer_free(data);
+    log_warn("memory allocation failure");
     return -1;
   }
 
-  size_t d = hdr.dlen();
-  size_t p = hdr.plen();
-  size_t blocksize = d + p + MIN_BLOCK_SIZE;
+  size_t d = elt.hdr.dlen();
+  size_t p = elt.hdr.plen();
+  size_t blocksize = elt.hdr.total_len();
   struct evbuffer_iovec v;
   if (evbuffer_reserve_space(block, blocksize, &v, 1) != 1 ||
       v.iov_len < blocksize) {
-    log_warn(conn, "memory allocation failure");
+    log_warn("memory allocation failure");
     evbuffer_free(block);
-    evbuffer_free(data);
     return -1;
   }
   v.iov_len = blocksize;
 
-  memcpy(v.iov_base, hdr.nonce(), HEADER_LEN);
+  elt.hdr.encode((uint8_t *)v.iov_base, ec);
 
-  uint8_t encodebuf[SECTION_LEN*2];
-  if (evbuffer_copyout(data, encodebuf, d) != (ssize_t)d) {
-    log_warn(conn, "failed to extract data");
+  uint8_t encodebuf[d + p];
+  if (evbuffer_copyout(elt.data, encodebuf, d) != (ssize_t)d) {
+    log_warn("failed to extract data");
     evbuffer_free(block);
-    evbuffer_free(data);
     return -1;
   }
   memset(encodebuf + d, 0, p);
   gc.encrypt((uint8_t *)v.iov_base + HEADER_LEN,
-             encodebuf, d + p, hdr.nonce(), HEADER_LEN);
+             encodebuf, d + p, (uint8_t *)v.iov_base, HEADER_LEN);
   if (evbuffer_commit_space(block, &v, 1)) {
-    log_warn(conn, "failed to commit block buffer");
+    log_warn("failed to commit block buffer");
     evbuffer_free(block);
-    evbuffer_free(data);
     return -1;
   }
 
-  if (conn->send(block)) {
+  if (evbuffer_add_buffer(output, block)) {
+    log_warn("failed to transfer block to output queue");
     evbuffer_free(block);
-    evbuffer_free(data);
     return -1;
   }
-
-  cbuf[next_to_send & 0xFF].hdr = hdr;
-  cbuf[next_to_send & 0xFF].data = data;
-  next_to_send++;
 
   evbuffer_free(block);
   return 0;
 }
 
 int
+transmit_queue::retransmit(transmit_elt &elt,
+                           uint16_t new_padding,
+                           evbuffer *output,
+                           ecb_encryptor &ec,
+                           gcm_encryptor &gc)
+{
+  if (!elt.hdr.prepare_retransmit(new_padding)) {
+    log_warn("block %u retransmitted too many times", elt.hdr.seqno());
+    return -1;
+  }
+  return transmit(elt, output, ec, gc);
+}
+
+int
 transmit_queue::process_ack(evbuffer *data)
 {
-  ack_payload ack(data, last_fully_acked);
+  ack_payload ack(data, next_to_ack);
   if (!ack.valid()) return -1;
 
   uint32_t hsn = ack.hsn();
-  if (hsn > next_to_send) return -1;
+  if (hsn >= next_to_send) return -1;
 
-  for (; last_fully_acked <= hsn; last_fully_acked++) {
-    uint8_t j = last_fully_acked & 0xFF;
+  for (; next_to_ack <= hsn; next_to_ack++) {
+    uint8_t j = next_to_ack & 0xFF;
     if (cbuf[j].data) {
       evbuffer_free(cbuf[j].data);
       cbuf[j].data = 0;
     }
   }
-  last_fully_acked--;
 
-  if (last_fully_acked == next_to_send - 1)
+  if (next_to_ack == next_to_send)
     return 0;
 
-  for (uint32_t i = last_fully_acked + 1; i < next_to_send; i++) {
+  for (uint32_t i = next_to_ack; i < next_to_send; i++) {
     uint8_t j = i & 0xFF;
     if (cbuf[j].data && ack.block_received(i)) {
       evbuffer_free(cbuf[j].data);
@@ -267,39 +351,15 @@ transmit_queue::process_ack(evbuffer *data)
   return 0;
 }
 
-bool
-transmit_queue::retransmit(unordered_set<conn_t *> &downstreams)
-{
-  bool something_to_retransmit = false;
-  bool retransmitted = false;
-
-  for (uint32_t seq = last_fully_acked + 1; seq < next_to_send; seq++) {
-    uint8_t j = seq & 0xFF;
-    if (cbuf[j].data) {
-      something_to_retransmit = true;
-      if (retransmit_one(cbuf[j], downstreams))
-        retransmitted = true;
-    }
-  }
-
-  return something_to_retransmit ? retransmitted : true;
-}
-
-bool
-transmit_queue::retransmit_one(transmit_elt & /*elt*/,
-                               unordered_set<conn_t *> & /*downstreams*/)
-{
-  return false;
-}
-
 reassembly_queue::reassembly_queue()
-  : next_to_process(0)
+  : next_to_process(0), count(0)
 {
   memset(cbuf, 0, sizeof cbuf);
 }
 
 reassembly_queue::~reassembly_queue()
 {
+  if (count == 0) return; // short cut for ideal case
   for (int i = 0; i < 256; i++)
     if (cbuf[i].data)
       evbuffer_free(cbuf[i].data);
@@ -321,35 +381,37 @@ reassembly_queue::remove_next()
     cbuf[front].data = 0;
     cbuf[front].op   = op_DAT;
     next_to_process++;
+    count--;
   }
   return rv;
 }
 
 bool
-reassembly_queue::insert(uint32_t seqno, opcode_t op,
-                         evbuffer *data, conn_t *conn)
+reassembly_queue::insert(uint32_t seqno, opcode_t op, evbuffer *data)
 {
   if (seqno - window() > 255) {
-    log_info(conn, "block outside receive window");
+    log_info("block outside receive window");
     evbuffer_free(data);
     return false;
   }
   uint8_t front = next_to_process & 0xFF;
   uint8_t pos = front + (seqno - window());
   if (cbuf[pos].data) {
-    log_info(conn, "duplicate block");
+    log_info("duplicate block");
     evbuffer_free(data);
     return false;
   }
 
   cbuf[pos].data = data;
   cbuf[pos].op   = op;
+  count++;
   return true;
 }
 
 void
 reassembly_queue::reset()
 {
+  log_assert(count == 0);
   for (int i = 0; i < 256; i++) {
     log_assert(!cbuf[i].data);
   }
@@ -359,12 +421,12 @@ reassembly_queue::reset()
 evbuffer *
 reassembly_queue::gen_ack() const
 {
-  ack_payload payload(next_to_process - 1);
+  ack_payload payload(next_to_process == 0 ? 0 : next_to_process - 1);
   uint8_t front = next_to_process & 0xFF;
   uint8_t pos = front;
   do {
     if (cbuf[pos].data)
-      payload.set_block_received((next_to_process - 1) + (pos - front));
+      payload.set_block_received(next_to_process + (pos - front));
     pos++;
   } while (pos != front);
 

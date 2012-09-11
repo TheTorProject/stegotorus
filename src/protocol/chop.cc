@@ -4,11 +4,14 @@
 
 #include "util.h"
 #include "chop_blk.h"
+#include "connections.h"
 #include "crypt.h"
+#include "protocol.h"
 #include "rng.h"
 #include "steg.h"
 
 #include <tr1/unordered_map>
+#include <sstream>
 #include <vector>
 
 #include <event2/event.h>
@@ -25,10 +28,37 @@ using std::make_pair;
 
 using namespace chop_blk;
 
+namespace {
+
+struct chop_conn_t;
+struct chop_circuit_t;
+struct chop_config_t;
+
 typedef unordered_map<uint32_t, chop_circuit_t *> chop_circuit_table;
+
+struct chop_conn_t : conn_t
+{
+  chop_config_t *config;
+  chop_circuit_t *upstream;
+  steg_t *steg;
+  struct evbuffer *recv_pending;
+  struct event *must_send_timer;
+  bool sent_handshake : 1;
+  bool no_more_transmissions : 1;
+
+  CONN_DECLARE_METHODS(chop);
+
+  int recv_handshake();
+  int send(struct evbuffer *block);
+
+  void send();
+  bool must_send_p() const;
+  static void must_send_timeout(evutil_socket_t, short, void *arg);
+};
 
 struct chop_circuit_t : circuit_t
 {
+  transmit_queue tx_queue;
   reassembly_queue recv_queue;
   unordered_set<chop_conn_t *> downstreams;
   gcm_encryptor *send_crypt;
@@ -38,7 +68,7 @@ struct chop_circuit_t : circuit_t
   chop_config_t *config;
 
   uint32_t circuit_id;
-  uint32_t send_seq;
+  uint32_t last_acked;
   uint32_t dead_cycles;
   bool received_fin : 1;
   bool sent_fin : 1;
@@ -55,9 +85,12 @@ struct chop_circuit_t : circuit_t
   int send_targeted(chop_conn_t *conn, size_t blocksize);
   int send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
                     struct evbuffer *payload);
+  int maybe_send_ack();
 
-  chop_conn_t *pick_connection(size_t desired, size_t *blocksize);
+  chop_conn_t *pick_connection(size_t desired, size_t minimum,
+                               size_t *blocksize);
 
+  int recv_block(uint32_t seqno, opcode_t op, evbuffer *payload);
   int process_queue();
   int check_for_eof();
 
@@ -85,6 +118,7 @@ struct chop_config_t : config_t
   chop_circuit_table circuits;
   bool trace_packets;
   bool encryption;
+  bool retransmit;
 
   CONFIG_DECLARE_METHODS(chop);
 };
@@ -96,6 +130,7 @@ chop_config_t::chop_config_t()
   ignore_socks_destination = true;
   trace_packets = false;
   encryption = true;
+  retransmit = true;
 }
 
 chop_config_t::~chop_config_t()
@@ -155,6 +190,8 @@ chop_config_t::init(int n_options, const char *const *options)
       log_enable_timestamps();
     } else if (!strcmp(options[1], "--disable-encryption")) {
       encryption = false;
+    } else if (!strcmp(options[1], "--disable-retransmit")) {
+      retransmit = false;
     } else {
       log_warn("chop: unrecognized option '%s'", options[1]);
       goto usage;
@@ -210,7 +247,7 @@ chop_config_t::init(int n_options, const char *const *options)
 }
 
 struct evutil_addrinfo *
-chop_config_t::get_listen_addrs(size_t n) const 
+chop_config_t::get_listen_addrs(size_t n) const
 {
   if (mode == LSN_SIMPLE_SERVER) {
     if (n < down_addresses.size())
@@ -427,24 +464,77 @@ chop_circuit_t::send()
     log_debug(this, "no downstream connections");
     no_target_connection = true;
   } else {
-    // Send at least one block, even if there is no real data to send.
-    do {
-      log_debug(this, "%lu bytes to send", (unsigned long)avail);
-      size_t blocksize;
-      chop_conn_t *target = pick_connection(avail, &blocksize);
-      if (!target) {
-        // this is not an error; it can happen e.g. when the server has
-        // something to send immediately and the client hasn't spoken yet
-        log_debug(this, "no target connection available");
-        no_target_connection = true;
+    bool did_retransmit = false;
+    if (avail == 0 && !(upstream_eof && !sent_fin) && config->retransmit) {
+      // Consider retransmission.
+      evbuffer *block = 0;
+      for (transmit_queue::iterator i = tx_queue.begin();
+           i != tx_queue.end();
+           ++i) {
+        transmit_elt &el = *i;
+        size_t lo = MIN_BLOCK_SIZE + el.hdr.dlen();
+        size_t room;
+        chop_conn_t *conn = pick_connection(lo, lo, &room);
+        if (!conn)
+          continue;
+        log_assert(lo <= room);
+
+        if (!block)
+          block = evbuffer_new();
+        if (!block)
+          log_abort("memory allocation failed");
+        if (tx_queue.retransmit(el, room - lo, block,
+                                *send_hdr_crypt, *send_crypt) ||
+            conn->send(block)) {
+          evbuffer_free(block);
+          return -1;
+        }
+
+        char fallbackbuf[4];
+        log_debug(conn, "retransmitted block %u <d=%lu p=%lu f=%s>",
+                  el.hdr.seqno(),
+                  (unsigned long)el.hdr.dlen(),
+                  (unsigned long)el.hdr.plen(),
+                  opname(el.hdr.opcode(), fallbackbuf));
+
+        if (config->trace_packets)
+          fprintf(stderr,
+                  "T:%.4f: ckt %u <ntp %u outq %lu>: "
+                  "resend %lu <d=%lu p=%lu f=%s>\n",
+                  log_get_timestamp(), this->serial,
+                  this->recv_queue.window(),
+                  (unsigned long)evbuffer_get_length(
+                                bufferevent_get_input(this->up_buffer)),
+                  (unsigned long)el.hdr.seqno(),
+                  (unsigned long)el.hdr.dlen(),
+                  (unsigned long)el.hdr.plen(),
+                  opname(el.hdr.opcode(), fallbackbuf));
+
+        evbuffer_free(block);
+        did_retransmit = true;
         break;
       }
+    }
 
-      if (send_targeted(target, blocksize))
-        return -1;
+    if (!did_retransmit)
+    // Send at least one block, even if there is no real data to send.
+      do {
+        log_debug(this, "%lu bytes to send", (unsigned long)avail);
+        size_t blocksize;
+        chop_conn_t *target = pick_connection(avail, 0, &blocksize);
+        if (!target) {
+          // this is not an error; it can happen e.g. when the server has
+          // something to send immediately and the client hasn't spoken yet
+          log_debug(this, "no target connection available");
+          no_target_connection = true;
+          break;
+        }
 
-      avail = evbuffer_get_length(xmit_pending);
-    } while (avail > 0);
+        if (send_targeted(target, blocksize))
+          return -1;
+
+        avail = evbuffer_get_length(xmit_pending);
+      } while (avail > 0);
   }
 
   if (avail0 == avail) { // no forward progress
@@ -476,28 +566,146 @@ chop_circuit_t::send_eof()
 int
 chop_circuit_t::send_special(opcode_t f, struct evbuffer *payload)
 {
-  size_t d = payload ? evbuffer_get_length(payload) : 0;
-  size_t blocksize;
-  log_assert(d <= SECTION_LEN);
-  chop_conn_t *conn = pick_connection(d, &blocksize);
-  size_t lo = MIN_BLOCK_SIZE + ((conn && !conn->sent_handshake)
-                                ? HANDSHAKE_LEN : 0);
-
-  if (!conn || (blocksize - lo < d)) {
-    log_warn("no usable connection for special block "
-             "(opcode %02x, need %lu bytes, have %lu)",
-             (unsigned int)f, (unsigned long)(d + lo),
-             (unsigned long)blocksize);
+  if (!payload)
+    payload = evbuffer_new();
+  if (!payload) {
+    log_warn(this, "memory allocation failure");
     return -1;
   }
 
-  return send_targeted(conn, d, (blocksize - lo) - d, f, payload);
+  size_t d = evbuffer_get_length(payload);
+  log_assert(d <= SECTION_LEN);
+
+  if (tx_queue.full()) {
+    log_warn(this, "transmit queue full, cannot send");
+    return -1;
+  }
+
+  size_t blocksize = 0;
+  size_t p;
+  chop_conn_t *conn = pick_connection(d, d, &blocksize);
+  if (!conn || blocksize < MIN_BLOCK_SIZE + d) {
+    char fallbackbuf[4];
+    log_info("no usable connection for special block "
+             "(opcode %s, need %lu bytes, have %lu)",
+             opname(f, fallbackbuf), (unsigned long)(d + MIN_BLOCK_SIZE),
+             (unsigned long)blocksize);
+    conn = 0;
+    p = 0;
+  } else {
+    p = blocksize - (d + MIN_BLOCK_SIZE);
+  }
+
+  // Regardless of whether we were able to find a connection right now,
+  // enqueue the block for transmission when possible.
+  // The transmit queue takes ownership of 'payload' at this point.
+  uint32_t seqno = tx_queue.enqueue(f, payload, p);
+
+  // Not having a connection to use right now does not constitute a failure.
+  if (!conn)
+    return 0;
+
+  struct evbuffer *block = evbuffer_new();
+  if (!block) {
+    log_warn(conn, "memory allocation failure");
+    return -1;
+  }
+  if (tx_queue.transmit(seqno, block, *send_hdr_crypt, *send_crypt)) {
+    log_warn(conn, "encryption failure for block %u", seqno);
+    evbuffer_free(block);
+    return -1;
+  }
+
+  if (conn->send(block)) {
+    evbuffer_free(block);
+    return -1;
+  }
+  evbuffer_free(block);
+
+  char fallbackbuf[4];
+  log_debug(conn, "transmitted block %u <d=%lu p=%lu f=%s>",
+            seqno, (unsigned long)d, (unsigned long)p,
+            opname(f, fallbackbuf));
+
+  if (config->trace_packets)
+    fprintf(stderr,
+            "T:%.4f: ckt %u <ntp %u outq %lu>: "
+            "send %lu <d=%lu p=%lu f=%s>\n",
+            log_get_timestamp(), this->serial,
+            this->recv_queue.window(),
+            (unsigned long)evbuffer_get_length(
+                              bufferevent_get_input(this->up_buffer)),
+            (unsigned long)seqno,
+            (unsigned long)d,
+            (unsigned long)p,
+            opname(f, fallbackbuf));
+
+  if (f == op_FIN) {
+    sent_fin = true;
+    read_eof = true;
+  }
+  if ((f == op_DAT && d > 0) || f == op_FIN)
+    // We are making forward progress if we are _either_ sending or
+    // receiving data.
+    dead_cycles = 0;
+  return 0;
 }
 
 int
 chop_circuit_t::send_targeted(chop_conn_t *conn)
 {
   size_t avail = evbuffer_get_length(bufferevent_get_input(up_buffer));
+  if (avail == 0 && !(upstream_eof && !sent_fin) && config->retransmit) {
+    // Consider retransmission if we have nothing new to send.
+    evbuffer *block = evbuffer_new();
+    if (!block)
+      log_abort("memory allocation failed");
+    for (transmit_queue::iterator i = tx_queue.begin();
+         i != tx_queue.end();
+         ++i) {
+      transmit_elt &el = *i;
+      size_t lo = MIN_BLOCK_SIZE + el.hdr.dlen();
+      size_t hi = MAX_BLOCK_SIZE;
+      if (!conn->sent_handshake) {
+        lo += HANDSHAKE_LEN;
+        hi += HANDSHAKE_LEN;
+      }
+
+      size_t room = conn->steg->transmit_room(lo, lo, hi);
+      if (lo <= room && room <= hi &&
+          !tx_queue.retransmit(el, room - lo, block,
+                               *send_hdr_crypt, *send_crypt)) {
+        if (conn->send(block)) {
+          evbuffer_free(block);
+          return -1;
+        }
+        evbuffer_free(block);
+
+        char fallbackbuf[4];
+        log_debug(conn, "retransmitted block %u <d=%lu p=%lu f=%s>",
+                  el.hdr.seqno(),
+                  (unsigned long)el.hdr.dlen(),
+                  (unsigned long)el.hdr.plen(),
+                  opname(el.hdr.opcode(), fallbackbuf));
+
+        if (config->trace_packets)
+          fprintf(stderr,
+                  "T:%.4f: ckt %u <ntp %u outq %lu>: "
+                  "resend %lu <d=%lu p=%lu f=%s>\n",
+                  log_get_timestamp(), this->serial,
+                  this->recv_queue.window(),
+                  (unsigned long)evbuffer_get_length(
+                              bufferevent_get_input(this->up_buffer)),
+                  (unsigned long)el.hdr.seqno(),
+                  (unsigned long)el.hdr.dlen(),
+                  (unsigned long)el.hdr.plen(),
+                  opname(el.hdr.opcode(), fallbackbuf));
+
+        return 0;
+      }
+    }
+  }
+
   if (avail > SECTION_LEN)
     avail = SECTION_LEN;
   avail += MIN_BLOCK_SIZE;
@@ -562,65 +770,61 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
   log_assert(d <= SECTION_LEN);
   log_assert(p <= SECTION_LEN);
 
+  if (tx_queue.full()) {
+    log_warn(conn, "transmit queue full, cannot send");
+    return -1;
+  }
+
+  struct evbuffer *data = evbuffer_new();
+  if (!data) {
+    log_warn(conn, "memory allocation failure");
+    return -1;
+  }
+
+  if (evbuffer_remove_buffer(payload, data, d) != (int)d) {
+    log_warn(conn, "failed to extract payload");
+    evbuffer_free(data);
+    return -1;
+  }
+
+  // The transmit queue takes ownership of 'data' at this point.
+  uint32_t seqno = tx_queue.enqueue(f, data, p);
+
   struct evbuffer *block = evbuffer_new();
   if (!block) {
     log_warn(conn, "memory allocation failure");
     return -1;
   }
-
-  size_t blocksize = d + p + MIN_BLOCK_SIZE;
-  struct evbuffer_iovec v;
-  if (evbuffer_reserve_space(block, blocksize, &v, 1) != 1 ||
-      v.iov_len < blocksize) {
-    log_warn(conn, "memory allocation failure");
-    return -1;
-  }
-  v.iov_len = blocksize;
-
-  header hdr(send_seq, d, p, f, *send_hdr_crypt);
-  memcpy(v.iov_base, hdr.nonce(), HEADER_LEN);
-
-  uint8_t encodebuf[SECTION_LEN*2];
-  if (payload) {
-    if (evbuffer_copyout(payload, encodebuf, d) != (ssize_t)d) {
-      log_warn(conn, "failed to extract payload");
-      evbuffer_free(block);
-      return -1;
-    }
-  }
-  memset(encodebuf + d, 0, p);
-  send_crypt->encrypt((uint8_t *)v.iov_base + HEADER_LEN, encodebuf,
-                      d + p, hdr.nonce(), HEADER_LEN);
-  if (evbuffer_commit_space(block, &v, 1)) {
-    log_warn(conn, "failed to commit block buffer");
+  if (tx_queue.transmit(seqno, block, *send_hdr_crypt, *send_crypt)) {
+    log_warn(conn, "encryption failure for block %u", seqno);
     evbuffer_free(block);
     return -1;
   }
-
-  char fallbackbuf[4];
-  log_debug(conn, "transmitting block %u <d=%lu p=%lu f=%s>",
-            hdr.seqno(), (unsigned long)hdr.dlen(), (unsigned long)hdr.plen(),
-            opname(hdr.opcode(), fallbackbuf));
-
-  if (config->trace_packets)
-    fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: send %lu <d=%lu p=%lu f=%s>\n",
-            log_get_timestamp(), this->serial,
-            this->recv_queue.window(),
-              (unsigned long)evbuffer_get_length(bufferevent_get_input(this->up_buffer)),
-            (unsigned long)hdr.seqno(),
-            (unsigned long)hdr.dlen(),
-            (unsigned long)hdr.plen(),
-            opname(hdr.opcode(), fallbackbuf));
 
   if (conn->send(block)) {
     evbuffer_free(block);
     return -1;
   }
-
   evbuffer_free(block);
-  evbuffer_drain(payload, d);
 
-  send_seq++;
+  char fallbackbuf[4];
+  log_debug(conn, "transmitted block %u <d=%lu p=%lu f=%s>",
+            seqno, (unsigned long)d, (unsigned long)p,
+            opname(f, fallbackbuf));
+
+  if (config->trace_packets)
+    fprintf(stderr,
+            "T:%.4f: ckt %u <ntp %u outq %lu>: "
+            "send %lu <d=%lu p=%lu f=%s>\n",
+            log_get_timestamp(), this->serial,
+            this->recv_queue.window(),
+            (unsigned long)evbuffer_get_length(
+                              bufferevent_get_input(this->up_buffer)),
+            (unsigned long)seqno,
+            (unsigned long)d,
+            (unsigned long)p,
+            opname(f, fallbackbuf));
+
   if (f == op_FIN) {
     sent_fin = true;
     read_eof = true;
@@ -635,21 +839,26 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
 // N.B. 'desired' is the desired size of the _data section_, and
 // 'blocksize' on output is the size to make the _entire block_.
 chop_conn_t *
-chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
+chop_circuit_t::pick_connection(size_t desired, size_t minimum,
+                                size_t *blocksize)
 {
   size_t maxbelow = 0;
   size_t minabove = MAX_BLOCK_SIZE + 1;
   chop_conn_t *targbelow = 0;
   chop_conn_t *targabove = 0;
 
+  log_assert(minimum <= SECTION_LEN);
+
   if (desired > SECTION_LEN)
     desired = SECTION_LEN;
 
-  desired += MIN_BLOCK_SIZE;
-
   // If we have any data to transmit, ensure we do not send a block
   // that contains no data at all.
-  size_t lo = MIN_BLOCK_SIZE + (desired == MIN_BLOCK_SIZE ? 0 : 1);
+  if (desired > 0 && minimum == 0)
+    minimum = 1;
+
+  desired += MIN_BLOCK_SIZE;
+  minimum += MIN_BLOCK_SIZE;
 
   log_debug(this, "target block size %lu bytes", (unsigned long)desired);
 
@@ -675,7 +884,8 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
     }
 
     size_t shake = conn->sent_handshake ? 0 : HANDSHAKE_LEN;
-    size_t room = conn->steg->transmit_room(desired + shake, lo + shake,
+    size_t room = conn->steg->transmit_room(desired + shake,
+                                            minimum + shake,
                                             MAX_BLOCK_SIZE + shake);
     if (room == 0) {
       log_debug(conn, "offers 0 bytes (%s)",
@@ -683,10 +893,10 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
       continue;
     }
 
-    if (room < lo + shake || room >= MAX_BLOCK_SIZE + shake)
+    if (room < minimum + shake || room >= MAX_BLOCK_SIZE + shake)
       log_abort(conn, "steg size request (%lu) out of range [%lu, %lu]",
                 (unsigned long)room,
-                (unsigned long)(lo + shake),
+                (unsigned long)(minimum + shake),
                 (unsigned long)(MAX_BLOCK_SIZE + shake));
 
     log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
@@ -722,6 +932,72 @@ chop_circuit_t::pick_connection(size_t desired, size_t *blocksize)
     *blocksize = maxbelow;
     return targbelow;
   }
+}
+
+int
+chop_circuit_t::maybe_send_ack()
+{
+  // Send acks aggressively if we are experiencing dead cycles *and*
+  // there are blocks on the receive queue.  Otherwise, send them only
+  // every 64 blocks received.  This heuristic will probably need
+  // adjustment.
+  if (recv_queue.window() - last_acked < 64 &&
+      (!dead_cycles || recv_queue.empty()))
+    return 0;
+
+  evbuffer *ackp = recv_queue.gen_ack();
+  if (log_do_debug()) {
+    std::ostringstream ackdump;
+    debug_ack_contents(ackp, ackdump);
+    log_debug(this, "sending ACK: %s", ackdump.str().c_str());
+  }
+  return send_special(op_ACK, ackp);
+}
+
+// Some blocks are to be processed immediately upon receipt.
+int
+chop_circuit_t::recv_block(uint32_t seqno, opcode_t op, evbuffer *data)
+{
+  switch (op) {
+  case op_DAT:
+  case op_FIN:
+    // No special handling required.
+    goto insert;
+
+  case op_RST:
+    // Remote signaled a protocol error.  Disconnect.
+    log_info(this, "received RST; disconnecting circuit");
+    circuit_recv_eof(this);
+    evbuffer_free(data);
+    goto zap;
+
+  case op_ACK:
+    if (log_do_debug()) {
+      std::ostringstream ackdump;
+      debug_ack_contents(data, ackdump);
+      log_debug(this, "received ACK: %s", ackdump.str().c_str());
+    }
+    if (tx_queue.process_ack(data))
+      log_warn(this, "protocol error: invalid ACK payload");
+    goto zap;
+
+  case op_XXX:
+  default:
+    char fallbackbuf[4];
+    log_warn(this, "protocol error: unsupported block opcode %s",
+             opname(op, fallbackbuf));
+    evbuffer_free(data);
+    goto zap;
+  }
+
+ zap:
+  // Block has been consumed; fill in the hole in the receive queue.
+  op = op_DAT;
+  data = evbuffer_new();
+
+ insert:
+  recv_queue.insert(seqno, op, data);
+  return 0;
 }
 
 int
@@ -761,18 +1037,11 @@ chop_circuit_t::process_queue()
       }
       break;
 
-    case op_RST:
-      log_info(this, "received RST; disconnecting circuit");
-      circuit_recv_eof(this);
-      pending_error = true;
-      break;
-
+    // no other opcodes should get this far
     default:
       char fallbackbuf[4];
-      log_warn(this, "protocol error: unsupported block opcode %s",
-               opname(blk.op, fallbackbuf));
-      pending_error = true;
-      break;
+      log_abort("f=%s block should never appear on receive queue",
+                opname(blk.op, fallbackbuf));
     }
 
     evbuffer_free(blk.data);
@@ -793,6 +1062,9 @@ chop_circuit_t::process_queue()
 
   log_debug(this, "processed %u blocks", count);
   if (sent_error)
+    return -1;
+
+  if (maybe_send_ack())
     return -1;
 
   // It may have become possible to send queued data or a FIN.
@@ -1028,28 +1300,37 @@ chop_conn_t::recv()
       break;
     }
 
-    header hdr(recv_pending, *upstream->recv_hdr_crypt);
-    if (!hdr.valid(upstream->recv_queue.window())) {
-      const uint8_t *c = hdr.cleartext();
+    uint8_t ciphr_hdr[HEADER_LEN];
+    if (evbuffer_copyout(recv_pending, ciphr_hdr, HEADER_LEN) !=
+        (ssize_t)HEADER_LEN) {
+      log_warn(this, "failed to copy out %lu bytes (header)",
+               (unsigned long)HEADER_LEN);
+      break;
+    }
+
+    header hdr(ciphr_hdr, *upstream->recv_hdr_crypt,
+               upstream->recv_queue.window());
+    if (!hdr.valid()) {
+      uint8_t c[HEADER_LEN];
+      upstream->recv_hdr_crypt->decrypt(c, ciphr_hdr);
       char fallbackbuf[4];
       log_info(this, "invalid block header: "
-               "%lu|%lu|%lu|%s|%02x%02x%02x%02x%02x%02x%02x",
-               (unsigned long)hdr.seqno(),
-               (unsigned long)hdr.dlen(),
-               (unsigned long)hdr.plen(),
-               opname(hdr.opcode(), fallbackbuf),
+               "%02x%02x%02x%02x|%02x%02x|%02x%02x|%s|%02x|"
+               "%02x%02x%02x%02x%02x%02x",
+               c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
+               opname(c[8], fallbackbuf),
                c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
 
       if (config->trace_packets)
         fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv-error "
-                "%lu <d=%lu p=%lu f=%s c=%02x%02x%02x%02x%02x%02x%02x>\n",
+                "%02x%02x%02x%02x <d=%02x%02x p=%02x%02x f=%s r=%02x "
+                "c=%02x%02x%02x%02x%02x%02x>\n",
                 log_get_timestamp(), upstream->serial,
                 upstream->recv_queue.window(),
-                (unsigned long)evbuffer_get_length(bufferevent_get_input(upstream->up_buffer)),
-                (unsigned long)hdr.seqno(),
-                (unsigned long)hdr.dlen(),
-                (unsigned long)hdr.plen(),
-                opname(hdr.opcode(), fallbackbuf),
+                (unsigned long)evbuffer_get_length(
+                                  bufferevent_get_input(upstream->up_buffer)),
+                c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
+                opname(c[8], fallbackbuf),
                 c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
 
       return -1;
@@ -1069,25 +1350,27 @@ chop_conn_t::recv()
     }
     if (upstream->recv_crypt->decrypt(decodebuf,
                                       decodebuf, hdr.total_len() - HEADER_LEN,
-                                      hdr.nonce(), HEADER_LEN)) {
+                                      ciphr_hdr, HEADER_LEN)) {
       log_info("MAC verification failure");
       return -1;
     }
 
     char fallbackbuf[4];
-    log_debug(this, "receiving block %u <d=%lu p=%lu f=%s>",
+    log_debug(this, "receiving block %u <d=%lu p=%lu f=%s r=%u>",
               hdr.seqno(), (unsigned long)hdr.dlen(), (unsigned long)hdr.plen(),
-              opname(hdr.opcode(), fallbackbuf));
+              opname(hdr.opcode(), fallbackbuf),
+              hdr.rcount());
 
     if (config->trace_packets)
-      fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv %lu <d=%lu p=%lu f=%s>\n",
+      fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv %lu <d=%lu p=%lu f=%s r=%u>\n",
               log_get_timestamp(), upstream->serial,
               upstream->recv_queue.window(),
               (unsigned long)evbuffer_get_length(bufferevent_get_input(upstream->up_buffer)),
               (unsigned long)hdr.seqno(),
               (unsigned long)hdr.dlen(),
               (unsigned long)hdr.plen(),
-              opname(hdr.opcode(), fallbackbuf));
+              opname(hdr.opcode(), fallbackbuf),
+              hdr.rcount());
 
     evbuffer *data = evbuffer_new();
     if (!data || (hdr.dlen() && evbuffer_add(data, decodebuf, hdr.dlen()))) {
@@ -1096,7 +1379,7 @@ chop_conn_t::recv()
       return -1;
     }
 
-    if (!upstream->recv_queue.insert(hdr.seqno(), hdr.opcode(), data, this))
+    if (upstream->recv_block(hdr.seqno(), hdr.opcode(), data))
       return -1; // insert() logs an error
   }
 
@@ -1234,6 +1517,8 @@ chop_conn_t::must_send_timeout(evutil_socket_t, short, void *arg)
 {
   static_cast<chop_conn_t *>(arg)->send();
 }
+
+} // anonymous namespace
 
 PROTO_DEFINE_MODULE(chop);
 

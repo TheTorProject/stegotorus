@@ -6,13 +6,11 @@
 #define CHOP_BLK_H
 
 #include <tr1/unordered_set>
-#include "connections.h"
-#include "crypt.h"
-#include "protocol.h"
+#include <ostream>
 
-struct chop_conn_t;
-struct chop_config_t;
-struct chop_circuit_t;
+struct ecb_encryptor;
+struct ecb_decryptor;
+struct gcm_encryptor;
 
 namespace chop_blk
 {
@@ -68,11 +66,12 @@ const size_t HANDSHAKE_LEN = sizeof(uint32_t);
 
 enum opcode_t
 {
-  op_DAT = 0,       // Pass data section along to upstream
-  op_FIN = 1,       // No further transmissions (pass data along if any)
-  op_RST = 2,       // Protocol error, close circuit now
-  op_ACK = 3,       // Acknowledge data received
-  op_RESERVED0 = 4, // 4 -- 127 reserved for future definition
+  op_XXX = 0,       // Permanently invalid opcode
+  op_DAT = 1,       // Pass data section along to upstream
+  op_FIN = 2,       // No further transmissions (pass data along if any)
+  op_RST = 3,       // Protocol error, close circuit now
+  op_ACK = 4,       // Acknowledge data received
+  op_RESERVED0 = 5, // 4 -- 127 reserved for future definition
   op_STEG0 = 128,   // 128 -- 255 reserved for steganography modules
   op_LAST = 255
 };
@@ -82,90 +81,69 @@ enum opcode_t
  * FALLBACKBUF is used for opcodes that have no official assignment.
  * Will either return FALLBACKBUF or a pointer to a string constant.
  */
-extern const char *opname(opcode_t o, char fallbackbuf[4]);
+extern const char *opname(unsigned int o, char fallbackbuf[4]);
+
+/**
+ * Decode an ACK payload (directly from the wire format) and report
+ * its contents in human-readable form.
+ */
+extern void debug_ack_contents(evbuffer *payload, std::ostream& os);
+
+inline bool
+opcode_valid(unsigned int o)
+{
+  return ((o > op_XXX && o < op_RESERVED0) ||
+          (o >= op_STEG0 && o <= op_LAST));
+}
 
 class header
 {
-  uint8_t clear[16];
-  uint8_t ciphr[16];
+  uint32_t s;
+  uint16_t d;
+  uint16_t p;
+  opcode_t f : 8;
+  uint8_t  r;
 
 public:
-  header()
+  header() : s(0), d(0), p(0), f(op_XXX), r(0) {}
+
+  header(uint32_t s_, uint16_t d_, uint16_t p_, opcode_t f_)
+    : s(0), d(0), p(0), f(op_XXX), r(0)
   {
-    memset(clear, 0xFF, sizeof clear);
-    memset(ciphr, 0xFF, sizeof ciphr);
+    if (!opcode_valid(f_))
+      return;
+    s = s_;
+    d = d_;
+    p = p_;
+    f = f_;
   }
 
-  header(uint32_t s, uint16_t d, uint16_t p, opcode_t f, ecb_encryptor &ec);
-  header(evbuffer *buf, ecb_decryptor &dc);
+  // Decode from wire format.  'ciphr' must point to 16 bytes of data.
+  header(const uint8_t *ciphr, ecb_decryptor &dc, uint32_t window);
 
-  uint32_t seqno() const
-  {
-    return ((uint32_t(clear[0]) << 24) |
-            (uint32_t(clear[1]) << 16) |
-            (uint32_t(clear[2]) <<  8) |
-            (uint32_t(clear[3])      ));
+  // Encode to wire format.  'ciphr' must point to 16 bytes of space.
+  void encode(uint8_t *ciphr, ecb_encryptor &ec) const;
 
-  }
+  // Returns false if incrementing the retransmit count has caused it
+  // to wrap around to zero.  If this happens, we have to stop trying
+  // to retransmit the block.
+  bool prepare_retransmit(uint16_t new_plen);
 
-  size_t dlen() const
-  {
-    return ((uint16_t(clear[4]) << 8) |
-            (uint16_t(clear[5])     ));
-  }
-
-  size_t plen() const
-  {
-    return ((uint16_t(clear[6]) << 8) |
-            (uint16_t(clear[7])     ));
-  }
+  // Accessors.
+  uint32_t seqno()  const { return s; }
+  size_t   dlen()   const { return d; }
+  size_t   plen()   const { return p; }
+  opcode_t opcode() const { return f; }
+  uint8_t  rcount() const { return r; }
 
   size_t total_len() const
   {
     return HEADER_LEN + TRAILER_LEN + dlen() + plen();
   }
 
-  opcode_t opcode() const
+  bool valid() const
   {
-    return opcode_t(clear[8]);
-  }
-
-  uint8_t rcount() const
-  {
-    return clear[9];
-  }
-
-  // Returns false if incrementing the retransmit count has caused it
-  // to wrap around to zero.  If this happens, we have to stop trying
-  // to retransmit the block.
-  bool prepare_retransmit(uint16_t new_plen, ecb_encryptor &ec);
-
-  // True if the check field is all-bits-zero.
-  // Note: must run in constant time (hence the binary ors).
-  bool check() const
-  {
-    return !(clear[10] | clear[11] | clear[12] |
-             clear[13] | clear[14] | clear[15]);
-  }
-
-  // True if the header is valid overall.
-  // Note: must run in constant time.
-  bool valid(uint64_t window) const
-  {
-    uint32_t delta = seqno() - window;
-    bool deltaOK = !(delta & ~uint32_t(0xFF));
-    bool checkOK = check();
-    return checkOK & deltaOK;
-  }
-
-  const uint8_t *nonce() const
-  {
-    return ciphr;
-  }
-
-  const uint8_t *cleartext() const
-  {
-    return clear;
+    return f != op_XXX;
   }
 };
 
@@ -262,7 +240,9 @@ public:
     log_assert(valid());
 
     uint32_t delta = (seq - hsn_) - 1;
-    log_assert(delta < 256);
+    if (delta >= 256)
+      log_abort("seq %u too high (hsn %u)", seq, hsn_);
+
     window[delta/8] |= (1 << (delta % 8));
     if (delta/8 + 1 > maxusedbyte)
       maxusedbyte = delta/8 + 1;
@@ -292,7 +272,7 @@ public:
  class transmit_queue
  {
    transmit_elt cbuf[256];
-   uint32_t last_fully_acked;
+   uint32_t next_to_ack;
    uint32_t next_to_send;
 
    transmit_queue(const transmit_queue&) DELETE_METHOD;
@@ -315,23 +295,49 @@ public:
     * cleared some of them.)
     */
    bool full() const
-   { return next_to_send - last_fully_acked > 255; }
+   { return next_to_send - next_to_ack > 255; }
 
    /**
     * True if we ought to rekey soon, i.e. the sequence number is in
     * danger of wrapping around.
     */
-   bool should_rekey() const { return next_to_send >= (1U<<31); }
+   bool should_rekey() const { return next_to_send >= 0x80000000u; }
 
    /**
-    * Push a block (defined by header HDR and data payload DATA) on
-    * the end of the transmit queue, and immediately transmit it on
-    * connection CONN.  May not be called when full() is true.  Can
-    * fail: returns -1 for failure or 0 for success.  Regardless of
-    * success or failure, consumes DATA.
+    * Push a block on the end of the transmit queue.  The block has
+    * opcode F, carries all of the data in DATA, and is padded with
+    * PADDING bytes at the end.  Returns the sequence number of the
+    * new block.  Must not be called when full() is true.
     */
-   int queue_and_send(header const& hdr, evbuffer *data,
-                      chop_conn_t *conn, gcm_encryptor& gc);
+   uint32_t enqueue(opcode_t f, evbuffer *data, uint16_t padding);
+
+   /**
+    * Encrypt the block with sequence number SEQNO and append it to
+    * the evbuffer OUTPUT.  That block must have already been on the
+    * transmit queue.  Optionally, change how much padding the block
+    * has.  Returns 0 on success, -1 on failure.  Failure can occur,
+    * among other reasons, if the block in question has been
+    * retransmitted too many times.
+    */
+   int transmit(uint32_t seqno,
+                evbuffer *output, ecb_encryptor &ec, gcm_encryptor &gc)
+   {
+     log_assert(seqno >= next_to_ack && seqno < next_to_send);
+     transmit_elt &elt = cbuf[seqno & 0xFF];
+     return transmit(elt, output, ec, gc);
+   }
+   int transmit(transmit_elt &elt,
+                evbuffer *output, ecb_encryptor &ec, gcm_encryptor &gc);
+
+   int retransmit(uint32_t seqno, uint16_t new_padding,
+                  evbuffer *output, ecb_encryptor &ec, gcm_encryptor &gc)
+   {
+     log_assert(seqno >= next_to_ack && seqno < next_to_send);
+     transmit_elt &elt = cbuf[seqno & 0xFF];
+     return retransmit(elt, new_padding, output, ec, gc);
+   }
+   int retransmit(transmit_elt &elt, uint16_t new_padding,
+                  evbuffer *output, ecb_encryptor &ec, gcm_encryptor &gc);
 
    /**
     * Process an acknowledgment, advancing the last_fully_acked
@@ -343,22 +349,42 @@ public:
    int process_ack(evbuffer *data);
 
    /**
-    * Retransmit as many blocks as possible given the present state of
-    * the connections in DOWNSTREAMS.  No-op if there is nothing to be
-    * retransmitted at this time.  Returns false if there was material
-    * to retransmit but we did not manage to retransmit any of it,
-    * true otherwise.
+    * Iteration over the transmit queue produces each block which has
+    * been enqueued but not yet discarded by process_ack.  Used for
+    * retransmission.
     */
-   bool retransmit(std::tr1::unordered_set<conn_t *> &downstreams);
+   class iterator
+   {
+     transmit_queue *queue;
+     uint32_t seqno;
 
- private:
-   /**
-    * Attempt to retransmit the block described by ELT on one of the
-    * connections in DOWNSTREAMS.  Returns true if the block has been
-    * retransmitted, false otherwise.
-    */
-   bool retransmit_one(transmit_elt &elt,
-                       std::tr1::unordered_set<conn_t *> &downstreams);
+   public:
+     iterator() : queue(0), seqno(-1) {}
+     iterator(transmit_queue *q, uint32_t s) : queue(q), seqno(s) {}
+
+     bool operator==(const iterator& o)
+     { return queue == o.queue && seqno == o.seqno; }
+     bool operator!=(const iterator& o)
+     { return queue != o.queue || seqno != o.seqno; }
+
+     transmit_elt& operator*() { return queue->cbuf[seqno & 0xFF]; }
+     iterator operator++()
+     {
+       do
+         seqno++;
+       while (seqno < queue->next_to_send && !queue->cbuf[seqno & 0xFF].data);
+       return *this;
+     }
+     iterator operator++(int)
+     {
+       iterator clone(*this);
+       ++*this;
+       return clone;
+     }
+   };
+
+   iterator begin() { return iterator(this, next_to_ack); }
+   iterator end() { return iterator(this, next_to_send); }
 };
 
 /* Most of a block's header information is processed before it reaches
@@ -382,6 +408,10 @@ class reassembly_queue
 {
   reassembly_elt cbuf[256];
   uint32_t next_to_process;
+  uint32_t count; // only a uint8_t is _necessary_, but that's a false
+                  // economy; using a uint32_t means we don't have to
+                  // worry about overflow at the upper limit, and the
+                  // size of the class will be the same in either case
 
   reassembly_queue(const reassembly_queue&) DELETE_METHOD;
   reassembly_queue& operator=(const reassembly_queue&) DELETE_METHOD;
@@ -407,7 +437,7 @@ public:
    * the queue (both of these cases indicate protocol errors).
    * DATA is consumed no matter what the return value is.
    */
-  bool insert(uint32_t seqno, opcode_t op, evbuffer *data, conn_t *conn);
+  bool insert(uint32_t seqno, opcode_t op, evbuffer *data);
 
   /**
    * Return the current lowest acceptable sequence number in the
@@ -415,6 +445,11 @@ public:
    * block_header::valid().
    */
   uint32_t window() const { return next_to_process; }
+
+  /**
+   * True if the queue is completely empty.
+   */
+  bool empty() const { return count == 0; }
 
   /**
    * Reset the expected next sequence number to zero.  The queue must
@@ -430,26 +465,6 @@ public:
 };
 
 } // namespace chop_blk
-
-struct chop_conn_t : conn_t
-{
-  chop_config_t *config;
-  chop_circuit_t *upstream;
-  steg_t *steg;
-  struct evbuffer *recv_pending;
-  struct event *must_send_timer;
-  bool sent_handshake : 1;
-  bool no_more_transmissions : 1;
-
-  CONN_DECLARE_METHODS(chop);
-
-  int recv_handshake();
-  int send(struct evbuffer *block);
-
-  void send();
-  bool must_send_p() const;
-  static void must_send_timeout(evutil_socket_t, short, void *arg);
-};
 
 #endif /* chop_blk.h */
 
