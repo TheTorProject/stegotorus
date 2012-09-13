@@ -30,12 +30,14 @@
 /config-aux/install-sh
 /config-aux/missing
 
-/protolist.c
-/steglist.c
-/unitgrplist.c
+/protolist.cc
+/steglist.cc
+/unitgrplist.cc
 
 /libstegotorus.a
 /stegotorus
+/pgen_fake
+/pgen_pcap
 /tltester
 /unittests
 
@@ -43,3 +45,4 @@
 /build-*/
 /bench/
 /bench-*/
+/traces/
