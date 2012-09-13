@@ -9,6 +9,7 @@
 
 #include <event2/buffer.h>
 #include <iomanip>
+#include <limits>
 
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
@@ -115,7 +116,7 @@ header::header(const uint8_t *ciphr, ecb_decryptor &dc, uint32_t window)
     s = s_;
     d = d_;
     p = p_;
-    f = f_;
+    f = opcode_t(f_);
     r = r_;
   } else {
     s = 0;
