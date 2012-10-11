@@ -431,7 +431,7 @@ int http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
     char outbuf2[MAX_COOKIE_SIZE];
     char *uri_end;
 
-    size_t sofar;
+    size_t sofar = 0;
 
     log_debug("uri: %s", p);
     uri_end = strchr(p, ' ');
