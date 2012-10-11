@@ -14,6 +14,8 @@
 #include <sstream>
 #include <string>
 
+#include "curl_util.h"
+
 using namespace std;
 
 #include "curl_util.h"
@@ -874,6 +876,9 @@ main(int argc, char **argv)
   //evbuffer_free(st.fartrans);
   event_base_free(st.base);
   //free(st.lbuf);
+
+  //more clean up
+  curl_multi_cleanup(st._curl_multi_handle);
 
   //more clean up
   curl_multi_cleanup(st._curl_multi_handle);
