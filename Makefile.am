@@ -8,7 +8,7 @@ AM_CXXFLAGS = -Werror -Wall -Wextra -Wformat=2
 AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
 
 noinst_LIBRARIES = libstegotorus.a
-noinst_PROGRAMS  = unittests tltester tester_proxy
+noinst_PROGRAMS  = unittests tltester tester_proxy webpage_tester
 bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \
@@ -106,6 +106,9 @@ unittests_LDADD = libstegotorus.a $(lib_LIBS)
 
 tltester_SOURCES = src/test/tltester.cc src/util.cc src/util-net.cc
 tltester_LDADD   = $(libevent_LIBS)
+
+webpage_tester_SOURCES = src/test/webpage_tester.cc src/util.cc src/curl_util.cc
+webtester_LDADD   = $(lib_LIBS)
 
 noinst_HEADERS = \
 	src/base64.h \
