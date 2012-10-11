@@ -14,6 +14,8 @@
 #include <sstream>
 #include <string>
 
+#include "curl_util.h"
+
 using namespace std;
 
 #include "curl_util.h"
@@ -27,7 +29,7 @@ using namespace std;
 
 /** 
    This program is used by the integration test harness.  It opens one
-   listening socet (the "far" socket) and one outbound connection
+   listening socket (the "far" socket) and one outbound connection
    (the "near" socket).  Then it requests web pages whose url is given 
    by standard input using curl, on the near socket, the far socket 
    receives the request and request  it (using curl) from the server. 
@@ -755,6 +757,28 @@ init_sockets_external(WebpageFetcher *st, const char *near, const char *far)
   }
 }
 
+static void fetch_page(WebpageFetcher *st)
+{
+  
+}
+
+/**
+
+   After openning the socket we need to initiate our
+   curl handles and give them the sockets
+ */
+bool init_curl_handles(WebpageFetcher *st)
+{
+  if (!(st->_curl_multi_handle = curl_multi_init())) {
+    fprintf(stderr, "failed to initiate curl multi object.");
+    return false;
+  }
+
+  init_easy_set_callback(st->near);
+  init_easy_set_callback(st->far);
+
+}
+
 int
 WebpageFetcher::compare_far_near()
 {
@@ -874,6 +898,9 @@ main(int argc, char **argv)
   //evbuffer_free(st.fartrans);
   event_base_free(st.base);
   //free(st.lbuf);
+
+  //more clean up
+  curl_multi_cleanup(st._curl_multi_handle);
 
   //more clean up
   curl_multi_cleanup(st._curl_multi_handle);
