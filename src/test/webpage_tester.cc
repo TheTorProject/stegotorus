@@ -13,6 +13,8 @@
 #include <iostream>
 #include <sstream>
 
+#include "curl_util.h"
+
 using namespace std;
 
 #ifdef _WIN32
@@ -21,22 +23,42 @@ using namespace std;
 # define ENOTCONN WSAENOTCONN
 #endif
 
-/* This program is used by the integration test harness.  It opens one
+/** 
+   This program is used by the integration test harness.  It opens one
    listening socket (the "far" socket) and one outbound connection
    (the "near" socket).  Then it requests web pages whose url is given 
-   by standard input, both dircetly and from st server. Then it compares 
-   the results
+   by standard input using curl, on the near socket, the far socket 
+   receives the request and request  it (using curl) from the server. 
+   Then it store the result in fartext and  write the result in the the
+   far socket. Finally the program receives the result in the near socket
+   and store in neartext.
+   At the end the program compare the near and far text.
+
+   The program operate in two mode.
+
+   Mode 1: The program open the socket and hand them to curl.
+   Mode 2: The program set the socket as SOCKS proxy in curl.
+
+   because it's curl who listen on near socket we do not need
+   to get involved with that in bufferevent level. But also
+   we need none-blocking so let the far also progress, then
+   we need fifo approach.
 */
 
-#define TL_TIMEOUT 0
-#define LOGGING false
-
-struct WebpageFetcher
+//#define TL_TIMEOUT 0
+//#define LOGGING false
+class WebpageFetcher
 {
   struct bufferevent *near;
   struct bufferevent *far;
   struct evbuffer *neartext;
   struct evbuffer *fartext;
+
+  CURLM* _curl_multi_handle; //we need the multi so we have none
+  //blocking curl
+  CURL* curl_near;
+  CURL* curl_far; //far doesn't need to be non-blocking
+
   struct evbuffer *neartrans;
   struct evbuffer *fartrans;
   string url;
@@ -63,10 +85,51 @@ struct WebpageFetcher
   static send_curl();
   static recv_curl();
 
-  bool fetch_direct();
-  bool fetch_throug_st();
+  bool fetch_page();
+  bool fetch_direct_socket();
+bool fetch_throug_st();
   
 };
+
+/*
+  This function needs to be called twice to setup the near and the
+  far handles
+**/
+bool init_easy_set_socket(CURL* cur_curl_handle,  bufferevent bufferside)
+{
+  //setting up near handle to be a part of multi handle
+  cur_curl_handle  = curl_easy_init();
+  if (!cur_curl_handle) {
+    fprintf(stderr, "failed to initiate curl");
+    return false;
+  }
+  
+  curl_easy_setopt(cur_curl_handle, CURLOPT_HEADER, 1L);
+  curl_easy_setopt(cur_curl_handle, CURLOPT_HTTP_CONTENT_DECODING, 0L);
+  curl_easy_setopt(cur_curl_handle, CURLOPT_HTTP_TRANSFER_DECODING, 0L);
+  curl_easy_setopt(cur_curl_handle, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(cur_curl_handle, CURLOPT_WRITEFUNCTION, read_data_cb);
+
+  curl_easy_setopt(cur_curl_handle, CURLOPT_OPENSOCKETFUNCTION, get_conn_socket);
+  curl_easy_setopt(cur_curl_handle, CURLOPT_OPENSOCKETDATA, bufferside);
+
+  //tells curl the socket is already connected
+  curl_easy_setopt(cur_curl_handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
+  curl_easy_setopt(cur_curl_handle, CURLOPT_CLOSESOCKETFUNCTION, ignore_close);
+}
+
+curl_socket_t get_conn_socket(void *bufferside,
+                                curlsocktype purpose,
+                                struct curl_sockaddr *address)
+{
+  (void)purpose;
+  //We just igonre the address because the connection has been established
+  //before hand.
+  (void)address;
+  curl_socket_t conn_sock = (curl_socket_t)bufferevent_getfd(bufferside);//In case Zack doesn't like the idea of adding function to conn_t: (curl_socket_t)(bufferevent_getfd(((conn_t*)conn)->buffer));
+  return conn_sock;
+}
+
 
 size_t
 curl_read_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
@@ -80,20 +143,8 @@ curl_read_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 bool fetch_page(CURL* curl_easy_handle, evbuffer* webpage)
 {
 
-  /*curl_easy_setopt(curl_easy_handle, CURLOPT_HEADER, 1L);
-  curl_easy_setopt(curl_easy_handle, CURLOPT_HTTP_CONTENT_DECODING, 0L);
-  curl_easy_setopt(curl_easy_handle, CURLOPT_HTTP_TRANSFER_DECODING, 0L);*/
-  curl_easy_setopt(curl_easy_handle, CURLOPT_VERBOSE, 1L);
-  curl_easy_setopt(curl_easy_handle, CURLOPT_WRITEFUNCTION, curl_read_cb);
   curl_easy_setopt(curl_easy_handle, CURLOPT_WRITEDATA, &webpage);
   curl_easy_setopt(curl_easy_handle, CURLOPT_URL, url);
-
-  //curl_easy_setopt(_curl_easy_handle, CURLOPT_OPENSOCKETFUNCTION, get_conn_socket);
-  //curl_easy_setopt(_curl_easy_handle, CURLOPT_OPENSOCKETDATA, conn);
-  //tells curl the socket is already connected
-  //curl_easy_setopt(_curl_easy_handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
-
-  //curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETFUNCTION, ignore_close);
 
   return (curl_easy_perform(curl_easy_handle) == CURLE_OK);
   
@@ -137,64 +188,62 @@ bool fake_proxying_http_request()
 
 }
 
-static void script_next_action(WebpageFetcher *st);
-
 /* Helpers */
 
-static void
-flush_text(WebpageFetcher *st, bool near)
-{
-  struct evbuffer *frombuf, *tobuf;
-  size_t avail;
-  int nseg, i, ll;
-  struct evbuffer_iovec *v;
-  char tag[2] = { '<', ' ' };
-  char nl[1] = { '\n' };
+// static void
+// flush_text(WebpageFetcher *st, bool near)
+// {
+//   struct evbuffer *frombuf, *tobuf;
+//   size_t avail;
+//   int nseg, i, ll;
+//   struct evbuffer_iovec *v;
+//   char tag[2] = { '<', ' ' };
+//   char nl[1] = { '\n' };
 
-  if (near) {
-    frombuf = st->neartext;
-    tobuf = st->neartrans;
-  } else {
-    frombuf = st->fartext;
-    tobuf = st->fartrans;
-    tag[0] = '>';
-  }
+//   if (near) {
+//     frombuf = st->neartext;
+//     tobuf = st->neartrans;
+//   } else {
+//     frombuf = st->fartext;
+//     tobuf = st->fartrans;
+//     tag[0] = '>';
+//   }
 
-  avail = evbuffer_get_length(frombuf);
-  if (avail == 0)
-    return;
+//   avail = evbuffer_get_length(frombuf);
+//   if (avail == 0)
+//     return;
 
-  nseg = evbuffer_peek(frombuf, avail, NULL, NULL, 0);
-  v = (struct evbuffer_iovec *) xzalloc(nseg * sizeof(struct evbuffer_iovec));
-  ll = 0;
-  evbuffer_peek(frombuf, avail, NULL, v, nseg);
-  evbuffer_expand(tobuf, avail + ((avail/64)+1)*3);
+//   nseg = evbuffer_peek(frombuf, avail, NULL, NULL, 0);
+//   v = (struct evbuffer_iovec *) xzalloc(nseg * sizeof(struct evbuffer_iovec));
+//   ll = 0;
+//   evbuffer_peek(frombuf, avail, NULL, v, nseg);
+//   evbuffer_expand(tobuf, avail + ((avail/64)+1)*3);
 
-  for (i = 0; i < nseg; i++) {
-    const char *p = (const char *)v[i].iov_base;
-    const char *limit = p + v[i].iov_len;
-    for (; p < limit; p++) {
-      if (ll == 0)
-        evbuffer_add(tobuf, tag, 2);
+//   for (i = 0; i < nseg; i++) {
+//     const char *p = (const char *)v[i].iov_base;
+//     const char *limit = p + v[i].iov_len;
+//     for (; p < limit; p++) {
+//       if (ll == 0)
+//         evbuffer_add(tobuf, tag, 2);
 
-      if (*p >= 0x20 && *p <= 0x7E && *p != '\\') {
-        evbuffer_add(tobuf, p, 1);
-        ll++;
-      } else {
-        evbuffer_add_printf(tobuf, "\\x%02x", (uint8_t)*p);
-        ll += 4;
-      }
-      if (ll >= 64) {
-        evbuffer_add(tobuf, nl, 1);
-        ll = 0;
-      }
-    }
-  }
-  free(v);
-  evbuffer_drain(frombuf, avail);
-  if (ll > 0)
-    evbuffer_add(tobuf, nl, 1);
-}
+//       if (*p >= 0x20 && *p <= 0x7E && *p != '\\') {
+//         evbuffer_add(tobuf, p, 1);
+//         ll++;
+//       } else {
+//         evbuffer_add_printf(tobuf, "\\x%02x", (uint8_t)*p);
+//         ll += 4;
+//       }
+//       if (ll >= 64) {
+//         evbuffer_add(tobuf, nl, 1);
+//         ll = 0;
+//       }
+//     }
+//   }
+//   free(v);
+//   evbuffer_drain(frombuf, avail);
+//   if (ll > 0)
+//     evbuffer_add(tobuf, nl, 1);
+// }
 
 static void
 send_eof(WebpageFetcher *st, struct bufferevent *bev)
@@ -261,10 +310,19 @@ socket_drain_cb(struct bufferevent *bev, void *arg)
   if (evbuffer_get_length(bufferevent_get_output(bev)) > 0)
     return;
 
-  if ((bev == st->near && st->sent_eof_near) ||
-      (bev == st->far && st->sent_eof_far)) {
-    send_eof(st, bev);
-  }
+  // if ((bev == st->near && st->sent_eof_near) ||
+  //     (bev == st->far && st->sent_eof_far)) {
+  //   send_eof(st, bev);
+  // }
+
+  if (bev == st->near)
+    {
+      //go to comparison function
+    }
+  else
+    {
+      //go to fetching function
+    }
 }
 
 static void
@@ -506,6 +564,28 @@ init_sockets_external(WebpageFetcher *st, const char *near, const char *far)
   }
 }
 
+static void fetch_page(WebpageFetcher *st)
+{
+  
+}
+
+/**
+
+   After openning the socket we need to initiate our
+   curl handles and give them the sockets
+ */
+bool init_curl_handles(WebpageFetcher *st)
+{
+  if (!(st->_curl_multi_handle = curl_multi_init())) {
+    fprintf(stderr, "failed to initiate curl multi object.");
+    return false;
+  }
+
+  init_easy_set_callback(st->near);
+  init_easy_set_callback(st->far);
+
+}
+
 int
 main(int argc, char **argv)
 {
@@ -558,14 +638,16 @@ main(int argc, char **argv)
                     socket_read_cb, socket_drain_cb, socket_event_cb, &st);
   bufferevent_setcb(st.far,
                     socket_read_cb, socket_drain_cb, socket_event_cb, &st);
-  bufferevent_enable(st.near, EV_READ|EV_WRITE);
+  //bufferevent_enable(st.near, EV_READ|EV_WRITE); libcurl will listen on near
   bufferevent_enable(st.far, EV_READ|EV_WRITE);
 
-  if (!st.fetch_page_direct(direct_page))
-    {
-      fprintf(stderr, "Error in fetching web page directly.");
-      return -1;
-    }
+  init_curl_handles(st);
+
+  if (!st.fetch_page_through_st(st))
+     {
+       fprintf(stderr, "Error in fetching web page directly.");
+       return -1;
+     }
 
   event_base_dispatch(st.base);
 
@@ -587,6 +669,9 @@ main(int argc, char **argv)
   evbuffer_free(st.fartrans);
   event_base_free(st.base);
   free(st.lbuf);
+
+  //more clean up
+  curl_multi_cleanup(st._curl_multi_handle);
 
   return st.saw_error;
 }
