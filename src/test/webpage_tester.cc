@@ -14,8 +14,6 @@
 #include <sstream>
 #include <string>
 
-#include "curl_util.h"
-
 using namespace std;
 
 #include "curl_util.h"
