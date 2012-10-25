@@ -6,6 +6,7 @@
  */
 #include <curl/curl.h>
 #include <event2/buffer.h>
+#include <event2/event.h>
 #include <string>
 #include <sstream>
 
@@ -109,4 +110,37 @@ size_t curl_read_data_cb(void *buffer, size_t size, size_t nmemb, void *userp)
 
   return no_bytes_2_read;
 
+}
+
+int sockopt_callback(void *clientp, curl_socket_t curlfd,
+                            curlsocktype purpose)
+{
+  (void)clientp;
+  (void)curlfd;
+  (void)purpose;
+  /* This return code was added in libcurl 7.21.5 */ 
+  return CURL_SOCKOPT_ALREADY_CONNECTED;
+}
+
+int ignore_close(void *clientp, curl_socket_t curlfd)
+{
+  (void) clientp;
+  (void) curlfd;
+  return 0;
+}
+
+int curl_close_socket_cb(void *clientp, curl_socket_t curlfd)
+{
+  //event* socket_event_handle = (event*) clientp;
+
+  (void) clientp;
+  (void) curlfd;
+  //if the event is not NULL then we should shutdown the event 
+  //first
+  /* if (socket_event_handle)
+      event_del(socket_event_handle);
+
+      shutdown(curlfd, SHUT_RD | SHUT_WR);*/
+
+  return 0;
 }
