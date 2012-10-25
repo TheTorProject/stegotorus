@@ -28,7 +28,7 @@
 
 /** 
    This program is used by the integration test harness.  It opens one
-   listening socket (the "far" socket) and one outbound connection
+   listening socet (the "far" socket) and one outbound connection
    (the "near" socket).  Then it requests web pages whose url is given 
    by standard input using curl, on the near socket, the far socket 
    receives the request and request  it (using curl) from the server. 
