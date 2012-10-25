@@ -3,7 +3,6 @@
 #include <event2/event.h>
 #include <curl/curl.h>
 #include <vector>
-#include <iostream>
 #include <sstream>
 
 using namespace std;
@@ -117,11 +116,6 @@ namespace  {
     static curl_socket_t get_conn_socket(void *conn,
                                 curlsocktype purpose,
                                          struct curl_sockaddr *address);
-
-    static int sockopt_callback(void *clientp, curl_socket_t curlfd,
-                                curlsocktype purpose);
-
-    static int ignore_close(void *clientp, curl_socket_t curlfd);
 
     static void curl_socket_event_cb(int fd, short kind,  void *userp);
 
@@ -250,12 +244,11 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   else {
     unsigned long url_index = 0;
     //memcpy((void*)&url_index, data, uri_byte_cut); this machine dependent
-    for(unsigned int i = 0; i < _apache_config->uri_byte_cut && i < sbuflen; i++)
-      {
-        url_index *=256;
-        url_index += (unsigned char) data[i];
-        log_debug("uri index so far %lu", url_index);
-      }
+    for(unsigned int i = 0; i < _apache_config->uri_byte_cut && i < sbuflen; i++) {
+      url_index *=256;
+      url_index += (unsigned char) data[i];
+      log_debug("uri index so far %lu", url_index);
+    }
     
     chosen_url= ((ApachePayloadServer*)_apache_config->payload_server)->uri_dict[url_index].URL;
   }
@@ -299,7 +292,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   
   //now we are using curl to send the request
   curl_easy_setopt(_curl_easy_handle, CURLOPT_URL, uri_to_send.c_str());
-  //cuarl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION,   discard_data);
+  //curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION,   discard_data);
   //curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEDATA,       conn);
 
   CURLMcode res = curl_multi_add_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
@@ -709,22 +702,6 @@ curl_socket_t http_apache_steg_t::get_conn_socket(void *conn,
   return conn_sock;
 }
 
-int http_apache_steg_t::sockopt_callback(void *clientp, curl_socket_t curlfd,
-                            curlsocktype purpose)
-{
-  (void)clientp;
-  (void)curlfd;
-  (void)purpose;
-  /* This return code was added in libcurl 7.21.5 */ 
-  return CURL_SOCKOPT_ALREADY_CONNECTED;
-}
-
-int http_apache_steg_t::ignore_close(void *clientp, curl_socket_t curlfd)
-{
-  (void) clientp;
-  (void) curlfd;
-  return 0;
-}
 
 /* Called by libevent when we get action on a multi socket */ 
 void http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
