@@ -21,4 +21,10 @@ unsigned long fetch_url_raw(CURL* curl_obj, string& url,  stringstream& buf);
 */
 size_t curl_read_data_cb(void *buffer, size_t size, size_t nmemb, void *userp);
 
+ int sockopt_callback(void *clientp, curl_socket_t curlfd,
+                                curlsocktype purpose);
+
+int ignore_close(void *clientp, curl_socket_t curlfd);
+int curl_close_socket_cb(void *clientp, curl_socket_t curlfd);
+
 #endif

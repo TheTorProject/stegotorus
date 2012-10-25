@@ -41,6 +41,7 @@
 /pgen_fake
 /pgen_pcap
 /tester_proxy
+/webpage_tester
 
 /build/
 /build-*/
