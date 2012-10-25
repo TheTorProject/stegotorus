@@ -107,8 +107,8 @@ unittests_LDADD = libstegotorus.a $(lib_LIBS)
 tltester_SOURCES = src/test/tltester.cc src/util.cc src/util-net.cc
 tltester_LDADD   = $(libevent_LIBS)
 
-webpage_tester_SOURCES = src/test/webpage_tester.cc src/util.cc src/curl_util.cc
-webtester_LDADD   = $(lib_LIBS)
+webpage_tester_SOURCES = src/test/webpage_tester.cc src/util.cc src/util-net.cc src/curl_util.cc src/http_parser/http_parser.cc
+webpage_tester_LDADD   = $(lib_LIBS)
 
 noinst_HEADERS = \
 	src/base64.h \
@@ -135,6 +135,7 @@ noinst_HEADERS = \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h \
 	src/test/unittest.h
+	src/http_parser/http_parser.h
 
 dist_noinst_SCRIPTS = \
 	src/audit-globals.sh \
