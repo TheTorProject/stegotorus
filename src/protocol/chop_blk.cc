@@ -22,7 +22,7 @@ namespace chop_blk
 {
 
 const char *
-opname(opcode_t o, char fallbackbuf[4])
+opname(unsigned int o, char fallbackbuf[4])
 {
   switch (o) {
   case op_XXX: return "XXX";

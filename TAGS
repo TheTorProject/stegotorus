@@ -1,0 +1,2382 @@
+
+config.h,785
+#define DELETE_METHOD 6,225
+#define HAVE_EXECINFO_H 12,402
+#define HAVE_EXECVPE 15,483
+#define HAVE_PATHS_H 18,564
+#define HAVE_STATIC_ASSERT 21,650
+# define static_assert(24,707
+#  define static_assert_id 26,804
+#  define static_assert_id 28,887
+# define static_assert_paste(30,968
+# define static_assert_paste_(31,1028
+#define PACKAGE 35,1098
+#define PACKAGE_BUGREPORT 38,1207
+#define PACKAGE_NAME 41,1284
+#define PACKAGE_STRING 44,1378
+#define PACKAGE_TARNAME 47,1478
+#define PACKAGE_URL 50,1564
+#define PACKAGE_VERSION 53,1633
+# define _ALL_SOURCE 57,1728
+# define _GNU_SOURCE 61,1834
+# define _POSIX_PTHREAD_SEMANTICS 65,1944
+# define _TANDEM_SOURCE 69,2050
+# define __EXTENSIONS__ 73,2151
+#define VERSION 78,2218
+# define _DARWIN_USE_64_BIT_INODE 82,2326
+
+scripts/tool_urlglob.c,337
+#define _XOPEN_SOURCE 23,1026
+  GLOB_OK,33,1193
+  GLOB_NO_MEM,34,1204
+  GLOB_ERROR35,1219
+} GlobCode;36,1232
+ISALPHA(40,1284
+ISDIGIT(47,1445
+static GlobCode glob_set(63,1892
+static GlobCode glob_range(178,5546
+static GlobCode glob_word(298,9201
+int glob_url(361,10853
+void glob_cleanup(409,12060
+int glob_next_url(434,12730
+
+scripts/bm-fixedrate-cgi.c,179
+#define _XOPEN_SOURCE 8,278
+#define _POSIX_C_SOURCE 9,304
+#define NORETURN 24,551
+#define NORETURN 26,605
+error_400(32,675
+error_500(43,928
+generate(52,1145
+main(134,3560
+
+scripts/tool_urlglob.h,835
+#define HEADER_CURL_TOOL_URLGLOB_H2,35
+  UPTSet 26,1111
+  UPTCharRange,27,1125
+  UPTNumRange28,1141
+} URLPatternType;29,1155
+  URLPatternType type;32,1191
+      char **elements;elements35,1237
+      short size;36,1260
+      short ptr_s;37,1278
+    } Set;38,1297
+      char min_c;40,1321
+      char max_c;41,1339
+      char ptr_c;42,1357
+      int step;43,1375
+    } CharRange;44,1391
+      int min_n;46,1421
+      int max_n;47,1438
+      short padlength;48,1455
+      int ptr_n;49,1478
+      int step;50,1495
+    } NumRange 51,1511
+  } content;52,1528
+} URLPattern;53,1541
+  char *literal[literal56,1573
+  URLPattern pattern[pattern57,1594
+  size_t size;58,1619
+  size_t urllen;59,1634
+  char *glob_buffer;glob_buffer60,1651
+  char beenhere;61,1672
+  char errormsg[errormsg62,1689
+} URLGlob;63,1737
+
+scripts/bm-mcurl.c,475
+#define _XOPEN_SOURCE 19,742
+#define NORETURN 34,977
+#define UNUSED 35,1025
+static bool verbose 37,1065
+timevaldiff(40,1116
+struct url_iter47,1310
+  char **upats;upats49,1328
+  URLGlob *uglob;uglob50,1344
+  int nglob;51,1362
+url_prep(55,1409
+url_next(65,1542
+discard_data(93,2031
+read_abort(99,2154
+setup_curl_easy_handle(108,2425
+#define SET_OR_CRASH(113,2513
+#undef SET_OR_CRASH134,3407
+process_urls(140,3455
+run(245,6257
+usage(273,6862
+main(282,7036
+
+src/http_parser/http_parser.cc,7501
+# define ULLONG_MAX 33,1462
+# define MIN(37,1531
+# define ARRAY_SIZE(41,1600
+# define BIT_AT(45,1675
+# define ELEM_AT(51,1878
+#define SET_ERRNO(55,1988
+#define SET_ERRNO(61,2290
+#define CALLBACK_NOTIFY_(69,2583
+#define CALLBACK_NOTIFY(86,3653
+#define CALLBACK_NOTIFY_NOADVANCE(89,3799
+#define CALLBACK_DATA_(92,3941
+#define CALLBACK_DATA(112,5224
+#define CALLBACK_DATA_NOADVANCE(116,5417
+#define MARK(120,5602
+#define PROXY_CONNECTION 128,5971
+#define CONNECTION 129,6015
+#define CONTENT_LENGTH 130,6047
+#define TRANSFER_ENCODING 131,6087
+#define UPGRADE 132,6133
+#define CHUNKED 133,6159
+#define KEEP_ALIVE 134,6185
+#define CLOSE 135,6217
+static const char *method_strings[method_strings138,6241
+#define XX(140,6283
+#undef XX142,6344
+static const char tokens[tokens153,6684
+static const int8_t unhex[unhex188,9150
+# define T(201,9621
+# define T(203,9643
+static const uint8_t normal_url_char[normal_url_char207,9668
+#undef T241,12145
+enum state243,12155
+  { s_dead state::s_dead244,12166
+  , s_start_req_or_resstate::s_start_req_or_res246,12215
+  , s_res_or_resp_Hstate::s_res_or_resp_H247,12238
+  , s_start_resstate::s_start_res248,12258
+  , s_res_Hstate::s_res_H249,12274
+  , s_res_HTstate::s_res_HT250,12286
+  , s_res_HTTstate::s_res_HTT251,12299
+  , s_res_HTTPstate::s_res_HTTP252,12313
+  , s_res_first_http_majorstate::s_res_first_http_major253,12328
+  , s_res_http_majorstate::s_res_http_major254,12355
+  , s_res_first_http_minorstate::s_res_first_http_minor255,12376
+  , s_res_http_minorstate::s_res_http_minor256,12403
+  , s_res_first_status_codestate::s_res_first_status_code257,12424
+  , s_res_status_codestate::s_res_status_code258,12452
+  , s_res_statusstate::s_res_status259,12474
+  , s_res_line_almost_donestate::s_res_line_almost_done260,12491
+  , s_start_reqstate::s_start_req262,12519
+  , s_req_methodstate::s_req_method264,12536
+  , s_req_spaces_before_urlstate::s_req_spaces_before_url265,12553
+  , s_req_schemastate::s_req_schema266,12581
+  , s_req_schema_slashstate::s_req_schema_slash267,12598
+  , s_req_schema_slash_slashstate::s_req_schema_slash_slash268,12621
+  , s_req_server_startstate::s_req_server_start269,12650
+  , s_req_serverstate::s_req_server270,12673
+  , s_req_server_with_atstate::s_req_server_with_at271,12690
+  , s_req_pathstate::s_req_path272,12715
+  , s_req_query_string_startstate::s_req_query_string_start273,12730
+  , s_req_query_stringstate::s_req_query_string274,12759
+  , s_req_fragment_startstate::s_req_fragment_start275,12782
+  , s_req_fragmentstate::s_req_fragment276,12807
+  , s_req_http_startstate::s_req_http_start277,12826
+  , s_req_http_Hstate::s_req_http_H278,12847
+  , s_req_http_HTstate::s_req_http_HT279,12864
+  , s_req_http_HTTstate::s_req_http_HTT280,12882
+  , s_req_http_HTTPstate::s_req_http_HTTP281,12901
+  , s_req_first_http_majorstate::s_req_first_http_major282,12921
+  , s_req_http_majorstate::s_req_http_major283,12948
+  , s_req_first_http_minorstate::s_req_first_http_minor284,12969
+  , s_req_http_minorstate::s_req_http_minor285,12996
+  , s_req_line_almost_donestate::s_req_line_almost_done286,13017
+  , s_header_field_startstate::s_header_field_start288,13045
+  , s_header_fieldstate::s_header_field289,13070
+  , s_header_value_startstate::s_header_value_start290,13089
+  , s_header_valuestate::s_header_value291,13114
+  , s_header_value_lwsstate::s_header_value_lws292,13133
+  , s_header_almost_donestate::s_header_almost_done294,13157
+  , s_chunk_size_startstate::s_chunk_size_start296,13183
+  , s_chunk_sizestate::s_chunk_size297,13206
+  , s_chunk_parametersstate::s_chunk_parameters298,13223
+  , s_chunk_size_almost_donestate::s_chunk_size_almost_done299,13246
+  , s_headers_almost_donestate::s_headers_almost_done301,13276
+  , s_headers_donestate::s_headers_done302,13302
+  , s_chunk_datastate::s_chunk_data309,13517
+  , s_chunk_data_almost_donestate::s_chunk_data_almost_done310,13534
+  , s_chunk_data_donestate::s_chunk_data_done311,13563
+  , s_body_identitystate::s_body_identity313,13586
+  , s_body_identity_eofstate::s_body_identity_eof314,13606
+  , s_message_donestate::s_message_done316,13631
+#define PARSING_HEADER(320,13657
+enum header_states323,13715
+  { h_general header_states::h_general324,13734
+  , h_Cheader_states::h_C325,13752
+  , h_COheader_states::h_CO326,13760
+  , h_CONheader_states::h_CON327,13769
+  , h_matching_connectionheader_states::h_matching_connection329,13780
+  , h_matching_proxy_connectionheader_states::h_matching_proxy_connection330,13806
+  , h_matching_content_lengthheader_states::h_matching_content_length331,13838
+  , h_matching_transfer_encodingheader_states::h_matching_transfer_encoding332,13868
+  , h_matching_upgradeheader_states::h_matching_upgrade333,13901
+  , h_connectionheader_states::h_connection335,13925
+  , h_content_lengthheader_states::h_content_length336,13942
+  , h_transfer_encodingheader_states::h_transfer_encoding337,13963
+  , h_upgradeheader_states::h_upgrade338,13987
+  , h_matching_transfer_encoding_chunkedheader_states::h_matching_transfer_encoding_chunked340,14002
+  , h_matching_connection_keep_aliveheader_states::h_matching_connection_keep_alive341,14043
+  , h_matching_connection_closeheader_states::h_matching_connection_close342,14080
+  , h_transfer_encoding_chunkedheader_states::h_transfer_encoding_chunked344,14113
+  , h_connection_keep_aliveheader_states::h_connection_keep_alive345,14145
+  , h_connection_closeheader_states::h_connection_close346,14173
+enum http_host_state349,14202
+    s_http_host_dead http_host_state::s_http_host_dead351,14227
+  , s_http_userinfo_starthttp_host_state::s_http_userinfo_start352,14252
+  , s_http_userinfohttp_host_state::s_http_userinfo353,14278
+  , s_http_host_starthttp_host_state::s_http_host_start354,14298
+  , s_http_host_v6_starthttp_host_state::s_http_host_v6_start355,14320
+  , s_http_hosthttp_host_state::s_http_host356,14345
+  , s_http_host_v6http_host_state::s_http_host_v6357,14361
+  , s_http_host_v6_endhttp_host_state::s_http_host_v6_end358,14380
+  , s_http_host_port_starthttp_host_state::s_http_host_port_start359,14403
+  , s_http_host_porthttp_host_state::s_http_host_port360,14430
+#define CR 364,14515
+#define LF 365,14548
+#define LOWER(366,14581
+#define IS_ALPHA(367,14635
+#define IS_NUM(368,14700
+#define IS_ALPHANUM(369,14755
+#define IS_HEX(370,14810
+#define IS_MARK(371,14890
+#define IS_USERINFO_CHAR(374,15052
+#define TOKEN(379,15255
+#define IS_URL_CHAR(380,15310
+#define IS_HOST_CHAR(381,15382
+#define TOKEN(383,15461
+#define IS_URL_CHAR(384,15535
+#define IS_HOST_CHAR(386,15678
+#define start_state 391,15829
+# define STRICT_CHECK(395,15933
+# define NEW_MESSAGE(402,16371
+# define STRICT_CHECK(404,16456
+# define NEW_MESSAGE(405,16484
+#define HTTP_STRERROR_GEN(410,16588
+  const char *name;::name412,16654
+  const char *description;::description413,16674
+} http_strerror_tab[http_strerror_tab414,16701
+#undef HTTP_STRERROR_GEN417,16766
+parse_url_char(433,17392
+size_t http_parser_execute 580,19931
+http_message_needs_eof 1857,54153
+http_should_keep_alive 1880,54684
+http_method_str 1899,55063
+http_parser_init 1906,55161
+http_errno_name(1917,55527
+http_errno_description(1923,55694
+http_parse_host_char(1929,55890
+http_parse_host(1994,57028
+http_parser_parse_url(2067,58779
+http_parser_pause(2166,60948
+http_body_is_final(2180,61412
+
+src/http_parser/url_parser.cc,32
+dump_url 6,70
+int main(26,584
+
+src/http_parser/http_parser.h,2929
+#define http_parser_h22,1177
+#define HTTP_PARSER_VERSION_MAJOR 27,1239
+#define HTTP_PARSER_VERSION_MINOR 28,1275
+typedef __int8 int8_t;33,1442
+typedef unsigned __int8 uint8_t;34,1465
+typedef __int16 int16_t;35,1498
+typedef unsigned __int16 uint16_t;36,1523
+typedef __int32 int32_t;37,1558
+typedef unsigned __int32 uint32_t;38,1583
+typedef __int64 int64_t;39,1618
+typedef unsigned __int64 uint64_t;40,1643
+typedef SIZE_T size_t;41,1678
+typedef SSIZE_T ssize_t;42,1701
+# define HTTP_PARSER_STRICT 51,1869
+# define HTTP_PARSER_DEBUG 58,2046
+#define HTTP_MAX_HEADER_SIZE 63,2119
+typedef struct http_parser http_parser;66,2160
+typedef struct http_parser_settings http_parser_settings;67,2200
+typedef int (*http_data_cb)http_data_cb83,2917
+typedef int (*http_cb)http_cb84,2992
+#define HTTP_METHOD_MAP(88,3055
+enum http_method121,4272
+#define XX(123,4293
+  HTTP_METHOD_MAP(124,4342
+  HTTP_METHOD_MAP(XX)124,4342
+#undef XX125,4364
+enum http_parser_type 129,4381
+enum http_parser_type { HTTP_REQUEST,129,4381
+enum http_parser_type { HTTP_REQUEST, HTTP_RESPONSE,129,4381
+enum http_parser_type { HTTP_REQUEST, HTTP_RESPONSE, HTTP_BOTH 129,4381
+enum flags133,4495
+  { F_CHUNKED 134,4506
+  , F_CONNECTION_KEEP_ALIVE 135,4543
+  , F_CONNECTION_CLOSE 136,4580
+  , F_TRAILING 137,4617
+  , F_UPGRADE 138,4654
+  , F_SKIPBODY 139,4691
+#define HTTP_ERRNO_MAP(147,4845
+#define HTTP_ERRNO_GEN(189,7641
+enum http_errno 190,7679
+  HTTP_ERRNO_MAP(191,7697
+  HTTP_ERRNO_MAP(HTTP_ERRNO_GEN)191,7697
+#undef HTTP_ERRNO_GEN193,7733
+#define HTTP_PARSER_ERRNO(197,7807
+#define HTTP_PARSER_ERRNO_LINE(201,7965
+#define HTTP_PARSER_ERRNO_LINE(203,8031
+struct http_parser 207,8082
+  unsigned char type 209,8121
+  unsigned char flags 210,8179
+  unsigned char state;211,8257
+  unsigned char header_state;212,8323
+  unsigned char index;213,8396
+  uint32_t nread;215,8460
+  uint64_t content_length;216,8527
+  unsigned short http_major;219,8629
+  unsigned short http_minor;220,8658
+  unsigned short status_code;221,8687
+  unsigned char method;222,8738
+  unsigned char http_errno 223,8788
+  unsigned char upgrade 230,9036
+  uint32_t error_lineno;233,9088
+  void *data;data237,9138
+struct http_parser_settings 241,9224
+  http_cb      on_message_begin;242,9254
+  http_data_cb on_url;243,9287
+  http_data_cb on_header_field;244,9310
+  http_data_cb on_header_value;245,9342
+  http_cb      on_headers_complete;246,9374
+  http_data_cb on_body;247,9410
+  http_cb      on_message_complete;248,9434
+enum http_parser_url_fields252,9475
+  { UF_SCHEMA 253,9503
+  , UF_HOST 254,9531
+  , UF_PORT 255,9559
+  , UF_PATH 256,9587
+  , UF_QUERY 257,9615
+  , UF_FRAGMENT 258,9643
+  , UF_USERINFO 259,9671
+  , UF_MAX 260,9699
+struct http_parser_url 271,10020
+  uint16_t field_set;272,10045
+  uint16_t port;273,10113
+    uint16_t off;276,10188
+    uint16_t len;277,10267
+  } field_data[field_data278,10329
+
+src/protocol.cc,79
+config_is_supported(13,274
+config_create(28,597
+config_t::~config_t(42,1100
+
+src/rng.h,20
+#define RNG_H6,112
+
+src/curl_util.h,26
+#define CURL_UTIL_H8,208
+
+src/curl_util.h.BASE.23047.h,26
+#define CURL_UTIL_H8,208
+
+src/pgen_fake.cc,799
+using std::string;13,210
+using std::ostringstream;14,229
+const char *const words[words19,411
+const size_t nwords 361,23592
+enum payload_type 363,23651
+  PT_HTML,payload_type::PT_HTML364,23671
+  PT_JS,payload_type::PT_JS365,23682
+  PT_SWF,payload_type::PT_SWF366,23691
+  PT_PDFpayload_type::PT_PDF367,23701
+const char *const type_extensions[type_extensions370,23714
+const char *const type_mimes[type_mimes371,23788
+pick_payload_type(382,24155
+gen_one_uripath(397,24364
+gen_one_hostname(408,24633
+gen_one_cookie_header(426,25077
+gen_one_html(451,25577
+gen_one_js(489,26682
+gen_one_swf(527,28039
+gen_one_pdf(551,28915
+gen_one_client_trace(575,29524
+gen_one_server_trace(602,30147
+  typedef void (*gen_payload_f)gen_payload_f604,30208
+gen_traces(629,30881
+main(662,31624
+
+src/test/unittest_socks.cc,668
+#define SOCKS_PRIVATE9,197
+struct test_socks_state17,419
+  struct evbuffer *dest;test_socks_state::dest19,445
+  struct evbuffer *source;test_socks_state::source20,470
+  socks_state_t *state;test_socks_state::state21,497
+cleanup_socks_state(25,536
+setup_socks_state(40,843
+static const struct testcase_setup_t socks_fixture 58,1223
+test_socks_socks5_send_negotiation(68,1599
+test_socks_socks5_request(166,4264
+test_socks_socks5_request_reply(319,8665
+test_socks_socks4_request(412,11562
+  #define HUGE 515,14746
+  #undef HUGE527,15036
+test_socks_socks4_request_reply(540,15331
+#define T(589,16719
+struct testcase_t socks_tests[socks_tests592,16794
+
+src/test/webpage_tester.cc,3488
+# undef near23,405
+# undef far24,418
+# define ENOTCONN 25,430
+#define TL_TIMEOUT 50,1427
+#define LOGGING 51,1448
+class WebpageFetcher52,1466
+  bufferevent *near;WebpageFetcher::near56,1498
+  bufferevent *far;WebpageFetcher::far57,1519
+  bufferevent *outbound_far;WebpageFetcher::outbound_far58,1539
+  evutil_socket_t nearfd;WebpageFetcher::nearfd60,1569
+  evutil_socket_t farfd;WebpageFetcher::farfd61,1595
+  curl_socket_t outbound_farfd;WebpageFetcher::outbound_farfd63,1623
+  event* fetch_through_st_event;WebpageFetcher::fetch_through_st_event65,1658
+  event* outbound_far_event;WebpageFetcher::outbound_far_event66,1691
+  struct evbuffer *neartext;WebpageFetcher::neartext68,1721
+  struct evbuffer *fartext;WebpageFetcher::fartext69,1750
+  CURLM* _curl_multi_handle;WebpageFetcher::_curl_multi_handle71,1779
+  int _curl_running_handle;WebpageFetcher::_curl_running_handle73,1862
+  CURL* curl_near;WebpageFetcher::curl_near75,1891
+  CURL* curl_far;WebpageFetcher::curl_far76,1910
+  CURL* curl_outbound_far;WebpageFetcher::curl_outbound_far77,1966
+  struct evbuffer *neartrans;WebpageFetcher::neartrans79,1994
+  struct evbuffer *fartrans;WebpageFetcher::fartrans80,2024
+  evbuffer* http_request;WebpageFetcher::http_request82,2054
+  char *lbuf;WebpageFetcher::lbuf84,2083
+  size_t lbufsize;WebpageFetcher::lbufsize85,2097
+  struct evconnlistener *listener;WebpageFetcher::listener87,2117
+  struct event *pause_timer;WebpageFetcher::pause_timer88,2152
+  struct event *timeout_timer;WebpageFetcher::timeout_timer89,2181
+  struct event_base *base;WebpageFetcher::base92,2269
+  bool base_stopped WebpageFetcher::base_stopped93,2296
+  bool rcvd_eof_near WebpageFetcher::rcvd_eof_near95,2326
+  bool rcvd_eof_far WebpageFetcher::rcvd_eof_far96,2352
+  bool sent_eof_near WebpageFetcher::sent_eof_near97,2378
+  bool sent_eof_far WebpageFetcher::sent_eof_far98,2404
+  bool script_eof WebpageFetcher::script_eof99,2430
+  bool saw_error WebpageFetcher::saw_error100,2456
+class ParsedHeader 116,2746
+  string _url;ParsedHeader::_url119,2779
+  string _host;ParsedHeader::_host120,2794
+  bool _host_found;ParsedHeader::_host_found121,2810
+  bool _message_complete;ParsedHeader::_message_complete124,2841
+  http_parser_settings settings_url_extract;ParsedHeader::settings_url_extract125,2867
+  http_parser* _parser;ParsedHeader::_parser128,2924
+  static int message_complete_cb ParsedHeader::message_complete_cb133,3105
+  static int request_url_cb ParsedHeader::request_url_cb139,3237
+  header_field_cb ParsedHeader::header_field_cb146,3402
+  header_value_cb ParsedHeader::header_value_cb155,3593
+  ParsedHeader(ParsedHeader::ParsedHeader167,3859
+  ~ParsedHeader(ParsedHeader::~ParsedHeader182,4300
+  extract_url(ParsedHeader::extract_url188,4354
+send_squelch(223,5191
+curl_socket_t get_conn_socket(239,5689
+curl_read_cb(252,6227
+bool WebpageFetcher::init_easy_set_socket(264,6546
+static int sock_cb(293,7651
+void curl_socket_event_cb(312,8198
+bool fetch_page(339,9159
+bool WebpageFetcher::fetch_through_st(362,9678
+send_eof(386,10390
+socket_read_cb(406,10918
+socket_drain_cb(441,12203
+socket_event_cb(456,12550
+timeout_cb(535,14784
+queue_eof(554,15234
+stop_if_finished(572,15571
+bool WebpageFetcher::fetch_direct_socket(586,16047
+init_sockets_internal(641,17518
+init_sockets_external(670,18370
+WebpageFetcher::compare_far_near(759,21581
+bool init_curl_handles(781,22103
+main(797,22562
+
+src/test/unittest.h,46
+#define UNITTEST_H7,169
+#define ALEN(14,344
+
+src/test/tester_proxy/tester_proxy.cc,481
+const char* program_name;31,653
+static struct event_base *base;base33,680
+static struct sockaddr_storage listen_on_addr;34,712
+static struct sockaddr_storage connect_to_addr;35,759
+static double drop_rate 36,807
+static int connect_to_addrlen;37,870
+#define MAX_OUTPUT 39,902
+#define LOGGING 40,932
+readcb(46,1102
+drained_writecb(76,2029
+close_on_finished_writecb(89,2416
+eventcb(100,2655
+syntax(140,4052
+accept_cb(153,4583
+void read_options(187,5682
+main(271,7816
+
+src/test/tltester.cc,1571
+# undef near15,265
+# undef far16,278
+# define ENOTCONN 17,290
+#define TL_TIMEOUT 83,3442
+#define LOGGING 84,3464
+struct tstate86,3487
+  struct bufferevent *near;tstate::near88,3503
+  struct bufferevent *far;tstate::far89,3531
+  struct evbuffer *neartext;tstate::neartext90,3558
+  struct evbuffer *fartext;tstate::fartext91,3587
+  struct evbuffer *neartrans;tstate::neartrans92,3615
+  struct evbuffer *fartrans;tstate::fartrans93,3645
+  FILE *script;tstate::script94,3674
+  FILE *transcript;tstate::transcript95,3690
+  char *lbuf;tstate::lbuf96,3710
+  size_t lbufsize;tstate::lbufsize97,3724
+  struct evconnlistener *listener;tstate::listener99,3744
+  struct event *pause_timer;tstate::pause_timer100,3779
+  struct event *timeout_timer;tstate::timeout_timer101,3808
+  struct event_base *base;tstate::base104,3896
+  bool rcvd_eof_near tstate::rcvd_eof_near106,3924
+  bool rcvd_eof_far tstate::rcvd_eof_far107,3950
+  bool sent_eof_near tstate::sent_eof_near108,3976
+  bool sent_eof_far tstate::sent_eof_far109,4002
+  bool script_eof tstate::script_eof110,4028
+  bool saw_error tstate::saw_error111,4054
+flush_text(119,4156
+send_eof(174,5426
+send_squelch(191,5971
+socket_read_cb(210,6546
+socket_drain_cb(232,7271
+socket_event_cb(248,7592
+pause_expired_cb(318,9634
+timeout_cb(326,9804
+queue_text(338,10009
+queue_eof(356,10504
+queue_delay(374,10840
+stop_if_finished(383,11047
+script_syntax_error(398,11527
+script_next_action(405,11675
+init_sockets_internal(516,14134
+init_sockets_external(545,14978
+main(633,18159
+
+src/test/unittest_pdfsteg.cc,134
+test_pdf_add_remove_delimiters(11,222
+test_pdf_wrap_unwrap(37,888
+#define T(75,1694
+struct testcase_t pdf_tests[pdf_tests78,1751
+
+src/test/unittest_crypt.cc,2388
+test_crypt_aesecb_varkey128(14,289
+  struct testvec19,500
+    const char *key;testvec::key21,521
+    const char *ciphertext;testvec::ciphertext22,542
+test_crypt_aesecb_vartxt128(308,20419
+  struct testvec313,20612
+    const char *plaintext;testvec::plaintext315,20633
+    const char *ciphertext;testvec::ciphertext316,20660
+test_crypt_aesgcm_enc(605,40625
+  struct testvec607,40657
+    const char *key;testvec::key609,40678
+    const char *iv;testvec::iv610,40699
+    const char *tag;testvec::tag611,40719
+    const char *pt;testvec::pt612,40740
+    const char *ct;testvec::ct613,40760
+    size_t len;testvec::len614,40780
+test_crypt_aesgcm_good_dec(689,44795
+  struct testvec691,44832
+    const char *key;testvec::key693,44853
+    const char *iv;testvec::iv694,44874
+    const char *ct;testvec::ct695,44894
+    const char *pt;testvec::pt696,44914
+    size_t len;testvec::len697,44934
+test_crypt_aesgcm_bad_dec(774,48803
+  struct testvec776,48839
+    const char *key;testvec::key778,48860
+    const char *iv;testvec::iv779,48881
+    const char *ct;testvec::ct780,48901
+    size_t len;testvec::len781,48921
+test_crypt_ecdh_p224_good(843,51733
+  struct testvec845,51769
+    const char *dA;testvec::dA847,51790
+    const char *xA;testvec::xA848,51810
+    const char *dB;testvec::dB849,51830
+    const char *xB;testvec::xB850,51850
+    const char *z;testvec::z851,51870
+test_crypt_ecdh_p224_bad(1153,68552
+  enum { bad_x ::bad_x1155,68587
+  enum { bad_x = 1, bad_z ::bad_z1155,68587
+  struct testvec1156,68616
+    const char *dA;testvec::dA1158,68637
+    const char *xA;testvec::xA1159,68657
+    const char *dB;testvec::dB1160,68677
+    const char *xB;testvec::xB1161,68697
+    const char *z;testvec::z1162,68717
+    unsigned int what;testvec::what1163,68736
+test_crypt_hkdf(1270,72925
+  struct testvec1272,72951
+    const char *key;testvec::key1274,72972
+    size_t klen;testvec::klen1275,72993
+    const char *salt;testvec::salt1276,73010
+    size_t slen;testvec::slen1277,73032
+    const char *info;testvec::info1278,73049
+    size_t ilen;testvec::ilen1279,73071
+    const char *okm;testvec::okm1280,73088
+    size_t olen;testvec::olen1281,73109
+#define TV(1283,73131
+#undef TV1325,75656
+test_crypt_rng(1396,78099
+#define T(1413,78438
+struct testcase_t crypt_tests[crypt_tests1416,78497
+
+src/test/tinytest.cc,1009
+#define WIN32_LEAN_AND_MEAN10,179
+#define LONGEST_TEST_NAME 21,334
+static int in_tinytest_main 23,367
+static int n_ok 24,441
+static int n_bad 25,503
+static int n_skipped 26,567
+static int opt_forked 28,642
+static int opt_nofork 29,723
+static int opt_verbosity 30,798
+const char *verbosity_flag verbosity_flag31,875
+enum outcome 33,909
+enum outcome { SKIP=outcome::SKIP33,909
+enum outcome { SKIP=2, OK=outcome::OK33,909
+enum outcome { SKIP=2, OK=1, FAIL=outcome::FAIL33,909
+static enum outcome cur_test_outcome 34,948
+const char *cur_test_prefix cur_test_prefix35,993
+const char *cur_test_name cur_test_name37,1149
+static const char *commandname commandname41,1235
+_testcase_run_bare(48,1401
+#define MAGIC_EXITCODE 72,1846
+_testcase_run_forked(75,1893
+testcase_run_one(171,4253
+_tinytest_set_flag(220,5334
+usage(245,5970
+tinytest_main(258,6317
+_tinytest_get_verbosity(323,7868
+_tinytest_set_test_failed(329,7931
+_tinytest_set_test_skipped(340,8156
+tt_base16_encode(347,8255
+
+src/test/unittest.cc,13
+main(11,220
+
+src/test/tinytest.h,692
+#define _TINYTEST_H6,134
+#define TT_FORK 11,247
+#define TT_SKIP 13,325
+#define _TT_ENABLED 15,411
+#define TT_FIRST_USER_FLAG 17,504
+typedef void (*testcase_fn)testcase_fn19,539
+struct testcase_setup_t 24,665
+	void *(*setup_fn)setup_fn26,751
+	int (*cleanup_fn)cleanup_fn28,870
+struct testcase_t 32,973
+	const char *name;name33,993
+	testcase_fn fn;34,1049
+	unsigned long flags;35,1118
+	const struct testcase_setup_t *setup;setup36,1172
+	void *setup_data;setup_data37,1245
+#define END_OF_TESTCASES 39,1311
+struct testgroup_t 42,1421
+	const char *prefix;prefix43,1442
+	struct testcase_t *cases;cases44,1503
+#define END_OF_GROUPS 46,1576
+#define tinytest_skip(61,2316
+
+src/test/http_parser_tester.cc,6554
+#undef TRUE29,1311
+#define TRUE 30,1323
+#undef FALSE31,1338
+#define FALSE 32,1351
+#define MAX_HEADERS 34,1368
+#define MAX_ELEMENT_SIZE 35,1391
+#define MIN(37,1421
+static http_parser *parser;parser39,1463
+struct message 41,1492
+  const char *name;message::name42,1509
+  const char *raw;message::raw43,1555
+  enum http_parser_type type;message::type44,1574
+  enum http_method method;message::method45,1604
+  int status_code;message::status_code46,1631
+  char request_path[message::request_path47,1650
+  char request_url[message::request_url48,1689
+  char fragment[message::fragment49,1727
+  char query_string[message::query_string50,1762
+  char body[message::body51,1801
+  size_t body_size;message::body_size52,1832
+  const char *host;message::host53,1852
+  const char *userinfo;message::userinfo54,1872
+  uint16_t port;message::port55,1896
+  int num_headers;message::num_headers56,1913
+  enum { NONE=message::NONE57,1932
+  enum { NONE=0, FIELD,message::FIELD57,1932
+  enum { NONE=0, FIELD, VALUE message::VALUE57,1932
+  char headers message::headers58,1985
+  int should_keep_alive;message::should_keep_alive59,2036
+  const char *upgrade;message::upgrade61,2062
+  unsigned short http_major;message::http_major63,2103
+  unsigned short http_minor;message::http_minor64,2132
+  int message_begin_cb_called;message::message_begin_cb_called66,2162
+  int headers_complete_cb_called;message::headers_complete_cb_called67,2193
+  int message_complete_cb_called;message::message_complete_cb_called68,2227
+  int message_complete_on_eof;message::message_complete_on_eof69,2261
+  int body_is_final;message::body_is_final70,2292
+static int currently_parsing_eof;73,2317
+static struct message messages[messages75,2352
+static int num_messages;76,2387
+static http_parser_settings *current_pause_parser;current_pause_parser77,2412
+const struct message requests[requests80,2490
+#define CURL_GET 81,2524
+#define FIREFOX_GET 107,3247
+#define DUMBFUCK 143,4540
+#define FRAGMENT_IN_URI 165,5011
+#define GET_NO_HEADERS_NO_BODY 184,5534
+#define GET_ONE_HEADER_NO_BODY 202,6028
+#define GET_FUNKY_CONTENT_LENGTH 224,6577
+#define POST_IDENTITY_BODY_WORLD 247,7180
+#define POST_CHUNKED_ALL_YOUR_BASE 274,7914
+#define TWO_CHUNKS_MULT_ZERO_END 299,8620
+#define CHUNKED_W_TRAILING_HEADERS 325,9281
+#define CHUNKED_W_BULLSHIT_AFTER_LENGTH 355,10080
+#define WITH_QUOTES 381,10826
+#define APACHEBENCH_GET 399,11286
+#define QUERY_URL_WITH_QUESTION_MARK_GET 428,12108
+#define PREFIX_NEWLINE_GET 448,12625
+#define UPGRADE_REQUEST 469,13139
+#define CONNECT_REQUEST 504,14244
+#define REPORT_REQ 530,14999
+#define NO_HTTP_VERSION 549,15389
+#define MSEARCH_REQ 568,15772
+#define LINE_FOLDING_IN_HEADER 593,16403
+#define QUERY_TERMINATED_HOST 622,17060
+#define QUERY_TERMINATED_HOSTPORT 642,17552
+#define SPACE_TERMINATED_HOSTPORT 663,18078
+#define PATCH_REQ 684,18571
+#define CONNECT_CAPS_REQUEST 712,19351
+#define UTF8_PATH_REQ 737,20042
+#define HOSTNAME_UNDERSCORE 758,20555
+#define EAT_TRAILING_CRLF_NO_CONNECTION_CLOSE 784,21310
+#define EAT_TRAILING_CRLF_WITH_CONNECTION_CLOSE 811,22144
+#define PURGE_REQ 839,23071
+#define SEARCH_REQ 859,23538
+#define PROXY_WITH_BASIC_AUTH 879,23985
+const struct message responses[responses905,24575
+#define GOOGLE_301 906,24610
+#define NO_CONTENT_LENGTH_RESPONSE 949,26285
+#define NO_HEADERS_NO_BODY_404 997,28100
+#define NO_REASON_PHRASE 1012,28424
+#define TRAILING_SPACE_ON_CHUNKED_BODY 1026,28716
+#define NO_CARRIAGE_RET 1058,29522
+#define PROXY_CONNECTION 1079,30098
+#define UNDERSTORE_HEADER_KEY 1104,30786
+#define BONJOUR_MADAME_FR 1129,31610
+#define RES_FIELD_UNDERSCORE 1166,32767
+#define NON_ASCII_IN_STATUS_LINE 1206,34188
+#define HTTP_VERSION_0_9 1229,34804
+#define NO_CONTENT_LENGTH_NO_TRANSFER_ENCODING_RESPONSE 1246,35138
+#define NO_BODY_HTTP10_KA_200 1269,35795
+#define NO_BODY_HTTP10_KA_204 1288,36234
+#define NO_BODY_HTTP11_KA_200 1307,36668
+#define NO_BODY_HTTP11_KA_204 1323,37016
+#define NO_BODY_HTTP11_NOKA_204 1339,37356
+#define NO_BODY_HTTP11_KA_CHUNKED_200 1358,37792
+#define SPACE_IN_FIELD_RES 1380,38299
+request_url_cb 1417,39363
+header_field_cb 1425,39525
+header_value_cb 1441,39831
+check_body_is_final 1454,40076
+body_cb 1467,40446
+count_body_cb 1478,40723
+message_begin_cb 1488,40911
+headers_complete_cb 1496,41046
+message_complete_cb 1509,41490
+dontcall_message_begin_cb 1543,42508
+dontcall_header_field_cb 1551,42672
+dontcall_header_value_cb 1559,42877
+dontcall_request_url_cb 1567,43082
+dontcall_body_cb 1575,43285
+dontcall_headers_complete_cb 1583,43477
+dontcall_message_complete_cb 1592,43668
+static http_parser_settings settings_dontcall 1600,43855
+pause_message_begin_cb 1615,44508
+pause_header_field_cb 1623,44659
+pause_header_value_cb 1631,44847
+pause_request_url_cb 1639,45035
+pause_body_cb 1647,45221
+pause_headers_complete_cb 1655,45393
+pause_message_complete_cb 1663,45550
+static http_parser_settings settings_pause 1670,45703
+static http_parser_settings settings 1680,46054
+static http_parser_settings settings_count_body 1690,46357
+static http_parser_settings settings_null 1700,46677
+parser_init 1711,46892
+parser_free 1726,47109
+size_t parse 1733,47180
+size_t parse_count_body 1741,47364
+size_t parse_pause 1749,47570
+check_str_eq 1761,47862
+check_num_eq 1781,48513
+#define MESSAGE_CHECK_STR_EQ(1794,48836
+#define MESSAGE_CHECK_NUM_EQ(1797,48967
+#define MESSAGE_CHECK_URL_EQ(1800,49098
+message_eq 1816,50037
+count_parsed_messages(1895,52344
+upgrade_message_fix(1918,52768
+print_error 1955,53617
+test_preserve_data 1998,54626
+struct url_test 2010,54924
+  const char *name;url_test::name2011,54942
+  const char *url;url_test::url2012,54962
+  int is_connect;url_test::is_connect2013,54981
+  struct http_parser_url u;url_test::u2014,54999
+  int rv;url_test::rv2015,55027
+const struct url_test url_tests[url_tests2018,55041
+dump_url 2482,65414
+test_parse_url 2503,65933
+test_method_str 2549,67166
+test_message 2556,67315
+test_message_count_body 2616,68492
+test_simple 2652,69187
+test_header_overflow_error 2683,69944
+test_content_length_overflow 2711,70742
+test_header_content_length_overflow_error 2724,71101
+#define X(2726,71152
+#undef X2733,71572
+test_chunk_content_length_overflow_error 2740,71811
+#define X(2742,71861
+#undef X2751,72433
+test_no_overflow_long_body 2758,72672
+test_multiple3 2791,73620
+test_scan 2848,74826
+create_large_chunked_message 2967,77790
+test_message_pause 2998,78565
+main 3049,79628
+
+src/test/unittest_base64.cc,500
+struct testvec9,159
+  const char *dec;testvec::dec11,176
+  const char *enc;testvec::enc12,195
+  size_t declen;testvec::declen13,214
+  size_t enclen;testvec::enclen14,231
+#define S_(17,252
+#define S(18,269
+const struct testvec testvecs[testvecs20,289
+#define B(31,619
+#undef B69,3295
+#define D(72,3379
+#undef D86,4233
+test_base64_standard(93,4277
+test_base64_altpunct(115,4722
+test_base64_wrapping(148,5490
+#define T(186,6568
+struct testcase_t base64_tests[base64_tests189,6628
+
+src/test/tinytest_macros.h,1003
+#define _TINYTEST_MACROS_H7,190
+#define TT_STMT_BEGIN 15,349
+#define TT_STMT_END 16,376
+#define TT_EXIT_TEST_FUNCTION 21,533
+#define TT_DECLARE(26,705
+#define TT_GRIPE(34,924
+#define TT_BLATHER(37,1020
+#define TT_DIE(42,1151
+#define TT_FAIL(49,1304
+#define tt_abort_printf(56,1486
+#define tt_abort_perror(57,1527
+#define tt_abort_msg(58,1607
+#define tt_abort(59,1653
+#define tt_fail_printf(62,1769
+#define tt_fail_perror(63,1810
+#define tt_fail_msg(64,1890
+#define tt_fail(65,1936
+#define tt_skip(68,2045
+#define _tt_want(74,2170
+#define tt_want_msg(86,2456
+#define tt_assert_msg(90,2575
+#define tt_want(94,2704
+#define tt_assert(96,2803
+#define tt_assert_test_fmt_type(98,2860
+#define tt_assert_test_type(128,3752
+#define tt_assert_op_type(134,4008
+#define tt_bool_op(137,4123
+#define tt_int_op(140,4230
+#define tt_uint_op(143,4329
+#define tt_ptr_op(147,4452
+#define tt_char_op(151,4566
+#define tt_str_op(155,4768
+#define tt_stn_op(159,4900
+#define tt_mem_op(168,5448
+
+src/test/unittest_compression.cc,628
+struct zlib_testvec19,516
+  const uint8_t *text;zlib_testvec::text21,538
+  size_t tlen;zlib_testvec::tlen22,561
+  const uint8_t *zlibbed;zlib_testvec::zlibbed23,576
+  size_t zlen;zlib_testvec::zlen24,602
+  const uint8_t *gzipped;zlib_testvec::gzipped25,617
+  size_t glen;zlib_testvec::glen26,643
+#define GZH(29,662
+#define T(32,727
+const zlib_testvec testvecs[testvecs37,927
+#undef T374,20778
+#undef GZH375,20787
+test_compress_zlib(378,20811
+test_decompress_zlib(391,21102
+test_compress_gzip(404,21382
+test_decompress_gzip(416,21672
+#define T(428,21940
+struct testcase_t zlib_tests[zlib_tests431,21993
+
+src/util-net.cc,173
+resolve_address_port(29,706
+printable_address(82,2048
+static struct evdns_base *the_evdns_base the_evdns_base121,3217
+get_evdns_base(124,3287
+init_evdns_base(130,3342
+
+src/curl_util.cc,214
+int wait_on_socket(22,445
+discard_data(52,1014
+unsigned long fetch_url_raw(76,1765
+size_t curl_read_data_cb(100,2387
+int sockopt_callback(115,2824
+int ignore_close(125,3082
+int curl_close_socket_cb(132,3188
+
+src/listener.h,184
+#define LISTENER_H5,132
+struct listener_t12,250
+  config_t *cfg;cfg14,270
+  struct evconnlistener *listener;listener15,287
+  char *address;address16,322
+  size_t index;17,339
+
+src/main.cc,391
+using std::vector;34,592
+using std::string;35,611
+static bool allow_kq 37,631
+static bool daemon_mode 38,661
+static string pidfile_name;39,694
+static string registration_helper;40,722
+start_shutdown(53,1079
+handle_signal_cb(78,2054
+lethal_signal(101,2662
+stdin_detect_eof_cb(137,3825
+call_registration_helper(160,4270
+usage(213,5920
+handle_generic_args(248,7186
+main(341,10015
+
+src/pgen.h,286
+#define PGEN_H6,119
+#define TYPE_SERVICE_DATA 10,192
+#define TYPE_HTTP_REQUEST 11,222
+#define TYPE_HTTP_RESPONSE 12,252
+struct pentry_header 15,338
+  uint16_t ptype;16,361
+  uint8_t  pad1[pad117,379
+  uint32_t length;18,399
+  uint16_t port;19,418
+  uint8_t  pad2[pad220,456
+
+src/base64.cc,194
+const int CHARS_PER_LINE 8,198
+encode1(11,242
+decode1(29,637
+namespace base6459,1663
+encoder::encode(base64::encoder::encode63,1693
+encoder::encode_end(121,3272
+decoder::decode(150,3828
+
+src/pgen_pcap.cc,2078
+#define __FAVOR_BSD 14,250
+#define NUM_FLOWS 20,376
+#define NUM_LISTS 21,399
+#define CONN_DATA_REQUEST 23,423
+#define CONN_DATA_REPLY 24,488
+#define RECV_MTU 26,552
+#define MAX_CHAIN_LEN 28,599
+#define MSG_INSERTED 30,627
+#define MSG_INVALID 31,650
+#define MSG_SEQ_WRAP 32,672
+#define MSG_DUPLICATE 33,696
+#define CHAIN_TOO_LONG 34,721
+#define MSG_OVERLAP 35,747
+#define CHAIN_HAS_GAPS_OVERLAPS 36,770
+#define CHAIN_EMPTY 37,805
+struct msg 39,829
+  uint8_t *buf;msg::buf40,842
+  uint16_t len;msg::len41,858
+  uint32_t seqno;msg::seqno42,874
+  msg *next_msg;msg::next_msg43,892
+struct flow 46,913
+  uint32_t src_ip;flow::src_ip47,927
+  uint32_t dst_ip;flow::dst_ip48,946
+  uint16_t sport;flow::sport49,965
+  uint16_t dport;flow::dport50,983
+  uint8_t flags;flow::flags51,1001
+  uint8_t proto;flow::proto52,1018
+  struct timeval change_time;flow::change_time53,1035
+  int sockfd;flow::sockfd54,1065
+  flow *next_flow;flow::next_flow55,1079
+  msg *msg_buf_chain;flow::msg_buf_chain56,1098
+  int chain_len;flow::chain_len57,1120
+  int msg_len_so_far;flow::msg_len_so_far58,1137
+  int dir;flow::dir59,1159
+  uint32_t ack_so_far;flow::ack_so_far60,1213
+static flow *flows[flows63,1287
+static pcap_t *descr;descr64,1318
+static int dir_flag 65,1340
+static char *bp_filter;bp_filter66,1365
+static char errbuf[errbuf67,1389
+static struct bpf_program fp;68,1427
+static uint32_t netp;69,1457
+static const char *argv0;argv070,1479
+#define RECV_MTU 72,1506
+#define PORT_HTTP 73,1529
+static FILE *client_file;client_file75,1551
+static FILE *server_file;server_file76,1577
+usage(79,1630
+terminate(87,1773
+free_msg_chain(101,2069
+has_chain_gaps(117,2298
+write_inflate_msg(143,2839
+write_msg_chains(213,4570
+is_valid_http_request(245,5336
+add_msg_to_flow(267,5821
+hash_flow(345,7419
+flow_compare(351,7523
+add_to_flows(358,7702
+has_seen_flow(382,8210
+reverse_flow(397,8426
+write_http_packet(413,8657
+write_packet(431,9044
+my_callback(446,9254
+handle_pcap_file(523,11244
+list_files(548,11821
+main(579,12474
+
+src/mkem.h,1024
+#define MKEM_H8,239
+struct MKEMParams16,448
+  BN_CTX *ctx;ctx18,468
+  const BIGNUM *m;m20,484
+  const BIGNUM *b;b21,503
+  const BIGNUM *a0;a022,522
+  const BIGNUM *a1;a123,542
+  const BIGNUM *p0;p024,562
+  const BIGNUM *p1;p125,582
+  const BIGNUM *n0;n026,602
+  const BIGNUM *n1;n127,622
+  const BIGNUM *maxu;maxu28,642
+  const EC_GROUP *c0;c030,665
+  const EC_GROUP *c1;c131,687
+  const EC_POINT *g0;g033,710
+  const EC_POINT *g1;g134,732
+  size_t  msgsize;36,755
+  unsigned int pad_bits;37,774
+  uint8_t pad_mask;38,799
+  uint8_t curve_bit;39,819
+  MKEMParams(41,841
+  ~MKEMParams(42,868
+  MKEMParams(45,895
+struct MKEMPrivateKeyLoad 50,1055
+const struct MKEMPrivateKeyLoad PRIVATE_KEY 51,1085
+struct MKEM53,1136
+  const MKEMParams *params;params55,1150
+  const BIGNUM *s0;s056,1178
+  const BIGNUM *s1;s157,1198
+  const EC_POINT *p0;p058,1218
+  const EC_POINT *p1;p159,1240
+  ~MKEM(61,1263
+  MKEM(64,1330
+  MKEM(68,1473
+  MKEM(76,1833
+  int export_public_key(82,2083
+
+src/steg.cc,144
+steg_is_supported(12,222
+steg_new(23,451
+steg_config_t::steg_config_t(34,749
+steg_config_t::~steg_config_t(42,1030
+steg_t::~steg_t(43,1065
+
+src/base64.h,1120
+#define ST_BASE64_H6,177
+class encoder13,239
+  enum encode_step 15,255
+  enum encode_step { step_A,15,255
+  enum encode_step { step_A, step_B,15,255
+  enum encode_step { step_A, step_B, step_C 15,255
+  encode_step step;16,302
+  int stepcount;17,322
+  char result;18,339
+  char plus;19,354
+  char slash;20,367
+  char equals;21,381
+  bool wrap;22,396
+  encoder(28,627
+  ptrdiff_t encode(33,797
+  ptrdiff_t encode_end(34,877
+class decoder37,921
+  enum decode_step decoder::decode_step39,937
+  enum decode_step { step_A,decoder::decode_step::step_A39,937
+  enum decode_step { step_A, step_B,decoder::decode_step::step_B39,937
+  enum decode_step { step_A, step_B, step_C,decoder::decode_step::step_C39,937
+  enum decode_step { step_A, step_B, step_C, step_D decoder::decode_step::step_D39,937
+  decode_step step;decoder::step40,992
+  char plainchar;decoder::plainchar41,1012
+  char plus;decoder::plus42,1030
+  char slash;decoder::slash43,1043
+  char equals;decoder::equals44,1057
+  bool wrap;decoder::wrap45,1072
+  decoder(decoder::decoder48,1094
+  void reset(decoder::reset54,1307
+
+src/curl_util.h.REMOTE.23047.h,26
+#define CURL_UTIL_H8,208
+
+src/compression.cc,106
+const size_t ZLIB_UINT_MAX 18,638
+const size_t ZLIB_CEILING 19,701
+compress(23,834
+decompress(74,2079
+
+src/compression.h,106
+#define _COMPRESSION_H5,126
+enum compression_format 7,150
+  c_format_zlib 8,176
+  c_format_gzip 9,197
+
+src/connections.cc,1596
+using std::tr1::unordered_set;16,325
+struct conn_global_state::conn_global_state21,432
+  unordered_set<conn_t *> connections;::conn_global_state::connections24,493
+  unordered_set<conn_t *> closed_connections;::conn_global_state::closed_connections28,623
+  unordered_set<circuit_t *> circuits;::conn_global_state::circuits31,701
+  unordered_set<circuit_t *> closed_circuits;::conn_global_state::closed_circuits35,828
+  struct event_base *the_event_base;::conn_global_state::the_event_base39,966
+  struct event *close_cleanup;::conn_global_state::close_cleanup45,1255
+  unsigned int last_conn_serial;::conn_global_state::last_conn_serial50,1507
+  unsigned int last_ckt_serial;::conn_global_state::last_ckt_serial51,1540
+  bool shutting_down;::conn_global_state::shutting_down56,1760
+conn_global_state::conn_global_state(62,1859
+conn_global_state::~conn_global_state(74,2251
+close_cleanup_cb(88,2541
+static conn_global_state *cgs;cgs122,3481
+conn_global_init(125,3518
+conn_start_shutdown(131,3611
+conn_count(159,4355
+circuit_count(165,4418
+conn_create(174,4544
+conn_t::~conn_t(193,4951
+conn_t::close(202,5091
+conn_t::circuit(221,5609
+conn_send_eof(228,5731
+flush_timer_cb(249,6325
+axe_timer_cb(263,6766
+circuit_create(272,6950
+circuit_t::~circuit_t(289,7287
+circuit_t::close(304,7619
+circuit_t::cfg(327,8174
+circuit_add_upstream(333,8219
+circuit_send(345,8462
+circuit_send_eof(359,8892
+circuit_recv_eof(372,9155
+circuit_arm_flush_timer(394,9721
+circuit_disarm_flush_timer(409,10104
+circuit_arm_axe_timer(416,10216
+circuit_disarm_axe_timer(431,10586
+
+src/mkem.cc,1478
+struct mk_curve_params15,367
+  const uint8_t *m;mk_curve_params::m18,468
+  size_t       L_m;mk_curve_params::L_m19,488
+  const uint8_t *b;mk_curve_params::b22,556
+  size_t       L_b;mk_curve_params::L_b23,576
+  const uint8_t *p0;mk_curve_params::p026,638
+  size_t       L_p0;mk_curve_params::L_p027,659
+  const uint8_t *p1;mk_curve_params::p128,680
+  size_t       L_p1;mk_curve_params::L_p129,701
+  const uint8_t *n0;mk_curve_params::n032,757
+  size_t       L_n0;mk_curve_params::L_n033,778
+  const uint8_t *n1;mk_curve_params::n134,799
+  size_t       L_n1;mk_curve_params::L_n135,820
+  const uint8_t *g0;mk_curve_params::g038,906
+  size_t       L_g0;mk_curve_params::L_g039,927
+  const uint8_t *g1;mk_curve_params::g140,948
+  size_t       L_g1;mk_curve_params::L_g141,969
+enum MKEMCurve 47,1134
+  MK_CURVE_163_0 MKEMCurve::MK_CURVE_163_048,1151
+#define S_(56,1394
+#define S(57,1411
+#define N21(60,1468
+#define P21(66,1778
+const mk_curve_params mk_curves[mk_curves72,2103
+#undef S_92,2955
+#undef S93,2965
+#undef N2194,2974
+#undef P2195,2985
+#define FAILZ(97,2997
+MKEMParams::MKEMParams(99,3046
+MKEMParams::~MKEMParams(167,5419
+MKEM::~MKEM(194,6138
+random_s(214,6859
+MKEM::load_secret_key(243,7347
+MKEM::MKEM(259,7764
+MKEM::MKEM(271,8059
+MKEM::MKEM(280,8269
+MKEM::export_public_key(301,8786
+bn2bin_padhi(317,9360
+MKEM::export_secret_key(330,9584
+MKEM::generate(341,9840
+MKEM::generate(358,10157
+MKEM::decode(436,12400
+
+src/socks.h,1328
+#define SOCKS_H5,129
+enum socks_status_t 7,146
+  ST_WAITING,9,221
+  ST_NEGOTIATION_DONE,11,303
+  ST_HAVE_ADDR,13,363
+  ST_SENT_REPLY15,403
+enum socks_ret 18,423
+  SOCKS_GOOD=19,440
+  SOCKS_INCOMPLETE,20,456
+  SOCKS_CMD_NOT_CONNECT,21,476
+  SOCKS_BROKEN22,501
+#define SOCKS5_SUCCESS 41,1311
+#define SOCKS5_FAILED_GENERAL 42,1350
+#define SOCKS5_FAILED_NOTALLOWED 43,1389
+#define SOCKS5_FAILED_NETUNREACH 44,1428
+#define SOCKS5_FAILED_HOSTUNREACH 45,1467
+#define SOCKS5_FAILED_REFUSED 46,1506
+#define SOCKS5_FAILED_TTLEXPIRED 47,1545
+#define SOCKS5_FAILED_UNSUPPORTED 48,1584
+#define SOCKS5_VERSION 52,1646
+#define SOCKS4_VERSION 53,1682
+#define SOCKS5_METHOD_NOAUTH 55,1719
+#define SOCKS5_METHOD_FAIL 56,1755
+#define SOCKS5_CMD_CONNECT 58,1792
+#define SOCKS5_ATYP_IPV4 60,1829
+#define SOCKS5_ATYP_FQDN 61,1865
+#define SOCKS5_ATYP_IPV6 62,1901
+#define MIN_SOCKS_PACKET 66,2027
+#define SIZEOF_SOCKS5_REQ_REPLY 70,2140
+#define SIZEOF_SOCKS5_STATIC_REQ 76,2293
+#define SOCKS4_MAX_LENGTH 80,2478
+#define SOCKS4_SUCCESS 82,2510
+#define SOCKS4_FAILED 83,2538
+struct parsereq 85,2566
+  int af;86,2584
+  char addr[addr87,2615
+  int port;88,2659
+struct socks_state_t 90,2674
+  enum socks_status_t state;91,2697
+  uint8_t version;92,2726
+  uint8_t broken;93,2745
+  struct parsereq parsereq;94,2763
+
+src/subprocess.h,467
+#define SUBPROCESS_H6,119
+#define CLD_EXITED 21,499
+#define CLD_KILLED 24,546
+#define CLD_DUMPED 27,593
+struct subprocess30,622
+  subprocess(36,897
+  static subprocess call(40,1067
+  bool poll(45,1325
+  void wait(48,1387
+  const pid_t pid;52,1519
+  int state;56,1655
+  int returncode;60,1808
+class pidfile84,2833
+  const std::string& pathname(pidfile::pathname90,2905
+  std::string path;pidfile::path103,3381
+  int errcode;pidfile::errcode104,3401
+
+src/protocol/chop.cc,4175
+using std::tr1::unordered_map;27,600
+using std::tr1::unordered_set;28,631
+using std::vector;29,662
+using std::make_pair;30,681
+using std::min;31,703
+typedef unordered_map<uint32_t,::uint32_t41,826
+typedef unordered_map<uint32_t, chop_circuit_t *> chop_circuit_table;::chop_circuit_table41,826
+struct chop_conn_t ::chop_conn_t43,897
+  chop_config_t *config;::chop_conn_t::config45,927
+  chop_circuit_t *upstream;::chop_conn_t::upstream46,952
+  steg_t *steg;::chop_conn_t::steg47,980
+  struct evbuffer *recv_pending;::chop_conn_t::recv_pending48,996
+  struct event *must_send_timer;::chop_conn_t::must_send_timer49,1029
+  bool sent_handshake ::chop_conn_t::sent_handshake50,1062
+  bool no_more_transmissions ::chop_conn_t::no_more_transmissions51,1089
+struct chop_circuit_t 63,1331
+  transmit_queue tx_queue;chop_circuit_t::tx_queue65,1367
+  reassembly_queue recv_queue;chop_circuit_t::recv_queue66,1394
+  unordered_set<chop_conn_t *> downstreams;chop_circuit_t::downstreams67,1425
+  gcm_encryptor *send_crypt;chop_circuit_t::send_crypt68,1469
+  ecb_encryptor *send_hdr_crypt;chop_circuit_t::send_hdr_crypt69,1498
+  gcm_decryptor *recv_crypt;chop_circuit_t::recv_crypt70,1531
+  ecb_decryptor *recv_hdr_crypt;chop_circuit_t::recv_hdr_crypt71,1560
+  chop_config_t *config;chop_circuit_t::config72,1593
+  uint32_t circuit_id;chop_circuit_t::circuit_id74,1619
+  uint32_t last_acked;chop_circuit_t::last_acked75,1642
+  uint32_t dead_cycles;chop_circuit_t::dead_cycles76,1665
+  bool received_fin chop_circuit_t::received_fin77,1689
+  bool sent_fin chop_circuit_t::sent_fin78,1714
+  bool upstream_eof chop_circuit_t::upstream_eof79,1735
+  uint32_t axe_interval(chop_circuit_t::axe_interval118,3016
+  uint32_t flush_interval(chop_circuit_t::flush_interval126,3424
+struct chop_config_t 134,3696
+  struct evutil_addrinfo *up_address;chop_config_t::up_address136,3730
+  vector<struct evutil_addrinfo *> down_addresses;chop_config_t::down_addresses137,3768
+  vector<steg_config_t *> steg_targets;chop_config_t::steg_targets138,3819
+  chop_circuit_table circuits;chop_config_t::circuits139,3859
+  bool trace_packets;chop_config_t::trace_packets140,3890
+  bool encryption;chop_config_t::encryption141,3912
+  bool retransmit;chop_config_t::retransmit142,3931
+chop_config_t::chop_config_t(149,4013
+chop_config_t::~chop_config_t(157,4151
+chop_config_t::init(176,4649
+chop_config_t::get_listen_addrs(271,7493
+chop_config_t::get_target_addrs(284,7741
+chop_config_t::get_steg(297,7989
+const char passphrase[passphrase306,8128
+chop_config_t::circuit_create(310,8247
+chop_circuit_t::chop_circuit_t(363,10029
+chop_circuit_t::~chop_circuit_t(367,10067
+chop_circuit_t::close(376,10203
+chop_circuit_t::cfg(412,11526
+chop_circuit_t::add_downstream(418,11581
+chop_circuit_t::add_downstream(433,11940
+chop_circuit_t::drop_downstream(439,12044
+chop_circuit_t::drop_downstream(469,13118
+chop_circuit_t::send(475,13223
+chop_circuit_t::send_all_steg_data(587,16879
+chop_circuit_t::send_eof(689,20139
+chop_circuit_t::send_special(696,20215
+chop_circuit_t::send_targeted(784,22723
+chop_circuit_t::send_targeted(877,25836
+chop_circuit_t::send_targeted_steg_data(908,26759
+chop_circuit_t::send_targeted(932,27532
+chop_circuit_t::pick_connection(1010,29794
+chop_conn_t* chop_circuit_t::check_for_steg_protocol_data(1105,32997
+chop_circuit_t::maybe_send_ack(1139,33953
+chop_circuit_t::recv_block(1160,34625
+chop_circuit_t::process_queue(1205,35678
+chop_circuit_t::check_for_eof(1304,38615
+chop_config_t::conn_create(1335,39528
+chop_conn_t::chop_conn_t(1349,39804
+chop_conn_t::~chop_conn_t(1353,39836
+chop_conn_t::close(1363,40002
+chop_conn_t::circuit(1375,40181
+chop_conn_t::maybe_open_upstream(1381,40238
+chop_conn_t::send(1388,40354
+chop_conn_t::handshake(1413,41063
+chop_conn_t::recv_handshake(1429,41732
+chop_conn_t::recv(1472,42901
+chop_conn_t::recv_eof(1626,48484
+chop_conn_t::expect_close(1653,49412
+chop_conn_t::cease_transmission(1659,49469
+chop_conn_t::transmit_soon(1668,49625
+chop_conn_t::send(1683,49999
+chop_conn_t::must_send_p(1746,51866
+chop_conn_t::must_send_timeout(1752,51987
+
+src/protocol/chop_blk.h,3203
+#define CHOP_BLK_H6,123
+namespace chop_blk15,259
+enum opcode_t67,2909
+  op_XXX 69,2925
+  op_DAT 70,2975
+  op_FIN 71,3034
+  op_RST 72,3107
+  op_ACK 73,3164
+  op_RESERVED0 74,3213
+  op_STEG0 75,3276
+  op_STEG_FIN 76,3345
+  op_LAST 77,3366
+opcode_valid(94,3846
+class header100,3970
+  uint32_t s;header::s102,3985
+  uint16_t d;header::d103,3999
+  uint16_t p;header::p104,4013
+  opcode_t f header::f105,4027
+  uint8_t  r;header::r106,4045
+  header(header::header109,4068
+  header(header::header111,4119
+  uint32_t seqno(header::seqno134,4818
+  size_t   dlen(header::dlen135,4858
+  size_t   plen(header::plen136,4898
+  opcode_t opcode(header::opcode137,4938
+  uint8_t  rcount(header::rcount138,4978
+  size_t total_len(header::total_len140,5019
+  bool valid(header::valid145,5110
+class ack_payload163,5830
+  uint32_t hsn_;ack_payload::hsn_165,5850
+  uint32_t maxusedbyte;ack_payload::maxusedbyte166,5867
+  uint8_t  window[ack_payload::window167,5891
+  ack_payload(ack_payload::ack_payload176,6148
+  bool valid(ack_payload::valid196,6776
+  uint32_t hsn(ack_payload::hsn201,6893
+  void set_hsn(ack_payload::set_hsn211,7085
+  bool block_received(ack_payload::block_received221,7328
+  void set_block_received(ack_payload::set_block_received239,7712
+ struct transmit_elt265,8610
+   header hdr;transmit_elt::hdr267,8634
+   evbuffer *data;transmit_elt::data268,8649
+   transmit_elt(transmit_elt::transmit_elt270,8669
+ class transmit_queue273,8712
+   transmit_elt cbuf[transmit_queue::cbuf275,8737
+   uint32_t next_to_ack;transmit_queue::next_to_ack276,8764
+   uint32_t next_to_send;transmit_queue::next_to_send277,8789
+   uint32_t next_seqno(transmit_queue::next_seqno290,9091
+   bool full(transmit_queue::full298,9389
+   bool should_rekey(transmit_queue::should_rekey305,9575
+   int transmit(transmit_queue::transmit323,10375
+   int retransmit(transmit_queue::retransmit333,10749
+   class iteratortransmit_queue::iterator357,11732
+     transmit_queue *queue;transmit_queue::iterator::queue359,11755
+     uint32_t seqno;transmit_queue::iterator::seqno360,11783
+     iterator(transmit_queue::iterator::iterator363,11816
+     iterator(transmit_queue::iterator::iterator364,11857
+     bool operator==(transmit_queue::iterator::operator==366,11927
+     bool operator!=(transmit_queue::iterator::operator!=368,12021
+     transmit_elt& operator*(transmit_queue::iterator::operator*371,12116
+     iterator operator++(transmit_queue::iterator::operator++372,12185
+     iterator operator++(transmit_queue::iterator::operator++379,12354
+   iterator begin(transmit_queue::begin387,12472
+   iterator end(transmit_queue::end388,12532
+struct reassembly_elt402,13162
+  evbuffer *data;reassembly_elt::data404,13186
+  opcode_t op;reassembly_elt::op405,13204
+  conn_t* conn;reassembly_elt::conn406,13219
+class reassembly_queue409,13239
+  reassembly_elt cbuf[reassembly_queue::cbuf411,13264
+  uint32_t next_to_process;reassembly_queue::next_to_process412,13292
+  uint32_t count;reassembly_queue::count413,13320
+  uint32_t window(reassembly_queue::window449,14749
+  bool empty(reassembly_queue::empty454,14860
+
+src/protocol/null.cc,1359
+  struct null_config_t ::null_config_t14,282
+    struct evutil_addrinfo *listen_addr;::null_config_t::listen_addr16,320
+    struct evutil_addrinfo *target_addr;::null_config_t::target_addr17,361
+  struct null_conn_t ::null_conn_t24,469
+    null_config_t *config;::null_conn_t::config26,503
+    null_circuit_t *upstream;::null_conn_t::upstream27,530
+  struct null_circuit_t ::null_circuit_t32,599
+    null_config_t *config;::null_circuit_t::config34,639
+    null_conn_t *downstream;::null_circuit_t::downstream35,666
+null_config_t::null_config_t(43,767
+null_config_t::~null_config_t(47,803
+null_config_t::init(56,983
+null_config_t::get_listen_addrs(106,2517
+null_config_t::get_target_addrs(115,2708
+null_config_t::circuit_create(124,2859
+null_circuit_t::null_circuit_t(131,2982
+null_circuit_t::~null_circuit_t(136,3041
+null_circuit_t::close(141,3085
+null_circuit_t::cfg(155,3351
+null_circuit_t::add_downstream(162,3452
+null_circuit_t::drop_downstream(180,3966
+null_circuit_t::send(196,4404
+null_circuit_t::send_eof(208,4742
+null_config_t::conn_create(222,4960
+null_conn_t::null_conn_t(229,5077
+null_conn_t::~null_conn_t(234,5128
+null_conn_t::close(239,5166
+null_conn_t::circuit(249,5329
+null_conn_t::maybe_open_upstream(256,5438
+null_conn_t::handshake(270,5704
+null_conn_t::recv(277,5793
+null_conn_t::recv_eof(288,6128
+
+src/protocol/chop_blk.cc,775
+using std::tr1::unordered_set;18,436
+using std::numeric_limits;19,467
+namespace chop_blk21,495
+opname(chop_blk::opname25,530
+debug_ack_contents(48,1066
+header::header(89,2051
+header::encode(133,3047
+header::prepare_retransmit(163,3570
+ack_payload::ack_payload(172,3693
+ack_payload::serialize(203,4539
+transmit_queue::transmit_queue(231,5179
+transmit_queue::~transmit_queue(236,5253
+transmit_queue::enqueue(244,5390
+transmit_queue::transmit(260,5795
+transmit_queue::retransmit(313,7152
+transmit_queue::process_ack(327,7574
+reassembly_queue::reassembly_queue(357,8201
+reassembly_queue::~reassembly_queue(363,8308
+reassembly_queue::remove_next(372,8509
+reassembly_queue::insert(393,8964
+reassembly_queue::reset(415,9434
+reassembly_queue::gen_ack(425,9594
+
+src/subprocess-unix.cc,1036
+#define _PATH_DEFPATH 28,658
+#  define PATH_MAX 33,740
+#  define PATH_MAX 35,777
+# define OPEN_MAX 40,834
+using std::map;45,888
+using std::vector;46,904
+using std::string;47,923
+#define HEX_ERRNO_SIZE 52,1054
+#define CHILD_STATE_REDIRECT_STDIN 55,1145
+#define CHILD_STATE_REDIRECT_STDOUT 56,1182
+#define CHILD_STATE_REDIRECT_STDERR 57,1220
+#define CHILD_STATE_CLOSEFROM 58,1258
+#define CHILD_STATE_EXEC 59,1290
+#define IGNORE_FAILURE(64,1497
+static map<pid_t, int> already_waited;72,1945
+closefrom(79,2118
+execvpe(121,3397
+format_helper_exit_status(219,6068
+do_fork_exec(288,8273
+#define error_message 343,9762
+#undef error_message348,9956
+do_fork_exec(356,10090
+decode_status(374,10503
+wait_common(395,11020
+subprocess::subprocess(427,11810
+subprocess::call(436,11994
+subprocess::poll(444,12136
+subprocess::wait(450,12217
+get_environ(458,12323
+daemonize(471,12571
+pidfile::pidfile(521,14314
+pidfile::~pidfile(557,14973
+pidfile::operator bool(pidfile::operator bool563,15057
+pidfile::errmsg(569,15125
+
+src/steg.h,471
+#define STEG_H5,118
+struct steg_config_t20,743
+  struct config_t *cfg;cfg22,766
+  steg_config_t(24,791
+  virtual ~steg_config_t(26,824
+  virtual const char *name(name30,998
+struct steg_t68,2364
+  steg_t(70,2380
+  virtual ~steg_t(71,2394
+struct steg_module114,4448
+  const char *name;name117,4542
+  steg_config_t *(*new_)new_120,4634
+#define STEG_DEFINE_MODULE(130,4879
+#define STEG_CONFIG_DECLARE_METHODS(144,5618
+#define STEG_DECLARE_METHODS(151,5949
+
+src/steg/apache_payload_server.cc,467
+ApachePayloadServer::ApachePayloadServer(20,396
+ApachePayloadServer::find_client_payload(110,3677
+ApachePayloadServer::get_payload(121,3839
+ApachePayloadServer::init_uri_dict(178,5712
+ApachePayloadServer::init_uri_dict(204,6306
+ApachePayloadServer::export_dict(228,6787
+ApachePayloadServer::compute_uri_dict_mac(239,7030
+ApachePayloadServer::store_dict(251,7279
+ApachePayloadServer::~ApachePayloadServer(272,7781
+ApachePayloadServer::find_url_type(280,7896
+
+src/steg/trace_payload_server.cc,421
+TracePayloadServer::TracePayloadServer(4,53
+int TracePayloadServer::init_JS_payload_pool(46,1575
+int  TracePayloadServer::init_HTML_payload_pool(125,3873
+TracePayloadServer::init_PDF_payload_pool(207,6184
+TracePayloadServer::init_SWF_payload_pool(281,8434
+int TracePayloadServer::get_payload 339,9965
+void TracePayloadServer::load_payloads(394,11567
+unsigned int TracePayloadServer::find_client_payload(474,13863
+
+src/steg/payloads.h,26
+#define _PAYLOADS_H6,124
+
+src/steg/trace_payload_server.h,898
+#define _TRACE_PAYLOAD_SERVER_H5,118
+struct pentry_header 12,352
+  PacketType ptype;13,375
+  int length;14,395
+  ushort port;15,409
+struct service_state 18,449
+  SID id;19,472
+  PacketType data_type;20,482
+  SID next_state;21,506
+  StateFlag flg;23,553
+  int dir;24,570
+struct payloads 27,585
+  int initTypePayload[initTypePayload28,603
+  int typePayloadCount[typePayloadCount29,644
+  int typePayload[typePayload30,686
+  int typePayloadCap[typePayloadCap31,737
+  unsigned int max_JS_capacity;33,792
+  unsigned int max_HTML_capacity;34,824
+  unsigned int max_PDF_capacity;35,858
+  pentry_header payload_hdrs[payload_hdrs37,892
+  char* payloads[payloads38,936
+  int payload_count;39,968
+class TracePayloadServer:TracePayloadServer42,993
+  payloads pl;TracePayloadServer::pl47,1338
+  const unsigned long c_max_buffer_size TracePayloadServer::c_max_buffer_size48,1353
+
+src/steg/cookies.cc,144
+int unwrap_cookie(8,144
+int gen_one_cookie(33,695
+int gen_one_cookie2(96,2039
+int gen_cookie_field(116,2417
+int gen_cookie_field2(187,3950
+
+src/steg/cookies.h,25
+#define _COOKIES_H6,123
+
+src/steg/apache_payload_server.h,909
+#define _APACHE_PAYLOAD_SERVER_H2,33
+class URIEntry12,232
+    string URL;URIEntry::URL15,259
+    bool accept_param URIEntry::accept_param16,275
+    URIEntry(URIEntry::URIEntry19,466
+typedef vector<URIEntry> URIDict;26,546
+class ApachePayloadServer:ApachePayloadServer28,581
+  string _database_filename;ApachePayloadServer::_database_filename33,759
+  string _apache_host_name ApachePayloadServer::_apache_host_name34,788
+  const unsigned long c_max_buffer_size ApachePayloadServer::c_max_buffer_size36,833
+  CURL* _curl_obj;ApachePayloadServer::_curl_obj37,884
+  uint8_t _uri_dict_mac[ApachePayloadServer::_uri_dict_mac40,1015
+  URIDict uri_dict;ApachePayloadServer::uri_dict54,1420
+  map<ApachePayloadServer::map55,1440
+  map<string, unsigned long> uri_decode_book;ApachePayloadServer::uri_decode_book55,1440
+  const uint8_t* uri_dict_mac(ApachePayloadServer::uri_dict_mac57,1487
+
+src/steg/b64cookies.h,29
+#define _B64_COOKIES_H6,127
+
+src/steg/payload_server.cc,518
+PayloadServer::capacityJS3 17,306
+PayloadServer::capacityPDF 88,1930
+PayloadServer::capacitySWF(126,3017
+PayloadServer::capacityJS 136,3164
+PayloadServer::find_uri_type(161,3699
+fixContentLen 248,5639
+gen_rfc_1123_date(404,10201
+gen_rfc_1123_expiry_date(411,10385
+gen_response_header(418,10595
+parse_client_headers(490,12000
+skipJSPattern(548,13091
+isalnum_ 597,13993
+offset2Alnum_ 603,14077
+offset2Hex 642,15131
+strInBinary 709,16694
+has_eligible_HTTP_content 752,17838
+find_content_length 876,21614
+
+src/steg/payload_server.h,2632
+#define _PAYLOAD_SERVER_H2,26
+using namespace std;6,86
+#define RECV_GOOD 9,121
+#define RECV_INCOMPLETE 10,141
+#define RECV_BAD 11,167
+#define CONN_DATA_REQUEST 13,188
+#define CONN_DATA_REPLY 14,253
+#define NO_NEXT_STATE 16,319
+#define MAX_PAYLOADS 18,345
+#define MAX_RESP_HDR_SIZE 19,372
+#define MAX_CANDIDATE_PAYLOADS 23,492
+#define JS_DELIMITER 26,554
+#define JS_DELIMITER_REPLACEMENT 29,681
+#define JS_DELIMITER_SIZE 32,844
+#define JS_MIN_AVAIL_SIZE 35,907
+#define HTML_MIN_AVAIL_SIZE 39,1036
+#define HTTP_MSG_BUF_SIZE 41,1070
+#define PDF_DELIMITER_SIZE 43,1105
+#define PDF_MIN_AVAIL_SIZE 44,1134
+#define HTTP_CONTENT_JAVASCRIPT 50,1349
+#define HTTP_CONTENT_PDF 51,1391
+#define HTTP_CONTENT_SWF 52,1433
+#define HTTP_CONTENT_ENCRYPTEDZIP 53,1475
+#define HTTP_CONTENT_HTML 54,1517
+#define CONTENT_JAVASCRIPT 61,1842
+#define CONTENT_HTML_JAVASCRIPT 62,1884
+#define MAX_CONTENT_TYPE	80,2476
+#define NO_CONTENT_TYPES 81,2505
+typedef int SID;83,2549
+typedef short PacketType;84,2566
+typedef short StateFlag;85,2592
+#define TYPE_SERVICE_DATA 87,2618
+#define TYPE_HTTP_REQUEST 88,2648
+#define TYPE_HTTP_RESPONSE 89,2678
+#define BEGIN_STATE_FLG 90,2709
+#define END_STATE_FLG 91,2737
+class PayloadInfo{PayloadInfo93,2764
+  char* url_hash;PayloadInfo::url_hash95,2792
+  unsigned int type;PayloadInfo::type96,2810
+  unsigned int capacity;PayloadInfo::capacity97,2831
+  unsigned int length;PayloadInfo::length98,2856
+  string url;PayloadInfo::url99,2879
+  PayloadInfo(PayloadInfo::PayloadInfo109,3082
+typedef map<string,string116,3138
+typedef map<string, PayloadInfo> PayloadDict;116,3138
+class TypeDetail122,3266
+  unsigned int max_capacity;TypeDetail::max_capacity125,3294
+  unsigned int count;TypeDetail::count126,3323
+  TypeDetail(TypeDetail::TypeDetail128,3346
+  TypeDetail(TypeDetail::TypeDetail135,3512
+class PayloadDatabase{PayloadDatabase143,3582
+  PayloadDict payloads;PayloadDatabase::payloads155,3963
+  map<PayloadDatabase::map156,3987
+  map<unsigned int, TypeDetail> type_detail;PayloadDatabase::type_detail156,3987
+  inline void add_payload(PayloadDatabase::add_payload160,4045
+  unsigned int typed_maximum_capacity(PayloadDatabase::typed_maximum_capacity173,4503
+enum MachineSide183,4822
+    client_side,MachineSide::client_side185,4843
+    server_sideMachineSide::server_side186,4860
+class PayloadServer189,4882
+  MachineSide _side;PayloadServer::_side192,4916
+  PayloadDatabase _payload_database;PayloadServer::_payload_database196,5008
+  PayloadServer(PayloadServer::PayloadServer199,5099
+  MachineSide side(PayloadServer::side213,5497
+
+src/steg/embed.cc,1326
+using std::vector;15,270
+  struct trace_t ::trace_t18,302
+    vector<short> pkt_sizes;::trace_t::pkt_sizes19,321
+    vector<int> pkt_times;::trace_t::pkt_times20,395
+  struct embed_steg_config_t ::embed_steg_config_t23,461
+    bool is_clientside;::embed_steg_config_t::is_clientside24,508
+    vector<trace_t> traces;::embed_steg_config_t::traces25,532
+  struct embed_steg_t ::embed_steg_t32,645
+    embed_steg_config_t *config;::embed_steg_t::config33,678
+    conn_t *conn;::embed_steg_t::conn34,711
+    int cur_idx;::embed_steg_t::cur_idx36,730
+    trace_t *cur;::embed_steg_t::cur37,780
+    int cur_pkt;::embed_steg_t::cur_pkt38,827
+    struct timeval last_pkt;::embed_steg_t::last_pkt39,885
+millis_since(56,1225
+embed_steg_config_t::embed_steg_config_t(67,1441
+embed_steg_config_t::~embed_steg_config_t(99,2495
+embed_steg_config_t::steg_create(104,2553
+embed_steg_config_t::get_random_trace(110,2651
+embed_steg_t::advance_packet(116,2740
+embed_steg_t::get_pkt_size(123,2843
+embed_steg_t::is_outgoing(129,2921
+embed_steg_t::get_pkt_time(135,3022
+embed_steg_t::is_finished(141,3095
+embed_steg_t::embed_steg_t(147,3210
+embed_steg_t::~embed_steg_t(159,3483
+embed_steg_t::cfg(164,3534
+embed_steg_t::transmit_room(170,3583
+embed_steg_t::transmit(187,3997
+embed_steg_t::receive(231,5268
+
+src/steg/pdfSteg.h,25
+#define _PDFSTEG_H6,123
+
+src/steg/swfSteg.cc,171
+static const char http_response_1[http_response_112,249
+swf_wrap(21,504
+swf_unwrap(90,2249
+http_server_SWF_transmit(118,3005
+http_handle_client_SWF_receive(164,4084
+
+src/steg/pdfSteg.cc,407
+#define PDF_DELIMITER 14,298
+#define PDF_DELIMITER2 15,327
+#define STREAM_BEGIN 17,357
+#define STREAM_BEGIN_SIZE 18,393
+#define STREAM_END 19,422
+#define STREAM_END_SIZE 20,461
+#define DEBUG22,491
+pdf_add_delimiter(45,1263
+pdf_remove_delimiter(101,2798
+strInBinaryRewind 173,4548
+pdf_wrap(205,5449
+pdf_unwrap(299,8069
+http_server_PDF_transmit(368,9880
+http_handle_client_PDF_receive(472,12802
+
+src/steg/http.cc,661
+http_steg_config_t::http_steg_config_t(37,774
+http_steg_config_t::http_steg_config_t(43,868
+http_steg_config_t::~http_steg_config_t(58,1323
+http_steg_config_t::steg_create(65,1430
+evbuffer_dump(75,1709
+buf_dump(102,2299
+http_steg_t::http_steg_t(117,2600
+http_steg_t::~http_steg_t(124,2790
+http_steg_t::cfg(129,2839
+http_steg_t::clamp(135,2887
+http_steg_t::transmit_room(143,3020
+lookup_peer_name_from_ip(196,4428
+http_steg_t::http_client_cookie_transmit 234,5247
+int gen_uri_field(350,8284
+http_steg_t::http_client_uri_transmit 413,9244
+http_steg_t::transmit(484,11287
+http_steg_t::http_server_receive(536,12716
+http_steg_t::receive(617,14970
+
+src/steg/b64cookies.cc,74
+unwrap_b64_cookies(9,154
+gen_one_cookie(23,399
+gen_b64_cookies(63,1168
+
+src/steg/http.h,728
+#define _HTTP_H2,16
+#define MIN_COOKIE_SIZE 4,33
+#define MAX_COOKIE_SIZE 5,60
+  struct http_steg_config_t 10,153
+    bool is_clientside 12,201
+    PayloadServer* payload_server;13,229
+    http_steg_config_t(22,710
+    STEG_CONFIG_DECLARE_METHODS(24,776
+  struct http_steg_t 28,822
+    http_steg_config_t *config;config30,856
+    conn_t *conn;conn31,888
+    char peer_dnsname[peer_dnsname32,906
+    bool have_transmitted 34,935
+    bool have_received 35,966
+    int type;36,994
+    http_steg_t(38,1009
+    STEG_DECLARE_METHODS(39,1062
+    size_t clamp(41,1095
+    virtual int http_client_uri_transmit 42,1147
+    virtual int http_client_cookie_transmit 43,1229
+    virtual int http_server_receive(44,1314
+
+src/steg/payload_scraper.h,742
+#define PAYLOADSCRAPER_H5,108
+struct steg_type7,134
+   int type;9,153
+   string  extension;10,166
+   unsigned int (*capacity_function)capacity_function11,188
+class PayloadScraper23,569
+    static const int _c_no_of_steg_protocol PayloadScraper::_c_no_of_steg_protocol27,604
+    string _database_filename;PayloadScraper::_database_filename28,653
+    ofstream _payload_db;PayloadScraper::_payload_db29,684
+    steg_type* _available_stegs;PayloadScraper::_available_stegs30,710
+    string _apache_conf_filename;PayloadScraper::_apache_conf_filename32,748
+    string _apache_doc_root;PayloadScraper::_apache_doc_root33,782
+    CURL* capacity_handle;PayloadScraper::capacity_handle36,899
+   pair<PayloadScraper::pair64,1827
+
+src/steg/http_trace.cc,532
+  struct http_trace_steg_config_t ::http_trace_steg_config_t36,741
+  struct http_trace_steg_t ::http_trace_steg_t42,852
+http_trace_steg_config_t::http_trace_steg_config_t(53,1043
+http_trace_steg_config_t::~http_trace_steg_config_t(58,1142
+http_trace_steg_config_t::steg_create(65,1261
+http_trace_steg_t::http_trace_steg_t(70,1362
+http_trace_steg_t::~http_trace_steg_t(74,1488
+http_trace_steg_t::cfg(79,1549
+http_trace_steg_t::transmit_room(85,1603
+http_trace_steg_t::transmit(91,1732
+http_trace_steg_t::receive(97,1834
+
+src/steg/payload_scraper.cc,243
+int PayloadScraper::scrape_dir(35,933
+PayloadScraper::PayloadScraper(78,2602
+int PayloadScraper::scrape(111,4206
+int PayloadScraper::apache_conf_parser(150,5078
+pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(192,6399
+
+src/steg/jsSteg.cc,600
+#define INVALID_BUF_SIZE	17,305
+#define INVALID_DATA_CHAR	18,333
+#define JS_GZIP_RESP 21,406
+int isxString(40,692
+int isGzipContent 62,1065
+int findContentType 105,1847
+int encode(185,3999
+#define startScriptTypeJS 232,4985
+#define endScriptTypeJS 233,5047
+int  encode2(248,5559
+int encodeHTTPBody(344,7758
+int decode 471,11363
+int decode2 502,12113
+int decodeHTTPBody 549,13120
+void printerr(601,14565
+int testEncode(615,14908
+int testDecode(638,15643
+int testEncode2(663,16388
+int testDecode2(699,17384
+http_server_JS_transmit 725,18123
+http_handle_client_JS_receive(902,23256
+
+src/steg/swfSteg.h,97
+#define _SWFSTEG_H6,123
+#define SWF_SAVE_HEADER_LEN 10,161
+#define SWF_SAVE_FOOTER_LEN 11,194
+
+src/steg/jsSteg.h,24
+#define _JSSTEG_H6,122
+
+src/steg/nosteg_rr.cc,758
+  struct nosteg_rr_steg_config_t ::nosteg_rr_steg_config_t12,227
+  struct nosteg_rr_steg_t ::nosteg_rr_steg_t17,330
+    nosteg_rr_steg_config_t *config;::nosteg_rr_steg_t::config19,369
+    conn_t *conn;::nosteg_rr_steg_t::conn20,406
+    bool can_transmit ::nosteg_rr_steg_t::can_transmit22,425
+    bool did_transmit ::nosteg_rr_steg_t::did_transmit23,452
+nosteg_rr_steg_config_t::nosteg_rr_steg_config_t(32,620
+nosteg_rr_steg_config_t::~nosteg_rr_steg_config_t(37,712
+nosteg_rr_steg_config_t::steg_create(42,778
+nosteg_rr_steg_t::nosteg_rr_steg_t(47,877
+nosteg_rr_steg_t::~nosteg_rr_steg_t(55,1097
+nosteg_rr_steg_t::cfg(60,1156
+nosteg_rr_steg_t::transmit_room(66,1209
+nosteg_rr_steg_t::transmit(72,1313
+nosteg_rr_steg_t::receive(94,1752
+
+src/steg/http_apache.cc,2227
+enum op_apache_steg_code31,538
+    op_STEG_NO_OP,op_apache_steg_code::op_STEG_NO_OP33,567
+    op_STEG_DICT_MAC,op_apache_steg_code::op_STEG_DICT_MAC34,586
+    op_STEG_DICT_UP2DATE,op_apache_steg_code::op_STEG_DICT_UP2DATE35,608
+    op_STEG_DICT_UPDATE,op_apache_steg_code::op_STEG_DICT_UPDATE36,634
+    op_STEG_DICT_WAIT_PEER,op_apache_steg_code::op_STEG_DICT_WAIT_PEER37,659
+  struct http_apache_steg_config_t ::http_apache_steg_config_t42,707
+    CURLM *_curl_multi_handle;::http_apache_steg_config_t::_curl_multi_handle45,768
+    int _curl_running_handle;::http_apache_steg_config_t::_curl_running_handle47,932
+    unsigned long uri_byte_cut;::http_apache_steg_config_t::uri_byte_cut49,995
+    static const char c_end_of_dict[::http_apache_steg_config_t::c_end_of_dict55,1222
+    stringstream dict_stream;::http_apache_steg_config_t::dict_stream57,1266
+  struct http_apache_steg_t ::http_apache_steg_t86,2077
+    CURL* _curl_easy_handle;::http_apache_steg_t::_curl_easy_handle92,2223
+    http_apache_steg_config_t* _apache_config;::http_apache_steg_t::_apache_config94,2258
+const char http_apache_steg_config_t::c_end_of_dict[http_apache_steg_config_t::c_end_of_dict131,3546
+http_apache_steg_config_t::http_apache_steg_config_t(135,3645
+http_apache_steg_config_t::~http_apache_steg_config_t(159,4478
+http_apache_steg_config_t::steg_create(168,4665
+http_apache_steg_t::http_apache_steg_t(173,4768
+http_apache_steg_t::http_client_uri_transmit 213,6706
+http_apache_steg_t::http_server_receive(328,10816
+http_apache_steg_t::http_server_receive_cookie(391,12628
+http_apache_steg_t::http_server_receive_uri(429,13627
+http_apache_steg_t::~http_apache_steg_t(502,16070
+bool http_apache_steg_config_t::init_uri_dict(508,16158
+http_apache_steg_t::cfg(522,16624
+http_apache_steg_t::transmit_room(528,16679
+http_apache_steg_t::transmit(577,18239
+http_apache_steg_t::receive(588,18497
+http_apache_steg_config_t::process_protocol_data(594,18597
+http_apache_steg_config_t::send_dict_to_peer(679,21676
+http_apache_steg_t::get_conn_socket(703,22489
+http_apache_steg_t::sockopt_callback(717,23076
+http_apache_steg_t::ignore_close(728,23354
+http_apache_steg_t::curl_socket_event_cb(737,23544
+
+src/steg/nosteg.cc,569
+  struct nosteg_steg_config_t ::nosteg_steg_config_t12,227
+  struct nosteg_steg_t ::nosteg_steg_t17,324
+    nosteg_steg_config_t *config;::nosteg_steg_t::config19,360
+    conn_t *conn;::nosteg_steg_t::conn20,394
+nosteg_steg_config_t::nosteg_steg_config_t(29,541
+nosteg_steg_config_t::~nosteg_steg_config_t(34,627
+nosteg_steg_config_t::steg_create(39,687
+nosteg_steg_t::nosteg_steg_t(44,780
+nosteg_steg_t::~nosteg_steg_t(49,877
+nosteg_steg_t::cfg(54,930
+nosteg_steg_t::transmit_room(60,980
+nosteg_steg_t::transmit(66,1062
+nosteg_steg_t::receive(82,1391
+
+src/util.h,1263
+#define UTIL_H7,171
+#define __STDC_LIMIT_MACROS11,208
+#define __STDC_CONSTANT_MACROS12,236
+#define SHUT_RD 30,689
+#define SHUT_WR 31,716
+#undef ssize_t37,862
+#define ssize_t 38,877
+#define ATTR_MALLOC 53,1112
+#define ATTR_NORETURN 54,1158
+#define ATTR_NOTHROW 55,1206
+#define ATTR_PRINTF_1 56,1253
+#define ATTR_PRINTF_2 57,1313
+#define ATTR_PRINTF_3 58,1373
+#define ATTR_PURE 59,1433
+#define SIZE_T_CEILING 64,1584
+void *xmalloc(xmalloc71,1882
+inline void *operator new[new84,2566
+inline void operator delete(86,2627
+inline void operator delete[delete88,2677
+inline void* operator new(90,2729
+inline void* operator new[new92,2812
+inline void operator delete(94,2897
+inline void operator delete[delete96,2971
+#define DOWNCAST(101,3083
+unsigned int ui64_log2(106,3226
+enum listen_mode 117,3424
+  LSN_SIMPLE_CLIENT 118,3443
+  LSN_SIMPLE_SERVER,119,3468
+  LSN_SOCKS_CLIENT120,3489
+static inline int ascii_isspace(136,3999
+static inline int ascii_isxdigit(146,4189
+int xsnprintf(157,4504
+#define LOG_METHOD_STDERR 167,4732
+#define LOG_METHOD_FILE 169,4797
+#define LOG_METHOD_NULL 171,4853
+#define log_abort(240,7691
+#define log_warn(241,7751
+#define log_info(242,7810
+#define log_debug(243,7869
+#define log_assert(285,9464
+
+src/network.cc,814
+using std::vector;21,392
+static vector<listener_t *> listeners;24,438
+vector<listener_t *> const& get_all_listeners(49,1551
+listener_open(59,1766
+listener_close(109,3221
+listener_close_all(122,3436
+client_listener_cb(137,3763
+server_listener_cb(189,5478
+socks_read_cb(243,7025
+upstream_read_cb(290,8549
+downstream_read_cb(306,9022
+upstream_event_cb(326,9471
+downstream_event_cb(365,10753
+upstream_flush_cb(409,12295
+downstream_flush_cb(434,13091
+upstream_connect_cb(460,14026
+downstream_connect_cb(490,14914
+downstream_socks_connect_cb(539,16352
+circuit_open_upstream(636,19660
+create_one_outbound_connection(680,20734
+create_outbound_connections(721,21963
+circuit_reopen_downstreams(743,22457
+create_outbound_connections_socks(749,22560
+circuit_do_flush(799,23988
+conn_do_flush(813,24407
+
+src/crypt.h,2291
+#define CRYPT_H6,171
+const size_t AES_BLOCK_LEN 8,188
+const size_t GCM_TAG_LEN 9,221
+const size_t SHA256_LEN 10,254
+const size_t EC_P224_LEN 11,287
+const size_t MKE_MSG_LEN 12,320
+struct ecb_encryptor43,1021
+  static ecb_encryptor *create(create47,1191
+  static ecb_encryptor *create(create52,1424
+  static ecb_encryptor *create_noop(create_noop57,1661
+  virtual ~ecb_encryptor(63,1873
+  ecb_encryptor(65,1912
+  ecb_encryptor(67,1942
+  ecb_encryptor& operator=68,1981
+struct ecb_decryptor71,2035
+  static ecb_decryptor *create(create75,2205
+  static ecb_decryptor *create(create80,2438
+  static ecb_decryptor *create_noop(create_noop85,2675
+  virtual ~ecb_decryptor(91,2887
+  ecb_decryptor(93,2926
+  ecb_decryptor(95,2956
+struct gcm_encryptor100,3078
+  static gcm_encryptor *create(create104,3248
+  static gcm_encryptor *create(create109,3481
+  static gcm_encryptor *create_noop(create_noop114,3718
+  virtual ~gcm_encryptor(124,4182
+  gcm_encryptor(126,4221
+  gcm_encryptor(128,4251
+  gcm_encryptor& operator=129,4290
+struct gcm_decryptor132,4344
+  static gcm_decryptor *create(create136,4514
+  static gcm_decryptor *create(create141,4747
+  static gcm_decryptor *create_noop(create_noop146,4984
+  virtual ~gcm_decryptor(157,5570
+  gcm_decryptor(159,5609
+  gcm_decryptor(161,5639
+struct ecdh_message167,5851
+  static ecdh_message *generate(generate170,5937
+  static ecdh_message *load_secret(load_secret176,6223
+  virtual void encode(181,6482
+  ecdh_message(196,7046
+struct mke_generator203,7329
+  static mke_generator *create(create211,7727
+  virtual const char *pubkey(pubkey215,7899
+  mke_generator(238,8905
+struct mke_decoder245,9235
+  static mke_decoder *create(create249,9366
+  virtual const char *pubkey(pubkey256,9675
+  mke_decoder(279,10616
+struct key_generator293,11265
+  static key_generator *from_random_secret(from_random_secret300,11591
+  static key_generator *from_passphrase(from_passphrase306,11956
+  static key_generator *from_ecdh(from_ecdh313,12349
+  static key_generator *from_mke(from_mke322,12866
+  static key_generator *from_mke(from_mke330,13285
+  static key_generator *from_rng(from_rng340,13854
+  virtual ~key_generator(350,14380
+  key_generator(351,14408
+  key_generator(353,14438
+
+src/connections.h,1266
+#define CONNECTIONS_H7,178
+struct conn_t 17,538
+  const char         *peername;peername18,554
+  struct bufferevent *buffer;buffer19,586
+  unsigned int        serial;20,616
+  bool                connected 21,646
+  bool                ever_received 22,683
+  bool                read_eof 23,724
+  bool                write_eof 24,760
+  bool                pending_write_eof 25,797
+  conn_t(27,843
+  virtual ~conn_t(40,1139
+  virtual void close(45,1353
+  virtual circuit_t *circuit(circuit50,1584
+  struct evbuffer *outbound(outbound57,1851
+  evutil_socket_t socket(61,2009
+struct circuit_t 144,5566
+  struct event       *flush_timer;flush_timer145,5585
+  struct event       *axe_timer;axe_timer146,5620
+  struct bufferevent *up_buffer;up_buffer147,5653
+  const char         *up_peer;up_peer148,5686
+  socks_state_t      *socks_state;socks_state149,5717
+  unsigned int        serial;150,5752
+  bool                connected 152,5783
+  bool                read_eof 153,5820
+  bool                write_eof 154,5856
+  bool                pending_read_eof 155,5893
+  bool                pending_write_eof 156,5937
+  circuit_t(158,5983
+  virtual ~circuit_t(174,6346
+  virtual void close(178,6513
+  virtual config_t *cfg(cfg181,6602
+
+src/protocol.h,606
+#define PROTOCOL_H7,175
+struct config_t20,659
+  struct event_base         *base;base22,677
+  enum listen_mode           mode;23,712
+  bool ignore_socks_destination 25,802
+  config_t(27,840
+  virtual ~config_t(28,894
+  virtual const char *name(name33,1101
+struct proto_module80,3502
+  const char *name;name83,3586
+  config_t *(*config_create)config_create87,3701
+#define PROTO_DEFINE_MODULE(94,3885
+#define CONFIG_DECLARE_METHODS(112,4984
+#define CONFIG_STEG_STUBS(124,5685
+#define CONN_DECLARE_METHODS(128,5834
+#define CONN_STEG_STUBS(142,6571
+#define CIRCUIT_DECLARE_METHODS(150,6963
+
+src/util.cc,1301
+die_oom(20,425
+xmalloc(26,513
+xrealloc(47,985
+xzalloc(62,1202
+xmemdup(70,1311
+xstrdup(78,1433
+xstrndup(84,1512
+ui64_log2(102,1900
+xsnprintf(144,2970
+xvsnprintf(158,3239
+xgetline(184,4009
+ascii_strstrip(228,4875
+ascii_strlower(242,5068
+#define MAX_LOG_ENTRY 261,5690
+#define TRUNCATED_STR 263,5787
+#define TRUNCATED_STR_LEN 265,5854
+#define LOG_SEV_ERR 269,5911
+#define LOG_SEV_WARN 270,5937
+#define LOG_SEV_INFO 271,5963
+#define LOG_SEV_DEBUG 272,5989
+static FILE *log_dest;log_dest275,6064
+static int log_min_sev 277,6118
+static bool log_timestamps 279,6193
+static struct timeval log_ts_base 280,6229
+sev_to_string(284,6353
+string_to_sev(299,6715
+sev_is_valid(318,7137
+log_open(331,7446
+log_close(351,7739
+log_set_method(363,7991
+log_set_min_severity(390,8498
+log_enable_timestamps(403,8792
+log_get_timestamp(413,8982
+log_do_debug(425,9326
+logv(435,9600
+logpfx(449,9886
+logpfx(468,10329
+logpfx(476,10487
+#define logfmt(488,10784
+#define FNARG 496,11067
+#define FN 497,11097
+#define FNARG 499,11117
+#define FN 500,11136
+void503,11157
+void511,11279
+void519,11422
+void527,11564
+void534,11676
+void541,11809
+void548,11937
+void555,12049
+void562,12182
+void569,12310
+void576,12425
+void583,12561
+void  buf2hex(590,12692
+int timeval_subtract(605,13060
+
+src/curl_util.h.BACKUP.23047.h,26
+#define CURL_UTIL_H8,208
+
+src/socks.cc,512
+#define SOCKS_PRIVATE8,175
+socks_state_new(41,940
+socks_state_free(52,1142
+#define ERR(59,1248
+#define ERR(61,1276
+socks_errno_to_reply(71,1536
+#undef ERR97,2148
+socks5_handle_request(112,2676
+socks5_send_reply(221,5695
+socks5_do_negotiation(281,7603
+socks5_handle_negotiation(307,8341
+socks4_read_request(347,9410
+socks4_send_reply(425,12025
+handle_socks(456,13043
+socks_state_get_status(537,15491
+socks_state_get_address(550,15803
+socks_state_set_address(568,16290
+socks_send_reply(607,17575
+
+src/rng.cc,392
+rng_bytes(21,447
+rng_int(33,728
+rng_range(78,2034
+rng_double(110,3428
+  class rngbit 112,3443
+    rngbit(rngbit::rngbit114,3470
+    bool get(rngbit::get116,3535
+    uint32_t bits;rngbit::bits128,3738
+    unsigned int n;rngbit::n129,3757
+  union ieee754_double 135,3902
+    double d;ieee754_double::d136,3927
+    uint64_t i;ieee754_double::i137,3941
+rng_range_geom(193,5971
+
+src/crypt.cc,5076
+static bool crypto_initialized 16,354
+static bool crypto_errs_initialized 17,394
+static BN_CTX *bctx bctx18,439
+#define REQUIRE_INIT_CRYPTO(20,465
+init_crypto(24,536
+free_crypto(41,930
+log_crypto(54,1192
+log_crypto_abort(70,1547
+log_crypto_warn(77,1649
+aes_ecb_by_size(85,1784
+aes_gcm_by_size(97,2052
+  class MemBlock ::MemBlock111,2353
+    explicit MemBlock(::MemBlock::MemBlock113,2382
+    MemBlock(::MemBlock::MemBlock116,2474
+    ~MemBlock(::MemBlock::~MemBlock119,2607
+    operator const ::MemBlock::operator const122,2670
+    operator void*(::MemBlock::operator void*124,2724
+    operator const ::MemBlock::operator const127,2767
+    operator uint8_t*(::MemBlock::operator uint8_t*129,2824
+    const uint8_t *begin(::MemBlock::begin132,2870
+    uint8_t *begin(::MemBlock::begin134,2924
+    const uint8_t *end(::MemBlock::end137,2967
+    uint8_t *end(::MemBlock::end139,3023
+    size_t size(::MemBlock::size142,3068
+    uint8_t *data;::MemBlock::data147,3166
+    size_t len;::MemBlock::len148,3185
+  struct ecb_encryptor_impl ::ecb_encryptor_impl151,3207
+    EVP_CIPHER_CTX ctx;::ecb_encryptor_impl::ctx153,3255
+    ecb_encryptor_impl(::ecb_encryptor_impl::ecb_encryptor_impl154,3279
+  struct ecb_encryptor_noop_impl ::ecb_encryptor_noop_impl159,3435
+    ecb_encryptor_noop_impl(::ecb_encryptor_noop_impl::ecb_encryptor_noop_impl161,3488
+  struct ecb_decryptor_impl ::ecb_decryptor_impl166,3626
+    EVP_CIPHER_CTX ctx;::ecb_decryptor_impl::ctx168,3674
+    ecb_decryptor_impl(::ecb_decryptor_impl::ecb_decryptor_impl169,3698
+  struct ecb_decryptor_noop_impl ::ecb_decryptor_noop_impl174,3854
+    ecb_decryptor_noop_impl(::ecb_decryptor_noop_impl::ecb_decryptor_noop_impl176,3907
+ecb_encryptor::create(183,4063
+ecb_encryptor::create(197,4460
+ecb_encryptor::create_noop(215,4954
+ecb_decryptor::create(221,5042
+ecb_decryptor::create(235,5439
+ecb_decryptor::create_noop(253,5933
+ecb_encryptor::~ecb_encryptor(258,6005
+ecb_encryptor_impl::~ecb_encryptor_impl(259,6040
+ecb_encryptor_noop_impl::~ecb_encryptor_noop_impl(261,6116
+ecb_decryptor::~ecb_decryptor(264,6172
+ecb_decryptor_impl::~ecb_decryptor_impl(265,6207
+ecb_decryptor_noop_impl::~ecb_decryptor_noop_impl(267,6283
+ecb_encryptor_impl::encrypt(271,6344
+ecb_encryptor_noop_impl::encrypt(280,6577
+ecb_decryptor_impl::decrypt(286,6687
+ecb_decryptor_noop_impl::decrypt(295,6920
+  struct gcm_encryptor_impl ::gcm_encryptor_impl301,7037
+    EVP_CIPHER_CTX ctx;::gcm_encryptor_impl::ctx303,7085
+    gcm_encryptor_impl(::gcm_encryptor_impl::gcm_encryptor_impl304,7109
+  struct gcm_encryptor_noop_impl ::gcm_encryptor_noop_impl310,7339
+    gcm_encryptor_noop_impl(::gcm_encryptor_noop_impl::gcm_encryptor_noop_impl312,7392
+  struct gcm_decryptor_impl ::gcm_decryptor_impl318,7604
+    EVP_CIPHER_CTX ctx;::gcm_decryptor_impl::ctx320,7652
+    gcm_decryptor_impl(::gcm_decryptor_impl::gcm_decryptor_impl321,7676
+  struct gcm_decryptor_noop_impl ::gcm_decryptor_noop_impl327,7904
+    gcm_decryptor_noop_impl(::gcm_decryptor_noop_impl::gcm_decryptor_noop_impl329,7957
+gcm_encryptor::create(354,9143
+gcm_encryptor::create(366,9435
+gcm_encryptor::create_noop(382,9824
+gcm_decryptor::create(388,9912
+gcm_decryptor::create(400,10204
+gcm_decryptor::create_noop(416,10593
+gcm_encryptor::~gcm_encryptor(421,10665
+gcm_encryptor_impl::~gcm_encryptor_impl(422,10700
+gcm_encryptor_noop_impl::~gcm_encryptor_noop_impl(424,10776
+gcm_decryptor::~gcm_decryptor(427,10832
+gcm_decryptor_impl::~gcm_decryptor_impl(428,10867
+gcm_decryptor_noop_impl::~gcm_decryptor_noop_impl(430,10943
+gcm_encryptor_impl::encrypt(434,11004
+gcm_encryptor_noop_impl::encrypt(461,11992
+gcm_decryptor_impl::decrypt(469,12195
+gcm_decryptor_noop_impl::decrypt(504,13375
+  struct ecdh_message_impl ::ecdh_message_impl516,13835
+    EC_KEY *key;::ecdh_message_impl::key518,13881
+ecdh_message_impl::ecdh_message_impl(530,14163
+ecdh_message_impl::ecdh_message_impl(539,14406
+ecdh_message_impl::regen_pubkey(558,15082
+ecdh_message::generate(582,15530
+ecdh_message::load_secret(589,15634
+ecdh_message::~ecdh_message(602,15895
+ecdh_message_impl::~ecdh_message_impl(603,15928
+ecdh_message_impl::encode(609,15998
+ecdh_message_impl::combine(636,16754
+  struct key_generator_impl ::key_generator_impl672,17674
+    HMAC_CTX expander;::key_generator_impl::expander674,17722
+    MemBlock prevT;::key_generator_impl::prevT675,17745
+    MemBlock info;::key_generator_impl::info676,17765
+    uint8_t counter;::key_generator_impl::counter678,17785
+    uint8_t leftover;::key_generator_impl::leftover679,17806
+    bool dead;::key_generator_impl::dead680,17828
+    key_generator_impl(::key_generator_impl::key_generator_impl685,17935
+static const uint8_t nosalt[nosalt699,18310
+key_generator::from_random_secret(702,18373
+key_generator::from_ecdh(723,18958
+key_generator::from_passphrase(735,19317
+key_generator_impl::generate(765,20394
+key_generator::~key_generator(818,21688
+key_generator_impl::~key_generator_impl(819,21723
+sha256(823,21809
+
+src/curl_util.h.LOCAL.23047.h,0
+
+src/subprocess-windows.cc,0
+
+src/test/unittest_JScapacity.cc,0
+
+unitgrplist.cc,0
+
+protolist.cc,0
+
+steglist.cc,0

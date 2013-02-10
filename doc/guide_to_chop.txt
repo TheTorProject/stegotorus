@@ -1,0 +1,24 @@
+Chop functions explained:
+
+chop circuit senders demistified.
+chop_circuit::
+
+   send(): 
+    - call send_all_steg_data to send all steg data
+    - if data is available finds a connection of approperiate size and send data
+    - elif no data available it retransmit from transmit queue
+    - elif nothing on transmit queue sends random block
+
+   send_targeted(chop_conn_t):
+    - I don't know who calls this function.
+    - check if the steg protocol data available send_targeted_steg_data(conn, size)
+    - elif data available call send_targeted
+    - elif no data then retransmit from the queue using send_targeted(conn, size)
+
+   send_targeted(chop_conn_t, size)
+    - attach either op_DAT or op_FIN to the block calls send_targeted(conn, size, opcode,payload)
+   
+   send_targeted(conn, size, opcode, payload):
+    - actually put stuff together and gives them to transmit queue.
+
+  

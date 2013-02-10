@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <getopt.h> //To process command line arguements
 
 #ifdef WIN32
 #include <winsock2.h>
@@ -27,9 +28,12 @@
 #include <event2/listener.h>
 #include <event2/util.h>
 
+const char* program_name;
+
 static struct event_base *base;
 static struct sockaddr_storage listen_on_addr;
 static struct sockaddr_storage connect_to_addr;
+static double drop_rate = 0; //do not drop anything by default
 static int connect_to_addrlen;
 
 #define MAX_OUTPUT (512*1024)
@@ -48,7 +52,8 @@ readcb(struct bufferevent *bev, void *ctx)
 
   src = bufferevent_get_input(bev);
   len = evbuffer_get_length(src);
-  if (!partner) {
+  if ((!partner) || ((drop_rate != 0) && ((double)rand()/RAND_MAX < drop_rate)))
+  {
     evbuffer_drain(src, len);
     return;
   }
@@ -130,15 +135,18 @@ eventcb(struct bufferevent *bev, short what, void *ctx)
   }
 }
 
+/* print usage information and exit the progam with code 1 */
 static void
-syntax(void)
+syntax(int exit_code)
 {
-  fputs("Syntax:\n", stderr);
-  fputs("   tester-proxy <listen-on-addr> <connect-to-addr>\n", stderr);
+  fprintf(stderr, "Usage:  %s options <listen-on-addr> <connect-to-addr>\n", program_name);
+  fputs("  -d  --drop-rate rate       The 0 <= rate <= 1, it drops the incomming traffic\n", stderr);
+  fputs("                             i.e. read_cb drain the buffer and discards data.\n", stderr);
+  fputs("  -h  --help                 Display this usage information.\n", stderr);
   fputs("Example:\n", stderr);
   fputs("   tester-proxy 127.0.0.1:8888 1.2.3.4:80\n", stderr);
 
-  exit(1);
+  exit(exit_code);
 }
 
 static void
@@ -174,46 +182,97 @@ accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
   bufferevent_enable(b_out, EV_READ|EV_WRITE);
 }
 
+/* read the command line argument and set the variable accordingly 
+  exits with 1 if anything goes wrong*/
+void read_options(int argc, char* argv[])
+{
+  //A string representigshort opt letters 
+  const char* short_options = "-d:";
+  //long options
+  const option long_options[] = {
+    { "drop-rate", 1, NULL, 'd'},
+    { "help", 1, NULL, 'h'}
+  };
+
+  unsigned int cur_side = 0;
+
+  program_name = argv[0];
+
+  int next_option;
+  do {
+    next_option = getopt_long(argc, argv, short_options, long_options, NULL);
+    
+    switch (next_option) {
+      case 'h':
+        syntax(0);
+        break;
+      
+      case 'd':
+        drop_rate = strtod(optarg, NULL);
+        break;
+
+      case 1:
+        switch (cur_side) {
+          case 0:
+            {
+              memset(&listen_on_addr, 0, sizeof(listen_on_addr));
+              int socklen = sizeof(listen_on_addr);
+
+              if (evutil_parse_sockaddr_port(optarg,
+                                 (struct sockaddr*)&listen_on_addr, &socklen)<0) {
+                int p = atoi(optarg);
+                struct sockaddr_in *sin = (struct sockaddr_in*)&listen_on_addr;
+           
+                if (p < 1 || p > 65535)
+                  syntax(1);
+                sin->sin_port = htons(p);
+                sin->sin_addr.s_addr = htonl(0x7f000001);
+                sin->sin_family = AF_INET;
+                socklen = sizeof(struct sockaddr_in);
+              }
+              break;
+            }
+         
+         case 1:
+           memset(&connect_to_addr, 0, sizeof(connect_to_addr));
+           connect_to_addrlen = sizeof(connect_to_addr);
+           if (evutil_parse_sockaddr_port(optarg,
+                                          (struct sockaddr*)&connect_to_addr, &connect_to_addrlen)<0)
+             syntax(1);
+           
+           break;
+
+         default: //too many paramerters. We only need two sides
+           syntax(1);
+        }
+
+        cur_side++;
+        break;
+
+      case '?': //unknown option
+        syntax(1);
+        
+      case -1: //done with the options
+        break;
+
+      default: //Something is wrong
+        abort();
+      
+    }
+  }while(next_option != -1);
+  
+  //make sure user has specified both sides
+  if (cur_side < 2)
+    syntax(1);
+
+}
+
 int
 main(int argc, char **argv)
 {
-  int i;
-  int socklen;
-  
+ 
   struct evconnlistener *listener;
-
-  if (argc < 3)
-    syntax();
-
-  for (i=1; i < argc; ++i) {
-    if (argv[i][0] == '-') {
-      syntax();
-    } else
-      break;
-  }
-  
-  if (i+2 != argc)
-    syntax();
-  
-  memset(&listen_on_addr, 0, sizeof(listen_on_addr));
-  socklen = sizeof(listen_on_addr);
-  if (evutil_parse_sockaddr_port(argv[i],
-                                 (struct sockaddr*)&listen_on_addr, &socklen)<0) {
-    int p = atoi(argv[i]);
-    struct sockaddr_in *sin = (struct sockaddr_in*)&listen_on_addr;
-    if (p < 1 || p > 65535)
-      syntax();
-    sin->sin_port = htons(p);
-    sin->sin_addr.s_addr = htonl(0x7f000001);
-    sin->sin_family = AF_INET;
-    socklen = sizeof(struct sockaddr_in);
-  }
-  
-  memset(&connect_to_addr, 0, sizeof(connect_to_addr));
-  connect_to_addrlen = sizeof(connect_to_addr);
-  if (evutil_parse_sockaddr_port(argv[i+1],
-                                 (struct sockaddr*)&connect_to_addr, &connect_to_addrlen)<0)
-    syntax();
+    read_options(argc, argv);
   
   base = event_base_new();
   if (!base) {
@@ -223,7 +282,7 @@ main(int argc, char **argv)
     
   listener = evconnlistener_new_bind(base, accept_cb, NULL,
                                      LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE,
-                                     -1, (struct sockaddr*)&listen_on_addr, socklen);
+                                     -1, (struct sockaddr*)&listen_on_addr, sizeof(listen_on_addr));
   
   event_base_dispatch(base);
   
@@ -231,4 +290,5 @@ main(int argc, char **argv)
   event_base_free(base);
   
   return 0;
+
 }

@@ -14,8 +14,7 @@
 #include <sstream>
 #include <string>
 
-#include "curl_util.h"
-#include "http_parser/http_parser.h"
+using namespace std;
 
 #include "curl_util.h"
 #include "http_parser/http_parser.h"
@@ -28,7 +27,7 @@
 
 /** 
    This program is used by the integration test harness.  It opens one
-   listening socet (the "far" socket) and one outbound connection
+   listening socket (the "far" socket) and one outbound connection
    (the "near" socket).  Then it requests web pages whose url is given 
    by standard input using curl, on the near socket, the far socket 
    receives the request and request  it (using curl) from the server. 
@@ -754,44 +753,6 @@ init_sockets_external(WebpageFetcher *st, const char *near, const char *far)
             strerror(errno));
     exit(1);
   }
-}
-
-int
-WebpageFetcher::compare_far_near()
-{
-
-  if (LOGGING >= 2) {
-    fprintf(stderr, "@far:\n%s\n", (const char*)evbuffer_pullup(fartext,-1));
-    fprintf(stderr, "@near:\n%s\n", (const char*)evbuffer_pullup(neartext,-1));
-  }
-
-  return strncmp((const char*)evbuffer_pullup(neartext,-1), (const char*)evbuffer_pullup(fartext, -1), evbuffer_get_length(fartext));
-  
-}
-
-/*static void fetch_page(WebpageFetcher *st)
-{
-  
-}*/
-
-/**
-
-   After openning the socket we need to initiate our
-   curl handles and give them the sockets
- */
-bool init_curl_handles(WebpageFetcher *st)
-{
-  if (!(st->_curl_multi_handle = curl_multi_init())) {
-    fprintf(stderr, "failed to initiate curl multi object.\n");
-    return false;
-  }
-
-  curl_multi_setopt(st->_curl_multi_handle, CURLMOPT_SOCKETFUNCTION, sock_cb);
-  curl_multi_setopt(st->_curl_multi_handle, CURLMOPT_SOCKETDATA, st);
-
-
-  return (st->init_easy_set_socket(st->curl_near, st->near));// && init_easy_set_socket(st->curl_far, st->far));
-
 }
 
 int

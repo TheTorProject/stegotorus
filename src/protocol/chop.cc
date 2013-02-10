@@ -618,6 +618,9 @@ chop_circuit_t::send_all_steg_data()
     //Now we check if the protocol_data has any data
     size_t avail = evbuffer_get_length(target->steg->cfg()->protocol_data_out);
     //we try to send all data
+    //we don't send random block or retransmit from the transmit
+    //queue because we are called by the this->send which will
+    //send those anyways
     while(avail > 0) {
       size_t desired;
       if (avail > SECTION_LEN)
