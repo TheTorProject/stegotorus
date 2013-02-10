@@ -48,7 +48,7 @@ using namespace std;
 */
 
 #define TL_TIMEOUT 0
-#define LOGGING 0
+#define LOGGING 1
 class WebpageFetcher
 {
 public:
