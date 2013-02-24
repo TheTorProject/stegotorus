@@ -19,6 +19,9 @@ using namespace boost::filesystem;
 #include "payload_scraper.h"
 #include "base64.h"
 
+#include "protocol/chop_blk.h" //We need this to no what's the minimum 
+                               //acceptable capacity
+
 /** We read the /etc/httpd/conf/httpd.conf (this need to be more dynamic)
     but I'm testing it on my system which is running arch) find
     the DocumentRoot. Then it will check the directory recursively and
@@ -60,7 +63,10 @@ int PayloadScraper::scrape_dir(const path dir_path)
             unsigned long cur_filelength = fileinfo.first;
             unsigned long capacity = fileinfo.second;
             
-            if (capacity == 0) continue;
+            if (capacity < chop_blk::MIN_BLOCK_SIZE) continue; //This is not the 
+            //what you want, I think chop should be changed so the steg be allowed
+            //to ignore totally corrupted package and chop should be allowed to send
+            //package with 0 room.
 
             _payload_db << total_file_count << " " << cur_steg->type << " " << url_hash64 << " " << capacity << " " << cur_filelength << " " << cur_url <<"\n";
           }

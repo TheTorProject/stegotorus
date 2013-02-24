@@ -1,0 +1,23 @@
+* TODO What would happen to a connection, if the server has nothing of type that the client requested of any capacity?
+  - Note taken on [2013-02-24 Sun 10:56] \\
+    This usually happens if the client ask for an html file but the html file but the none of the html files has any javascript in them.
+  - In theory must_send_timer should be invoked -> invokes chop_conn_t::send() which tries to transmit data but no room would be send.
+
+    log_debug(this, "must send (no upstream)");
+    
+        size_t room = steg->transmit_room(MIN_BLOCK_SIZE, MIN_BLOCK_SIZE,
+                                          MAX_BLOCK_SIZE);
+        if (room < MIN_BLOCK_SIZE || room >= MAX_BLOCK_SIZE)
+          log_abort(this, "steg size request (%lu) out of range [%lu, %lu]",
+                    (unsigned long)room,
+                    (unsigned long)MIN_BLOCK_SIZE,
+                    (unsigned long)MAX_BLOCK_SIZE);
+
+
+  - This obvously means that you should not have payload with capacity less than MIN_BLOCK = 16 + 16 = 32. I'll check the database and confirm this.
+
+  - Possible remedy this is added to the scraper but that is not ideal:
+            if (capacity < chop_blk::MIN_BLOCK_SIZE) continue; //This is not the 
+            //what you want, I think chop should be changed so the steg be allowed
+            //to ignore totally corrupted package and chop should be allowed to send
+            //package with 0 room.

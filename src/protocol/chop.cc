@@ -1142,9 +1142,14 @@ chop_circuit_t::maybe_send_ack()
   // there are blocks on the receive queue.  Otherwise, send them only
   // every 64 blocks received.  This heuristic will probably need
   // adjustment.
+  log_debug(this, "considering ACK");
   if (recv_queue.window() - last_acked < 64 &&
       (!dead_cycles || recv_queue.empty()))
-    return 0;
+    {
+      log_debug(this, "back log size only %u, not sending ACK", recv_queue.window() - last_acked);
+      return 0;
+    }
+
 
   evbuffer *ackp = recv_queue.gen_ack();
   if (log_do_debug()) {
@@ -1162,6 +1167,9 @@ chop_circuit_t::recv_block(uint32_t seqno, opcode_t op, evbuffer *data)
   switch (op) {
   case op_DAT:
   case op_FIN:
+  case op_STEG0:   // steganography modules
+  case op_STEG_FIN:
+
     // No special handling required.
     goto insert;
 

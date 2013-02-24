@@ -248,6 +248,23 @@ public:
     if (delta/8 + 1 > maxusedbyte)
       maxusedbyte = delta/8 + 1;
   }
+
+  /**
+   * Print out the whole window array in hex format for debug
+   * purpose
+   */
+  void log_info_window()
+  {  
+    char log_ack_stat[1024] = {};
+    char curstat[] = "00";
+    for (int i = 0; i < 32; i++) {
+      sprintf(curstat, "%02x", window[i]);
+      strcat(log_ack_stat, curstat);
+    }
+    
+    log_info("ack status: %s hsn: %u", log_ack_stat, hsn_);
+  }
+
 };
 
 /* The transmit queue holds blocks that we have transmitted at least

@@ -33,4 +33,3 @@ The client software at its initialization checks for ./apache_payload/client_lis
 The server compares url list hashes. If they are the same then it sends a op_STEG0 chop package containing 1 bytes of op_STEG_DICT_UP2DATE. Otherwise it sends the whole url list following op_STEG_DICT_UPDATE byte. It ends with "\r\n".
 
 After that the client will index the url dictionary from 1 to n-1, n being the number of urls. It will store [log_2(n)/8] bytes of the chop's block in the url and the rest in the "q" parameter of the uri in base64 format. If the [log_2(n)/8] > length of chop block (this never happens in practice) then parameter "p" contains the length of the block.
- 

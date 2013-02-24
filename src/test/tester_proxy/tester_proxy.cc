@@ -36,8 +36,11 @@ static struct sockaddr_storage connect_to_addr;
 static double drop_rate = 0; //do not drop anything by default
 static int connect_to_addrlen;
 
+#define LOGGING_OFF 0
+#define LOGGING_MODERATE 1
+#define LOGGING_SEVERE 2
 #define MAX_OUTPUT (512*1024)
-#define LOGGING false
+#define LOGGING LOGGING_MODERATE
 
 static void drained_writecb(struct bufferevent *bev, void *ctx);
 static void eventcb(struct bufferevent *bev, short what, void *ctx);
@@ -54,9 +57,18 @@ readcb(struct bufferevent *bev, void *ctx)
   len = evbuffer_get_length(src);
   if ((!partner) || ((drop_rate != 0) && ((double)rand()/RAND_MAX < drop_rate)))
   {
+    if (LOGGING >= LOGGING_MODERATE) 
+      //indicating that we have dropped the packet
+      fprintf(stderr, "#");
+
     evbuffer_drain(src, len);
     return;
   }
+
+  if (LOGGING >= LOGGING_MODERATE) 
+    //indicating that we have passed the packet
+    fprintf(stderr, ".");
+
   dst = bufferevent_get_output(partner);
   evbuffer_add_buffer(dst, src);
 
@@ -111,7 +123,7 @@ eventcb(struct bufferevent *bev, short what, void *ctx)
       readcb(bev, ctx);
       
       if (evbuffer_get_length(bufferevent_get_output(partner))) {
-        if (LOGGING){
+        if (LOGGING > LOGGING_SEVERE){
           size_t buffer_size = evbuffer_get_length(bufferevent_get_input(partner));
           char* debug_buf = new char[buffer_size+1];
           evbuffer_copyout(bufferevent_get_input(partner), (void*) debug_buf, sizeof(char)* buffer_size);

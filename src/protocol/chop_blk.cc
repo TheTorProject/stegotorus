@@ -326,7 +326,11 @@ transmit_queue::retransmit(transmit_elt &elt,
 int
 transmit_queue::process_ack(evbuffer *data)
 {
+
   ack_payload ack(data, next_to_ack);
+
+  ack.log_info_window();
+
   if (!ack.valid()) return -1;
 
   uint32_t hsn = ack.hsn();
