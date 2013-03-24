@@ -182,6 +182,9 @@ conn_create(config_t *cfg, size_t index,
   conn->buffer = buf;
   conn->peername = peername;
   conn->serial = ++cgs->last_conn_serial;
+  //keeping track of connection consumption
+  time(&conn->creation_time);
+
   cgs->connections.insert(conn);
   log_debug(conn, "new connection");
   return conn;

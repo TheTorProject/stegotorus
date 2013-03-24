@@ -228,8 +228,8 @@ ack_payload::serialize() const
   return wire;
 }
 
-transmit_queue::transmit_queue()
-  : next_to_ack(0), next_to_send(0)
+transmit_queue::transmit_queue(bool intend_to_retransmit = true)
+  : next_to_ack(0), next_to_send(0), overwrite_allowed(not intend_to_retransmit)
 {
 }
 
@@ -249,6 +249,12 @@ transmit_queue::enqueue(opcode_t f, evbuffer *data, uint16_t padding)
 
   uint32_t seqno = next_to_send;
   transmit_elt &elt = cbuf[seqno & 0xFF];
+
+  if (elt.data) {
+    evbuffer_free(elt.data);
+    elt.data = 0;      
+  }
+
   elt.hdr = header(seqno, evbuffer_get_length(data), padding, f);
   elt.data = data;
 
@@ -387,6 +393,7 @@ reassembly_queue::remove_next()
     rv = cbuf[front];
     cbuf[front].data = 0;
     cbuf[front].op   = op_DAT;
+    cbuf[front].conn = NULL;
     next_to_process++;
     count--;
   }
@@ -394,23 +401,25 @@ reassembly_queue::remove_next()
 }
 
 bool
-reassembly_queue::insert(uint32_t seqno, opcode_t op, evbuffer *data)
+reassembly_queue::insert(uint32_t seqno, opcode_t op, 
+                         evbuffer *data, conn_t *conn)
 {
   if (seqno - window() > 255) {
-    log_info("block outside receive window");
+    log_info(conn, "block outside receive window");
     evbuffer_free(data);
     return false;
   }
   uint8_t front = next_to_process & 0xFF;
   uint8_t pos = front + (seqno - window());
   if (cbuf[pos].data) {
-    log_info("duplicate block");
+    log_info(conn, "duplicate block");
     evbuffer_free(data);
     return false;
   }
 
   cbuf[pos].data = data;
   cbuf[pos].op   = op;
+  cbuf[pos].conn = conn;
   count++;
   return true;
 }

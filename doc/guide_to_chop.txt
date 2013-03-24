@@ -21,4 +21,5 @@ chop_circuit::
    send_targeted(conn, size, opcode, payload):
     - actually put stuff together and gives them to transmit queue.
 
+   send_special(opcode_t f, struct evbuffer *payload)
   

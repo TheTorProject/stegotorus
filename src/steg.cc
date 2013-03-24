@@ -32,9 +32,11 @@ steg_new(const char *name, config_t *cfg)
 /* defining the constructor here, so we don't need 
    to include buffer.h to all module who uses steg */
 steg_config_t::steg_config_t(config_t* c)
-  : cfg(c) {
+  : cfg(c)
+ {
     log_assert(protocol_data_in = evbuffer_new());
     log_assert(protocol_data_out = evbuffer_new());
+    
   }
 
 /* Define these here rather than in the class definition so that the

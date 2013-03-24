@@ -685,6 +685,16 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
   struct bufferevent *buf;
   conn_t *conn;
 
+  //We should prevent the whole program from creating more than 1024
+  //connection. This can easily happen because browsers now a days
+  //open connections aggresively and the protocol (like chops) can
+  //multiply that number
+  if (conn_count() >= MAX_GLOBAL_CONN_COUNT)
+    {
+      log_warn(ckt, "global maximum number of connection is reached. global number of conn: %lu. unable to create more connection", conn_count());
+      return false;
+    }
+
   buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
     log_warn(ckt, "unable to create outbound socket buffer");
@@ -742,7 +752,13 @@ create_outbound_connections(circuit_t *ckt, bool is_socks)
 void
 circuit_reopen_downstreams(circuit_t *ckt)
 {
-  create_outbound_connections(ckt, false);
+  if (conn_count() >= MAX_GLOBAL_CONN_COUNT) {
+    //maybe we just need to wait a bit
+      log_warn(ckt, "global maximum number of connection is reached. global number of conn: %lu. unable to create more connection", conn_count());
+      
+  }
+  else
+    create_outbound_connections(ckt, false);
 }
 
 static void

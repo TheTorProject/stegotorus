@@ -154,7 +154,8 @@ http_server_SWF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *con
 
   free(inbuf);
   free(outbuf);
-  return 0;
+  return outlen; //Change to return the number of bytes transmited to monitor
+                 //performance
 }
 
 

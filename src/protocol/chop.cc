@@ -8,7 +8,9 @@
 #include "crypt.h"
 #include "protocol.h"
 #include "rng.h"
+#include <algorithm>
 #include "steg.h"
+
 
 #include <tr1/unordered_map>
 #include <sstream>
@@ -23,6 +25,8 @@
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
    being implemented, and may change incompatibly.  */
+
+#define MAX_CONN_PER_CIRCUIT 8
 
 using std::tr1::unordered_map;
 using std::tr1::unordered_set;
@@ -58,6 +62,7 @@ struct chop_conn_t : conn_t
   void send();
   bool must_send_p() const;
   static void must_send_timeout(evutil_socket_t, short, void *arg);
+
 };
 
 struct chop_circuit_t : circuit_t
@@ -78,8 +83,15 @@ struct chop_circuit_t : circuit_t
   bool sent_fin : 1;
   bool upstream_eof : 1;
 
+  //For debug and tracking performance we keep track of average room
+  //desirable and offered size
+  double avg_desirable_size = 0;
+  double avg_available_size = 0;
+  unsigned long number_of_room_requests = 0;
   CIRCUIT_DECLARE_METHODS(chop);
 
+  //override the constructor so we can initialize the transmit queue
+  chop_circuit_t(bool retransmit);
   // Shortcut some unnecessary conversions for callers within this file.
   void add_downstream(chop_conn_t *conn);
   void drop_downstream(chop_conn_t *conn);
@@ -111,7 +123,7 @@ struct chop_circuit_t : circuit_t
   chop_conn_t *pick_connection(size_t desired, size_t minimum,
                                size_t *blocksize);
 
-  int recv_block(uint32_t seqno, opcode_t op, evbuffer *payload);
+  int recv_block(uint32_t seqno, opcode_t op, evbuffer *payload, conn_t *conn);
   int process_queue();
   int check_for_eof();
 
@@ -127,6 +139,10 @@ struct chop_circuit_t : circuit_t
     // 10*60*1000 lies between 2^19 and 2^20.
     uint32_t shift = std::max(1u, std::min(19u, dead_cycles));
     uint32_t xv = std::max(1u, std::min(10u * 60 * 1000, 1u << shift));
+    //TODO: this needs to be formalised
+    if (dead_cycles == 0)
+      return 100;
+
     return rng_range_geom(20 * 60 * 1000, xv) + 100;
   }
 };
@@ -138,8 +154,14 @@ struct chop_config_t : config_t
   vector<steg_config_t *> steg_targets;
   chop_circuit_table circuits;
   bool trace_packets;
+  bool trace_packet_data;
   bool encryption;
   bool retransmit;
+
+    /* Performance calculators */
+  unsigned long total_transmited_data_bytes;
+  unsigned long total_transmited_cover_bytes;
+
 
   CONFIG_DECLARE_METHODS(chop);
 };
@@ -147,11 +169,14 @@ struct chop_config_t : config_t
 // Configuration methods
 
 chop_config_t::chop_config_t()
+  : total_transmited_data_bytes(0), total_transmited_cover_bytes(1) 
+                                    //just to evade div by 0
 {
   ignore_socks_destination = true;
   trace_packets = false;
-  encryption = true;
-  retransmit = true;
+  trace_packet_data = false;
+  encryption = false;
+  retransmit = false;
 }
 
 chop_config_t::~chop_config_t()
@@ -309,7 +334,7 @@ const char passphrase[] =
 circuit_t *
 chop_config_t::circuit_create(size_t)
 {
-  chop_circuit_t *ckt = new chop_circuit_t;
+  chop_circuit_t *ckt = new chop_circuit_t(retransmit);
   ckt->config = this;
 
   key_generator *kgen = 0;
@@ -360,7 +385,14 @@ chop_config_t::circuit_create(size_t)
   return ckt;
 }
 
+/** This has to be here for the unfortunate macro game */
 chop_circuit_t::chop_circuit_t()
+  :tx_queue(true)
+{
+}
+
+chop_circuit_t::chop_circuit_t(bool retransmit = true)
+  : tx_queue(retransmit)
 {
 }
 
@@ -400,6 +432,7 @@ chop_circuit_t::close()
   // get destroyed on the client side after the c->s FIN, and the
   // mandatory reply will be to a stale circuit.
   chop_circuit_table::iterator out;
+  log_debug(this,"deleting circuit %u from the table", circuit_id);
   out = config->circuits.find(circuit_id);
   log_assert(out != config->circuits.end());
   log_assert(out->second == this);
@@ -474,6 +507,7 @@ chop_circuit_t::drop_downstream(conn_t *cn)
 int
 chop_circuit_t::send()
 {
+ 
   circuit_disarm_flush_timer(this);
 
   //First we check if there's steg data that we need to send
@@ -572,11 +606,14 @@ chop_circuit_t::send()
     // reopening new connections.  If we're the server, we have to
     // just twiddle our thumbs and hope the client does that.
     if (no_target_connection) {
+      log_debug(this, "number of open connections on this circuit %u, golobally %u", (unsigned int)downstreams.size(), (unsigned int) conn_count());
       if (config->mode != LSN_SIMPLE_SERVER &&
-          downstreams.size() < 64)
+          (int)downstreams.size() < min(MAX_CONN_PER_CIRCUIT, ((int)(MAX_GLOBAL_CONN_COUNT - conn_count() + (int)circuit_count() - 1)/(int)circuit_count()))) //min(8, and ceilling of (MAX - count)/no of circ)
         circuit_reopen_downstreams(this);
-      else
+      else {
+        log_debug(this,"no more connection available at this time");
         circuit_arm_axe_timer(this, axe_interval());
+      }
     }
   }
 
@@ -594,6 +631,8 @@ chop_circuit_t::send_all_steg_data()
 
   bool no_target_connection = true;
 
+  //TODO: Instead of re-implementing pick connection here I should 
+  //adopt it so it can works both for send and send steg.
   for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
        i != downstreams.end(); i++) {
     chop_conn_t *target = *i;
@@ -669,17 +708,22 @@ chop_circuit_t::send_all_steg_data()
       }
     } //while(avail > 0)
   } //for all targets
-
+  
+  (void) no_target_connection;
   // If we're the client and we had no target connection, try
   // reopening new connections.  If we're the server, we have to
   // just twiddle our thumbs and hope the client does that.
-  if (no_target_connection) {
-    if (config->mode != LSN_SIMPLE_SERVER &&
-        downstreams.size() < 64)
-      circuit_reopen_downstreams(this);
-    else
-      circuit_arm_axe_timer(this, axe_interval());
-  }
+  // if (no_target_connection) {
+  //   if (config->mode != LSN_SIMPLE_SERVER &&
+  //       downstreams.size() < 64) {
+  //     log_debug("number of open connections %u", (unsigned int) downstreams.size());
+  //     circuit_reopen_downstreams(this);
+  //   }
+  //   else {
+  //     log_debug("number of open connections %u", (unsigned int) downstreams.size());
+  //     circuit_arm_axe_timer(this, axe_interval());
+  //   }
+  // }
 
   return 0;
 }
@@ -692,6 +736,8 @@ chop_circuit_t::send_eof()
   return send();
 }
 
+//TODO check if send_special can be used steg data communication
+//instead of send_all_steg_data
 int
 chop_circuit_t::send_special(opcode_t f, struct evbuffer *payload)
 {
@@ -841,7 +887,7 @@ chop_circuit_t::send_targeted(chop_conn_t *conn)
       }
     }
   }
-
+      
   if (avail > SECTION_LEN)
     avail = SECTION_LEN;
   avail += MIN_BLOCK_SIZE;
@@ -973,12 +1019,16 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
   }
   evbuffer_free(block);
 
+  //if we don't do retransmit we need to remove the block
+  //from the queue not make full. because the only way that
+  //ACK remove lost payload is by retransmission.
+
   char fallbackbuf[4];
   log_debug(conn, "transmitted block %u <d=%lu p=%lu f=%s>",
             seqno, (unsigned long)d, (unsigned long)p,
             opname(f, fallbackbuf));
 
-  if (config->trace_packets)
+  if (config->trace_packets) {
     fprintf(stderr,
             "T:%.4f: ckt %u <ntp %u outq %lu>: "
             "send %lu <d=%lu p=%lu f=%s>\n",
@@ -990,6 +1040,9 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
             (unsigned long)d,
             (unsigned long)p,
             opname(f, fallbackbuf));
+    config->total_transmited_data_bytes += d;
+    log_debug(this, "efficiency: %f", config->total_transmited_data_bytes/(double)(config->total_transmited_cover_bytes));
+  }
   if (f == op_FIN || f == op_STEG_FIN) {
     sent_fin = true;
     read_eof = true;
@@ -1036,6 +1089,8 @@ chop_circuit_t::pick_connection(size_t desired, size_t minimum,
        i != downstreams.end(); i++) {
     chop_conn_t *conn = *i;
 
+    //Keeping track of connection life length
+    log_debug(conn, "has been connected for %lu secs", (unsigned long)difftime(time(0), conn->creation_time));
     // We cannot transmit on a connection whose steganography module has
     // not yet been instantiated.  (This only ever happens server-side.)
     if (!conn->steg) {
@@ -1057,7 +1112,7 @@ chop_circuit_t::pick_connection(size_t desired, size_t minimum,
                                             MAX_BLOCK_SIZE + shake);
     if (room == 0) {
       log_debug(conn, "offers 0 bytes (%s)",
-                conn->steg->cfg()->name());
+        conn->steg->cfg()->name());
       continue;
     }
 
@@ -1070,6 +1125,17 @@ chop_circuit_t::pick_connection(size_t desired, size_t minimum,
     log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
               conn->steg->cfg()->name());
 
+    //When we are here it means that our offer when through
+    
+    //for debug reason only
+    if (config->trace_packets) {
+        avg_desirable_size += (-avg_desirable_size + (desired+shake))/((double)(number_of_room_requests+1));
+        avg_available_size += (-avg_available_size + (room))/((double)(number_of_room_requests+1));
+        number_of_room_requests++;
+
+        log_debug(this, "no req: %lu avg des: %f avg act: %f", number_of_room_requests, avg_desirable_size, avg_available_size);
+    }
+    
     if (room >= desired + shake) {
       if (room < minabove) {
         minabove = room;
@@ -1142,6 +1208,11 @@ chop_circuit_t::maybe_send_ack()
   // there are blocks on the receive queue.  Otherwise, send them only
   // every 64 blocks received.  This heuristic will probably need
   // adjustment.
+  
+  //If we don't retransmit we shouldn't send ACK either because it will consume
+  //all the channel if a block is lost
+  if (!config->retransmit)
+    return 0;
   log_debug(this, "considering ACK");
   if (recv_queue.window() - last_acked < 64 &&
       (!dead_cycles || recv_queue.empty()))
@@ -1161,8 +1232,14 @@ chop_circuit_t::maybe_send_ack()
 }
 
 // Some blocks are to be processed immediately upon receipt.
+/* conn is needed to have access to the steg module while the circuit is
+   processing the queue, in the event that op_STEGx is op, then it is the 
+   steg module that should be able to process it.
+*/
+
 int
-chop_circuit_t::recv_block(uint32_t seqno, opcode_t op, evbuffer *data)
+chop_circuit_t::recv_block(uint32_t seqno, opcode_t op, 
+                           evbuffer *data, conn_t *conn)
 {
   switch (op) {
   case op_DAT:
@@ -1205,7 +1282,7 @@ chop_circuit_t::recv_block(uint32_t seqno, opcode_t op, evbuffer *data)
   data = evbuffer_new();
 
  insert:
-  recv_queue.insert(seqno, op, data);
+  recv_queue.insert(seqno, op, data, conn);
   return 0;
 }
 
@@ -1236,7 +1313,8 @@ chop_circuit_t::process_queue()
         } else {
           // We are making forward progress if we are _either_ sending or
           // receiving data.
-          dead_cycles = 0;
+          if (evbuffer_get_length(blk.data) > 0)
+            dead_cycles = 0;
           if (evbuffer_add_buffer(bufferevent_get_output(up_buffer),
                                   blk.data)) {
             log_warn(this, "buffer transfer failure");
@@ -1331,7 +1409,9 @@ chop_circuit_t::check_for_eof()
     log_debug(this, "client arming flush timer%s%s",
               sent_fin ? " (sent FIN)" : "",
               received_fin ? " (received FIN)": "");
-    circuit_arm_flush_timer(this, flush_interval());
+    uint32_t next_try_interval = flush_interval();
+    log_debug(this, "next try to connect to server in %u msecs", next_try_interval);
+    circuit_arm_flush_timer(this, next_try_interval);
   }
 
   return 0;
@@ -1407,10 +1487,13 @@ chop_conn_t::send(struct evbuffer *block)
     }
   }
 
-  if (steg->transmit(block)) {
+  int transmission_size = steg->transmit(block);
+  if (transmission_size < 0) {
     log_warn(this, "failed to transmit block");
     return -1;
   }
+
+  config->total_transmited_cover_bytes += transmission_size;
   sent_handshake = true;
   if (must_send_timer)
     evtimer_del(must_send_timer);
@@ -1606,7 +1689,7 @@ chop_conn_t::recv()
               hdr.rcount());
 
          // vmon: I need the content of the packet as well.
-        if (hdr.dlen())
+        if (config->trace_packet_data && hdr.dlen())
           {
             char* data_4_log =  new char[hdr.dlen() + 1];
             memcpy(data_4_log, decodebuf, hdr.dlen());
@@ -1623,7 +1706,7 @@ chop_conn_t::recv()
       return -1;
     }
 
-    if (upstream->recv_block(hdr.seqno(), hdr.opcode(), data))
+    if (upstream->recv_block(hdr.seqno(), hdr.opcode(), data, this))
       return -1; // insert() logs an error
   }
 
@@ -1742,9 +1825,12 @@ chop_conn_t::send()
       conn_do_flush(this);
       return;
     }
-
-    if (steg->transmit(chaff))
+    
+    int transmission_size = steg->transmit(chaff);
+    if (transmission_size < 0)
       conn_do_flush(this);
+    else
+      config->total_transmited_cover_bytes += transmission_size;
 
     evbuffer_free(chaff);
   }

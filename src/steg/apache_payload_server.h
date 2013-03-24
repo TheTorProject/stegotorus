@@ -34,6 +34,7 @@ class ApachePayloadServer: public PayloadServer
   string _apache_host_name = "127.0.0.1";
   
   const unsigned long c_max_buffer_size = 1000000;
+  const unsigned int c_ACCEPTABLE_EFFICIENCY_COMPROMISE = 30;
   CURL* _curl_obj; //this is used to communicate with http server
 
   //This is too keep the dict in sync between client and server

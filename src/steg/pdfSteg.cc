@@ -465,7 +465,7 @@ http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source,
   }
 
   evbuffer_drain(source, sbuflen);
-  return 0;
+  return newHdrLen + outbuflen;
 }
 
 int

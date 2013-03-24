@@ -55,3 +55,8 @@
 /apache_payload/*
 /traces/*
 /src/test/tester_proxy/*
+
+#debugging stuff
+tools
+tmp
+setup_stegotorus.sh

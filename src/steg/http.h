@@ -4,6 +4,10 @@
 #define MIN_COOKIE_SIZE 24
 #define MAX_COOKIE_SIZE 1024
 
+#define WAIT_BEFORE_TRANSMIT 100 //in milisecond a conn_t that receive should
+                                    //wait before transmiting no matter what to 
+                                    //keep the cover looks real
+
 int
 lookup_peer_name_from_ip(const char* p_ip, char* p_name);
 

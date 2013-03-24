@@ -67,6 +67,8 @@ nosteg_steg_t::transmit(struct evbuffer *source)
 {
   struct evbuffer *dest = conn->outbound();
 
+  int no_byte_to_transmit = (unsigned long)evbuffer_get_length(source);
+
   log_debug(conn, "transmitting %lu bytes",
             (unsigned long)evbuffer_get_length(source));
 
@@ -75,7 +77,7 @@ nosteg_steg_t::transmit(struct evbuffer *source)
     return -1;
   }
 
-  return 0;
+  return no_byte_to_transmit;
 }
 
 int

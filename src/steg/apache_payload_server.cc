@@ -67,7 +67,8 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
       payload_info_stream >>  cur_payload_info.url;
 
       _payload_database.payloads.insert(pair<string, PayloadInfo>(cur_hash, cur_payload_info));
-
+      _payload_database.sorted_payloads.push_back(EfficiencyIndicator(cur_hash, cur_payload_info.length));
+                                                  
       //update type related global data 
       _payload_database.type_detail[cur_payload_info.type].count++;
       if (cur_payload_info.capacity > _payload_database.type_detail[cur_payload_info.type].max_capacity)
@@ -78,6 +79,8 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
     if (payload_info_stream.bad())
       log_abort("payload info file corrupted.");
         
+    _payload_database.sorted_payloads.sort();
+    
     log_debug("loaded %ld payloads from %s\n", _payload_database.payloads.size(), _database_filename.c_str());
     
     //This is how server side initiates the uri dict
@@ -95,6 +98,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
 
   }
 
+    
   //init curl
   if (!(_curl_obj = curl_easy_init()))
     log_abort("Failed to initiate the curl object");
@@ -129,42 +133,75 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
   //get payload is not supposed to act like this but for the sake 
   //of testing and compatibility we are simulating the original 
   //get_payload
-  PayloadDict::iterator itr_payloads, itr_first, itr_best = _payload_database.payloads.end();
-  while(numCandidate < MAX_CANDIDATE_PAYLOADS) {
-    itr_payloads = _payload_database.payloads.begin();
-    advance(itr_payloads, rng_int(_payload_database.payloads.size()));
-    if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType || (*itr_payloads).second.length > c_max_buffer_size)
-      continue;
+  PayloadInfo* itr_first, *itr_best = NULL;
+  list<EfficiencyIndicator>::iterator  itr_payloads = _payload_database.sorted_payloads.begin();
 
-    found = true;
-    itr_first = itr_payloads;
-    numCandidate++;
-
-    if (itr_best == _payload_database.payloads.end())
-      itr_best = itr_payloads;
-    else if ((*itr_best).second.length > (*itr_payloads).second.length)
-      itr_best = itr_payloads;
-
+  PayloadInfo* cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
+  while(itr_payloads != _payload_database.sorted_payloads.end() && (cur_payload_candidate->capacity < (unsigned int)cap ||
+                                                                   cur_payload_candidate->type != (unsigned int)contentType)){
+    itr_payloads++; numCandidate++;
+    cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
   }
+
+  if (itr_payloads != _payload_database.sorted_payloads.end() && cur_payload_candidate->length < c_max_buffer_size)
+    {
+      found = true;
+      itr_first = itr_best = cur_payload_candidate;
+    }
+  // while(numCandidate < MAX_CANDIDATE_PAYLOADS) {
+  //   //itr_payloads = _payload_database.payloads.begin();
+  //   //advance(itr_payloads, rng_int(_payload_database.payloads.size()));  
+    
+  //     //if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType || (*itr_payloads).second.length > c_max_buffer_size || (*itr_payloads).second.length/c_ACCEPTABLE_EFFICIENCY_COMPROMISE > (unsigned int)cap )
+  //   if (cur_payload_candidate->capacity <= (unsigned int)cap) //the list is sorted so we'll have no more luck
+  //     break; 
+  //   if (cur_payload_candidate->type != (unsigned int)contentType || cur_payload_candidate->length > c_max_buffer_sizep)
+  //     {
+  //       itr_payloads++;
+  //       continue;
+  //     }
+
+  //   found = true;
+  //   itr_first = cur_payload_candidate;
+  //   numCandidate++;
+
+  //   if (itr_best == NULL)
+  //     itr_best = cur_payload_candidate;
+  //   else if (itr_best->length > cur_payload_candidate->length)
+  //     itr_best = cur_payload_candidate;
+
+  //   if (cur_payload_candidate->length/c_ACCEPTABLE_EFFICIENCY_COMPROMISE < (unsigned int)cap)
+  //     break;
+
+  //   itr_payloads++;
+
+  // }
 
   if (found)
     {
-      log_debug("cur payload size=%d, best payload size=%d, num candidate=%d\n",
-                (*itr_first).second.length,
-                (*itr_best).second.length,
-                numCandidate);
-      stringstream tmp_stream_buf;
-      string payload_uri = "http://" + _apache_host_name + "/" + (*itr_best).second.url;
+      log_debug("cur payload size=%d, best payload size=%d, num candidate=%d for transmiting %d bytes\n",
+                itr_first->length,
+                itr_best->length,
+                numCandidate,
+                cap);
 
-      *size = fetch_url_raw(_curl_obj, payload_uri, tmp_stream_buf);
-      if (*size == 0)
-      {
-         log_abort("Failed fetch the url %s", (*itr_best).second.url.c_str());
-         return 0;
+      if (!itr_best->cached) {
+          stringstream tmp_stream_buf;
+          string payload_uri = "http://" + _apache_host_name + "/" + (*itr_best).url;
+
+          itr_best->cached_size = fetch_url_raw(_curl_obj, payload_uri, tmp_stream_buf);
+          if (itr_best->cached_size == 0)
+            {
+              log_abort("Failed fetch the url %s", (*itr_best).url.c_str());
+              return 0;
+            }
+
+          itr_best->cached = new char[itr_best->cached_size];
+          tmp_stream_buf.read(itr_best->cached, itr_best->cached_size);
       }
-
-      *buf = new char[*size];
-      tmp_stream_buf.read(*buf, *size);
+      
+      *buf = itr_best->cached;
+      *size = itr_best->cached_size;
       return 1;
       
     } 
@@ -219,7 +256,7 @@ ApachePayloadServer::init_uri_dict(istream& dict_stream)
   if (!dict_stream.bad()) 
     return true;
 
-  log_debug("crrupted dictionary buffer");
+  log_debug("corrupted dictionary buffer");
   return false;
   
 }

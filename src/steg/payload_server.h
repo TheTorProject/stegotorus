@@ -2,6 +2,7 @@
 #define _PAYLOAD_SERVER_H
 #include <map>
 #include <string>
+#include <list>
 
 using namespace std; 
 
@@ -20,7 +21,7 @@ using namespace std;
 
 // max number of payloads that have enough capacity from which
 // we choose the best fit
-#define MAX_CANDIDATE_PAYLOADS 10
+#define MAX_CANDIDATE_PAYLOADS 100
 
 // jsSteg-specific defines
 #define JS_DELIMITER '?'
@@ -97,6 +98,8 @@ class PayloadInfo{
   unsigned int capacity;
   unsigned int length;
   string url;
+  char* cached;
+  unsigned int cached_size;
 
   /**
      constructor fills up the elements  
@@ -109,11 +112,29 @@ class PayloadInfo{
   PayloadInfo()
     {
       url_hash = NULL;
+      cached = NULL;
+      cached_size = 0;
+      
     }
 
 };
 
 typedef map<string, PayloadInfo> PayloadDict;
+
+class EfficiencyIndicator
+{
+ public:
+  string url_hash;
+  unsigned long length;
+
+  EfficiencyIndicator(string new_hash, unsigned long new_length)
+   : url_hash(new_hash), length(new_length)
+  {  }
+
+  bool operator<(EfficiencyIndicator rhs) {
+    return (length < rhs.length);
+  }
+};
 
 /** 
     The initiation process needs to fill up the
@@ -153,6 +174,8 @@ class PayloadDatabase{
 
   //pentry_header payload_hdrs[MAX_PAYLOADS];
   PayloadDict payloads;
+  list<EfficiencyIndicator> sorted_payloads;
+
   map<unsigned int, TypeDetail> type_detail;
 
   /**

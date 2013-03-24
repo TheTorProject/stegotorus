@@ -8,6 +8,14 @@
 
 #include <event2/bufferevent.h>
 
+#include <time.h> //Keeping track of life length of a connection for debug reason
+
+#define MAX_GLOBAL_CONN_COUNT 256 //To prevent the total number of connections
+                                  //created by this instance exceed this number. 
+                                  //I am not sure if it is the best place to 
+                                  //to define this
+
+
 /** This struct defines the state of one downstream socket-level
     connection.  Each protocol must define a subclass of this
     structure; see protocol.h for helper macros.
@@ -23,6 +31,9 @@ struct conn_t {
   bool                read_eof : 1;
   bool                write_eof : 1;
   bool                pending_write_eof : 1;
+
+  //for debug reason: we want to keep track of connection life length 
+  time_t creation_time;
 
   conn_t()
     : peername(0)

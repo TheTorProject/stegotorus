@@ -4,6 +4,7 @@
 #include <curl/curl.h>
 #include <vector>
 #include <sstream>
+#include <algorithm>
 
 using namespace std;
 
@@ -36,7 +37,6 @@ enum op_apache_steg_code
     op_STEG_DICT_UPDATE,
     op_STEG_DICT_WAIT_PEER,
   };
-
 
 namespace  {
   struct http_apache_steg_config_t : http_steg_config_t
@@ -86,7 +86,7 @@ namespace  {
   struct http_apache_steg_t : http_steg_t
   {
 
-    const size_t c_min_uri_length = 1;
+    const size_t c_min_uri_length = 0;
     const size_t c_max_uri_length = 2000; //Unofficial cap
 
     CURL* _curl_easy_handle;
@@ -321,7 +321,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   //and recycle them it also will help with clean-up.
   // while((res = curl_multi_perform(_apache_config->_curl_multi_handle, &_apache_config->_curl_running_handle)) == CURLM_CALL_MULTI_PERFORM);
 
-   return 0;
+   return uri_to_send.length()+46; //GET request always adds 46 chars
 }
 
 int
@@ -383,13 +383,15 @@ http_apache_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, str
   // in transmit_room.)
   conn->expect_close();
 
-  conn->transmit_soon(100);
+  conn->transmit_soon(max(WAIT_BEFORE_TRANSMIT-(int)conn_count(), 20));
   return RECV_GOOD;
 }
 
 int
 http_apache_steg_t::http_server_receive_cookie(char* p, evbuffer* dest)
 {
+  using std::max;
+
     char outbuf[MAX_COOKIE_SIZE * 3/2];
     char outbuf2[MAX_COOKIE_SIZE];
     char *pend;
@@ -527,10 +529,12 @@ http_apache_steg_t::cfg()
 size_t
 http_apache_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
 {
-  log_debug("computing available room of type %u", type);
-  if (have_transmitted)
+  //log_debug(conn, "computing available room of type %u", type);
+  if (have_transmitted) {
     /* can't send any more on this connection */
+    log_debug(conn, "have transmited.");
     return 0;
+  }
 
   if (config->is_clientside) {
     // MIN_COOKIE_SIZE and MAX_COOKIE_SIZE are *after* base64'ing
@@ -545,7 +549,7 @@ http_apache_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
                 config->is_clientside, type,
                 (unsigned long)hi, (unsigned long)lo);
 
-    return clamp(pref + rng_range_geom(hi - lo, 8), lo, hi);
+    return (hi == 0) ? 0 : clamp(pref + rng_range_geom(hi - lo, 8), lo, hi);
 
   }
 

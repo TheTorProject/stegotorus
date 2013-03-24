@@ -50,7 +50,13 @@ struct steg_config_t
   */
   virtual size_t process_protocol_data()
   {
-    return 0;
+    /* Don't worry, struct can handle virtual functions */
+    /* should never arrive here, probably the client and server
+       has misunderstanding about which steg module to use*/
+    log_debug("steg protocol does not handle protocol data");
+    
+    return 0; //This signals that there's no data protocol available
+              //to send as the result of the (non)process
   }
 
 };

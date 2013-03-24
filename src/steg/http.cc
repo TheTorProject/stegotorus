@@ -186,10 +186,17 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
       
   }
 
-  if (hi < lo)
-    /* cannot satisfy this request */
-    return 0;
-  return clamp(pref, lo, hi);
+  if (hi < lo) 
+    /* cannot satisfy this request, doesn't make sense */
+    log_abort("hi<lo: client=%d type=%d hi=%ld lo=%ld",
+              config->is_clientside, type,
+              (unsigned long)hi, (unsigned long)lo);
+
+  return clamp(pref + rng_range_geom(hi - lo + 1, 8), lo, hi); //vmon I've added the randomness
+  //but don't know why, (I think zack took it away) also I would get into  
+  //[error] rng_range_geom: assertion failure at src/rng.cc:202: 0 < xv && xv < hi
+  // that is why added that + 1 there
+
 }
 
 int
@@ -246,6 +253,7 @@ http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
   size_t cookie_len = 0;
   size_t rval;
   size_t len = 0;
+  int transmit_len = 0;
   // '+' -> '-', '/' -> '_', '=' -> '.' per
   // RFC4648 "Base 64 encoding with RL and filename safe alphabet"
   // (which does not replace '=', but dot is an obvious choice; for
@@ -291,43 +299,49 @@ http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
     log_warn("error adding uri field\n");
     goto err;
   }
+  transmit_len += strstr(buf, "\r\n") - buf + 2;
 
   rval = evbuffer_add(dest, "Host: ", 6);
   if (rval) {
     log_warn("error adding host field\n");
     goto err;
   }
+  transmit_len += 6;
 
   rval = evbuffer_add(dest, peer_dnsname, strlen(peer_dnsname));
   if (rval) {
     log_warn("error adding peername field\n");
     goto err;
   }
+  transmit_len += strlen(peer_dnsname);
 
   rval = evbuffer_add(dest, strstr(buf, "\r\n"), payload_len - (unsigned int) (strstr(buf, "\r\n") - buf));
   if (rval) {
     log_warn("error adding HTTP fields\n");
     goto err;
   }
-
+  transmit_len +=  strstr(buf, "\r\n") - buf;
+  
   rval =   evbuffer_add(dest, "Cookie: ", 8);
   if (rval) {
     log_warn("error adding cookie fields\n");
     goto err;
   }
-  rval = evbuffer_add(dest, cookiebuf, cookie_len);
+  transmit_len += 8;
 
+  rval = evbuffer_add(dest, cookiebuf, cookie_len);
   if (rval) {
     log_warn("error adding cookie buf\n");
     goto err;
   }
+  transmit_len += cookie_len;
 
   rval = evbuffer_add(dest, "\r\n\r\n", 4);
-
   if (rval) {
     log_warn("error adding terminators \n");
     goto err;
   }
+  transmit_len += 4;
 
   evbuffer_drain(source, sbuflen);
   log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
@@ -338,7 +352,7 @@ http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
 
   free(buf);
   free(data2);
-  return 0;
+  return transmit_len;
 
 err:
   free(buf);
@@ -521,7 +535,7 @@ http_steg_t::transmit(struct evbuffer *source)
       break;
     }
 
-    if (rval == 0) {
+    if (rval >= 0) {
       have_transmitted = 1;
       // FIXME: should decide whether or not to do this based on the
       // Connection: header.  (Needs additional changes elsewhere, esp.
@@ -609,7 +623,7 @@ http_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, struct evb
   // in transmit_room.)
   conn->expect_close();
 
-  conn->transmit_soon(100);
+  conn->transmit_soon(WAIT_BEFORE_TRANSMIT);
   return RECV_GOOD;
 }
 

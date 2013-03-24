@@ -84,7 +84,7 @@ unsigned long fetch_url_raw(CURL* curl_obj, string& url,  stringstream& buf)
   curl_easy_setopt(curl_obj, CURLOPT_WRITEDATA, (void*)&buf);
 
   /* Perform the request, res will get the return code */ 
-  res = curl_easy_perform(curl_obj);
+  res = curl_easy_perform(curl_obj); //need to be turn to non-blocking
   /* Check for errors */ 
   if(res != CURLE_OK) {
     log_debug("curl_easy_perform() failed: %s\n",
@@ -141,6 +141,7 @@ int curl_close_socket_cb(void *clientp, curl_socket_t curlfd)
       event_del(socket_event_handle);
 
       shutdown(curlfd, SHUT_RD | SHUT_WR);*/
+  log_debug("preventing curl from closing the socket");
 
   return 0;
 }

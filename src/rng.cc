@@ -199,7 +199,10 @@ rng_range_geom(unsigned int hi, unsigned int xv)
   using std::max;
 
   log_assert(hi <= ((unsigned int)INT_MAX)+1);
-  log_assert(0 < xv && xv < hi);
+  log_assert(0 < xv);// && xv < hi); //the expected value is xv so if it's 
+  //bigger than max, it does not seems to cause mathematical problem
+  //as xv is the expected value for the untruncated variable. Refere to
+  //the same http://math.stackexchange.com/questions/97733
 
   double U = rng_double();
 

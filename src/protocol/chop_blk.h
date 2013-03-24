@@ -293,11 +293,13 @@ public:
    uint32_t next_to_ack;
    uint32_t next_to_send;
 
+   bool overwrite_allowed;
+
    transmit_queue(const transmit_queue&) DELETE_METHOD;
    transmit_queue& operator=(const transmit_queue&) DELETE_METHOD;
 
  public:
-   transmit_queue();
+   transmit_queue(bool intend_to_retransmit);
    ~transmit_queue();
 
    /**
@@ -313,7 +315,7 @@ public:
     * cleared some of them.)
     */
    bool full() const
-   { return next_to_send - next_to_ack > 255; }
+   { return (not overwrite_allowed) and (next_to_send - next_to_ack > 255); }
 
    /**
     * True if we ought to rekey soon, i.e. the sequence number is in
@@ -414,7 +416,14 @@ public:
 
    The reassembly queue is also a 256-element circular buffer, of
    'reassembly_elt' structs, following the same logic as the transmit
-   queue. */
+   queue. 
+   
+   the pointer to the conn in the reassembly element has been added
+   because if the element contain op_STEG (steg protocol) data, it 
+   needs to be able to process it. Maybe there is a better way to deal
+   with the steg data, but because 
+
+*/
 
 struct reassembly_elt
 {
@@ -456,7 +465,7 @@ public:
    * the queue (both of these cases indicate protocol errors).
    * DATA is consumed no matter what the return value is.
    */
-  bool insert(uint32_t seqno, opcode_t op, evbuffer *data);
+  bool insert(uint32_t seqno, opcode_t op, evbuffer *data, conn_t *conn);
 
   /**
    * Return the current lowest acceptable sequence number in the

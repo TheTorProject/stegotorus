@@ -890,7 +890,7 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
   evbuffer_drain(source, sbuflen);
 
   free(outbuf2);
-  return 0;
+  return newHdrLen + outbuf2len;
 }
 
 
