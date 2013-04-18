@@ -101,7 +101,9 @@ PayloadScraper::PayloadScraper(string  database_filename, string apache_conf)
 
   _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  _available_stegs[4].capacity_function = PayloadServer::capacityJS;
 
-  _available_stegs[5].type = 0;
+  _available_stegs[5].type = HTTP_CONTENT_JPEG; _available_stegs[5].extension = ".jpg";  _available_stegs[5].capacity_function = JPGSteg::capacity;
+
+  _available_stegs[6].type = 0;
 
 }
 

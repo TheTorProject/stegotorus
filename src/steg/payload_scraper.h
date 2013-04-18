@@ -24,7 +24,7 @@ class PayloadScraper
 {
 protected:
 
-    static const int _c_no_of_steg_protocol = 5;
+    static const int _c_no_of_steg_protocol = 6;
     string _database_filename;
     ofstream _payload_db;
     steg_type* _available_stegs;

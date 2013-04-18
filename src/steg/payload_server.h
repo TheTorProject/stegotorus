@@ -52,6 +52,8 @@ using namespace std;
 #define HTTP_CONTENT_SWF                3
 #define HTTP_CONTENT_ENCRYPTEDZIP       4
 #define HTTP_CONTENT_HTML               5
+#define HTTP_CONTENT_JPEG               6
+
 
 // used by the JavaScript steg module to distinguish two cases in which
 // JS may appear in the HTTP msg
