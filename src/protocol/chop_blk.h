@@ -430,6 +430,7 @@ struct reassembly_elt
   evbuffer *data;
   opcode_t op;
   conn_t* conn;
+  bool do_ack;
 };
 
 class reassembly_queue
@@ -489,7 +490,7 @@ public:
    * Generate an acknowledgment payload corresponding to the present
    * contents of the queue.
    */
-  evbuffer *gen_ack() const;
+  evbuffer *gen_ack(); // const;
 };
 
 } // namespace chop_blk

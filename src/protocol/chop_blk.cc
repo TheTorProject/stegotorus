@@ -381,7 +381,7 @@ reassembly_queue::~reassembly_queue()
 reassembly_elt
 reassembly_queue::remove_next()
 {
-  reassembly_elt rv = { 0, op_DAT, NULL };
+  reassembly_elt rv = { 0, op_DAT, NULL, false };
   uint8_t front = next_to_process & 0xFF;
   char fallbackbuf[4];
 
@@ -392,6 +392,7 @@ reassembly_queue::remove_next()
   if (cbuf[front].data) {
     rv = cbuf[front];
     cbuf[front].data = 0;
+    cbuf[front].do_ack = true;
     cbuf[front].op   = op_DAT;
     cbuf[front].conn = NULL;
     next_to_process++;
@@ -435,14 +436,16 @@ reassembly_queue::reset()
 }
 
 evbuffer *
-reassembly_queue::gen_ack() const
+reassembly_queue::gen_ack() //const
 {
   ack_payload payload(next_to_process == 0 ? 0 : next_to_process - 1);
   uint8_t front = next_to_process & 0xFF;
   uint8_t pos = front;
   do {
-    if (cbuf[pos].data)
+    if (cbuf[pos].data) {
       payload.set_block_received(next_to_process + (pos - front));
+      cbuf[pos].do_ack = false;
+    }
     pos++;
   } while (pos != front);
 

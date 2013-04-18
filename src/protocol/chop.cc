@@ -102,6 +102,7 @@ struct chop_circuit_t : circuit_t
   int send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
                     struct evbuffer *payload);
   int maybe_send_ack();
+  int retransmit();
 
   /** 
       check all conn for steg protocol data and send them
@@ -174,9 +175,9 @@ chop_config_t::chop_config_t()
 {
   ignore_socks_destination = true;
   trace_packets = false;
-  trace_packet_data = false;
+  trace_packet_data = true;
   encryption = false;
-  retransmit = false;
+  retransmit = true;
 }
 
 chop_config_t::~chop_config_t()
@@ -238,6 +239,8 @@ chop_config_t::init(int n_options, const char *const *options)
       encryption = false;
     } else if (!strcmp(options[1], "--disable-retransmit")) {
       retransmit = false;
+    } else if (!strcmp(options[1], "--enable-retransmit")) {
+      retransmit = true;
     } else {
       log_warn("chop: unrecognized option '%s'", options[1]);
       goto usage;
@@ -577,7 +580,7 @@ chop_circuit_t::send()
       }
     }
 
-    if (!did_retransmit)
+    if (!did_retransmit && !tx_queue.full())
     // Send at least one block, even if there is no real data to send.
       do {
         log_debug(this, "%lu bytes to send", (unsigned long)avail);
@@ -1125,7 +1128,7 @@ chop_circuit_t::pick_connection(size_t desired, size_t minimum,
     log_debug(conn, "offers %lu bytes (%s)", (unsigned long)room,
               conn->steg->cfg()->name());
 
-    //When we are here it means that our offer when through
+    //When we are here it means that our offer went through
     
     //for debug reason only
     if (config->trace_packets) {
@@ -1214,13 +1217,12 @@ chop_circuit_t::maybe_send_ack()
   if (!config->retransmit)
     return 0;
   log_debug(this, "considering ACK");
-  if (recv_queue.window() - last_acked < 64 &&
+  if (recv_queue.window() - last_acked < 32 &&
       (!dead_cycles || recv_queue.empty()))
     {
       log_debug(this, "back log size only %u, not sending ACK", recv_queue.window() - last_acked);
       return 0;
     }
-
 
   evbuffer *ackp = recv_queue.gen_ack();
   if (log_do_debug()) {
@@ -1228,6 +1230,7 @@ chop_circuit_t::maybe_send_ack()
     debug_ack_contents(ackp, ackdump);
     log_debug(this, "sending ACK: %s", ackdump.str().c_str());
   }
+  last_acked = recv_queue.window();
   return send_special(op_ACK, ackp);
 }
 
@@ -1265,6 +1268,11 @@ chop_circuit_t::recv_block(uint32_t seqno, opcode_t op,
     }
     if (tx_queue.process_ack(data))
       log_warn(this, "protocol error: invalid ACK payload");
+    //The upstream data always has priority but there are occasions that 
+    //retransmitting is crucial for processing of the data 
+    // here is a place to force retransmission, even if upstream data 
+    // are coming
+    retransmit();
     goto zap;
 
   case op_XXX:
@@ -1417,6 +1425,61 @@ chop_circuit_t::check_for_eof()
   return 0;
 }
 
+int
+chop_circuit_t::retransmit()
+{
+  //bool did_retransmit = false;
+  // Consider retransmission.
+  evbuffer *block = 0;
+  for (transmit_queue::iterator i = tx_queue.begin();
+       i != tx_queue.end();
+       ++i) {
+    transmit_elt &el = *i;
+    size_t lo = MIN_BLOCK_SIZE + el.hdr.dlen();
+    size_t room;
+    chop_conn_t *conn = pick_connection(lo, lo, &room);
+    if (!conn)
+      continue;
+    log_assert(lo <= room);
+    
+    if (!block)
+      block = evbuffer_new();
+    if (!block)
+      log_abort("memory allocation failed");
+    if (tx_queue.retransmit(el, room - lo, block,
+                            *send_hdr_crypt, *send_crypt) ||
+        conn->send(block)) {
+      evbuffer_free(block);
+      return -1;
+    }
+    
+    char fallbackbuf[4];
+    log_debug(conn, "retransmitted block %u <d=%lu p=%lu f=%s>",
+              el.hdr.seqno(),
+              (unsigned long)el.hdr.dlen(),
+              (unsigned long)el.hdr.plen(),
+              opname(el.hdr.opcode(), fallbackbuf));
+    
+    if (config->trace_packets)
+      fprintf(stderr,
+              "T:%.4f: ckt %u <ntp %u outq %lu>: "
+              "resend %lu <d=%lu p=%lu f=%s>\n",
+              log_get_timestamp(), this->serial,
+              this->recv_queue.window(),
+              (unsigned long)evbuffer_get_length(
+                                                 bufferevent_get_input(this->up_buffer)),
+              (unsigned long)el.hdr.seqno(),
+              (unsigned long)el.hdr.dlen(),
+              (unsigned long)el.hdr.plen(),
+              opname(el.hdr.opcode(), fallbackbuf));
+
+    evbuffer_free(block);
+    //did_retransmit = true;
+    break;
+  }
+  
+  return 0;
+}
 // Connection methods
 
 conn_t *
