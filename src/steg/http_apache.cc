@@ -49,9 +49,9 @@ namespace  {
     unsigned long uri_byte_cut; /* The number of byte of the message that
                                     can be stored in url */
 
-    op_apache_steg_code _cur_operation = op_STEG_NO_OP;
+    op_apache_steg_code _cur_operation;
 
-    bool uri_dict_up2date = false;
+    bool uri_dict_up2date;
     static const char c_end_of_dict[];
     
     stringstream dict_stream; /*we receive the dictionary in form
@@ -86,12 +86,13 @@ namespace  {
   struct http_apache_steg_t : http_steg_t
   {
 
-    const size_t c_min_uri_length = 0;
-    const size_t c_max_uri_length = 2000; //Unofficial cap
+    http_apache_steg_config_t* _apache_config;
+
+    const size_t c_min_uri_length;
+    const size_t c_max_uri_length; //Unofficial cap
 
     CURL* _curl_easy_handle;
      
-    http_apache_steg_config_t* _apache_config;
 
     /**
         constructors and destructors taking care of curl initialization and
@@ -133,7 +134,10 @@ const char http_apache_steg_config_t::c_end_of_dict[] = "\r\n";
 STEG_DEFINE_MODULE(http_apache);
 
 http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
-  : http_steg_config_t(cfg, false)
+  : http_steg_config_t(cfg, false),
+    _cur_operation(op_STEG_NO_OP),
+    uri_dict_up2date(false)
+
 {
   string payload_filename;
   if (is_clientside)
@@ -171,7 +175,10 @@ http_apache_steg_config_t::steg_create(conn_t *conn)
 }
 
 http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn)
-  : http_steg_t((http_steg_config_t*)cf, cn), _apache_config(cf)
+  : http_steg_t((http_steg_config_t*)cf, cn), _apache_config(cf),     
+    c_min_uri_length(0),
+    c_max_uri_length(2000)
+
 {
 
   if (!_apache_config->payload_server)

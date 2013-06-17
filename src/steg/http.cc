@@ -33,18 +33,10 @@ using namespace std;
 #include "http.h"
 
 STEG_DEFINE_MODULE(http);
-
-http_steg_config_t::http_steg_config_t(config_t *cfg)
-  : http_steg_config_t(cfg, true)
-{
-
-}
-
-http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
-   : steg_config_t(cfg),
-    is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
-{
-  if (init_payload_server) {
+void
+http_steg_config_t::init_http_steg_config_t(bool init_payload_server)
+{ 
+if (init_payload_server) {
     string payload_filename;
     if (is_clientside)
       payload_filename = "traces/client.out";
@@ -53,6 +45,22 @@ http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
   
     payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
   }
+}
+
+http_steg_config_t::http_steg_config_t(config_t *cfg)
+   : steg_config_t(cfg),
+    is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
+{
+  init_http_steg_config_t(true);
+
+}
+
+http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
+   : steg_config_t(cfg),
+    is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
+{
+  init_http_steg_config_t(init_payload_server);
+ 
 }
 
 http_steg_config_t::~http_steg_config_t()

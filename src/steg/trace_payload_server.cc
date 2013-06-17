@@ -2,7 +2,7 @@
 #include "trace_payload_server.h"
 
 TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
-  : PayloadServer(init_side)
+  : PayloadServer(init_side), c_max_buffer_size(1000000)
 {
 
   load_payloads(fname.c_str());

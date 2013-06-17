@@ -4,7 +4,7 @@
 
 ACLOCAL_AMFLAGS = -I config-aux --install
 
-AM_CXXFLAGS = -Werror -Wall -Wextra -Wformat=2
+AM_CXXFLAGS = -Werror -Wall -Wextra -Wformat=2 -std=c++0x
 # Took off _FROTYFY_SOURCE because stdlib doesn't allow it with -O0 -g2
 # So it is only for releaes time
 #AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)

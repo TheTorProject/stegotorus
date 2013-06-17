@@ -85,9 +85,9 @@ struct chop_circuit_t : circuit_t
 
   //For debug and tracking performance we keep track of average room
   //desirable and offered size
-  double avg_desirable_size = 0;
-  double avg_available_size = 0;
-  unsigned long number_of_room_requests = 0;
+  double avg_desirable_size;
+  double avg_available_size;
+  unsigned long number_of_room_requests;
   CIRCUIT_DECLARE_METHODS(chop);
 
   //override the constructor so we can initialize the transmit queue
@@ -395,7 +395,8 @@ chop_circuit_t::chop_circuit_t()
 }
 
 chop_circuit_t::chop_circuit_t(bool retransmit = true)
-  : tx_queue(retransmit)
+  : tx_queue(retransmit), avg_desirable_size(0), avg_available_size(0),
+    number_of_room_requests(0)
 {
 }
 

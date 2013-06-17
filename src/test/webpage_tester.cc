@@ -53,6 +53,10 @@ class WebpageFetcher
 {
 public:
 
+  WebpageFetcher()
+    : base_stopped(false)
+  {
+  };
   bufferevent *near;
   bufferevent *far;
   bufferevent *outbound_far;
@@ -90,7 +94,7 @@ public:
   //stop the program in case of communication
   //error
   struct event_base *base;
-  bool base_stopped = false;
+  bool base_stopped;
 
   bool rcvd_eof_near : 1;
   bool rcvd_eof_far  : 1;

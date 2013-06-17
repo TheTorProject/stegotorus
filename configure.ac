@@ -124,9 +124,9 @@ PKG_CHECK_MODULES([libevent], [libevent >= 2.0])
 # from 2009
 PKG_CHECK_MODULES([libz], [zlib >= 1.2.3.4])
 # libcurl for htt_apache steg module
-PKG_CHECK_MODULES([libcurl], [libcurl >= 7.26.0])
+PKG_CHECK_MODULES([libcurl], [libcurl >= 7.22.0])
 # the portable c++ library for manipulating filesystem
-PKG_CHECK_MODULES([libboost], [libboost >= 1.49.0])
+PKG_CHECK_MODULES([libboost], [libboost >= 1.46.0])
 
 LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS $libcurl_LIBS $libboost_LIBS"
 

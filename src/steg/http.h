@@ -25,6 +25,11 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
     */
     http_steg_config_t(config_t *cfg, bool init_payload_server);
 
+    /* it is unfortunate that c++ isn't flexibale enough to allow calling a
+       a constructor inside another and we have to have another init function
+       called by both constructors */
+    void init_http_steg_config_t(bool init_payload_server);
+
     STEG_CONFIG_DECLARE_METHODS(http);
 
   };

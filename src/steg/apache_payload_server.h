@@ -12,12 +12,14 @@ class PayloadScraper; /* Just tell ApachePayloadServer that such a
 class URIEntry
 {
   public:
-    string URL;
-    bool accept_param = true; /*This is to discriminate between types like html
+    bool accept_param; /*This is to discriminate between types like html
                                 vs cgi, js, etc, but for now I'm not using it
                               */
+    string URL;
+
     URIEntry(string init_URL)
-      :URL(init_URL)
+      : accept_param(true),
+       URL(init_URL)
       {
         
       }
@@ -27,14 +29,14 @@ typedef vector<URIEntry> URIDict;
 
 class ApachePayloadServer: public PayloadServer
 {
-  friend PayloadScraper; /* We need the url retrieving capabilities in
+  friend class PayloadScraper; /* We need the url retrieving capabilities in
                             PayloadScraper*/
  protected:
   string _database_filename;
-  string _apache_host_name = "127.0.0.1";
+  string _apache_host_name;
   
-  const unsigned long c_max_buffer_size = 1000000;
-  const unsigned int c_ACCEPTABLE_EFFICIENCY_COMPROMISE = 30;
+  const unsigned long c_max_buffer_size;
+  const unsigned int c_ACCEPTABLE_EFFICIENCY_COMPROMISE;
   CURL* _curl_obj; //this is used to communicate with http server
 
   //This is too keep the dict in sync between client and server

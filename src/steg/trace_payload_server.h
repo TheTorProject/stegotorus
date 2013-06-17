@@ -45,7 +45,7 @@ class TracePayloadServer: public PayloadServer
   /* this should be change to PayloadDatabase type and for now, I leave itas is
      . However, I made it protected meaning that any function that needs to access it should be part of this class. This is necessary so the rest of the code is compatible with different payload server*/
   payloads pl;
-  const unsigned long c_max_buffer_size = 1000000;
+  const unsigned long c_max_buffer_size;
 
   /** called by the constructor to load the payloads */
   void load_payloads(const char* fname);

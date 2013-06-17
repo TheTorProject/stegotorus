@@ -18,7 +18,11 @@ using namespace boost::filesystem;
   and initialize the payload table.
 */
 ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_filename)
-  :PayloadServer(init_side),_database_filename(database_filename)
+  :PayloadServer(init_side),_database_filename(database_filename),
+   _apache_host_name("127.0.0.1"),
+   c_max_buffer_size(1000000),
+   c_ACCEPTABLE_EFFICIENCY_COMPROMISE(30)
+
 {
   /* Ideally this should check the side and on client side
      it should not attempt openning the the database file but
