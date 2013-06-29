@@ -1,11 +1,18 @@
-This doesn't work yet.
+This is StegoTorus, a framework for implementing steganographic
+transports for the Tor anonymity overlay.  For a detailed description
+of the design, please see
+<http://freehaven.net/anonbib/cache/ccs2012-stegotorus.pdf>.  It
+requires OpenSSL 1.0.1 or later and Libevent 2.0 or later.
 
-It requires OpenSSL 1.0.1 or later.
+This software is INCOMPLETE and UNSAFE TO USE OUTSIDE A LABORATORY,
+and is unlikely to receive further development.  We hope that leaving
+the source available will be of use to someone, but it will not even
+compile without modifications.
 
-It requires Libevent 2.0 or later.
+If you have an immediate need for a steganographic transport that
+works in the field, Tails <https://tails.boum.org/> has experimental
+support for obfsproxy: <https://tails.boum.org/todo/obfsproxy/>
 
-See doc/TODO for open tasks.
-
-Happy hacking!
-
-  -- nickm
+If you are interested in continuing development of StegoTorus or
+something similar, please contact the Tor Project at
+<tor-dev@lists.torproject.org>.
