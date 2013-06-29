@@ -282,8 +282,7 @@ chop_config_t::get_steg(size_t n) const
 
 // Circuit methods
 
-const char passphrase[] =
-  "did you buy one of therapist reawaken chemists continually gamma pacifies?";
+#error "Key agreement not yet implemented"
 
 circuit_t *
 chop_config_t::circuit_create(size_t)
@@ -294,9 +293,7 @@ chop_config_t::circuit_create(size_t)
   key_generator *kgen = 0;
 
   if (encryption)
-    kgen = key_generator::from_passphrase((const uint8_t *)passphrase,
-                                          sizeof(passphrase) - 1,
-                                          0, 0, 0, 0);
+    kgen = key_generator::from_passphrase(...);
 
   if (mode == LSN_SIMPLE_SERVER) {
     if (encryption) {
