@@ -27,6 +27,7 @@ using namespace std;
 #include "swfSteg.h"
 #include "pdfSteg.h"
 #include "jsSteg.h"
+#include "jpegSteg.h"
 #include "base64.h"
 #include "b64cookies.h"
 
@@ -42,7 +43,8 @@ http_steg_config_t::http_steg_config_t(config_t *cfg)
 
 http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
    : steg_config_t(cfg),
-    is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
+     is_clientside(cfg->mode != LSN_SIMPLE_SERVER),
+     file_steg_mods(c_no_of_steg_protocol, NULL)
 {
   if (init_payload_server) {
     string payload_filename;
@@ -50,8 +52,15 @@ http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
       payload_filename = "traces/client.out";
     else
       payload_filename = "traces/server.out";
-  
+
+    
     payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
+
+  //initiating the steg modules
+  //TODO: for now the first modules are set to void till their codes be
+  //transformed into a FileStegMod child
+    file_steg_mod[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server);
+
   }
 }
 
@@ -182,8 +191,11 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
 
       case HTTP_CONTENT_ENCRYPTEDZIP: //We need to prevent this
         return 0;
+
+      default:
+        return config->file_steg_mod[type]->capacity();
       }
-      
+        
   }
 
   if (hi < lo)
@@ -521,6 +533,11 @@ http_steg_t::transmit(struct evbuffer *source)
     case HTTP_CONTENT_PDF:
       rval = http_server_PDF_transmit(config->payload_server, source, conn);
       break;
+
+    default:
+      //this we choose from the steg module array
+      rval = config->file_steg_mods[type]->http_server_transmit(source, conn);
+      break;
     }
 
     if (rval == 0) {
@@ -637,6 +654,11 @@ http_steg_t::receive(struct evbuffer *dest)
     case HTTP_CONTENT_PDF:
       rval = http_handle_client_PDF_receive(this, conn, dest, source);
       break;
+
+    default:
+      rval = config->file_steg_mods[type]->http_client_receive(conn, dest, source);
+      break;
+     
     }
 
     if (rval == RECV_GOOD) have_received = 1;

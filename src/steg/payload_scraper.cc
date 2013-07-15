@@ -89,7 +89,7 @@ PayloadScraper::PayloadScraper(string  database_filename, string apache_conf)
   _apache_conf_filename  = apache_conf;
 
   /** This is hard coded */
-  _available_stegs = new steg_type[_c_no_of_steg_protocol];
+  _available_stegs = new steg_type[c_no_of_steg_protocol];
 
   _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js";  _available_stegs[0].capacity_function = PayloadServer::capacityJS;
 

@@ -37,7 +37,6 @@ enum op_apache_steg_code
     op_STEG_DICT_WAIT_PEER,
   };
 
-
 namespace  {
   struct http_apache_steg_config_t : http_steg_config_t
   {
