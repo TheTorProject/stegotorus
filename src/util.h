@@ -308,6 +308,6 @@ int timeval_subtract(struct timeval *x, struct timeval *y,
 
    @return the length of the memory block or < 0 in case of error
 */
-size_t evbuffer_to_memory_block(evbuffer* scattered_buffer, unit8_t** memory_block);
+size_t evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block);
 
 #endif
