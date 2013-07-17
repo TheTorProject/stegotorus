@@ -28,28 +28,35 @@
 
 class JPGSteg : public FileStegMod
 {
-public: 
-	static int capacity(const char *buffer, int len);
+public:
 
-	int http_server_transmit(payloads &pl, struct evbuffer *source, conn_t *conn);
+    /**
+       returns the capacity of the data you can store in jpeg response
+       given the jpeg file content in 
 
-	int http_client_receive(steg_t *s, conn_t *conn, struct evbuffer *dest, 
-					struct evbuffer *source);
+       @param buffer: the buffer containing the payload
+       @param len: the buffer's length
 
-	int test(char file_name[]);
+       @return the capacity that the buffer can cover or < 0 in case of error
+     */
+	virtual size_t capacity(const uint8_t *buffer, int len);
+	static unsigned int static_capacity(char *buffer, int len);
+
+    /**
+       constructor just to call parent constructor
+    */
+   JPGSteg(PayloadServer* payload_provider);
 
 protected:
-	int read_file(const char *file_name, void *buffer, int buffer_size);
+ 	static int starting_point(const uint8_t *raw, int len);
 
-	static int starting_point(const char *raw, int len);
+	int modify_huffman_table(uint8_t *raw, int len);
 
-	int modify_huffman_table(char *raw, int len);
+	int corrupt_reset_interval(uint8_t *raw, int len);
 
-	int corrupt_reset_interval(char *raw, int len);
-
-    virtual int encode(char* data, size_t data_len, char *cover_payload, size_t cover_len);
+    virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len);
     
-	virtual int decode(const char *cover_payload, int cover_len, char** data);
+	virtual int decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
 
 };
 

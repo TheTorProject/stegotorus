@@ -13,7 +13,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <evbuffer.h>
+#include <event2/buffer.h>
 
 using namespace std;
 
@@ -626,45 +626,4 @@ int timeval_subtract(struct timeval *x, struct timeval *y,
 
   /* Return 1 if result is negative. */
   return x->tv_sec < y->tv_sec;
-}
-
-/*********************** Data Manipulation **********************/
-/**
-   Convert the evbuffer into a consecutive memory block
-
-   @param scattered_buffer the data in evbuffer type
-   @param memory_block return data in consecutive memory block
-
-   @return the length of the memory block or < 0 in case of error
-*/
-int 
-evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block)
-{
-
-  size_t sbuflen = evbuffer_get_length(source);
-
-  int nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
-  evbuffer_iovect* iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
-
-  if (evbuffer_peek(source, sbuflen, NULL, iv, nv) != nv) {
-    free(iv);
-    return -1;
-  }
-
-  memory_block = new uint8_t[sbuflen]; //Vmon: Should I use xzalloc? don't
-                                       //think so, new is overloaded to 
-                                       //handle delete
-  cnt = 0;
-  for (i = 0; i < nv; i++) {
-    const unsigned char *p = (const unsigned char *)iv[i].iov_base;
-    const unsigned char *limit = p + iv[i].iov_len;
-    while (p < limit && cnt < (int)sbuflen) {
-      data1[cnt++] = *p++;
-    }
-  }
-
-  free(iv);
-
-  return sbuflen;
-
 }

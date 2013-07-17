@@ -2,7 +2,7 @@
  * See LICENSE for other credits and copying information
  */
 #include "util.h"
-#include "payload_server.h"
+#include "../payload_server.h"
 #include "swfSteg.h"
 #include "compression.h"
 #include "connections.h"

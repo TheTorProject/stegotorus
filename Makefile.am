@@ -22,15 +22,18 @@ STEGANOGRAPHERS = \
 	src/steg/embed.cc \
 	src/steg/http.cc \
 	src/steg/http_apache.cc \
-	src/steg/jsSteg.cc \
+	src/steg/http_apache.cc \
+	src/steg/http_steg_mods/file_steg.cc \
+	src/steg/http_steg_mods/pdfSteg.cc \
+	src/steg/http_steg_mods/swfSteg.cc \
+	src/steg/http_steg_mods/jsSteg.cc \
+	src/steg/http_steg_mods/jpgSteg.cc \
 	src/steg/nosteg.cc \
 	src/steg/nosteg_rr.cc \
 	src/steg/payload_server.cc \
 	src/steg/trace_payload_server.cc \
 	src/steg/payload_scraper.cc \
-	src/steg/apache_payload_server.cc \
-	src/steg/pdfSteg.cc \
-	src/steg/swfSteg.cc
+	src/steg/apache_payload_server.cc 
 
 libstegotorus_a_SOURCES = \
 	src/base64.cc \
@@ -45,6 +48,7 @@ libstegotorus_a_SOURCES = \
 	src/steg.cc \
 	src/util.cc \
 	src/util-net.cc \
+	src/evbuf_util.cc \
 	src/curl_util.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
 
@@ -121,17 +125,19 @@ noinst_HEADERS = \
 	src/subprocess.h \
 	src/steg.h \
 	src/util.h \
+	src/evbuf_util.h \
 	src/protocol/chop_blk.h \
 	src/steg/b64cookies.h \
 	src/steg/cookies.h \
-	src/steg/jsSteg.h \
 	src/steg/payloads.h \
-	src/steg/pdfSteg.h \
-	src/steg/swfSteg.h \
 	src/steg/http.h \
+	src/steg/http_steg_mods/jsSteg.h \
+	src/steg/http_steg_mods/pdfSteg.h \
+	src/steg/http_steg_mods/swfSteg.h \
+	src/steg/http_steg_mods/jpgSteg.h \
 	src/test/tinytest.h \
 	src/test/tinytest_macros.h \
-	src/test/unittest.h
+	src/test/unittest.h 
 
 dist_noinst_SCRIPTS = \
 	src/audit-globals.sh \

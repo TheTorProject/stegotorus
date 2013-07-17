@@ -41,8 +41,6 @@ TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
  */
 
 
-
-
 int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity) {
   // stat for usable payload
   int minPayloadSize = 0, maxPayloadSize = 0;

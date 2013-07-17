@@ -5,7 +5,7 @@
 #include "util.h"
 #include "unittest.h"
 #include "../steg/payload_server.h"
-#include "../steg/pdfSteg.h"
+#include "../steg/http_steg_mods/pdfSteg.h"
 
 static void
 test_pdf_add_remove_delimiters(void *)

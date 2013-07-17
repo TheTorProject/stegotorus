@@ -130,6 +130,13 @@ PKG_CHECK_MODULES([libboost], [libboost >= 1.49.0])
 
 LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS $libcurl_LIBS $libboost_LIBS"
 
+# libraries needed for tester proxy
+PKG_CHECK_MODULES([libevent_openssl], [libevent_openssl >= 2.0])
+PKG_CHECK_MODULES([libssl], [libssl >= 1.0])
+
+lib_CPPFLAGS="$libevent_CFLAGS $libcrypto_CFLAGS $libz_CFLAGS $libevent_openssl_CPPFLAGS $libssl_CPPFLAGS"
+AC_SUBST(lib_CPPFLAGS)
+
 # ntohl and a bunch of related functions require a special library on Windows.
 # It is possible that libevent or libcrypto has hooked us up already.
 # This can't be done with AC_SEARCH_LIBS -- see m4/winsock.m4 for gory details.

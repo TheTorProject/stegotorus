@@ -2,11 +2,12 @@
  * See LICENSE for other credits and copying information
  */
 
+#include <event2/buffer.h>
+
 #include "util.h"
-#include "payload_server.h"
+#include "../payload_server.h"
 #include "pdfSteg.h"
 #include "connections.h"
-#include <event2/buffer.h>
 #include "compression.h"
 
 /* pdfSteg: A PDF-based steganography module */
@@ -294,7 +295,7 @@ pdf_wrap(const char *data, size_t dlen,
 /*
  * pdf_unwrap is the inverse operation of pdf_wrap
  */
-size_t
+ssize_t
 pdf_unwrap(const char *data, size_t dlen,
            char *outbuf, size_t outbufsize)
 {

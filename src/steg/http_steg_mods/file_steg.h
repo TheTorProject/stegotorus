@@ -1,13 +1,11 @@
 #ifndef FILE_STEG_H
 #define FILE_STEG_H
 
-const int FileStegMod::RESPONSE_GOOD = 0;
-const int FileStegMod::RESPONSE_INCOMPLETE = -1;
-const int FileStegMod::RESPONSE_BAD = -2;
+#include <list>
 
-const size_t  FileStegMod::_HTTP_MSG_BUF_SIZE =  1000000;
+using namespace std;
 
-extern const int c_no_of_steg_protocol = 6;
+extern const int c_no_of_steg_protocol;
 
 /**
    This is an abstract class that all steg modules should inherit from,
@@ -21,12 +19,12 @@ protected:
      Constants
   */
   //Constants
-  const int RESPONSE_GOOD;
-  const int RESPONSE_INCOMPLETE;
-  const int RESPONSE_BAD;
+  const int RESPONSE_GOOD = 0 ;
+  const int RESPONSE_INCOMPLETE = -1;
+  const int RESPONSE_BAD = -2;
 
-  const size_t  HTTP_MSG_BUF_SIZE;
-  static const int c_content_type; //The inheriting class will set the type
+  const size_t c_HTTP_MSG_BUF_SIZE = 1000000;
+  const int c_content_type; //The inheriting class will set the type
   PayloadServer* _payload_server;
 
   /**
@@ -37,7 +35,7 @@ protected:
 
      @return payload size or < 0 in case of error
   */
-  pick_approperiate_cover_payload(size_t data_len, char** payload_buf);
+  ssize_t pick_appropriate_cover_payload(size_t data_len, char** payload_buf);
   
   /**
      Encapsulate the repetative task of checking for the respones of content_type
@@ -52,7 +50,7 @@ protected:
              find the start of body) or RESPONSE_BAD (<0) in case of other
              errors
   */
-  size_t extract_appropriate_respones_body(size_t data_len, char* payload_buf, size_t payload_size);
+  size_t extract_appropriate_respones_body(char* payload_buf, size_t payload_size);
 
   /**
      The overloaded version with evbuffer
@@ -69,9 +67,9 @@ protected:
      @param cover_payload: the cover to embed the data into
      @param cover_len: cover size in byte
 
-     @return < 0 in case of error
+     @return < 0 in case of error or 0 at success
    */
-  virtual int encode(char* data, size_t data_len, char *cover_payload, size_t cover_len) = 0;
+  virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) = 0;
 
   /**
      Embed the data in the cover buffer, need to be implemented by the
@@ -85,11 +83,11 @@ protected:
 
      @return the length of recovered data or < 0 in case of error
    */
-  virtual int decode(char *cover_payload, size_t cover_len, char** data) = 0;
+  virtual int decode(const uint8_t *cover_payload, size_t cover_len, uint8_t* data) = 0;
   
  public:
   const list<string> extensions;
-  virtual static int capacity(const char *buffer, int len) = 0;
+  virtual size_t capacity(const uint8_t* buffer, int len) = 0;
 
   /**
      Find appropriate payload calls virtual embed to embed it appropriate
@@ -122,7 +120,7 @@ protected:
      @param the payload server that is going to be used to provide cover
             to this module.
   */
-  FileStegMod(payloadServer* payload_provider);
+  FileStegMod(PayloadServer* payload_provider, int child_type);
   
 };
 

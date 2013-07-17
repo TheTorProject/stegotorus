@@ -11,6 +11,9 @@ using namespace boost::filesystem;
 #include "crypt.h"
 #include "rng.h"
 #include "apache_payload_server.h"
+
+#include "http_steg_mods/file_steg.h"
+#include "http_steg_mods/jpgSteg.h"
 #include "payload_scraper.h"
 
 /**
@@ -31,12 +34,17 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
 
   if (_side == server_side) {
     //Initializing type specific data, we initiate with max_capacity = 0, count = 0
+    //I don't think we need this as we have the default constructor doing the same
     _payload_database.type_detail[HTTP_CONTENT_JAVASCRIPT] =  TypeDetail(0, 0);
     _payload_database.type_detail[HTTP_CONTENT_HTML] =  TypeDetail(0, 0);
 
     _payload_database.type_detail[HTTP_CONTENT_PDF] =  TypeDetail(0, 0);
 
     _payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(0, 0);
+    _payload_database.type_detail[HTTP_CONTENT_JPEG] = TypeDetail(0, 0);
+    //it should be like this but beacause they are not pointers 
+    //we are in trouble need to change the type to pointer
+    //_payload_database.type_detail = new TypeDetail[c_no_of_steg_protocol];
 
     if (!boost::filesystem::exists(_database_filename))
       {

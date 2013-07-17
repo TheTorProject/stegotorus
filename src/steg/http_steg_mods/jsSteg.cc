@@ -3,9 +3,9 @@
  */
 
 #include "util.h"
-#include "payload_server.h"
+#include "../payload_server.h"
 #include "jsSteg.h"
-#include "cookies.h"
+//#include "cookies.h"
 #include "compression.h"
 #include "connections.h"
 

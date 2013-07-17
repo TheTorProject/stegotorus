@@ -29,6 +29,12 @@ protected:
     string _database_filename;
     ofstream _payload_db;
     steg_type* _available_stegs;
+    FileStegMod* _available_file_stegs[c_no_of_steg_protocol+1]; //Later when all stegs
+               //were converted to this
+               //we don't need _available_stegs type. At the moment I have to 
+               //actually instantiate because the capacity function is virtual
+               //from this
+                                      
     
     string _apache_conf_filename;
     string _apache_doc_root; /* the directory that apache serve where

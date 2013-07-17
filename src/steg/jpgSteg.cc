@@ -93,7 +93,7 @@ int jpg_steg::starting_point(const char *raw_data, int len)
 	return lm + 2 + *flen; // 2 for FFDA, and skip the header
 }
 
-int jpg_steg::capacity(const char *raw, int len)
+unsigned int jpg_steg::capacity(char *raw, int len)
 {
 	int from = starting_point(raw, len);
 	return len - from - 2 - sizeof(int); // 2 for FFD9, 4 for len
@@ -171,4 +171,12 @@ int main2(int argc, char *argv[])
 	
 	jsteg.test(file_name);
 	return 0;
+}
+
+/**
+  constructor just to call parent constructor
+*/
+JPGSteg(PayloadServer* payload_provider)
+  :FileStegMod(payload_provider)
+{
 }

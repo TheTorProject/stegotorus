@@ -24,12 +24,14 @@ using namespace std;
 #include "apache_payload_server.h"
 
 #include "cookies.h"
-#include "swfSteg.h"
-#include "pdfSteg.h"
-#include "jsSteg.h"
-#include "jpegSteg.h"
 #include "base64.h"
 #include "b64cookies.h"
+
+#include "http_steg_mods/file_steg.h"
+#include "http_steg_mods/swfSteg.h"
+#include "http_steg_mods/pdfSteg.h"
+#include "http_steg_mods/jsSteg.h"
+#include "http_steg_mods/jpgSteg.h"
 
 #include "http.h"
 
@@ -56,10 +58,10 @@ http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
     
     payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
 
-  //initiating the steg modules
-  //TODO: for now the first modules are set to void till their codes be
-  //transformed into a FileStegMod child
-    file_steg_mod[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server);
+    //initiating the steg modules
+    //TODO: for now the first modules are set to void till their codes be
+    //transformed into a FileStegMod child
+    file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server);
 
   }
 }
@@ -193,7 +195,7 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
         return 0;
 
       default:
-        return config->file_steg_mod[type]->capacity();
+        return config->payload_server->_payload_database.typed_maximum_capacity(type);
       }
         
   }

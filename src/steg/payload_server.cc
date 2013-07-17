@@ -5,7 +5,7 @@
 
 #include "util.h"
 #include "payload_server.h"
-#include "swfSteg.h"
+#include "http_steg_mods/swfSteg.h"
 
 #include <ctype.h>
 #include <time.h>
