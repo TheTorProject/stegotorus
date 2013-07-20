@@ -53,10 +53,12 @@ using namespace std;
 #define HTTP_CONTENT_ENCRYPTEDZIP       4
 #define HTTP_CONTENT_HTML               5
 #define HTTP_CONTENT_JPEG               6
+#define HTTP_CONTENT_PNG                7
+#define HTTP_CONTENT_GIF                8
 
 //I could not find a single class that made
 //sense to put this in it so let it be global
-const int c_no_of_steg_protocol = 6;
+const int c_no_of_steg_protocol = 8;
 
 // used by the JavaScript steg module to distinguish two cases in which
 // JS may appear in the HTTP msg
@@ -210,7 +212,7 @@ class PayloadServer
 
   virtual unsigned int find_client_payload(char* buf, int len, int type) = 0;
 
-  virtual int get_payload (int contentType, int cap, char** buf, int* size) = 0;
+  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal=0) = 0;
 
   virtual int find_uri_type(const char* buf, int size);
 

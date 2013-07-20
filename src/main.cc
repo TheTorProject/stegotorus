@@ -229,7 +229,7 @@ usage(void)
           "--registration-helper=<helper> ~ use <helper> to register with "
           "a relay database\n"
           "--pid-file=<file> ~ write process ID to <file> after startup\n"
-          "--daemon ~ run as a daemon");
+          "--daemon ~ run as a daemon\n");
 
   exit(1);
 }

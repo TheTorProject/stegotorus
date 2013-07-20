@@ -24,8 +24,10 @@ protected:
   const int RESPONSE_BAD = -2;
 
   const size_t c_HTTP_MSG_BUF_SIZE = 1000000;
-  const int c_content_type; //The inheriting class will set the type
   PayloadServer* _payload_server;
+  double noise2signal; //making sure that the cover is bigger enough than the 
+                       //the data to protect against statistical analysis
+  const int c_content_type; //The inheriting class will set the type
 
   /**
      Finds a payload of approperiate type and size
@@ -83,11 +85,11 @@ protected:
 
      @return the length of recovered data or < 0 in case of error
    */
-  virtual int decode(const uint8_t *cover_payload, size_t cover_len, uint8_t* data) = 0;
+  virtual ssize_t decode(const uint8_t *cover_payload, size_t cover_len, uint8_t* data) = 0;
   
  public:
   const list<string> extensions;
-  virtual size_t capacity(const uint8_t* buffer, int len) = 0;
+  virtual ssize_t capacity(const uint8_t* buffer, size_t len) = 0;
 
   /**
      Find appropriate payload calls virtual embed to embed it appropriate
@@ -119,8 +121,9 @@ protected:
 
      @param the payload server that is going to be used to provide cover
             to this module.
+     @child_type?
   */
-  FileStegMod(PayloadServer* payload_provider, int child_type);
+  FileStegMod(PayloadServer* payload_provider, double noise2signal, int child_type);
   
 };
 

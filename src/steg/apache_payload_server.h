@@ -98,7 +98,7 @@ class ApachePayloadServer: public PayloadServer
 
   /** virtual functions */
   virtual unsigned int find_client_payload(char* buf, int len, int type);
-  virtual int get_payload (int contentType, int cap, char** buf, int* size);
+  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal = 0);
 
   /**
      Gets \0 ended uri char* and determines its type based on

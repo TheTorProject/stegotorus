@@ -39,13 +39,13 @@ public:
 
        @return the capacity that the buffer can cover or < 0 in case of error
      */
-	virtual size_t capacity(const uint8_t *buffer, int len);
+	virtual ssize_t capacity(const uint8_t *buffer, size_t len);
 	static unsigned int static_capacity(char *buffer, int len);
 
     /**
        constructor just to call parent constructor
     */
-   JPGSteg(PayloadServer* payload_provider);
+    JPGSteg(PayloadServer* payload_provider, double noise2signal = 0);
 
 protected:
  	static int starting_point(const uint8_t *raw, int len);
@@ -56,7 +56,7 @@ protected:
 
     virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len);
     
-	virtual int decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
+	virtual ssize_t decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
 
 };
 

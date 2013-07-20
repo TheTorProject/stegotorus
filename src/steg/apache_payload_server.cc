@@ -2,6 +2,7 @@
 #include <sstream>
 #include <vector>
 #include <boost/filesystem.hpp>
+#include <assert.h>
 
 using namespace std;
 using namespace boost::filesystem;
@@ -30,7 +31,6 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
   //(_side == server_side) {
   /* First we read all the payload info from the db file  */
   ifstream payload_info_stream;
-
 
   if (_side == server_side) {
     //Initializing type specific data, we initiate with max_capacity = 0, count = 0
@@ -126,7 +126,7 @@ ApachePayloadServer::find_client_payload(char* buf, int len, int type)
 }
 
 int
-ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* size)
+ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* size, double noise2signal)
 {
   int found = 0, numCandidate = 0;
 
@@ -137,11 +137,12 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
   //get payload is not supposed to act like this but for the sake 
   //of testing and compatibility we are simulating the original 
   //get_payload
+  assert(cap != 0); //why do you ask for zero capacity?
   PayloadDict::iterator itr_payloads, itr_first, itr_best = _payload_database.payloads.end();
   while(numCandidate < MAX_CANDIDATE_PAYLOADS) {
     itr_payloads = _payload_database.payloads.begin();
     advance(itr_payloads, rng_int(_payload_database.payloads.size()));
-    if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType || (*itr_payloads).second.length > c_max_buffer_size)
+    if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType || (*itr_payloads).second.length > c_max_buffer_size || (*itr_payloads).second.length/(double)cap < noise2signal )
       continue;
 
     found = true;

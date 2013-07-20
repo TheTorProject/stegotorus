@@ -32,6 +32,8 @@ using namespace std;
 #include "http_steg_mods/pdfSteg.h"
 #include "http_steg_mods/jsSteg.h"
 #include "http_steg_mods/jpgSteg.h"
+#include "http_steg_mods/pngSteg.h"
+#include "http_steg_mods/gifSteg.h"
 
 #include "http.h"
 
@@ -46,7 +48,8 @@ http_steg_config_t::http_steg_config_t(config_t *cfg)
 http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
    : steg_config_t(cfg),
      is_clientside(cfg->mode != LSN_SIMPLE_SERVER),
-     file_steg_mods(c_no_of_steg_protocol, NULL)
+     file_steg_mods(c_no_of_steg_protocol+1, NULL) //just because there is no protocol with
+                                                   //HTTP_CONTENT 0
 {
   if (init_payload_server) {
     string payload_filename;
@@ -61,8 +64,9 @@ http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
     //initiating the steg modules
     //TODO: for now the first modules are set to void till their codes be
     //transformed into a FileStegMod child
-    file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server);
-
+    file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
+    file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
+    file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
   }
 }
 

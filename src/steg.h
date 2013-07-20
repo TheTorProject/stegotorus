@@ -41,6 +41,16 @@ struct steg_config_t
   evbuffer* protocol_data_in;
   evbuffer* protocol_data_out;
 
+  /* To protecet against statistical analysis stegonographer 
+     should make sure that the cover size should at least be
+     noise2signal times of the data
+     
+     However, due to the nature of steg module such as nosteg
+     module the steganographer might choose to ignore the 
+     directive
+  */
+  double noise2signal;
+
   /** If chop receives protocol related data, then it writes
       it in protocol_data then call this function to process it.
       

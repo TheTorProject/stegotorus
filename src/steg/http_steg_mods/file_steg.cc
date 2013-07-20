@@ -19,10 +19,10 @@ using namespace std;
   @param the payload server that is going to be used to provide cover
          to this module.
 */
-FileStegMod::FileStegMod(PayloadServer* payload_provider, int child_type = -1)
-  : c_content_type(child_type)
+FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_from_cfg, int child_type = -1)
+  :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type)
 {
-  _payload_server = payload_provider;
+  
 
 }
 
@@ -98,7 +98,7 @@ ssize_t FileStegMod::pick_appropriate_cover_payload(size_t data_len, char** payl
 
   ssize_t payload_size;
   if (_payload_server->get_payload(c_content_type, data_len, payload_buf,
-                                   (int*)&payload_size) == 1) {
+                                   (int*)&payload_size, noise2signal) == 1) {
     log_debug("SERVER found the next HTTP response template with size %d",
               (int)payload_size);
   } else {

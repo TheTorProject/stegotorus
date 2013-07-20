@@ -18,6 +18,8 @@ using namespace boost::filesystem;
 #include "curl_util.h"
 #include "http_steg_mods/file_steg.h"
 #include "http_steg_mods/jpgSteg.h"
+#include "http_steg_mods/pngSteg.h"
+#include "http_steg_mods/gifSteg.h"
 
 #include "payload_scraper.h"
 #include "base64.h"
@@ -113,7 +115,13 @@ PayloadScraper::PayloadScraper(string  database_filename, string apache_conf)
   _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(NULL); //We are only using the capacity function so we don't need a payload server
   _available_stegs[5].type = HTTP_CONTENT_JPEG; _available_stegs[5].extension = ".jpg"; _available_stegs[5].capacity_function = JPGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
 
-  _available_stegs[6].type = 0;
+  _available_file_stegs[HTTP_CONTENT_PNG] = new PNGSteg(NULL); //We are only using the capacity function so we don't need a payload server
+  _available_stegs[6].type = HTTP_CONTENT_PNG; _available_stegs[6].extension = ".png"; _available_stegs[6].capacity_function = PNGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
+
+  _available_file_stegs[HTTP_CONTENT_GIF] = new GIFSteg(NULL); //We are only using the capacity function so we don't need a payload server
+  _available_stegs[7].type = HTTP_CONTENT_GIF; _available_stegs[6].extension = ".gif"; _available_stegs[7].capacity_function = GIFSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
+
+  _available_stegs[8].type = 0;
 
 }
 

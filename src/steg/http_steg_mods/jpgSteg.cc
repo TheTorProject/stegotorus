@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include <event2/buffer.h>
+#include <assert.h>
 
 #include "util.h"
 #include "connections.h"
@@ -81,7 +82,7 @@ int JPGSteg::starting_point(const uint8_t *raw_data, int len)
 	return lm + 2 + *flen; // 2 for FFDA, and skip the header
 }
 
-size_t JPGSteg::capacity(const uint8_t *raw, int len)
+ssize_t JPGSteg::capacity(const uint8_t *raw, size_t len)
 {
 	int from = starting_point(raw, len);
 	return len - from - 2 - sizeof(int); // 2 for FFD9, 4 for len
@@ -104,14 +105,15 @@ int JPGSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     
 }
 
-int JPGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data)
+ssize_t JPGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data)
 {
 	// TODO: There may be FFDA in the data
-	int from = starting_point(cover_payload, cover_len);
-	int s = (int)*(cover_payload+from);
+    ssize_t from = starting_point(cover_payload, cover_len);
+    assert(from >= 0);
+    size_t s = (size_t)*(cover_payload+from);
 
-    //We need to allocate data here cause it is when we know the data size
-    data = new uint8_t[s];
+    //We assume the enough mem is allocated for the data
+    assert((size_t)s < c_HTTP_MSG_BUF_SIZE);
 	memcpy(data, cover_payload+from+sizeof(int), s);
 	return s;
 
@@ -120,7 +122,7 @@ int JPGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* dat
 /**
    constructor just to call parent constructor
 */
-JPGSteg::JPGSteg(PayloadServer* payload_provider)
-  :FileStegMod(payload_provider, HTTP_CONTENT_JPEG)
+JPGSteg::JPGSteg(PayloadServer* payload_provider, double noise2signal)
+  :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_JPEG)
 {
 }

@@ -334,7 +334,7 @@ TracePayloadServer::init_SWF_payload_pool(int len, int type, int /*unused */)
 }
 
 
-int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* size) {
+int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* size, double noise2signal) {
   int r, i, cnt, found = 0, numCandidate = 0, first, best, current;
 
   log_debug("contentType = %d, initTypePayload = %d, typePayloadCount = %d",
@@ -344,9 +344,9 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
   if (contentType <= 0 ||
       contentType >= MAX_CONTENT_TYPE ||
       pl.initTypePayload[contentType] == 0 ||
-      pl.typePayloadCount[contentType] == 0)
+      pl.typePayloadCount[contentType] == 0 ||
+      cap <= 0) //why should you ask for no or negative capacity?
     return 0;
-
 
   cnt = pl.typePayloadCount[contentType];
   r = rand() % cnt;
@@ -360,7 +360,7 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
     i++;
     current = (r+i)%cnt;
 
-    if (pl.typePayloadCap[contentType][current] <= cap)
+    if (pl.typePayloadCap[contentType][current] <= cap || pl.payload_hdrs[pl.typePayload[contentType][current]].length/(double)cap < noise2signal)
       continue;
 
     if (found) {

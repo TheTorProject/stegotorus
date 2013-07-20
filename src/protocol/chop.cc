@@ -129,6 +129,8 @@ struct chop_config_t : config_t
   bool trace_packets;
   bool encryption;
 
+  double noise2signal; //to protect against statistical analysis
+
   CONFIG_DECLARE_METHODS(chop);
 };
 
@@ -139,6 +141,7 @@ chop_config_t::chop_config_t()
   ignore_socks_destination = true;
   trace_packets = false;
   encryption = true;
+  noise2signal = 0;
 }
 
 chop_config_t::~chop_config_t()
@@ -198,6 +201,8 @@ chop_config_t::init(int n_options, const char *const *options)
       log_enable_timestamps();
     } else if (!strcmp(options[1], "--disable-encryption")) {
       encryption = false;
+    } else if (!strcmp(options[1], "--minimum-noise-to-signal")) {
+      noise2signal = atoi(options[2]);
     } else {
       log_warn("chop: unrecognized option '%s'", options[1]);
       goto usage;
@@ -1086,6 +1091,7 @@ chop_config_t::conn_create(size_t index)
   chop_conn_t *conn = new chop_conn_t;
   conn->config = this;
   conn->steg = steg_targets.at(index)->steg_create(conn);
+  conn->steg->cfg()->noise2signal = noise2signal;
   if (!conn->steg) {
     free(conn);
     return 0;
