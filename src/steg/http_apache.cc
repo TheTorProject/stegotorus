@@ -158,7 +158,6 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
     log_abort("failed to allocate evbuffer for protocol data");
 
 }
-
 http_apache_steg_config_t::~http_apache_steg_config_t()
 {
   //delete payload_server; maybe we don't need it
@@ -285,9 +284,8 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
       if (uri_to_send.size() > c_max_uri_length)
         {
           log_debug("%lu too big to be send in uri", uri_to_send.size());
-            return -1;
+            return -1;       
         }
-   
     }
   else
     {
