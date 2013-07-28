@@ -29,6 +29,73 @@ using namespace std;
 
 #include "http.h"
 
+  /**
+     To solve the problem with curl and libevent fundamentally and for other steg
+     module (e.g. a headless firefox) we will open socket connection with stegotorus
+     and write the data in there.
+
+     It make sense to have more modular structure but for now, it is just a proto-type
+     
+     the steg module (like http_apache_steg_t) will start a bufferevent listening on 
+     a port (randomly chosen until gets an available port)  that is stored in the config. 
+     It has read write functions that all they do is to write into the conn provided by the 
+     chopper and is sent as argument to them.
+     
+     the http_client_transmit is going to read the port number and open connection to
+     the server and basically talk to that server for transmission.
+
+     the client then can safely discard the received the data cause the chopper already
+     analysis them. But the server receive will write those data back to auxilary connection
+     so it doesn't break anything.
+
+     I probably need to use the network.cc structures to generates these connections, 
+     but it is still not clear which structure to use. It might be useful to generate
+     connection without circuit. This is a local connection and can handle everything 
+     pretty fast.
+
+     so for now, this connection will be of type conn_t but if I saw that I need 
+     more property then I'll make it better.
+
+     so the only unclear message is that I don't know how to assgin the read and write functions  
+     Also, I need a protocol or someting, it is not clear how the connection will be aware of 
+     the event base. I can copy the config from the connection the is sent to client_transmit_uri function.
+
+     next step find out where the function get assigned: 
+     the steps for client is as follows:
+        - create new buffer event
+
+          buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
+  buf = bufferevent_socket_new(cfg->base, -1, BEV_OPT_CLOSE_ON_FREE);
+  if (!buf) {
+    log_warn(ckt, "unable to create outbound socket buffer");
+    return false;
+  }
+
+  do {
+    peername = printable_address(addr->ai_addr, addr->ai_addrlen);
+    log_info(ckt, "trying to connect to %s", peername);
+    if (bufferevent_socket_connect(buf,
+                                   addr->ai_addr,
+                                   addr->ai_addrlen) >= 0)
+      goto success;
+
+    log_info(ckt, "connection to %s failed: %s", peername,
+             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    free(peername);
+    addr = addr->ai_next;
+  } while (addr);
+
+  conn = conn_create(cfg, index, buf, peername);
+  ckt->add_downstream(conn);
+  bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
+                    is_socks ? downstream_socks_connect_cb
+                    : downstream_connect_cb, conn);
+
+  but i don't need the connection from client because that is happenning by the 
+  the client instead I need it to play server
+
+  */
+
 enum op_apache_steg_code
   {
     op_STEG_NO_OP,
@@ -79,6 +146,11 @@ namespace  {
     */
     size_t send_dict_to_peer();
 
+    /**
+       Machinary to allow external cover clients such as firefox, curl etc be used
+       directly to generate the client-2-server traffic
+     */
+    listener_t* external_cover_client_listener;
 
     STEG_CONFIG_DECLARE_METHODS(http_apache);
   };
@@ -93,7 +165,6 @@ namespace  {
 
     CURL* _curl_easy_handle;
      
-
     /**
         constructors and destructors taking care of curl initialization and
         clean-up
@@ -125,6 +196,13 @@ namespace  {
 
     static void curl_socket_event_cb(int fd, short kind,  void *userp);
 
+    //Aparatus to talk to external client
+    int start_listening_to_external_client();
+
+    static void external_client_listener_cb((struct evconnlistener *, evutil_socket_t fd,
+                   struct sockaddr *peeraddr, int peerlen,
+                                             void *closure);
+
   };
 
 }
@@ -133,7 +211,7 @@ const char http_apache_steg_config_t::c_end_of_dict[] = "\r\n";
 
 STEG_DEFINE_MODULE(http_apache);
 
-http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
+http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg, eventbase)
   : http_steg_config_t(cfg, false),
     _cur_operation(op_STEG_NO_OP),
     uri_dict_up2date(false)
@@ -141,7 +219,14 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
 {
   string payload_filename;
   if (is_clientside)
-    payload_filename = "apache_payload/client_list.txt";
+    {
+      payload_filename = "apache_payload/client_list.txt";
+      
+      //Machinary for external cover client.
+      //It is only curl for now
+      external_cover_client_listener = bufferevent_socket_new(st->base, pair[1], BEV_OPT_CLOSE_ON_FREE);
+
+    }
   else
     payload_filename = "apache_payload/server_list.txt";
   
@@ -780,4 +865,78 @@ http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
   else
     log_abort(steg_mod->conn, "We are not supposed to be here, only write action is acceptable for libcur");
 
+}
+
+//external cover generator client handlers
+int 
+http_apache_steg_t::start_listening_to_external_client()
+{
+  external_cover_client_listener = (listener_t *)xzalloc(sizeof(listener_t));
+  external_cover_client_listener->cfg = cfg->conn->cfg;
+  external_cover_client_listener->address = printable_address(cfg->get_listen_addrs()->ai_addr, cfg->get_listen_addrs()->ai_addrlen);
+
+  external_cover_client_listener->listener =
+    evconnlistener_new_bind(cfg->base, http_apache_steg_t::external_client_listener_cb, external_cover_client_listener, flags, -1,
+             addrs->ai_addr, addrs->ai_addrlen);
+
+  if (!external_cover_client_listener->listener) {
+    log_warn("failed to open listening socket on %s: %s",
+             external_cover_client_listener->address,
+             evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    listener_close(external_cover_client_listener);
+    return 0;
+  }
+
+  log_debug("listening on %s for external cover provider",
+            external_cover_client_listener->address, cfg->name());
+
+}
+
+void
+http_apache_steg_t::external_client_listener_cb(struct evconnlistener *, evutil_socket_t fd,
+                                                struct sockaddr *peeraddr, int peerlen,
+                                                void *closure)
+{
+  listener_t *lsn = (listener_t *)closure;
+  char *peername = printable_address(peeraddr, peerlen);
+  struct bufferevent *buf = NULL;
+  circuit_t *ckt = NULL;
+  int is_socks = lsn->cfg->mode == LSN_SOCKS_CLIENT;
+
+  log_assert(lsn->cfg->mode != LSN_SIMPLE_SERVER);
+  log_info("%s: new connection to %sclient from %s",
+           lsn->address, is_socks ? "socks " : "", peername);
+
+  buf = bufferevent_socket_new(lsn->cfg->base, fd, BEV_OPT_CLOSE_ON_FREE);
+  if (!buf) {
+    log_warn("%s: failed to create buffer for new connection from %s",
+             lsn->address, peername);
+    evutil_closesocket(fd);
+    free(peername);
+    return;
+  }
+
+  ckt = circuit_create(lsn->cfg, lsn->index);
+  if (!ckt) {
+    log_warn("%s: failed to create circuit for new connection from %s",
+             lsn->address, peername);
+    bufferevent_free(buf);
+    free(peername);
+    return;
+  }
+
+  ckt->connected = 1;
+  circuit_add_upstream(ckt, buf, peername);
+  if (is_socks) {
+    /* We can't do anything more till we know where to connect to. */
+    bufferevent_setcb(buf, socks_read_cb, upstream_flush_cb,
+                      upstream_event_cb, ckt);
+    bufferevent_enable(buf, EV_READ|EV_WRITE);
+  } else {
+    bufferevent_setcb(buf, upstream_read_cb, upstream_flush_cb,
+                      upstream_event_cb, ckt);
+    create_outbound_connections(ckt, false);
+    /* Don't enable reading or writing till the outbound connection(s) are
+       established. */
+  }
 }
