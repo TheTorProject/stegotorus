@@ -79,7 +79,6 @@ namespace  {
     */
     size_t send_dict_to_peer();
 
-
     STEG_CONFIG_DECLARE_METHODS(http_apache);
   };
 
@@ -92,7 +91,9 @@ namespace  {
     const size_t c_max_uri_length; //Unofficial cap
 
     CURL* _curl_easy_handle;
-     
+  
+    evbuffer* curl_inbound; //the evbuffer that is going to be used instead
+    //of original bufferevent read-only buffer
 
     /**
         constructors and destructors taking care of curl initialization and
@@ -124,6 +125,17 @@ namespace  {
     static int ignore_close(void *clientp, curl_socket_t curlfd);
 
     static void curl_socket_event_cb(int fd, short kind,  void *userp);
+
+    /**
+       Basically immitates the downstream_read_cb in network.cc, but write the content
+       in steg->curl_inbound evbuffer. The unfortunate situation is a result of:
+       - curl is not able to *only* handle write and has to handle read operation as well.
+       - bufferevent's read buffer is read-only.
+
+       @param userp of http_apache_steg type that has attribute curl_inbound
+
+    */
+    static size_t curl_downstream_read_cb(void *buffer, size_t size, size_t nmemb, void *userp);
 
   };
 
@@ -177,7 +189,8 @@ http_apache_steg_config_t::steg_create(conn_t *conn)
 http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn)
   : http_steg_t((http_steg_config_t*)cf, cn), _apache_config(cf),     
     c_min_uri_length(0),
-    c_max_uri_length(2000)
+    c_max_uri_length(2000),
+    curl_inbound(NULL)
 
 {
 
@@ -203,6 +216,7 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
   //tells curl the socket is already connected
   curl_easy_setopt(_curl_easy_handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
   curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETFUNCTION, ignore_close);
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETDATA, conn);
 
   /** setup the buffer we communicate with chop */
   //Every connection checks if the dict is valid
@@ -304,9 +318,15 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
     }
   
   //now we are using curl to send the request
+  //however, it seems that there is no way to stop curl from also receving 
+  //the data and giving control to libevent. Hence we are deligating the 
+  //receive process over curl as well
   curl_easy_setopt(_curl_easy_handle, CURLOPT_URL, uri_to_send.c_str());
-  curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION,   discard_data);
-  curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEDATA,       conn);
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION, curl_downstream_read_cb );
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEDATA, this);
+
+  //We also need to prepare the evbuffer that is going to used to store the response
+  curl_inbound = evbuffer_new();
 
   CURLMcode res = curl_multi_add_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
 
@@ -314,14 +334,17 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
     log_debug(conn,"error in adding curl handle. CURL Error %s", curl_multi_strerror(res));
   }
 
-  bufferevent_disable(conn->buffer, EV_WRITE);
-  event* write_url_event = event_new(bufferevent_get_base(conn->buffer), conn->socket(), EV_WRITE, curl_socket_event_cb, this);
-  event_add(write_url_event, NULL);
+  bufferevent_disable(conn->buffer, EV_WRITE | EV_READ); //We are giving the full control of the socket over curl
+  event* curl_client_event = event_new(bufferevent_get_base(conn->buffer), conn->socket(), EV_WRITE | EV_READ | EV_PERSIST, curl_socket_event_cb, this);
+  event_add(curl_client_event, NULL);
 
   log_debug(conn, "curl is fetching %s", uri_to_send.c_str());
   log_debug(conn, "%u handles are still running",_apache_config->_curl_running_handle);
 
-   have_transmitted = 1;
+  log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
+  //conn->cease_transmission(); we can't let libevent to mess around with the socket
+  // at this point, we have to wait till curl is done with the connection
+  have_transmitted = true;
 
   //FIX ME I need to clean-up the easy handle but I don't know
   //where should I do it. If I keep track of all easy handle
@@ -457,7 +480,7 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
     size_t url_meaning_length = 0;
     bool param_valid_load = true;
     if (extracted_url != "") { 
-       //Otherwise the uri_dict sync hasn't been verified so 
+      //Otherwise the uri_dict sync hasn't been verified so 
       //we can't use it
       url_code = ((ApachePayloadServer*)_apache_config->payload_server)->uri_decode_book[extracted_url];
       log_debug(conn, "url code %lu", url_code);
@@ -510,6 +533,7 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
 
 http_apache_steg_t::~http_apache_steg_t()
 {
+  if (curl_inbound) evbuffer_free(curl_inbound);
   curl_easy_cleanup(_curl_easy_handle);
 
 }
@@ -595,10 +619,48 @@ http_apache_steg_t::transmit(struct evbuffer *source)
     return http_steg_t::transmit(source);
 }
 
+/**
+  Overriden receive that takes care of the data that is received 
+  over curl (instead of libevent through bufferevent structure.
+*/
 int
 http_apache_steg_t::receive(struct evbuffer *dest)
 {
-  return http_steg_t::receive(dest);
+  struct evbuffer *source;
+  // unsigned int type;
+  int rval = RECV_BAD;
+
+  //if we are on the client side, curl has received the data and hence
+  //we need to retrieve the data from this->curl_received_data_evbuf
+  //If we are on the server side it is business
+  if (config->is_clientside) {
+    source = curl_inbound;
+
+    switch(type) {
+
+    case HTTP_CONTENT_SWF:
+      rval = http_handle_client_SWF_receive(this, conn, dest, source);
+      break;
+
+    case HTTP_CONTENT_JAVASCRIPT:
+    case HTTP_CONTENT_HTML:
+      rval = http_handle_client_JS_receive(this, conn, dest, source);
+      break;
+
+    case HTTP_CONTENT_PDF:
+      rval = http_handle_client_PDF_receive(this, conn, dest, source);
+      break;
+    }
+
+    if (rval == RECV_GOOD) have_received = 1;
+    return rval;
+
+  } 
+
+  //We are here becouse we are on the server side
+  source = conn->inbound();
+  return http_server_receive(conn, dest, source);
+
 }
 
 size_t
@@ -751,33 +813,71 @@ http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
   CURLMcode rc;
   
   log_debug(steg_mod->conn, "socket is ready for %s", kind & EV_READ ? "read" : (kind & EV_WRITE ? "write" : "unknow op"));
-  if (kind & EV_READ)
+
+  //I don't know why I have this here
+  //But for now I have deactivated the EV_READ on the bufferevent as 
+  //well
+  /*
+      if (kind & EV_READ) 
     {
       bufferevent_flush(steg_mod->conn->buffer, EV_READ, BEV_NORMAL);
     }
+  */
 
   int action =
     (kind & EV_READ ? CURL_CSELECT_IN : 0) |
     (kind & EV_WRITE ? CURL_CSELECT_OUT : 0);
  
-  if (action == CURL_CSELECT_OUT) {
+  //not policing the EV_READ event anymore
+  //if (action == CURL_CSELECT_OUT) {
     rc = curl_multi_socket_action(steg_mod->_apache_config->_curl_multi_handle, fd, action, &steg_mod->_apache_config->_curl_running_handle);
 
-  if (rc == CURLM_OK)
+  if (rc != CURLM_OK)
     {
-      curl_multi_remove_handle(steg_mod->_apache_config->_curl_multi_handle, steg_mod->_curl_easy_handle);
-
-      bufferevent_enable(steg_mod->conn->buffer, EV_READ|EV_WRITE);
-
-      steg_mod->conn->cease_transmission();
-    }
-  else
-    {
+      //I don't think we need to get rid of handle anymore
+      //curl_multi_remove_handle(steg_mod->_apache_config->_curl_multi_handle, steg_mod->_curl_easy_handle);
+      //I probably shouldn't be that serious with this error
       log_abort(steg_mod->conn, "error in requesting the uri. CURL Error %s", curl_multi_strerror(rc));
+      //log_abort(steg_mod->conn, "We are not supposed to be here, only write action is acceptable for libcur");
     }
 
+  log_debug(steg_mod->conn, "steg target has still %d active easy handles", steg_mod->_apache_config->_curl_running_handle);
+
+}
+
+/**
+   Basically immitates the downstream_read_cb in network.cc, but write the content
+   in steg->curl_inbound evbuffer. The unfortunate situation is a result of:
+   - curl is not able to *only* handle write and has to handle read operation as well.
+   - bufferevent's read buffer is read-only.
+
+   @param userp of http_apache_steg type that has attribute curl_inbound
+
+ */
+size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, size_t nmemb, void *userp)
+{
+  http_apache_steg_t*  steg_mod = (http_apache_steg_t*) userp;
+  conn_t *down = (conn_t *)(steg_mod->conn);
+
+  down->ever_received = 1;
+
+  size_t no_bytes_2_read = size * nmemb;
+  log_debug(down, "%lu bytes available (received by curl)", no_bytes_2_read);
+
+  //move everything to the steg evbuffer
+  if (evbuffer_add(steg_mod->curl_inbound, buffer, size * no_bytes_2_read)) {
+    log_debug("Error reading data from curl buffer");
+    return 0;
   }
-  else
-    log_abort(steg_mod->conn, "We are not supposed to be here, only write action is acceptable for libcur");
+
+  //following network.cc pattern
+  if (down->recv()) {
+    log_debug(down, "error during receive");
+    down->close();
+
+    return 0;
+  }
+
+  return no_bytes_2_read;
 
 }
