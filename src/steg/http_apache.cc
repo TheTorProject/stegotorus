@@ -91,6 +91,8 @@ namespace  {
     const size_t c_max_uri_length; //Unofficial cap
 
     CURL* _curl_easy_handle;
+    event* _curl_client_event; //we need to keep track of the event
+    //to make it non-pending before giving the control back to the libevent
   
     evbuffer* curl_inbound; //the evbuffer that is going to be used instead
     //of original bufferevent read-only buffer
@@ -127,6 +129,12 @@ namespace  {
     static void curl_socket_event_cb(int fd, short kind,  void *userp);
 
     /**
+       gets call everytime that curl deal with the event, to check for
+       all easy handles that are done and get rid of them.
+     */
+    static void check_curl_multi_situation(CURLM* cur_steg_curl_multi_handle);
+
+    /**
        Basically immitates the downstream_read_cb in network.cc, but write the content
        in steg->curl_inbound evbuffer. The unfortunate situation is a result of:
        - curl is not able to *only* handle write and has to handle read operation as well.
@@ -136,6 +144,7 @@ namespace  {
 
     */
     static size_t curl_downstream_read_cb(void *buffer, size_t size, size_t nmemb, void *userp);
+
 
   };
 
@@ -324,6 +333,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   curl_easy_setopt(_curl_easy_handle, CURLOPT_URL, uri_to_send.c_str());
   curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEFUNCTION, curl_downstream_read_cb );
   curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEDATA, this);
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_PRIVATE, this);
 
   //We also need to prepare the evbuffer that is going to used to store the response
   curl_inbound = evbuffer_new();
@@ -335,8 +345,8 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   }
 
   bufferevent_disable(conn->buffer, EV_WRITE | EV_READ); //We are giving the full control of the socket over curl
-  event* curl_client_event = event_new(bufferevent_get_base(conn->buffer), conn->socket(), EV_WRITE | EV_READ | EV_PERSIST, curl_socket_event_cb, this);
-  event_add(curl_client_event, NULL);
+  _curl_client_event = event_new(bufferevent_get_base(conn->buffer), conn->socket(), EV_WRITE | EV_READ | EV_PERSIST, curl_socket_event_cb, this);
+  event_add(_curl_client_event, NULL);
 
   log_debug(conn, "curl is fetching %s", uri_to_send.c_str());
   log_debug(conn, "%u handles are still running",_apache_config->_curl_running_handle);
@@ -800,8 +810,9 @@ http_apache_steg_t::sockopt_callback(void *clientp, curl_socket_t curlfd,
 int
 http_apache_steg_t::ignore_close(void *clientp, curl_socket_t curlfd)
 {
-  (void) clientp;
+  conn_t* cur_conn = (conn_t*) clientp;
   (void) curlfd;
+  log_debug(cur_conn, "done with curl");
   return 0;
 }
 
@@ -842,6 +853,8 @@ http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
     }
 
   log_debug(steg_mod->conn, "steg target has still %d active easy handles", steg_mod->_apache_config->_curl_running_handle);
+  //Get rid of any handle that was done in this turn
+  check_curl_multi_situation(steg_mod->_apache_config->_curl_multi_handle);
 
 }
 
@@ -880,4 +893,38 @@ size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, si
 
   return no_bytes_2_read;
 
+}
+
+/* Check for completed transfers, and remove their easy handles */
+void http_apache_steg_t::check_curl_multi_situation(CURLM* cur_steg_curl_multi_handle)
+{
+  char *eff_url;
+  CURLMsg *msg;
+  int msgs_left;
+  http_apache_steg_t* affected_steg_mod;
+  CURL *easy;
+  CURLcode res;
+
+  log_debug("checking for retired curl connections");
+  while ((msg = curl_multi_info_read(cur_steg_curl_multi_handle, &msgs_left))) {
+    if (msg->msg == CURLMSG_DONE) {
+      easy = msg->easy_handle;
+      res = msg->data.result;
+      curl_easy_getinfo(easy, CURLINFO_PRIVATE, &affected_steg_mod);
+      curl_easy_getinfo(easy, CURLINFO_EFFECTIVE_URL, &eff_url);
+      log_debug(affected_steg_mod->conn, "DONE: %s => (%d)\n", eff_url, res);
+      curl_multi_remove_handle(cur_steg_curl_multi_handle, affected_steg_mod->_curl_easy_handle);
+      curl_easy_cleanup(affected_steg_mod->_curl_easy_handle);
+
+      //First tell libevent don't refer this connection back to curl
+      if (event_del(affected_steg_mod->_curl_client_event)<0) {
+        log_abort(affected_steg_mod->conn, "Failed to exclude curl from the event loop.");
+      }
+
+      //then give back the control to libevent
+      //bufferevent_enable(affected_steg_mod->conn->buffer, EV_READ|EV_WRITE);
+      //affected_steg_mod->conn->cease_transmission();
+      
+    }
+  }
 }
