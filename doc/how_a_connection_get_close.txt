@@ -1,0 +1,7 @@
+in http.cc:
+transmit_cookie
+ cease_transmission
+  conn_do_flush
+   downstream_flush_cb
+    conn->write_eof = true;
+  

@@ -6,6 +6,7 @@
 #include <sstream>
 #include <algorithm>
 
+#include <assert.h>
 using namespace std;
 
 #include "util.h"
@@ -97,6 +98,9 @@ namespace  {
     evbuffer* curl_inbound; //the evbuffer that is going to be used instead
     //of original bufferevent read-only buffer
 
+    bool curl_send_complete; //because curl does not tell us when it is done
+    //with sending a request we need to track that
+
     /**
         constructors and destructors taking care of curl initialization and
         clean-up
@@ -145,7 +149,6 @@ namespace  {
     */
     static size_t curl_downstream_read_cb(void *buffer, size_t size, size_t nmemb, void *userp);
 
-
   };
 
 }
@@ -185,6 +188,8 @@ http_apache_steg_config_t::~http_apache_steg_config_t()
 {
   //delete payload_server; maybe we don't need it
   /* always cleanup */ 
+  log_debug("steg config is releasing mulit handle");
+  log_debug("%u handles are still running",_curl_running_handle);
   curl_multi_cleanup(_curl_multi_handle);
 
 }
@@ -199,6 +204,7 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
   : http_steg_t((http_steg_config_t*)cf, cn), _apache_config(cf),     
     c_min_uri_length(0),
     c_max_uri_length(2000),
+    _curl_client_event(NULL),
     curl_inbound(NULL)
 
 {
@@ -206,9 +212,11 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
   if (!_apache_config->payload_server)
     log_abort("payload server is not initialized.");
 
+  //FIXME: If server doesn't use _curl_easy_handle then we should 
+  //only initialize it for the client side
   //we need to use a fresh curl easy object because we might have
-  //multiple connection at a time. FIX ME:It might be a way to re-
-  //cycle these objects
+  //multiple connection at a time. 
+  //FIX ME:It might be a way to recycle these objects
   _curl_easy_handle = curl_easy_init();
   if (!_curl_easy_handle)
     log_abort("failed to initiate curl");
@@ -225,8 +233,9 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
   //tells curl the socket is already connected
   curl_easy_setopt(_curl_easy_handle, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
   curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETFUNCTION, ignore_close);
-  curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETDATA, conn);
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_CLOSESOCKETDATA, this);
 
+  curl_easy_setopt(_curl_easy_handle, CURLOPT_FORBID_REUSE,1); // forbid reuse 
   /** setup the buffer we communicate with chop */
   //Every connection checks if the dict is valid
   if (_apache_config->is_clientside && !_apache_config->uri_dict_up2date
@@ -235,7 +244,14 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
     char status_to_send = op_STEG_DICT_MAC;
     evbuffer_add(_apache_config->protocol_data_out, &status_to_send, 1);
     evbuffer_add(_apache_config->protocol_data_out, ((ApachePayloadServer*)_apache_config->payload_server)->uri_dict_mac(), SHA256_DIGEST_LENGTH);
+
   }
+
+  if (_apache_config->is_clientside) {
+    //We also need to prepare the evbuffer that is going to used to store the response, this only is happening on the client side
+    curl_inbound = evbuffer_new();
+  }
+
 
 }
 
@@ -249,6 +265,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   char* data2 = (char*) xmalloc (sbuflen*4);
   size_t len;
 
+  curl_send_complete = false;
   // '+' -> '-', '/' -> '_', '=' -> '.' per
   // RFC4648 "Base 64 encoding with RL and filename safe alphabet"
   // (which does not replace '=', but dot is an obvious choice; for
@@ -335,21 +352,18 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   curl_easy_setopt(_curl_easy_handle, CURLOPT_WRITEDATA, this);
   curl_easy_setopt(_curl_easy_handle, CURLOPT_PRIVATE, this);
 
-  //We also need to prepare the evbuffer that is going to used to store the response
-  curl_inbound = evbuffer_new();
-
   CURLMcode res = curl_multi_add_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
 
   if (res != CURLM_OK) {
     log_debug(conn,"error in adding curl handle. CURL Error %s", curl_multi_strerror(res));
   }
 
-  bufferevent_disable(conn->buffer, EV_WRITE | EV_READ); //We are giving the full control of the socket over curl
+  bufferevent_disable(conn->buffer, EV_READ); //We are giving the full control of the socket over curl
   _curl_client_event = event_new(bufferevent_get_base(conn->buffer), conn->socket(), EV_WRITE | EV_READ | EV_PERSIST, curl_socket_event_cb, this);
   event_add(_curl_client_event, NULL);
 
   log_debug(conn, "curl is fetching %s", uri_to_send.c_str());
-  log_debug(conn, "%u handles are still running",_apache_config->_curl_running_handle);
+  //log_debug(conn, "%u handles are still running",_apache_config->_curl_running_handle);
 
   log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
   //conn->cease_transmission(); we can't let libevent to mess around with the socket
@@ -375,7 +389,6 @@ http_apache_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, str
     char *p;
 
     //int cookie_mode = 0;
-
      if (s2.pos == -1) {
       log_debug(conn, "Did not find end of request %d",
                 (int) evbuffer_get_length(source));
@@ -544,6 +557,14 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
 http_apache_steg_t::~http_apache_steg_t()
 {
   if (curl_inbound) evbuffer_free(curl_inbound);
+  if (_curl_client_event) {
+    log_debug(conn,"at steg destructor!");
+    event_free(_curl_client_event); 
+    //calling for manual clean up just in case
+    curl_multi_remove_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
+    log_debug(conn,"at steg destructor, releasing curl");
+  }
+  
   curl_easy_cleanup(_curl_easy_handle);
 
 }
@@ -810,9 +831,30 @@ http_apache_steg_t::sockopt_callback(void *clientp, curl_socket_t curlfd,
 int
 http_apache_steg_t::ignore_close(void *clientp, curl_socket_t curlfd)
 {
-  conn_t* cur_conn = (conn_t*) clientp;
+  http_apache_steg_t* steg_mod = (http_apache_steg_t*) clientp;
   (void) curlfd;
-  log_debug(cur_conn, "done with curl");
+  (void)clientp;
+
+  /* Peer is done sending us data. */
+  steg_mod->conn->recv_eof();
+  steg_mod->conn->read_eof = true;
+  /*if (steg_mod->conn->read_eof && steg_mod->conn->write_eof)*/
+  steg_mod->conn->close();
+
+    //curl_multi_remove_handle(steg_mod->_apache_config->_curl_multi_handle, steg_mod->_curl_easy_handle);
+  //I think we should purely ignoe close cause it might close before 
+  //this get called.
+
+  //First tell libevent don't refer this connection back to curl
+  if (event_del(steg_mod->_curl_client_event)<0)
+        log_abort(steg_mod->conn, "Failed to exclude curl from the event loop.");
+  log_debug(steg_mod->conn, "done with curl");
+
+
+  //curl_multi_socket_action(steg_mod->_apache_config->_curl_multi_handle, steg_mod->conn->socket(), CURL_CSELECT_IN| CURL_CSELECT_OUT, &steg_mod->_apache_config->_curl_running_handle);
+  //then give back the control to libevent
+  //bufferevent_enable(steg_mod->conn->buffer, EV_READ|EV_WRITE);
+
   return 0;
 }
 
@@ -823,7 +865,7 @@ http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
   http_apache_steg_t*  steg_mod = (http_apache_steg_t*) userp;
   CURLMcode rc;
   
-  log_debug(steg_mod->conn, "socket is ready for %s", kind & EV_READ ? "read" : (kind & EV_WRITE ? "write" : "unknow op"));
+  //nlog_debug(steg_mod->conn, "socket is ready for %s", kind & EV_READ ? "read" : (kind & EV_WRITE ? "write" : "unknow op"));
 
   //I don't know why I have this here
   //But for now I have deactivated the EV_READ on the bufferevent as 
@@ -841,7 +883,7 @@ http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
  
   //not policing the EV_READ event anymore
   //if (action == CURL_CSELECT_OUT) {
-    rc = curl_multi_socket_action(steg_mod->_apache_config->_curl_multi_handle, fd, action, &steg_mod->_apache_config->_curl_running_handle);
+  rc = curl_multi_socket_action(steg_mod->_apache_config->_curl_multi_handle, fd, action, &steg_mod->_apache_config->_curl_running_handle);
 
   if (rc != CURLM_OK)
     {
@@ -852,7 +894,7 @@ http_apache_steg_t::curl_socket_event_cb(int fd, short kind, void *userp)
       //log_abort(steg_mod->conn, "We are not supposed to be here, only write action is acceptable for libcur");
     }
 
-  log_debug(steg_mod->conn, "steg target has still %d active easy handles", steg_mod->_apache_config->_curl_running_handle);
+  //log_debug(steg_mod->conn->circuit(), "steg target has still %d active easy handles", steg_mod->_apache_config->_curl_running_handle);
   //Get rid of any handle that was done in this turn
   check_curl_multi_situation(steg_mod->_apache_config->_curl_multi_handle);
 
@@ -873,6 +915,18 @@ size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, si
   conn_t *down = (conn_t *)(steg_mod->conn);
 
   down->ever_received = 1;
+  //this also seems a hackish way that curl leaves me with no choice
+  if (!steg_mod->curl_send_complete) {
+    steg_mod->curl_send_complete = true;
+
+    //re-adjusting the event
+    event_del(steg_mod->_curl_client_event);
+    assert(event_assign(steg_mod->_curl_client_event, bufferevent_get_base(down->buffer), down->socket(), EV_READ | EV_PERSIST, curl_socket_event_cb, steg_mod) == 0);
+    event_add(steg_mod->_curl_client_event, NULL);
+
+    //bufferevent_enable(down->buffer, EV_WRITE);
+    down->cease_transmission();
+  }
 
   size_t no_bytes_2_read = size * nmemb;
   log_debug(down, "%lu bytes available (received by curl)", no_bytes_2_read);
@@ -886,7 +940,8 @@ size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, si
   //following network.cc pattern
   if (down->recv()) {
     log_debug(down, "error during receive");
-    down->close();
+    //down->close(); I'm not closing here, instead let curl to take
+    //action and calls the close cb
 
     return 0;
   }
@@ -905,26 +960,20 @@ void http_apache_steg_t::check_curl_multi_situation(CURLM* cur_steg_curl_multi_h
   CURL *easy;
   CURLcode res;
 
-  log_debug("checking for retired curl connections");
   while ((msg = curl_multi_info_read(cur_steg_curl_multi_handle, &msgs_left))) {
     if (msg->msg == CURLMSG_DONE) {
       easy = msg->easy_handle;
       res = msg->data.result;
       curl_easy_getinfo(easy, CURLINFO_PRIVATE, &affected_steg_mod);
       curl_easy_getinfo(easy, CURLINFO_EFFECTIVE_URL, &eff_url);
-      log_debug(affected_steg_mod->conn, "DONE: %s => (%d)\n", eff_url, res);
+      log_debug(/*affected_steg_mod->conn,*/ "DONE: %s => (%d)\n", eff_url, res);
       curl_multi_remove_handle(cur_steg_curl_multi_handle, affected_steg_mod->_curl_easy_handle);
-      curl_easy_cleanup(affected_steg_mod->_curl_easy_handle);
+      //curl_easy_cleanup(affected_steg_mod->_curl_easy_handle);
+      //I need to do the clean up in destructor cause the server also 
+      //has this handle
 
-      //First tell libevent don't refer this connection back to curl
-      if (event_del(affected_steg_mod->_curl_client_event)<0) {
-        log_abort(affected_steg_mod->conn, "Failed to exclude curl from the event loop.");
-      }
-
-      //then give back the control to libevent
-      //bufferevent_enable(affected_steg_mod->conn->buffer, EV_READ|EV_WRITE);
       //affected_steg_mod->conn->cease_transmission();
-      
+      log_debug(affected_steg_mod->conn->circuit(), "steg target has still %d active easy handles", affected_steg_mod->_apache_config->_curl_running_handle);      
     }
   }
 }
