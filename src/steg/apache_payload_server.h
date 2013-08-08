@@ -36,7 +36,6 @@ class ApachePayloadServer: public PayloadServer
   string _apache_host_name;
   
   const unsigned long c_max_buffer_size;
-  const unsigned int c_ACCEPTABLE_EFFICIENCY_COMPROMISE;
   CURL* _curl_obj; //this is used to communicate with http server
 
   //This is too keep the dict in sync between client and server
@@ -51,6 +50,10 @@ class ApachePayloadServer: public PayloadServer
   const uint8_t* compute_uri_dict_mac();
 
  public:
+  enum PayloadChoiceStrategy {
+    c_most_efficient_payload_choice,
+    c_random_payload_choice
+  } chosen_payload_choice_strategy;
   /*These are used for client side communication. They are 
    public because http_apache_steg_t uses them frequently.
    FIX ME: They need to be protected though*/
@@ -101,7 +104,7 @@ class ApachePayloadServer: public PayloadServer
 
   /** virtual functions */
   virtual unsigned int find_client_payload(char* buf, int len, int type);
-  virtual int get_payload (int contentType, int cap, char** buf, int* size);
+  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal = 0);
 
   /**
      Gets \0 ended uri char* and determines its type based on

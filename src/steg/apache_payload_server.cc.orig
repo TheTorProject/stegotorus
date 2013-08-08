@@ -25,7 +25,8 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
   :PayloadServer(init_side),_database_filename(database_filename),
    _apache_host_name("127.0.0.1"),
    c_max_buffer_size(1000000),
-   chosen_payload_choice_strategy(c_most_efficient_payload_choice)
+   c_ACCEPTABLE_EFFICIENCY_COMPROMISE(30)
+
 {
   /* Ideally this should check the side and on client side
      it should not attempt openning the the database file but
@@ -144,42 +145,69 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
   //get payload is not supposed to act like this but for the sake 
   //of testing and compatibility we are simulating the original 
   //get_payload
-  assert(cap != 0); //why do you ask for zero capacity?
-  PayloadInfo* itr_first, *cur_payload_candidate, *itr_best = NULL;
-  if (chosen_payload_choice_strategy == c_most_efficient_payload_choice) {
-    list<EfficiencyIndicator>::iterator  itr_payloads = _payload_database.sorted_payloads.begin();
-    
-    cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
-    while(itr_payloads != _payload_database.sorted_payloads.end() && (cur_payload_candidate->capacity < (unsigned int)cap || cur_payload_candidate->type != (unsigned int)contentType || cur_payload_candidate->length/(double)cap < noise2signal)) {
+<<<<<<< HEAD
+  PayloadInfo* itr_first, *itr_best = NULL;
+  list<EfficiencyIndicator>::iterator  itr_payloads = _payload_database.sorted_payloads.begin();
+
+  PayloadInfo* cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
+  while(itr_payloads != _payload_database.sorted_payloads.end() && (cur_payload_candidate->capacity < (unsigned int)cap ||
+                                                                   cur_payload_candidate->type != (unsigned int)contentType)){
     itr_payloads++; numCandidate++;
     cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
+=======
+  assert(cap != 0); //why do you ask for zero capacity?
+  PayloadDict::iterator itr_payloads, itr_first, itr_best = _payload_database.payloads.end();
+  while(numCandidate < MAX_CANDIDATE_PAYLOADS) {
+    itr_payloads = _payload_database.payloads.begin();
+    advance(itr_payloads, rng_int(_payload_database.payloads.size()));
+    if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType || (*itr_payloads).second.length > c_max_buffer_size || (*itr_payloads).second.length/(double)cap < noise2signal )
+      continue;
+
+    found = true;
+    itr_first = itr_payloads;
+    numCandidate++;
+
+    if (itr_best == _payload_database.payloads.end())
+      itr_best = itr_payloads;
+    else if ((*itr_best).second.length > (*itr_payloads).second.length)
+      itr_best = itr_payloads;
+
+>>>>>>> f--image-steg
+  }
+
+  if (itr_payloads != _payload_database.sorted_payloads.end() && cur_payload_candidate->length < c_max_buffer_size)
+    {
+      found = true;
+      itr_first = itr_best = cur_payload_candidate;
     }
+  // while(numCandidate < MAX_CANDIDATE_PAYLOADS) {
+  //   //itr_payloads = _payload_database.payloads.begin();
+  //   //advance(itr_payloads, rng_int(_payload_database.payloads.size()));  
+    
+  //     //if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType || (*itr_payloads).second.length > c_max_buffer_size || (*itr_payloads).second.length/c_ACCEPTABLE_EFFICIENCY_COMPROMISE > (unsigned int)cap )
+  //   if (cur_payload_candidate->capacity <= (unsigned int)cap) //the list is sorted so we'll have no more luck
+  //     break; 
+  //   if (cur_payload_candidate->type != (unsigned int)contentType || cur_payload_candidate->length > c_max_buffer_sizep)
+  //     {
+  //       itr_payloads++;
+  //       continue;
+  //     }
 
-    if (itr_payloads != _payload_database.sorted_payloads.end() && cur_payload_candidate->length < c_max_buffer_size)
-      {
-        found = true;
-        itr_first = itr_best = cur_payload_candidate;
-      }
-  }
-  else { //    c_random_payload_choice
-    PayloadDict::iterator itr_payloads;
-      while(numCandidate < MAX_CANDIDATE_PAYLOADS) {
-        itr_payloads = _payload_database.payloads.begin();
-        advance(itr_payloads, rng_int(_payload_database.payloads.size()));  
-        if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType || (*itr_payloads).second.length > c_max_buffer_size ||  (*itr_payloads).second.length/(double)cap < noise2signal)
-            continue;
+  //   found = true;
+  //   itr_first = cur_payload_candidate;
+  //   numCandidate++;
 
-        found = true;
-        itr_first = &((*itr_payloads).second);
-        numCandidate++;
+  //   if (itr_best == NULL)
+  //     itr_best = cur_payload_candidate;
+  //   else if (itr_best->length > cur_payload_candidate->length)
+  //     itr_best = cur_payload_candidate;
 
-        if (itr_best == NULL)
-          itr_best = itr_first;
-        else if (itr_best->length > itr_first->length)
-          itr_best = itr_first;
+  //   if (cur_payload_candidate->length/c_ACCEPTABLE_EFFICIENCY_COMPROMISE < (unsigned int)cap)
+  //     break;
 
-      }
-  }
+  //   itr_payloads++;
+
+  // }
 
   if (found)
     {

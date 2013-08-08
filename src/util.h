@@ -31,6 +31,7 @@
 #define SHUT_WR SD_SEND
 #endif
 
+
 /* event2/util.h finds ssize_t but refuses to actually call it ssize_t.
    Correct this. */
 #ifdef _EVENT_ssize_t
@@ -298,5 +299,15 @@ void buf2hex(uint8_t* buf, size_t len, std::string& res);
     negative, and 0 otherwise. **/
 int timeval_subtract(struct timeval *x, struct timeval *y,
 		     struct timeval *result);
+
+/**
+   Convert the evbuffer into a consecutive memory block
+
+   @param scattered_buffer the data in evbuffer type
+   @param memory_block return data in consecutive memory block
+
+   @return the length of the memory block or < 0 in case of error
+*/
+int evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block);
 
 #endif

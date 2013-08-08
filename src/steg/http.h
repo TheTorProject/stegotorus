@@ -16,6 +16,9 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
     bool is_clientside : 1;
     PayloadServer* payload_server;
 
+    //list of available steg type modules
+    vector<FileStegMod*> file_steg_mods;
+
     /** If you are a child of http_steg_t and you want to initiate your own,
         you need to call this constructor in your config_t constructor instead.
         In normal world we could have http_trace_steg which only implements 

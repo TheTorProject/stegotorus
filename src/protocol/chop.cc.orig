@@ -11,6 +11,7 @@
 #include <algorithm>
 #include "steg.h"
 
+
 #include <tr1/unordered_map>
 #include <sstream>
 
@@ -176,10 +177,14 @@ chop_config_t::chop_config_t()
 {
   ignore_socks_destination = true;
   trace_packets = false;
+<<<<<<< HEAD
   trace_packet_data = true;
   encryption = false;
   retransmit = true;
+=======
+  encryption = true;
   noise2signal = 0;
+>>>>>>> f--image-steg
 }
 
 chop_config_t::~chop_config_t()
@@ -239,12 +244,15 @@ chop_config_t::init(int n_options, const char *const *options)
       log_enable_timestamps();
     } else if (!strcmp(options[1], "--disable-encryption")) {
       encryption = false;
+<<<<<<< HEAD
     } else if (!strcmp(options[1], "--disable-retransmit")) {
       retransmit = false;
     } else if (!strcmp(options[1], "--enable-retransmit")) {
       retransmit = true;
+=======
     } else if (!strcmp(options[1], "--minimum-noise-to-signal")) {
       noise2signal = atoi(options[2]);
+>>>>>>> f--image-steg
     } else {
       log_warn("chop: unrecognized option '%s'", options[1]);
       goto usage;

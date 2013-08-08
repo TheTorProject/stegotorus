@@ -61,7 +61,7 @@ class TracePayloadServer: public PayloadServer
   /**virtual functions */
   unsigned int find_client_payload(char* buf, int len, int type);
 
-  int get_payload (int contentType, int cap, char** buf, int* size);
+  int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal = 0);
 
   /** Moved untouched from payloads.c */
   int init_JS_payload_pool(int len, int type, int minCapacity);

@@ -1,3 +1,4 @@
+
 /* Copyright 2011 Nick Mathewson, George Kadianakis
  * Copyright 2011, 2012 SRI International
  * See LICENSE for other credits and copying information
@@ -11,6 +12,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+#include <event2/buffer.h>
 
 using namespace std;
 

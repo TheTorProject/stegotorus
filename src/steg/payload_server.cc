@@ -5,7 +5,7 @@
 
 #include "util.h"
 #include "payload_server.h"
-#include "swfSteg.h"
+#include "http_steg_mods/swfSteg.h"
 
 #include <ctype.h>
 #include <time.h>
@@ -201,7 +201,6 @@ PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
   }
 
   ext = strchr(ext, '.');
-
 
   if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
       || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))

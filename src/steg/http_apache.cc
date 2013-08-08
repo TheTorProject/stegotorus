@@ -22,11 +22,15 @@ using namespace std;
 #include "apache_payload_server.h"
 
 #include "cookies.h"
-#include "swfSteg.h"
-#include "pdfSteg.h"
-#include "jsSteg.h"
 #include "base64.h"
 #include "b64cookies.h"
+#include "http_steg_mods/file_steg.h"
+#include "http_steg_mods/swfSteg.h"
+#include "http_steg_mods/pdfSteg.h"
+#include "http_steg_mods/jsSteg.h"
+#include "http_steg_mods/jpgSteg.h"
+#include "http_steg_mods/pngSteg.h"
+#include "http_steg_mods/gifSteg.h"
 
 #include "http.h"
 
@@ -175,6 +179,10 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
     size_t no_of_uris = ((ApachePayloadServer*)payload_server)->uri_dict.size();
     for(uri_byte_cut = 0; (no_of_uris /=256) > 0; uri_byte_cut++);
   }
+  else {
+    ((ApachePayloadServer*)payload_server)->chosen_payload_choice_strategy = ApachePayloadServer::c_most_efficient_payload_choice; //This is hard coded now but it should become user's choice
+
+  }
 
   if (!(_curl_multi_handle = curl_multi_init()))
     log_abort("failed to initiate curl multi object.");
@@ -183,7 +191,6 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
     log_abort("failed to allocate evbuffer for protocol data");
 
 }
-
 http_apache_steg_config_t::~http_apache_steg_config_t()
 {
   //delete payload_server; maybe we don't need it
@@ -329,9 +336,8 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
       if (uri_to_send.size() > c_max_uri_length)
         {
           log_debug("%lu too big to be send in uri", uri_to_send.size());
-            return -1;
+            return -1;       
         }
-   
     }
   else
     {

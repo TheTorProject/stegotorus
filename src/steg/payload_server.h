@@ -53,6 +53,13 @@ using namespace std;
 #define HTTP_CONTENT_SWF                3
 #define HTTP_CONTENT_ENCRYPTEDZIP       4
 #define HTTP_CONTENT_HTML               5
+#define HTTP_CONTENT_JPEG               6
+#define HTTP_CONTENT_PNG                7
+#define HTTP_CONTENT_GIF                8
+
+//I could not find a single class that made
+//sense to put this in it so let it be global
+const int c_no_of_steg_protocol = 8;
 
 // used by the JavaScript steg module to distinguish two cases in which
 // JS may appear in the HTTP msg
@@ -228,7 +235,7 @@ class PayloadServer
 
   virtual unsigned int find_client_payload(char* buf, int len, int type) = 0;
 
-  virtual int get_payload (int contentType, int cap, char** buf, int* size) = 0;
+  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal=0) = 0;
 
   virtual int find_uri_type(const char* buf, int size);
 
@@ -243,10 +250,8 @@ class PayloadServer
   static unsigned int get_max_JS_capacity(void);
   static unsigned int get_max_HTML_capacity(void);
 
-
   static unsigned int capacityPDF (char* buf, int len);
   static unsigned int get_max_PDF_capacity(void);
-
 
   /* These are added to make payload_scraper works for now.
      The plan is to make each type of steg payload a class

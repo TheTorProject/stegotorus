@@ -49,16 +49,7 @@ if (init_payload_server) {
       payload_filename = "traces/server.out";
   
     payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
-
-    //initiating the steg modules
-    //TODO: for now the first modules are set to void till their codes be
-    //transformed into a FileStegMod child
-    file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
-    file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
-    file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
-
   }
-
 }
 
 http_steg_config_t::http_steg_config_t(config_t *cfg)
@@ -75,7 +66,28 @@ http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
      file_steg_mods(c_no_of_steg_protocol+1, NULL) //just because there is no protocol with
                                                    //HTTP_CONTENT 0
 {
+<<<<<<< HEAD
   init_http_steg_config_t(init_payload_server);
+ 
+=======
+  if (init_payload_server) {
+    string payload_filename;
+    if (is_clientside)
+      payload_filename = "traces/client.out";
+    else
+      payload_filename = "traces/server.out";
+
+    
+    payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
+
+    //initiating the steg modules
+    //TODO: for now the first modules are set to void till their codes be
+    //transformed into a FileStegMod child
+    file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
+    file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
+    file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
+  }
+>>>>>>> f--image-steg
 }
 
 http_steg_config_t::~http_steg_config_t()

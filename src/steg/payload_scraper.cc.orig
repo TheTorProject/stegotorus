@@ -24,8 +24,11 @@ using namespace boost::filesystem;
 #include "payload_scraper.h"
 #include "base64.h"
 
+<<<<<<< HEAD
 #include "protocol/chop_blk.h" //We need this to no what's the minimum 
                                //acceptable capacity
+=======
+>>>>>>> f--image-steg
 
 /** We read the /etc/httpd/conf/httpd.conf (this need to be more dynamic)
     but I'm testing it on my system which is running arch) find
