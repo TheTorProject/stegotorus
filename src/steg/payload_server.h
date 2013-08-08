@@ -259,6 +259,16 @@ class PayloadServer
   static unsigned int capacityJS(char* buf, int len);
   static unsigned int capacitySWF(char* buf, int len);
 
+  /* Payload manipulation tools */
+
+  /**
+     TODO: IMPLEMENT
+     Gets an HTTP Response header and change the reponse size
+     to the new size.
+
+     @return the length of new header
+   */
+  size_t adjust_header_size(char* original_header, size_t original_length,                            char* newHeader);
 };
 
   /** Moved from payloads.c without a touch. needs clean up */

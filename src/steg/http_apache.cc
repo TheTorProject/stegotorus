@@ -167,13 +167,10 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
     uri_dict_up2date(false)
 
 {
-  string payload_filename;
-  if (is_clientside)
-    payload_filename = "apache_payload/client_list.txt";
-  else
-    payload_filename = "apache_payload/server_list.txt";
+  const string payload_filename(is_clientside ? "apache_payload/client_list.txt" : "apache_payload/server_list.txt");
   
   payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename);
+  init_file_steg_mods();
 
   if (!is_clientside) {//on server side the dictionary is ready to be used
     size_t no_of_uris = ((ApachePayloadServer*)payload_server)->uri_dict.size();
@@ -564,11 +561,9 @@ http_apache_steg_t::~http_apache_steg_t()
 {
   if (curl_inbound) evbuffer_free(curl_inbound);
   if (_curl_client_event) {
-    log_debug(conn,"at steg destructor!");
     event_free(_curl_client_event); 
-    //calling for manual clean up just in case
+    //remove the handle to stop anything related to this handle
     curl_multi_remove_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
-    log_debug(conn,"at steg destructor, releasing curl");
   }
   
   curl_easy_cleanup(_curl_easy_handle);
@@ -665,32 +660,13 @@ http_apache_steg_t::receive(struct evbuffer *dest)
 {
   struct evbuffer *source;
   // unsigned int type;
-  int rval = RECV_BAD;
 
   //if we are on the client side, curl has received the data and hence
   //we need to retrieve the data from this->curl_received_data_evbuf
   //If we are on the server side it is business
   if (config->is_clientside) {
     source = curl_inbound;
-
-    switch(type) {
-
-    case HTTP_CONTENT_SWF:
-      rval = http_handle_client_SWF_receive(this, conn, dest, source);
-      break;
-
-    case HTTP_CONTENT_JAVASCRIPT:
-    case HTTP_CONTENT_HTML:
-      rval = http_handle_client_JS_receive(this, conn, dest, source);
-      break;
-
-    case HTTP_CONTENT_PDF:
-      rval = http_handle_client_PDF_receive(this, conn, dest, source);
-      break;
-    }
-
-    if (rval == RECV_GOOD) have_received = 1;
-    return rval;
+    return http_client_receive(source, dest);
 
   } 
 

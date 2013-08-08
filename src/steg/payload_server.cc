@@ -204,7 +204,7 @@ PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
 
   if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
       || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))
-    return HTTP_CONTENT_HTML;
+    return HTTP_CONTENT_PNG;//For Test HTTP_CONTENT_HTML;
 
   if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
     return HTTP_CONTENT_JAVASCRIPT;
@@ -216,6 +216,8 @@ PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
   if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
     return HTTP_CONTENT_SWF;
 
+  if (!strncmp(ext, ".png", 4) || !strncmp(ext, ".PNG", 4))
+    return HTTP_CONTENT_PNG;
 
 
   free(buf);

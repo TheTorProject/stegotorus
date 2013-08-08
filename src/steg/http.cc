@@ -41,7 +41,7 @@ STEG_DEFINE_MODULE(http);
 void
 http_steg_config_t::init_http_steg_config_t(bool init_payload_server)
 { 
-if (init_payload_server) {
+  if (init_payload_server) {
     string payload_filename;
     if (is_clientside)
       payload_filename = "traces/client.out";
@@ -50,17 +50,23 @@ if (init_payload_server) {
   
     payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
 
-    //initiating the steg modules
-    //TODO: for now the first modules are set to void till their codes be
-    //transformed into a FileStegMod child
-    file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
-    file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
-    file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
-
   }
 
 }
 
+void http_steg_config_t::init_file_steg_mods()
+{
+  // we can't call this in constructor cause 
+  //it should be called after the payload server is initialized
+
+  //initiating the steg modules
+  //TODO: for now the first modules are set to void till their codes be
+  //transformed into a FileStegMod child
+  file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
+
+}
 http_steg_config_t::http_steg_config_t(config_t *cfg)
    : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
@@ -71,9 +77,7 @@ http_steg_config_t::http_steg_config_t(config_t *cfg)
 
 http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
    : steg_config_t(cfg),
-     is_clientside(cfg->mode != LSN_SIMPLE_SERVER),
-     file_steg_mods(c_no_of_steg_protocol+1, NULL) //just because there is no protocol with
-                                                   //HTTP_CONTENT 0
+     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
   init_http_steg_config_t(init_payload_server);
 }
@@ -207,7 +211,7 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
         return 0;
 
       default:
-        return config->payload_server->_payload_database.typed_maximum_capacity(type);
+        hi = config->payload_server->_payload_database.typed_maximum_capacity(type);
       }
         
   }
@@ -662,36 +666,42 @@ int
 http_steg_t::receive(struct evbuffer *dest)
 {
   struct evbuffer *source = conn->inbound();
-  // unsigned int type;
-  int rval = RECV_BAD;
 
   if (config->is_clientside) {
-    switch(type) {
-
-    case HTTP_CONTENT_SWF:
-      rval = http_handle_client_SWF_receive(this, conn, dest, source);
-      break;
-
-    case HTTP_CONTENT_JAVASCRIPT:
-    case HTTP_CONTENT_HTML:
-      rval = http_handle_client_JS_receive(this, conn, dest, source);
-      break;
-
-    case HTTP_CONTENT_PDF:
-      rval = http_handle_client_PDF_receive(this, conn, dest, source);
-      break;
-
-    default:
-      rval = config->file_steg_mods[type]->http_client_receive(conn, dest, source);
-      break;
-     
-    }
-
-    if (rval == RECV_GOOD) have_received = 1;
-    return rval;
+    return http_client_receive(source, dest);
 
   } 
 
   return http_server_receive(conn, dest, source);
+
+}
+
+int
+http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
+{
+  int rval = RECV_BAD;
+
+  switch(type) {
+  case HTTP_CONTENT_SWF:
+    rval = http_handle_client_SWF_receive(this, conn, dest, source);
+    break;
+
+  case HTTP_CONTENT_JAVASCRIPT:
+  case HTTP_CONTENT_HTML:
+    rval = http_handle_client_JS_receive(this, conn, dest, source);
+    break;
+
+  case HTTP_CONTENT_PDF:
+    rval = http_handle_client_PDF_receive(this, conn, dest, source);
+    break;
+
+  default:
+    rval = config->file_steg_mods[type]->http_client_receive(conn, dest, source);
+    break;
+     
+  }
+
+  if (rval == RECV_GOOD) have_received = 1;
+  return rval;
 
 }

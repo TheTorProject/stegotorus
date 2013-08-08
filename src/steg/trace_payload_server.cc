@@ -21,6 +21,8 @@ TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
 
   _payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(0, pl.typePayloadCount[HTTP_CONTENT_SWF]);
 
+  //TODO: Add FileTypeSteg Capability to trace server
+
 }
 
 

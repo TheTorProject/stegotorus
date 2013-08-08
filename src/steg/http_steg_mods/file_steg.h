@@ -52,7 +52,7 @@ protected:
              find the start of body) or RESPONSE_BAD (<0) in case of other
              errors
   */
-  size_t extract_appropriate_respones_body(char* payload_buf, size_t payload_size);
+  static size_t extract_appropriate_respones_body(char* payload_buf, size_t payload_size);
 
   /**
      The overloaded version with evbuffer
@@ -69,7 +69,7 @@ protected:
      @param cover_payload: the cover to embed the data into
      @param cover_len: cover size in byte
 
-     @return < 0 in case of error or 0 at success
+     @return < 0 in case of error or length of the cover with embedded dat at success
    */
   virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) = 0;
 

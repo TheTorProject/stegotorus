@@ -82,17 +82,22 @@ int JPGSteg::starting_point(const uint8_t *raw_data, int len)
 	return lm + 2 + *flen; // 2 for FFDA, and skip the header
 }
 
-ssize_t JPGSteg::capacity(const uint8_t *raw, size_t len)
+ssize_t JPGSteg::capacity(const uint8_t *cover_payload, size_t len)
 {
-	int from = starting_point(raw, len);
-	return len - from - 2 - sizeof(int); // 2 for FFD9, 4 for len
+  return static_capacity((char*)cover_payload, len);
 }
 
 //Temp: should get rid of ASAP
-unsigned int JPGSteg::static_capacity(char *raw, int len)
+unsigned int JPGSteg::static_capacity(char *cover_payload, int len)
 {
-    int from = starting_point((uint8_t*)raw, len);
-	return len - from - 2 - sizeof(int); // 2 for FFD9, 4 for len
+  ssize_t body_offset = extract_appropriate_respones_body(cover_payload, len);
+  if (body_offset == -1) //couldn't find the end of header
+    return 0;  //useless payload
+ 
+  size_t header_length = body_offset - (size_t)cover_payload;
+  
+  int from = starting_point((uint8_t*)body_offset, (size_t)len - header_length);
+  return min(len - header_length - from - 2 - sizeof(int), (size_t)0); // 2 for FFD9, 4 for len
 }
 
 

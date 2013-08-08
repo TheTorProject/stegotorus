@@ -6,6 +6,8 @@
 
 #include <list>
 #include <event2/buffer.h>
+#include <assert.h>
+
 using namespace std;
 
 #include "util.h"
@@ -127,9 +129,10 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   //call this from util to find to extract the buffer into memory block
   int sbuflen = evbuffer_to_memory_block(source, &data1);
   uint8_t outbuf[c_HTTP_MSG_BUF_SIZE];
-  int outbuflen = 0;
+  ssize_t outbuflen = 0;
 
   uint8_t newHdr[MAX_RESP_HDR_SIZE];
+  ssize_t newHdrLen;
 
   if (sbuflen < 0) {
     log_warn("unable to extract the data from evbuffer");
@@ -138,43 +141,53 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   //now we need to choose a payload
   char* cover_payload;
-  size_t cnt;
-        
-  cnt = pick_appropriate_cover_payload(sbuflen, &cover_payload);
-  int body_offset =  extract_appropriate_respones_body(cover_payload , cnt);
+  size_t cnt = pick_appropriate_cover_payload(sbuflen, &cover_payload);
 
+  //we shouldn't touch the cover as there is only one copy of it in the
+  //the cache
+  ssize_t body_offset =  extract_appropriate_respones_body(cover_payload, cnt);
   if (body_offset < 0)
     {
       log_warn("Failed to aquire approperiate payload.");
       return -1;
     }
+  size_t hLen = body_offset - (size_t)cover_payload;
+  memcpy(outbuf, (const void*)body_offset, (cnt-hLen)*sizeof(char));
 
-  int hLen = body_offset - (size_t)cover_payload - 4 + 1;
+  //int hLen = body_offset - (size_t)cover_payload - 4 + 1;
   //extracting the body part of the payload
   log_debug("SERVER embeding data1 with length %d into type %d", (int)cnt, c_content_type);
-  outbuflen = encode(data1, cnt, outbuf, outbuflen);
+  outbuflen = encode(data1, sbuflen, outbuf, cnt - hLen);
 
   if (outbuflen < 0) {
     log_warn("SERVER embeding fails fails");
     return -1;
   }
-  log_debug("SERVER pdfSteg sends resp with hdr len %d body len %d",
+  log_debug("SERVER pdfSteg sends resp with hdr len %lu body len %lu",
             hLen, outbuflen);
 
-  int newHdrLen = gen_response_header((char*) "application/pdf", 0,
-                                      outbuflen, (char*)newHdr, sizeof(newHdr));
+  //TODO instead of generating the header we should just manipulate
+  //it
+  //The only possible problem is length but we are not changing 
+  //the length for now
+  /*int newHdrLen = gen_response_header((char*) "application/pdf", 0,
+    outbuflen, (char*)newHdr, sizeof(newHdr));
   if (newHdrLen < 0) {
     log_warn("SERVER ERROR: gen_response_header fails for pdfSteg");
     return -1;
-  }
+    }*/
+  //I'm not crazy, these are filler for later change
+  assert((size_t)outbuflen == cnt - hLen); //changing length is not supported yet
+  memcpy(newHdr, cover_payload, hLen*sizeof(char)+4);
+  newHdrLen = hLen;
 
   evbuffer *dest = conn->outbound();
   if (evbuffer_add(dest, newHdr, newHdrLen)) {
     log_warn("SERVER ERROR: evbuffer_add() fails for newHdr");
     return -1;
-  }
+    }
 
-  if (evbuffer_add(dest, outbuf, outbuflen)) {
+  if (evbuffer_add(dest, outbuf, cnt)) {
     log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
     return -1;
   }
@@ -205,10 +218,10 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   log_debug("CLIENT received response header with len %d", (int)body_offset-4);
 
   response_len = 0;
-  ssize_t hdrLen = body_offset - 4;
+  ssize_t hdrLen = body_offset;
   response_len += hdrLen;
 
-  httpHdr = evbuffer_pullup(source, body_offset);
+  httpHdr = evbuffer_pullup(source, hdrLen);
   if (httpHdr == NULL) {
     log_warn("CLIENT unable to pullup the complete HTTP header");
     return RECV_BAD;

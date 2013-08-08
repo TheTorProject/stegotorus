@@ -48,7 +48,7 @@ class PNGChunkData
     next_chunk->compute_length();
 
     while(next_chunk->chunk_offset < payload_end) {
-      if  (memcmp(type, next_chunk->chunk_offset, 4 * sizeof(uint8_t)))
+      if  (!memcmp(type, next_chunk->chunk_offset + 4, 4 * sizeof(uint8_t)))
         return next_chunk->chunk_offset;
 
       next_chunk->chunk_offset += next_chunk->length + (size_t)12;
@@ -84,7 +84,7 @@ class PNGChunkData
       aux_chunk.chunk_offset = cur_chunk_offset;
       aux_chunk.payload_end = payload_end;
       aux_chunk.compute_length();
-      assert(get_next_IDAT_chunk(this));
+      assert(aux_chunk.get_next_IDAT_chunk(this));
       
     }
 

@@ -40,11 +40,16 @@ ssize_t GIFSteg::capacity(const uint8_t *raw, size_t len)
 }
 
 //Temp: should get rid of ASAP
-unsigned int GIFSteg::static_capacity(char *raw, int len)
-
+unsigned int GIFSteg::static_capacity(char *cover_payload, int len)
 {
-  int from = starting_point((uint8_t*)raw, len);
-	return len - from - 1 - sizeof(size_t); // 1 for 0x3B, 4 for len
+  ssize_t body_offset = extract_appropriate_respones_body(cover_payload, len);
+  if (body_offset == -1) //couldn't find the end of header
+    return 0;  //useless payload
+ 
+  size_t header_length = body_offset - (size_t)cover_payload;
+
+  int from = starting_point((uint8_t*)body_offset, len - header_length);
+  return min(len - header_length - from - 1 - sizeof(size_t), (size_t)0); // 1 for 0x3B, 4 for len
 }
 
 

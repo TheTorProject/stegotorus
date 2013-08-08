@@ -38,13 +38,9 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
   if (_side == server_side) {
     //Initializing type specific data, we initiate with max_capacity = 0, count = 0
     //I don't think we need this as we have the default constructor doing the same
-    _payload_database.type_detail[HTTP_CONTENT_JAVASCRIPT] =  TypeDetail(0, 0);
-    _payload_database.type_detail[HTTP_CONTENT_HTML] =  TypeDetail(0, 0);
-
-    _payload_database.type_detail[HTTP_CONTENT_PDF] =  TypeDetail(0, 0);
-
-    _payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(0, 0);
-    _payload_database.type_detail[HTTP_CONTENT_JPEG] = TypeDetail(0, 0);
+    TypeDetail init_empty_type;
+    for(int cur_type = 1; cur_type < c_no_of_steg_protocol+1; cur_type++)
+      _payload_database.type_detail[cur_type] = init_empty_type;
     //it should be like this but beacause they are not pointers 
     //we are in trouble need to change the type to pointer
     //_payload_database.type_detail = new TypeDetail[c_no_of_steg_protocol];
@@ -325,7 +321,7 @@ ApachePayloadServer::find_url_type(const char* uri)
 
   if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
       || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))
-    return HTTP_CONTENT_HTML;
+    return HTTP_CONTENT_PNG;//HTML;
 
   if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
     return HTTP_CONTENT_JAVASCRIPT;
@@ -336,6 +332,9 @@ ApachePayloadServer::find_url_type(const char* uri)
 
   if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
     return HTTP_CONTENT_SWF;
+
+  if (!strncmp(ext, ".png", 4) || !strncmp(ext, ".PNG", 4))
+    return HTTP_CONTENT_PNG;
 
   return 0;
 }

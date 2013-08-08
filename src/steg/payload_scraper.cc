@@ -73,6 +73,12 @@ int PayloadScraper::scrape_dir(const path dir_path)
             //to ignore totally corrupted package and chop should be allowed to send
             //package with 0 room.
 
+            //We are not going to transfer more than one block size per
+            //payload so If capacity is bigger than chop_blk::MAX_BLOCK_SIZE
+            //we set it back at that
+            if (capacity > chop_blk::MAX_BLOCK_SIZE) 
+              capacity = chop_blk::MAX_BLOCK_SIZE;
+
             _payload_db << total_file_count << " " << cur_steg->type << " " << url_hash64 << " " << capacity << " " << cur_filelength << " " << cur_url <<"\n";
           }
     }
@@ -103,19 +109,19 @@ PayloadScraper::PayloadScraper(string  database_filename, string apache_conf)
   _available_stegs = new steg_type[c_no_of_steg_protocol];
 
   _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = NULL;
-  _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js";  _available_stegs[0].capacity_function = PayloadServer::capacityJS;
+  _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js0";  _available_stegs[0].capacity_function = PayloadServer::capacityJS;
 
   _available_file_stegs[HTTP_CONTENT_PDF] = NULL;
-  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PayloadServer::capacityPDF;
+  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf0"; _available_stegs[1].capacity_function = PayloadServer::capacityPDF;
 
   _available_file_stegs[HTTP_CONTENT_SWF] = NULL;
-  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = PayloadServer::capacitySWF;
+  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf0";  _available_stegs[2].capacity_function = PayloadServer::capacitySWF;
 
   _available_file_stegs[HTTP_CONTENT_HTML] = NULL; 
-  _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html";  _available_stegs[3].capacity_function = PayloadServer::capacityJS;
+  _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html0";  _available_stegs[3].capacity_function = PayloadServer::capacityJS;
 
   //in new model, extensions are stored in list so one type can have more ext.
-  _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  _available_stegs[4].capacity_function = PayloadServer::capacityJS;
+  _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm0";  _available_stegs[4].capacity_function = PayloadServer::capacityJS;
 
   _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(NULL); //We are only using the capacity function so we don't need a payload server
   _available_stegs[5].type = HTTP_CONTENT_JPEG; _available_stegs[5].extension = ".jpg"; _available_stegs[5].capacity_function = JPGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
@@ -124,7 +130,7 @@ PayloadScraper::PayloadScraper(string  database_filename, string apache_conf)
   _available_stegs[6].type = HTTP_CONTENT_PNG; _available_stegs[6].extension = ".png"; _available_stegs[6].capacity_function = PNGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
 
   _available_file_stegs[HTTP_CONTENT_GIF] = new GIFSteg(NULL); //We are only using the capacity function so we don't need a payload server
-  _available_stegs[7].type = HTTP_CONTENT_GIF; _available_stegs[6].extension = ".gif"; _available_stegs[7].capacity_function = GIFSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
+  _available_stegs[7].type = HTTP_CONTENT_GIF; _available_stegs[7].extension = ".gif"; _available_stegs[7].capacity_function = GIFSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
 
   _available_stegs[8].type = 0;
 

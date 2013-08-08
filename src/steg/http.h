@@ -17,7 +17,7 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
     PayloadServer* payload_server;
 
     //list of available steg type modules
-    vector<FileStegMod*> file_steg_mods;
+    map<unsigned int, FileStegMod*> file_steg_mods;
 
     /** If you are a child of http_steg_t and you want to initiate your own,
         you need to call this constructor in your config_t constructor instead.
@@ -32,6 +32,11 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
        a constructor inside another and we have to have another init function
        called by both constructors */
     void init_http_steg_config_t(bool init_payload_server);
+    
+    /**
+       init the each file steg mod
+    */
+    void init_file_steg_mods();
 
     STEG_CONFIG_DECLARE_METHODS(http);
 
@@ -54,7 +59,7 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
     virtual int http_client_uri_transmit (struct evbuffer *source, conn_t *conn);
     virtual int http_client_cookie_transmit (struct evbuffer *source, conn_t *conn);
     virtual int http_server_receive(conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
-
+    virtual int http_client_receive(evbuffer *source, evbuffer *dest);
   };
 
 #endif

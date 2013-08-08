@@ -4,4 +4,10 @@ transmit_cookie
   conn_do_flush
    downstream_flush_cb
     conn->write_eof = true;
+
+client_recieve_TYPE
+ expect_close
+  process_queue
+   circuit_arm_flush_time
+    chop->send
   
