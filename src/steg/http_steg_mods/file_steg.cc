@@ -163,7 +163,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     log_warn("SERVER embeding fails fails");
     return -1;
   }
-  log_debug("SERVER pdfSteg sends resp with hdr len %lu body len %lu",
+  log_debug("SERVER FileSteg sends resp with hdr len %lu body len %lu",
             hLen, outbuflen);
 
   //TODO instead of generating the header we should just manipulate

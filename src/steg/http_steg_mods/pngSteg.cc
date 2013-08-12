@@ -47,12 +47,12 @@ unsigned int PNGSteg::static_capacity(char *cover_payload, int cover_length)
 int PNGSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len)
 {
   //Make a new block of data with data length attached
-  uint8_t lengthed_data[data_len + sizeof(data_len)]; //This is in stack I hope
+  uint8_t lengthed_data[data_len + sizeof(uint32_t)]; //This is in stack I hope
   uint32_t data_len_encode = (uint32_t)data_len;
   memcpy(lengthed_data, &data_len_encode, sizeof(uint32_t));
-  memcpy(lengthed_data+sizeof(data_len), data, data_len * sizeof(uint8_t));
+  memcpy(lengthed_data+sizeof(uint32_t), data, data_len * sizeof(uint8_t));
 
-  uint8_t* end_of_data = lengthed_data + data_len + sizeof(data_len);
+  uint8_t* end_of_data = lengthed_data + data_len + sizeof(uint32_t);
   uint8_t* cur_data_offset = lengthed_data;
   PNGChunkData next_data_chunk(cover_payload + c_magic_header_length, cover_payload + cover_len), cur_data_chunk;
 
