@@ -181,7 +181,6 @@ int PayloadScraper::apache_conf_parser()
           if (_apache_doc_root[_apache_doc_root.length()-1] != '/')
             _apache_doc_root.push_back('/');
 
-
           return 0;
         }
     }
@@ -227,6 +226,8 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
   unsigned int capacity = cur_steg->capacity_function(buf, apache_size);
 
   //no delete need for buf because new is overloaded to handle that
+  //TODO:or is it? i see a relative huge memory consumption when the payload 
+  //scraperneeds to recompute the db
   return pair<unsigned long, unsigned long>(cur_filelength, capacity);
 
 }

@@ -612,7 +612,7 @@ chop_circuit_t::send()
     if (no_target_connection) {
       log_debug(this, "number of open connections on this circuit %u, golobally %u", (unsigned int)downstreams.size(), (unsigned int) conn_count());
       if (config->mode != LSN_SIMPLE_SERVER &&
-          (int)downstreams.size() < min(MAX_CONN_PER_CIRCUIT, ((int)(MAX_GLOBAL_CONN_COUNT - conn_count() + (int)circuit_count() - 1)/(int)circuit_count()))) //min(8, and ceilling of (MAX - count)/no of circ)
+          (int)downstreams.size() < min(MAX_CONN_PER_CIRCUIT, ((int)(MAX_GLOBAL_CONN_COUNT - conn_count() + (int)circuit_count() - 1)/(int)circuit_count()))) //min(8, and ceilling of (MAX - count)/no of circ) 
         circuit_reopen_downstreams(this);
       else {
         log_debug(this,"no more connection available at this time");
