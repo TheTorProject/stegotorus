@@ -22,6 +22,7 @@ using namespace boost::filesystem;
 #include "protocol/chop_blk.h" //We need this to no what's the minimum 
                                //acceptable capacity
 
+#define TEMP_MOUNT_DIR "/tmp/remote_www"
 /** We read the /etc/httpd/conf/httpd.conf (this need to be more dynamic)
     but I'm testing it on my system which is running arch) find
     the DocumentRoot. Then it will check the directory recursively and
@@ -81,8 +82,10 @@ int PayloadScraper::scrape_dir(const path dir_path)
     
     @param database_filename the name of the file to store the payload list   
 */
-PayloadScraper::PayloadScraper(string  database_filename, string apache_conf)
-  :_available_stegs(NULL), capacity_handle(curl_easy_init())
+PayloadScraper::PayloadScraper(string  database_filename, string cover_server, string apache_conf)
+  :_available_stegs(NULL), 
+   capacity_handle(curl_easy_init()),
+   
 {
   /* curl initiation */
   log_assert(capacity_handle);
@@ -92,6 +95,7 @@ PayloadScraper::PayloadScraper(string  database_filename, string apache_conf)
   curl_easy_setopt(capacity_handle, CURLOPT_WRITEFUNCTION, curl_read_data_cb);
   
   _database_filename = database_filename;
+  _cover_server = cover_server;
   _apache_conf_filename  = apache_conf;
 
   /** This is hard coded */
@@ -126,14 +130,42 @@ int PayloadScraper::scrape()
       return -1;
     }
 
-  /* look for doc root dir */
-  if (apache_conf_parser())
-    {
+  // looking for doc root dir...
+  // If the http server is localhost, then try read localy...
+  bool remote_mount = false; //true if the doc_root is mounted from remote host
+  if (_cover_server == "127.0.0.1")
+    if (apache_conf_parser())
       log_warn("error in retrieving apache doc root: %s",strerror(errno));
+
+
+  if (_apache_doc_root.empty()) {
+    // if the http server is remote or we failed to retrieve the 
+    //   doc_root then try to connect to the server through ftp
+    //   and mount the www dir
+  
+    // we need to make directory to mount the remote www dir
+    boost::filesystem::path mount_dir(TEMP_MOUNT_DIR);
+    if (!(boost::filesystem::exists(mount_dir) ||
+          boost::filesystem::create_directory(mount_dir))) {
+      log_warn("Failed to create a temp dir to mount remote filesystem");
       _payload_db.close();
       return -1;
     }
-  
+
+    string ftp_mount_command_string = "curlftpfs ftp://";
+    ftp_mount_command_string += _cover_server + " " + TEMP_MOUNT_DIR;
+
+    int mount_result = system(ftp_mount_command_string.c_str());
+    if (mount_result) {
+      log_warn("Failed to mount the remote filesystem");
+      _payload_db.close();
+      return -1;
+    }
+
+    remote_mount = true;
+    _apache_doc_root = TEMP_MOUNT_DIR;
+
+  }
   /* now all we need to do is to call scrape */
   path dir_path(_apache_doc_root);
   if (scrape_dir(dir_path) < 0)
@@ -143,6 +175,12 @@ int PayloadScraper::scrape()
       return -1;
     }
     
+  if (remote_mount) {
+    string ftp_unmount_command_string = "fusermount -u "
+    ftp_mount_command_string += TEMP_MOUNT_DIR;
+    
+    system(ftp_unmount_command_string);
+  }
   _payload_db.close();
   return 0;
   
@@ -189,7 +227,7 @@ int PayloadScraper::apache_conf_parser()
      I should probably return a defult dir in this case
      but we return error for now
   */
-  fprintf(stderr, "DocumentRoot isn't specified in apache config file");
+  log_warn("DocumentRoot isn't specified in apache config file");
   return -1;
 
 }

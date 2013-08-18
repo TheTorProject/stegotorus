@@ -161,15 +161,15 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
   : http_steg_config_t(cfg, false),
     _cur_operation(op_STEG_NO_OP),
     uri_dict_up2date(false)
-
 {
   string payload_filename;
+
   if (is_clientside)
     payload_filename = "apache_payload/client_list.txt";
   else
     payload_filename = "apache_payload/server_list.txt";
   
-  payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename);
+  payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename, config->cover_server);
 
   if (!is_clientside) {//on server side the dictionary is ready to be used
     size_t no_of_uris = ((ApachePayloadServer*)payload_server)->uri_dict.size();

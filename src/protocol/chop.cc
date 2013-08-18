@@ -4,6 +4,7 @@
 
 #include "util.h"
 #include "chop_blk.h"
+#include "chop_handshaker.h"
 #include "connections.h"
 #include "crypt.h"
 #include "protocol.h"
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include "steg.h"
 
+#include "transparent_proxy.h"
 
 #include <tr1/unordered_map>
 #include <sstream>
@@ -163,6 +165,9 @@ struct chop_config_t : config_t
   unsigned long total_transmited_data_bytes;
   unsigned long total_transmited_cover_bytes;
 
+  /* Transparent proxy and cover server */
+  string cover_server_address;
+  TransparentProxy* transparent_proxy;
 
   CONFIG_DECLARE_METHODS(chop);
 };
@@ -170,7 +175,8 @@ struct chop_config_t : config_t
 // Configuration methods
 
 chop_config_t::chop_config_t()
-  : total_transmited_data_bytes(0), total_transmited_cover_bytes(1) 
+  : total_transmited_data_bytes(0), total_transmited_cover_bytes(1),
+    transparent_proxy(NULL)
                                     //just to evade div by 0
 {
   ignore_socks_destination = true;
@@ -241,6 +247,8 @@ chop_config_t::init(int n_options, const char *const *options)
       retransmit = false;
     } else if (!strcmp(options[1], "--enable-retransmit")) {
       retransmit = true;
+    } else if (!strcmp(options[1], "--cover-server")) {
+      transparent_proxy = new TransparentProxy(base, options[2]);
     } else {
       log_warn("chop: unrecognized option '%s'", options[1]);
       goto usage;
@@ -1544,7 +1552,12 @@ chop_conn_t::send(struct evbuffer *block)
       log_abort(this, "handshake: can't happen: up%c cid=%u",
                 upstream ? '+' : '-',
                 upstream ? upstream->circuit_id : 0);
-    if (evbuffer_prepend(block, (void *)&upstream->circuit_id,
+    /*hear we need to cook the handshake */
+    uint8_t conn_handshake[HANDSHAKE_LEN];
+    ChopHandshake handshaker(upstream->circuit_id);
+    handshaker.generate(conn_handshake, upstream->ecb_encryptor);
+    
+    if (evbuffer_prepend(block, (void *)conn_handshake,
                          HANDSHAKE_LEN)) {
       log_warn(this, "failed to prepend handshake to first block");
       return -1;
@@ -1580,6 +1593,13 @@ chop_conn_t::handshake()
   return 0;
 }
 
+/**
+ checks if the handshake is correctly authenticated
+
+ @return 0 success
+         1 failed, transparentized the connection
+        -1 failed, unrecoverable, please close the connection
+*/
 int
 chop_conn_t::recv_handshake()
 {
@@ -1587,9 +1607,25 @@ chop_conn_t::recv_handshake()
   log_assert(config->mode == LSN_SIMPLE_SERVER);
 
   uint32_t circuit_id;
-  if (evbuffer_remove(recv_pending, (void *)&circuit_id,
+  ChopHandshaker handshker;
+  uint8_t* conn_handshake[HANDSHAKE_LEN];
+
+  if (evbuffer_remove(recv_pending, (void *)conn_handshake,
                       sizeof circuit_id) != sizeof circuit_id)
     return -1;
+
+  if (!handshaker.verify_and_extract(conn_handshake, upstream->ecb_decryptor)) {
+    //invalid handshake, if we have a transparent proxy we 
+    //we'll act as one for this connection
+    if (transparent_proxy) {
+      transparent_proxy.transparentize_connection(this);
+      return 1;
+    }
+    
+    return -1
+  }
+
+  circuit_id = handshaker.circuit_id;
 
   chop_circuit_table::value_type in(circuit_id, (chop_circuit_t *)0);
   std::pair<chop_circuit_table::iterator, bool> out
@@ -1626,8 +1662,18 @@ chop_conn_t::recv_handshake()
 int
 chop_conn_t::recv()
 {
-  if (steg->receive(recv_pending))
+  if (steg->receive(recv_pending)) {
+    //If steg fails in recovering the data
+    //then maybe it wasn't an steg data to begin with
+    //so we have transparent proxy we will become 
+    //transparent at this moment
+    if (transparent_proxy) {
+      transparent_proxy.transparentize_connection();
+      return 0;
+    }
+ 
     return -1;
+  }
 
   // If that succeeded but did not copy anything into recv_pending,
   // wait for more data.
@@ -1648,8 +1694,16 @@ chop_conn_t::recv()
     }
 
     // We're the server. Try to receive a handshake.
-    if (recv_handshake())
-      return -1;
+    switch(recv_handshake()) 
+      {
+      case 1:
+        //this connection was transparentized return 0 and don't 
+        //worry about it any more
+        return 0;
+      case -1:
+        //unrecoverable error, close the connection
+        return -1;
+      }
 
     // If we get here and ->upstream is not set, this is a connection
     // for a stale circuit: that is, a new connection made by the
