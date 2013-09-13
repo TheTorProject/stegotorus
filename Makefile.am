@@ -50,6 +50,7 @@ libstegotorus_a_SOURCES = \
 	src/util.cc \
 	src/util-net.cc \
 	src/curl_util.cc \
+	src/transparent_proxy.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
 
 if WINDOWS

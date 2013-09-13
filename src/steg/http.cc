@@ -627,7 +627,7 @@ http_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, struct evb
   this->type = type;
 
   // FIXME: should decide whether or not to do this based on the
-  // Connection: header.  (Needs additional changes elsewhere, esp.
+  // Connection: header. (Needs additional changes elsewhere, esp.
   // in transmit_room.)
   conn->expect_close();
 

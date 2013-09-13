@@ -1,0 +1,9 @@
+For now we assume that client knowledge of the server public key is
+the shared secret between them and is the potection against knocking.
+
+chop_conn_t::send calls gen_handshake
+gen_handshake returns
+aP, Pad, SHA256(abP+Pad) abP
+
+But for now all we do, is Pad:
+Circuit_id + Pad + HKDF_SHA256

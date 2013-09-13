@@ -109,18 +109,18 @@ namespace  {
 
     http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn);
 
-     virtual int http_client_uri_transmit (struct evbuffer *source, conn_t *conn);
-     virtual int http_server_receive(conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
+    virtual int http_client_uri_transmit (struct evbuffer *source, conn_t *conn);
+    virtual int http_server_receive(conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
 
-     virtual int http_server_receive_cookie(char* p, struct evbuffer *dest);
-     virtual int http_server_receive_uri(char *p, struct evbuffer *dest);
+    virtual int http_server_receive_cookie(char* p, struct evbuffer *dest);
+    virtual int http_server_receive_uri(char *p, struct evbuffer *dest);
   
     /**
        We curl tries to open a socket, it calls this function which
        returns the socket which already has been opened using 
        eventbuffer_socket_connect at the time of creation of the
        connection.
-     */
+    */
     static curl_socket_t get_conn_socket(void *conn,
                                 curlsocktype purpose,
                                          struct curl_sockaddr *address);
@@ -163,13 +163,23 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
     uri_dict_up2date(false)
 {
   string payload_filename;
+  string cover_server;
 
   if (is_clientside)
     payload_filename = "apache_payload/client_list.txt";
-  else
+  else {
     payload_filename = "apache_payload/server_list.txt";
-  
-  payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename, config->cover_server);
+
+    //We absolutely need a cover server, it is either provided by the protocol or we 
+    //try to use local
+    cover_server = "127.0.0.1";
+    if (!cfg->steg_mod_user_configs["protocol"].empty())
+      cover_server = cfg->steg_mod_user_configs["protocol"]["cover_server"] != "" ?
+        cfg->steg_mod_user_configs["protocol"]["cover_server"] : cover_server;
+
+  }
+
+  payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename, cover_server);
 
   if (!is_clientside) {//on server side the dictionary is ready to be used
     size_t no_of_uris = ((ApachePayloadServer*)payload_server)->uri_dict.size();

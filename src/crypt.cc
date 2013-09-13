@@ -834,7 +834,7 @@ uint8_t*
 sha1(const uint8_t* buffer, size_t n, uint8_t* md)
 {
   if (md == NULL)
-    md = (uint8_t*) xmalloc(SHA1_DIGEST_LENGTH);
+    md = (uint8_t*) xmalloc(SHA_DIGEST_LENGTH);
   
   SHA1(buffer, n, md);
 

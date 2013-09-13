@@ -3,6 +3,9 @@
  *
  * AUTHOR:
  *    Vmon (vmon@riseup.net): August 2013: initial version
+ *  
+ * I have not used it yet. Transparent proxy seems to be an 
+ * easier approach.
  */
 
 #ifndef TRANSPARENT_CIRCUIT_H

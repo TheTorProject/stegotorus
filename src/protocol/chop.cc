@@ -3,10 +3,10 @@
  */
 
 #include "util.h"
+#include "crypt.h"
 #include "chop_blk.h"
 #include "chop_handshaker.h"
 #include "connections.h"
-#include "crypt.h"
 #include "protocol.h"
 #include "rng.h"
 #include <algorithm>
@@ -16,6 +16,7 @@
 
 #include <tr1/unordered_map>
 #include <sstream>
+#include <string>
 
 #include <tr1/unordered_set>
 #include <vector>
@@ -123,7 +124,7 @@ struct chop_circuit_t : circuit_t
      @return the first connection whose steg has data to send
   */
   chop_conn_t* check_for_steg_protocol_data();
-  chop_conn_t *pick_connection(size_t desired, size_t minimum,
+  chop_conn_t* pick_connection(size_t desired, size_t minimum,
                                size_t *blocksize);
 
   int recv_block(uint32_t seqno, opcode_t op, evbuffer *payload, conn_t *conn);
@@ -165,8 +166,18 @@ struct chop_config_t : config_t
   unsigned long total_transmited_data_bytes;
   unsigned long total_transmited_cover_bytes;
 
+  /*ecb encryptor and decryptor for the handshake*/
+  ecb_encryptor* handshake_encryptor;
+  ecb_decryptor* handshake_decryptor;
+
+  /**
+     create the approperiate block cipher with 
+     approperiate keys for the handshake
+   */
+  void init_handshake_encryption();
   /* Transparent proxy and cover server */
-  string cover_server_address;
+  std::string cover_server_address; //is the server that is going to serve covers
+  //in case the steg module expect a cover server.
   TransparentProxy* transparent_proxy;
 
   CONFIG_DECLARE_METHODS(chop);
@@ -175,7 +186,10 @@ struct chop_config_t : config_t
 // Configuration methods
 
 chop_config_t::chop_config_t()
-  : total_transmited_data_bytes(0), total_transmited_cover_bytes(1),
+  : total_transmited_data_bytes(0), 
+    total_transmited_cover_bytes(1),
+    handshake_encryptor(NULL),
+    handshake_decryptor(NULL),
     transparent_proxy(NULL)
                                     //just to evade div by 0
 {
@@ -248,7 +262,12 @@ chop_config_t::init(int n_options, const char *const *options)
     } else if (!strcmp(options[1], "--enable-retransmit")) {
       retransmit = true;
     } else if (!strcmp(options[1], "--cover-server")) {
+      cover_server_address = options[2];
       transparent_proxy = new TransparentProxy(base, options[2]);
+      //This is not related to an specific steg module hence, we store it under
+      //"protocol" tag
+      steg_mod_user_configs["protocol"]["cover_server"] = cover_server_address;
+                       
     } else {
       log_warn("chop: unrecognized option '%s'", options[1]);
       goto usage;
@@ -262,6 +281,9 @@ chop_config_t::init(int n_options, const char *const *options)
     log_warn("chop: invalid up address: %s", options[1]);
     goto usage;
   }
+
+  //init the header encryptor and the decryptor
+  init_handshake_encryption();
 
   // From here on out, arguments alternate between downstream
   // addresses and steg targets.
@@ -341,6 +363,33 @@ chop_config_t::get_steg(size_t n) const
 
 const char passphrase[] =
   "did you buy one of therapist reawaken chemists continually gamma pacifies?";
+
+void
+chop_config_t::init_handshake_encryption()
+{
+  key_generator *kgen = 0;
+
+  if (encryption)
+    kgen = key_generator::from_passphrase((const uint8_t *)passphrase,
+                                          sizeof(passphrase) - 1,
+                                          0, 0, 0, 0);
+  if (mode == LSN_SIMPLE_SERVER) {
+    if (encryption) {
+      handshake_decryptor = ecb_decryptor::create(kgen, 16);
+    } else {
+      handshake_decryptor = ecb_decryptor::create_noop();
+    }
+  } else {
+    if (encryption) {
+      handshake_encryptor = ecb_encryptor::create(kgen, 16);
+    } else {
+      handshake_encryptor = ecb_encryptor::create_noop();
+    }
+  }
+
+  delete kgen;
+
+}
 
 circuit_t *
 chop_config_t::circuit_create(size_t)
@@ -1554,8 +1603,8 @@ chop_conn_t::send(struct evbuffer *block)
                 upstream ? upstream->circuit_id : 0);
     /*hear we need to cook the handshake */
     uint8_t conn_handshake[HANDSHAKE_LEN];
-    ChopHandshake handshaker(upstream->circuit_id);
-    handshaker.generate(conn_handshake, upstream->ecb_encryptor);
+    ChopHandshaker handshaker(upstream->circuit_id);
+    handshaker.generate(conn_handshake, *(config->handshake_encryptor));
     
     if (evbuffer_prepend(block, (void *)conn_handshake,
                          HANDSHAKE_LEN)) {
@@ -1607,22 +1656,22 @@ chop_conn_t::recv_handshake()
   log_assert(config->mode == LSN_SIMPLE_SERVER);
 
   uint32_t circuit_id;
-  ChopHandshaker handshker;
-  uint8_t* conn_handshake[HANDSHAKE_LEN];
+  ChopHandshaker handshaker;
+  uint8_t conn_handshake[HANDSHAKE_LEN];
 
   if (evbuffer_remove(recv_pending, (void *)conn_handshake,
-                      sizeof circuit_id) != sizeof circuit_id)
+                      HANDSHAKE_LEN) != HANDSHAKE_LEN)
     return -1;
 
-  if (!handshaker.verify_and_extract(conn_handshake, upstream->ecb_decryptor)) {
+  if (!handshaker.verify_and_extract(conn_handshake, *(config->handshake_decryptor))) {
     //invalid handshake, if we have a transparent proxy we 
     //we'll act as one for this connection
-    if (transparent_proxy) {
-      transparent_proxy.transparentize_connection(this);
+    if (config->transparent_proxy) {
+      config->transparent_proxy->transparentize_connection(this);
       return 1;
     }
     
-    return -1
+    return -1;
   }
 
   circuit_id = handshaker.circuit_id;
@@ -1667,8 +1716,8 @@ chop_conn_t::recv()
     //then maybe it wasn't an steg data to begin with
     //so we have transparent proxy we will become 
     //transparent at this moment
-    if (transparent_proxy) {
-      transparent_proxy.transparentize_connection();
+    if (config->transparent_proxy) {
+      config->transparent_proxy->transparentize_connection(this);
       return 0;
     }
  

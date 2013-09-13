@@ -84,8 +84,7 @@ int PayloadScraper::scrape_dir(const path dir_path)
 */
 PayloadScraper::PayloadScraper(string  database_filename, string cover_server, string apache_conf)
   :_available_stegs(NULL), 
-   capacity_handle(curl_easy_init()),
-   
+   capacity_handle(curl_easy_init())
 {
   /* curl initiation */
   log_assert(capacity_handle);
@@ -176,10 +175,10 @@ int PayloadScraper::scrape()
     }
     
   if (remote_mount) {
-    string ftp_unmount_command_string = "fusermount -u "
-    ftp_mount_command_string += TEMP_MOUNT_DIR;
+    string ftp_unmount_command_string = "fusermount -u ";
+    ftp_unmount_command_string += TEMP_MOUNT_DIR;
     
-    system(ftp_unmount_command_string);
+    system(ftp_unmount_command_string.c_str());
   }
   _payload_db.close();
   return 0;

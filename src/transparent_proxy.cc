@@ -33,64 +33,14 @@
 using namespace std;
 
 #include "util.h"
-#include "connection.h"
-
-const char* program_name;
+#include "connections.h"
 
 static double drop_rate = 0; //do not drop anything by default
 
-class TransparentProxy
-{
-protected:
-  bool trace_packet_data;
-  struct sockaddr_storage connect_to_addr;
-  int connect_to_addrlen;
-  struct event_base *base;
-  struct sockaddr_storage listen_on_addr;
-  struct evconnlistener *listener;
+#include "transparent_proxy.h"
 
-public:
-
-  static void drained_writecb(struct bufferevent *bev, void *ctx);
-  static void eventcb(struct bufferevent *bev, short what, void *ctx);
-  static void close_on_finished_writecb(struct bufferevent *bev, void *ctx)
-
-  static void readcb(struct bufferevent *bev, void *ctx);
-
-  static void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
-            struct sockaddr *a, int slen, void *p);
-
-  /**
-     This will receive a chop_conn that failed/ignored to handshake
-     and turn it into a transparent circuit to the cover server, hence
-     it acts similar to accept_cb except that the downstream connection
-     is already established.
-   */
-  void transparentize_connection();
-
-  void set_upstream_address(const string* upstream_address)
-  {
-    memset(&connect_to_addr, 0, sizeof(connect_to_addr));
-    connect_to_addrlen = sizeof(connect_to_addr);
-    assert(evutil_parse_sockaddr_port(upstream_address,
-                                      (struct sockaddr*)&connect_to_addr, &connect_to_addrlen)>=0);
-  }
-
-  /** 
-    Constructor: starts listening
-  */
-  TransparentProxy(event_base* cur_event_base);
-
-  /**
-     Destructor: dismantle the events
-  */
-  ~TransparentProxy()
-  {
-    if (listener)
-      evconnlistener_free(listener);
-  }
-
-};
+#define MAX_OUTPUT (512*1024)
+bool TransparentProxy::trace_packet_data = false;
 
 /** 
   Constructor: starts listening
@@ -100,24 +50,26 @@ public:
                             all connection is going to be deligated
                             it can be left NULL
 */
-    TransparentProxy(event_base* cur_event_base, const string* upstream_address,const string* downstream_port=NULL)
-  :trace_packet_data(false),
-   listener(NULL)
+TransparentProxy::TransparentProxy(event_base* cur_event_base, const string& upstream_address,const string& downstream_port)
+  : listener(NULL)
 {
   base = cur_event_base;
   if (!base) {
-    log_warn("event_base_new()");
-    return 1;
+    log_abort("event_base_new()");
+    return;
   }
    
   set_upstream_address(upstream_address);
-  if (downstream_port) {
+
+  //if it is empty they are going to give us the downstream
+  //connection after it gets connected
+  if (!downstream_port.empty()) {
     memset(&listen_on_addr, 0, sizeof(listen_on_addr));
     int socklen = sizeof(listen_on_addr);
-
+  
     if (evutil_parse_sockaddr_port(optarg,
                                    (struct sockaddr*)&listen_on_addr, &socklen)<0) {
-      int p = atoi(downstream_port.cstr());
+      int p = atoi(downstream_port.c_str());
       struct sockaddr_in *sin = (struct sockaddr_in*)&listen_on_addr;
            
       assert(!(p < 1 || p > 65535));
@@ -126,16 +78,16 @@ public:
       sin->sin_addr.s_addr = htonl(0x7f000001);
       sin->sin_family = AF_INET;
       socklen = sizeof(struct sockaddr_in);
-      
-      listener = evconnlistener_new_bind(base, accept_cb, NULL,
-                                         LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE,
-                                         -1, (struct sockaddr*)&listen_on_addr, sizeof(listen_on_addr));
     }
 
-  
-}
+    listener = evconnlistener_new_bind(base, accept_cb, NULL,
+                                       LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE,
+                                       -1, (struct sockaddr*)&listen_on_addr, sizeof(listen_on_addr));
 
-static void
+  }
+
+}
+void
 TransparentProxy::readcb(struct bufferevent *bev, void *ctx)
 {
   struct bufferevent *partner = (bufferevent *)ctx;
@@ -155,7 +107,7 @@ TransparentProxy::readcb(struct bufferevent *bev, void *ctx)
   }
 
   //indicating that we have passed the packet
-  log_debug(stderr, ".");
+  log_debug(".");
 
   dst = bufferevent_get_output(partner);
   evbuffer_add_buffer(dst, src);
@@ -172,7 +124,7 @@ TransparentProxy::readcb(struct bufferevent *bev, void *ctx)
   }
 }
 
-static void
+void
 TransparentProxy::drained_writecb(struct bufferevent *bev, void *ctx)
 {
   struct bufferevent *partner = (bufferevent *)ctx;
@@ -185,7 +137,7 @@ TransparentProxy::drained_writecb(struct bufferevent *bev, void *ctx)
     bufferevent_enable(partner, EV_READ);
 }
 
-static void
+void
 TransparentProxy::close_on_finished_writecb(struct bufferevent *bev, void *ctx)
 {
   struct evbuffer *b = bufferevent_get_output(bev);
@@ -196,7 +148,7 @@ TransparentProxy::close_on_finished_writecb(struct bufferevent *bev, void *ctx)
   }
 }
 
-static void
+void
 TransparentProxy::eventcb(struct bufferevent *bev, short what, void *ctx)
 {
   struct bufferevent *partner = (bufferevent *)ctx;
@@ -235,7 +187,7 @@ TransparentProxy::eventcb(struct bufferevent *bev, short what, void *ctx)
   }
 }
 
-static void
+void
 TransparentProxy::accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
     struct sockaddr *a, int slen, void *p)
 {
@@ -245,7 +197,7 @@ TransparentProxy::accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
   (void)listener; //to avoid Werror: unused
   (void)a;
   (void)slen;
-  cur_circuit = (TransparentProxy*)p;
+  TransparentProxy* cur_circuit = (TransparentProxy*)p;
 
   b_in = bufferevent_socket_new(cur_circuit->base, fd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
 
@@ -270,7 +222,8 @@ TransparentProxy::accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
 void TransparentProxy::transparentize_connection(conn_t* conn_in)
 {
-  struct bufferevent *b_out, *b_in = conn_in->in_bound;
+  assert(conn_in->buffer);
+  struct bufferevent *b_out, *b_in = conn_in->buffer;
   /* Create two linked bufferevent objects: one to connect, one for the
    * new connection */
 

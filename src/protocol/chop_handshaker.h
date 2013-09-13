@@ -8,11 +8,9 @@
 #ifndef CHOP_HANDSHAKER_H
 #define CHOP_HANDSHAKER_H
 
-#include "rng.h"
+#include <openssl/sha.h>
 
-struct ecb_encryptor;
-struct ecb_decryptor;
-struct gcm_encryptor;
+#include "rng.h"
 
 /* The handshake generator and reciever class for chop protocol, 
    this is a simplest implementation for a verifiable handshake to 
@@ -32,8 +30,10 @@ struct gcm_encryptor;
   */
 
 const size_t HANDSHAKE_LEN = 32;//sizeof(uint32_t);
+const size_t NO_ENCRYPTED_WORDS = 4;
 const size_t CIRCUIT_ID_LEN = sizeof(uint32_t);
 const size_t PADDING_LEN = 12;
+const size_t HANDSHAKE_DIGEST_LENGTH = HANDSHAKE_LEN - CIRCUIT_ID_LEN - PADDING_LEN;
 
 class ChopHandshaker
 {
@@ -41,22 +41,25 @@ class ChopHandshaker
 public:
   uint32_t circuit_id;
    
-  ChopHandshake(conn_circuit_id = 0) : circuit_id(conn_circuit_id) {}
+  ChopHandshaker(uint32_t conn_circuit_id = 0) : circuit_id(conn_circuit_id) {};
 
   /** 
      Generates the handshake for a connection whose circuit_id is already
-     set
+     seti
 
      @param handshake: empty buffer of size HANDSHAKE_LEN will contains the handshake
      @param ec: the block cipher to encrypt the circuit_id
    */
-  void genenrate(unit32_t* handshake, ecb_encryptor& ec)
+  void generate(uint8_t* handshake, ecb_encryptor& ec)
   {
-    unit32_t id_cat_padding[CIRCUIT_ID_LEN + PADDING_LEN];
+    uint32_t id_cat_padding[NO_ENCRYPTED_WORDS];
+    uint8_t digest_buffer[SHA256_DIGEST_LENGTH];
+    log_debug("circ id to send %u", circuit_id);
     id_cat_padding[0] = circuit_id;
-    rng_bytes((uint8_t*)(id_cat_padding + 1), sizeof(uint32_t) * PADDING_LEN);
-    ec.encrypt(handshake, id_cat_padding);
-    sha1((uint8_t*)(id_cat_padding), (CIRCUIT_ID_LEN + PADDING_LEN) * sizeof(uint32_t),(uint8_t*)(handshake + CIRCUIT_ID_LEN + PADDING_LEN));
+    rng_bytes((uint8_t*)(id_cat_padding + 1),  PADDING_LEN);
+    ec.encrypt(handshake, (const uint8_t*)id_cat_padding);
+    sha256((uint8_t*)(id_cat_padding), CIRCUIT_ID_LEN + PADDING_LEN, digest_buffer);
+    memcpy((uint8_t*)(handshake + CIRCUIT_ID_LEN + PADDING_LEN), digest_buffer, HANDSHAKE_DIGEST_LENGTH);
     
   }
 
@@ -66,17 +69,18 @@ public:
 
      @return false in case verification fails 
   */
-  bool verify_and_extract(unit32_t* handshake, ecb_decryptor& dc)
+  bool verify_and_extract(uint8_t* handshake, ecb_decryptor& dc)
   {
-    unit_8 id_cat_padding[CIRCUIT_ID_LEN + PADDING_LEN];
-    uint_8 verify_buf[SHA1_DIGEST_LENGTH];
+    uint32_t id_cat_padding[NO_ENCRYPTED_WORDS];
+    uint8_t verify_buf[SHA256_DIGEST_LENGTH];
 
-    dc.encrypt(id_cat_padding,handshake);
-    sha1((uint8_t*)(id_cat_padding), (CIRCUIT_ID_LEN + PADDING_LEN) * sizeof(uint32_t), verify_buf);
-    if (memcmp(verify_buf, handshake + (CIRCUIT_ID_LEN + PADDING_LEN) * sizeof(uint32_t), SHA1_DIGEST_LENGTH))
-      return fail; //not a valid handshake
+    dc.decrypt((uint8_t*)id_cat_padding,handshake);
+    sha256((uint8_t*)id_cat_padding, CIRCUIT_ID_LEN + PADDING_LEN, verify_buf);
+    if (memcmp(verify_buf, handshake + (CIRCUIT_ID_LEN + PADDING_LEN), HANDSHAKE_DIGEST_LENGTH))
+      return false; //not a valid handshake
 
     circuit_id = id_cat_padding[0];
+    log_debug("retrieved circ id %u", circuit_id);
     return true;
     
   }

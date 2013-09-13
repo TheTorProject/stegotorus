@@ -33,7 +33,6 @@ protected:
     string _apache_conf_filename;
     string _apache_doc_root; /* the directory that apache serve where
                                the html doc*/
-    bool _remote_mount; //true if the doc_root is mounted from remote host
     
     CURL* capacity_handle;    /* We use this auxiliary curl handle
                                in task of computing the capacity of the 
