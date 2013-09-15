@@ -24,6 +24,8 @@
 
 #include <event2/event.h>
 #include <event2/buffer.h>
+#include <event2/util.h>
+
 
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
@@ -53,6 +55,9 @@ struct chop_conn_t : conn_t
   chop_circuit_t *upstream;
   steg_t *steg;
   struct evbuffer *recv_pending;
+  uint8_t *originally_received; //Keep a copy of pending in case we need 
+  size_t received_length;
+  //to become a transparent proxy
   struct event *must_send_timer;
   bool sent_handshake : 1;
   bool no_more_transmissions : 1;
@@ -267,6 +272,10 @@ chop_config_t::init(int n_options, const char *const *options)
       //This is not related to an specific steg module hence, we store it under
       //"protocol" tag
       steg_mod_user_configs["protocol"]["cover_server"] = cover_server_address;
+      //we neet to move the option pointer one forward cause
+      //our option has an argument
+      options++;
+      n_options--;
                        
     } else {
       log_warn("chop: unrecognized option '%s'", options[1]);
@@ -1666,8 +1675,10 @@ chop_conn_t::recv_handshake()
   if (!handshaker.verify_and_extract(conn_handshake, *(config->handshake_decryptor))) {
     //invalid handshake, if we have a transparent proxy we 
     //we'll act as one for this connection
+    log_warn("handshake authentication faild.");
     if (config->transparent_proxy) {
-      config->transparent_proxy->transparentize_connection(this);
+      log_info("stegotorus turning into a transparent proxy.");
+      config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
       return 1;
     }
     
@@ -1711,13 +1722,22 @@ chop_conn_t::recv_handshake()
 int
 chop_conn_t::recv()
 {
+  //TODO: This is too slow, we need to do it more cleverly.
+  //we keep a copy of value of recv_pending, in case we need to
+  //transparentize the connection
+  received_length = evbuffer_get_length(bufferevent_get_input(buffer));
+  originally_received = new uint8_t[received_length];
+  if (evbuffer_copyout(bufferevent_get_input(buffer), originally_received, received_length) != (ssize_t) received_length)
+    log_abort("was not able to make a copy of received data");
+
   if (steg->receive(recv_pending)) {
     //If steg fails in recovering the data
     //then maybe it wasn't an steg data to begin with
     //so we have transparent proxy we will become 
     //transparent at this moment
     if (config->transparent_proxy) {
-      config->transparent_proxy->transparentize_connection(this);
+      log_info("stegotorus turning into a transparent proxy.");
+      config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
       return 0;
     }
  

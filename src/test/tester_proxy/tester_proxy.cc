@@ -55,6 +55,12 @@ readcb(struct bufferevent *bev, void *ctx)
 
   src = bufferevent_get_input(bev);
   len = evbuffer_get_length(src);
+
+  char* data_4_log =  new char[len + 1];
+  evbuffer_copyout(src, data_4_log, len);
+  data_4_log[len] = '\0';
+  fprintf(stderr,"Data received: %s\n",  data_4_log);
+
   if ((!partner) || ((drop_rate != 0) && ((double)rand()/RAND_MAX < drop_rate)))
   {
     if (LOGGING >= LOGGING_MODERATE) 

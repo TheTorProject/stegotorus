@@ -53,17 +53,17 @@ bool TransparentProxy::trace_packet_data = false;
 TransparentProxy::TransparentProxy(event_base* cur_event_base, const string& upstream_address,const string& downstream_port)
   : listener(NULL)
 {
-  base = cur_event_base;
-  if (!base) {
-    log_abort("event_base_new()");
-    return;
+  
+  if (!(base = cur_event_base)) {
+    log_warn("event base isn't initialized yet!");
   }
    
   set_upstream_address(upstream_address);
 
-  //if it is empty they are going to give us the downstream
+  //if it is empty or we don't have a event base, then we can't
+  //set up a listener, they are going to give us the downstream
   //connection after it gets connected
-  if (!downstream_port.empty()) {
+  if (!downstream_port.empty() && base) {
     memset(&listen_on_addr, 0, sizeof(listen_on_addr));
     int socklen = sizeof(listen_on_addr);
   
@@ -97,6 +97,12 @@ TransparentProxy::readcb(struct bufferevent *bev, void *ctx)
 
   src = bufferevent_get_input(bev);
   len = evbuffer_get_length(src);
+
+  // char* data_4_log =  new char[len + 1];
+  // evbuffer_copyout(src, data_4_log, len);
+  // data_4_log[len] = '\0';
+  // log_info("Data received: %s",  data_4_log);
+
   if ((!partner) || ((drop_rate != 0) && ((double)rand()/RAND_MAX < drop_rate)))
   {
     //indicating that we have dropped the packet
@@ -220,7 +226,7 @@ TransparentProxy::accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
   bufferevent_enable(b_out, EV_READ|EV_WRITE);
 }
 
-void TransparentProxy::transparentize_connection(conn_t* conn_in)
+void TransparentProxy::transparentize_connection(conn_t* conn_in, uint8_t* apriori_data, size_t apriori_data_length)
 {
   assert(conn_in->buffer);
   struct bufferevent *b_out, *b_in = conn_in->buffer;
@@ -228,6 +234,10 @@ void TransparentProxy::transparentize_connection(conn_t* conn_in)
    * new connection */
 
   /*b_in = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);*/
+
+  base = bufferevent_get_base(conn_in->buffer);
+  if (!base)
+    log_abort("sorry, can not transparentize a connection without event base.");
 
   b_out = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
 
@@ -250,7 +260,20 @@ void TransparentProxy::transparentize_connection(conn_t* conn_in)
 
   //we need to call the readcb in case there is already data in 
   //in the buffer.
-  readcb(b_in, b_out);
+  //readcb(b_in, b_out);
+  evbuffer* dst = bufferevent_get_output(b_out);
+  evbuffer_add(dst, apriori_data, apriori_data_length);
+
+  if (evbuffer_get_length(dst) >= MAX_OUTPUT) {
+    /* We're giving the other side data faster than it can
+     * pass it on.  Stop reading here until we have drained the
+     * other side to MAX_OUTPUT/2 bytes. */
+    bufferevent_setcb(b_out, readcb, drained_writecb,
+                      eventcb, b_in);
+    bufferevent_setwatermark(b_out, EV_WRITE, MAX_OUTPUT/2,
+                             MAX_OUTPUT);
+    bufferevent_disable(b_in, EV_READ);
+  }
 
 }
 

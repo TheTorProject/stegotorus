@@ -97,7 +97,7 @@ class ApachePayloadServer: public PayloadServer
      The constructor reads the payload database prepared by scraper
      and initialize the payload table.
     */
-  ApachePayloadServer(MachineSide init_side, string database_filename09, string cover_server); 
+  ApachePayloadServer(MachineSide init_side, const string& database_filename, const string& cover_server); 
 
   /** virtual functions */
   virtual unsigned int find_client_payload(char* buf, int len, int type);

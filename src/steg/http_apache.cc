@@ -189,8 +189,10 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
   if (!(_curl_multi_handle = curl_multi_init()))
     log_abort("failed to initiate curl multi object.");
 
-  if (!(protocol_data_in || protocol_data_out))
+  if (!(protocol_data_in || protocol_data_out)) {
+    log_info("I'm really here");
     log_abort("failed to allocate evbuffer for protocol data");
+  }
 
 }
 
@@ -431,12 +433,21 @@ http_apache_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, str
     }
     else
       {
+        if (memcmp(data, "GET /", sizeof("GET /") -1)) {
+          log_warn("HTTP Method is not a simple GET");
+          return RECV_BAD;
+        }
+                   
         p = data + sizeof "GET /" -1;
-        http_server_receive_uri(p, dest);
+        if (http_server_receive_uri(p, dest) == RECV_BAD) {
+          log_warn("Bad uri");
+          return RECV_BAD;
+        }
+          
       }
 
     evbuffer_drain(source, s2.pos + sizeof("\r\n\r\n") - 1);
-  } while (evbuffer_get_length(source));
+      } while (evbuffer_get_length(source));
 
   have_received = 1;
   this->type = type;
@@ -501,17 +512,30 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
 
     log_debug(conn, "uri: %s", p);
     uri_end = strchr(p, ' ');
-    log_assert(uri_end);
-    if ((size_t)(uri_end - p) > c_max_uri_length * 3/2)
-      log_abort(conn, "uri too big: %lu (max %lu)",
-                (unsigned long)(uri_end - p), (unsigned long)c_max_uri_length);
+    if (uri_end == NULL) {
+      log_warn("could not find the end of the uri");
+      return RECV_BAD;
+    }
+    if ((size_t)(uri_end - p) > c_max_uri_length * 3/2) {
+      log_warn(conn, "uri too big: %lu (max %lu)",
+                (unsigned long)(uri_end - p), (unsigned long)c_max_uri_length); 
+      //This should not abort, only should says RECV_BAD
+      return RECV_BAD;
+    }
 
     memset(outbuf, 0, sizeof(outbuf));
+    bool param_valid_load = true;
     char* url_end = strstr(p, "?");
+    if (url_end == NULL) {//? not found
+      url_end = uri_end;
+      param_valid_load = false;
+      return RECV_BAD; //TODO: Current protocol always send a paramater but it
+                       //is more realistic to change that
+    }
+      
     string extracted_url = string(p, url_end - p);
     unsigned long url_code = 0;
     size_t url_meaning_length = 0;
-    bool param_valid_load = true;
     if (extracted_url != "") { 
       //Otherwise the uri_dict sync hasn't been verified so 
       //we can't use it
@@ -545,11 +569,16 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
         memset(outbuf2+url_meaning_length, 0, sizeof(outbuf2) - url_meaning_length);
         sofar = D.decode(outbuf, cookielen+1, outbuf2+url_meaning_length);
 
-        if (sofar <= 0)
+        if (sofar <= 0) {
           log_warn(conn, "base64 decode failed\n");
+          return RECV_BAD;
+        }
 
-        if (sofar >= c_max_uri_length)
-          log_abort(conn, "uri decode buffer overflow\n");
+        if (sofar >= c_max_uri_length) {
+          log_warn(conn, "uri decode buffer overflow\n");
+          return RECV_BAD;
+        }
+
       }
 
     //Extra logging in the case decryption failure
@@ -571,7 +600,7 @@ http_apache_steg_t::~http_apache_steg_t()
     log_debug(conn,"at steg destructor!");
     event_free(_curl_client_event); 
     //calling for manual clean up just in case
-    curl_multi_remove_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
+    //curl_multi_remove_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
     log_debug(conn,"at steg destructor, releasing curl");
   }
   

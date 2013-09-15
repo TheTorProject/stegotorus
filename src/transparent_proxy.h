@@ -40,7 +40,7 @@ public:
      it acts similar to accept_cb except that the downstream connection
      is already established.
    */
-  void transparentize_connection(conn_t* conn_in);
+  void transparentize_connection(conn_t* conn_in, uint8_t* apriori_data, size_t apriori_data_length);
 
   void set_upstream_address(const std::string& upstream_address)
   {
