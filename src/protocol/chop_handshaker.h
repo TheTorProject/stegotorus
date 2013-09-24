@@ -22,7 +22,7 @@
 
    Each is 16bit word:
    | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | A | B | C | D | E | F |
-   | Enc_ecb(Circuit ID + Padding) | SHA-1(Circuit ID + Padding)   |
+   | Enc_ecb(Circuit ID + Padding) | SHA-256(Circuit ID + Padding) |
 
    It is not the most secure header more secure header out-there
    TODO: Make a secure header with Elligator algorithm
