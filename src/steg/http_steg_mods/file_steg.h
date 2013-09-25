@@ -52,12 +52,12 @@ protected:
              find the start of body) or RESPONSE_BAD (<0) in case of other
              errors
   */
-  static size_t extract_appropriate_respones_body(char* payload_buf, size_t payload_size);
+  static ssize_t extract_appropriate_respones_body(char* payload_buf, size_t payload_size);
 
   /**
      The overloaded version with evbuffer
   */
-  size_t 
+  ssize_t 
   extract_appropriate_respones_body(evbuffer* payload_buf);
 
   /**

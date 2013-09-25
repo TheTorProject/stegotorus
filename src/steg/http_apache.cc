@@ -113,18 +113,18 @@ namespace  {
 
     http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn);
 
-     virtual int http_client_uri_transmit (struct evbuffer *source, conn_t *conn);
-     virtual int http_server_receive(conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
+    virtual int http_client_uri_transmit (struct evbuffer *source, conn_t *conn);
+    virtual int http_server_receive(conn_t *conn, struct evbuffer *dest, struct evbuffer* source);
 
-     virtual int http_server_receive_cookie(char* p, struct evbuffer *dest);
-     virtual int http_server_receive_uri(char *p, struct evbuffer *dest);
+    virtual int http_server_receive_cookie(char* p, struct evbuffer *dest);
+    virtual int http_server_receive_uri(char *p, struct evbuffer *dest);
   
     /**
        We curl tries to open a socket, it calls this function which
        returns the socket which already has been opened using 
        eventbuffer_socket_connect at the time of creation of the
        connection.
-     */
+    */
     static curl_socket_t get_conn_socket(void *conn,
                                 curlsocktype purpose,
                                          struct curl_sockaddr *address);
@@ -165,18 +165,31 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
   : http_steg_config_t(cfg, false),
     _cur_operation(op_STEG_NO_OP),
     uri_dict_up2date(false)
-
 {
-  const string payload_filename(is_clientside ? "apache_payload/client_list.txt" : "apache_payload/server_list.txt");
-  
-  payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename);
+  string payload_filename;
+  string cover_server;
+
+  if (is_clientside)
+    payload_filename = "apache_payload/client_list.txt";
+  else {
+    payload_filename = "apache_payload/server_list.txt";
+
+    //We absolutely need a cover server, it is either provided by the protocol or we 
+    //try to use local
+    cover_server = "127.0.0.1";
+    if (!cfg->steg_mod_user_configs["protocol"].empty())
+      cover_server = cfg->steg_mod_user_configs["protocol"]["cover_server"] != "" ?
+        cfg->steg_mod_user_configs["protocol"]["cover_server"] : cover_server;
+
+  }
+
+  payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename, cover_server);
+
   init_file_steg_mods();
 
   if (!is_clientside) {//on server side the dictionary is ready to be used
     size_t no_of_uris = ((ApachePayloadServer*)payload_server)->uri_dict.size();
     for(uri_byte_cut = 0; (no_of_uris /=256) > 0; uri_byte_cut++);
-  }
-  else {
     ((ApachePayloadServer*)payload_server)->chosen_payload_choice_strategy = ApachePayloadServer::c_most_efficient_payload_choice; //This is hard coded now but it should become user's choice
 
   }
@@ -184,10 +197,13 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
   if (!(_curl_multi_handle = curl_multi_init()))
     log_abort("failed to initiate curl multi object.");
 
-  if (!(protocol_data_in || protocol_data_out))
+  if (!(protocol_data_in || protocol_data_out)) {
+    log_info("I'm really here");
     log_abort("failed to allocate evbuffer for protocol data");
+  }
 
 }
+
 http_apache_steg_config_t::~http_apache_steg_config_t()
 {
   //delete payload_server; maybe we don't need it
@@ -413,7 +429,7 @@ http_apache_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, str
     if (type == -1) { //If we can't recognize the type we assign a random type
       //type = rng_int(NO_CONTENT_TYPES) + 1; //For now, till we decide about the type
       log_debug("Could not recognize request type. Assume html");
-      type = HTTP_CONTENT_HTML; //Fail safe to html
+      type = HTTP_CONTENT_PNG; //Fail safe to html
     }
 
     if (strstr((char*) data, "Cookie") != NULL) {
@@ -424,12 +440,21 @@ http_apache_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, str
     }
     else
       {
+        if (memcmp(data, "GET /", sizeof("GET /") -1)) {
+          log_warn("HTTP Method is not a simple GET");
+          return RECV_BAD;
+        }
+                   
         p = data + sizeof "GET /" -1;
-        http_server_receive_uri(p, dest);
+        if (http_server_receive_uri(p, dest) == RECV_BAD) {
+          log_warn("Bad uri");
+          return RECV_BAD;
+        }
+          
       }
 
     evbuffer_drain(source, s2.pos + sizeof("\r\n\r\n") - 1);
-  } while (evbuffer_get_length(source));
+      } while (evbuffer_get_length(source));
 
   have_received = 1;
   this->type = type;
@@ -494,17 +519,30 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
 
     log_debug(conn, "uri: %s", p);
     uri_end = strchr(p, ' ');
-    log_assert(uri_end);
-    if ((size_t)(uri_end - p) > c_max_uri_length * 3/2)
-      log_abort(conn, "uri too big: %lu (max %lu)",
-                (unsigned long)(uri_end - p), (unsigned long)c_max_uri_length);
+    if (uri_end == NULL) {
+      log_warn("could not find the end of the uri");
+      return RECV_BAD;
+    }
+    if ((size_t)(uri_end - p) > c_max_uri_length * 3/2) {
+      log_warn(conn, "uri too big: %lu (max %lu)",
+                (unsigned long)(uri_end - p), (unsigned long)c_max_uri_length); 
+      //This should not abort, only should says RECV_BAD
+      return RECV_BAD;
+    }
 
     memset(outbuf, 0, sizeof(outbuf));
+    bool param_valid_load = true;
     char* url_end = strstr(p, "?");
+    if (url_end == NULL) {//? not found
+      url_end = uri_end;
+      param_valid_load = false;
+      return RECV_BAD; //TODO: Current protocol always send a paramater but it
+                       //is more realistic to change that
+    }
+      
     string extracted_url = string(p, url_end - p);
     unsigned long url_code = 0;
     size_t url_meaning_length = 0;
-    bool param_valid_load = true;
     if (extracted_url != "") { 
       //Otherwise the uri_dict sync hasn't been verified so 
       //we can't use it
@@ -538,11 +576,16 @@ http_apache_steg_t::http_server_receive_uri(char *p, evbuffer* dest)
         memset(outbuf2+url_meaning_length, 0, sizeof(outbuf2) - url_meaning_length);
         sofar = D.decode(outbuf, cookielen+1, outbuf2+url_meaning_length);
 
-        if (sofar <= 0)
+        if (sofar <= 0) {
           log_warn(conn, "base64 decode failed\n");
+          return RECV_BAD;
+        }
 
-        if (sofar >= c_max_uri_length)
-          log_abort(conn, "uri decode buffer overflow\n");
+        if (sofar >= c_max_uri_length) {
+          log_warn(conn, "uri decode buffer overflow\n");
+          return RECV_BAD;
+        }
+
       }
 
     //Extra logging in the case decryption failure
@@ -562,8 +605,10 @@ http_apache_steg_t::~http_apache_steg_t()
   if (curl_inbound) evbuffer_free(curl_inbound);
   if (_curl_client_event) {
     event_free(_curl_client_event); 
-    //remove the handle to stop anything related to this handle
-    curl_multi_remove_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
+    //calling for manual clean up just in case
+    //just in case? you can't double remove
+    //curl_multi_remove_handle(_apache_config->_curl_multi_handle, _curl_easy_handle);
+    log_debug(conn,"at steg destructor, releasing curl");
   }
   
   curl_easy_cleanup(_curl_easy_handle);

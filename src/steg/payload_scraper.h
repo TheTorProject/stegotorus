@@ -36,10 +36,11 @@ protected:
                //from this
                                       
     
+    string _cover_server;
     string _apache_conf_filename;
     string _apache_doc_root; /* the directory that apache serve where
                                the html doc*/
-
+    
     CURL* capacity_handle;    /* We use this auxiliary curl handle
                                in task of computing the capacity of the 
                                payloads */
@@ -75,7 +76,7 @@ public:
 
       @param database_filename the name of the file to store the payload list   
     */
-   PayloadScraper(string database_filename,  const string apache_conf = "/etc/httpd/conf/httpd.conf");
+   PayloadScraper(string database_filename,  string cover_server, const string apache_conf = "/etc/httpd/conf/httpd.conf");
 
    /**
       reads all the files in the Doc root and classifies them. return the number of payload file founds. -1 if it fails

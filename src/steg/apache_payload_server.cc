@@ -21,9 +21,9 @@ using namespace boost::filesystem;
   The constructor reads the payload database prepared by scraper
   and initialize the payload table.
 */
-ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_filename)
+ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& database_filename, const string& cover_server)
   :PayloadServer(init_side),_database_filename(database_filename),
-   _apache_host_name("127.0.0.1"),
+   _apache_host_name((cover_server.empty()) ? "127.0.0.1" : cover_server),
    c_max_buffer_size(1000000),
    chosen_payload_choice_strategy(c_most_efficient_payload_choice)
 {
@@ -50,7 +50,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, string database_
         log_debug("payload database does not exists.");
         log_debug("scarping payloads to create the database...");
 
-        PayloadScraper my_scraper(_database_filename);
+        PayloadScraper my_scraper(_database_filename, _apache_host_name);
         my_scraper.scrape();
 
       }

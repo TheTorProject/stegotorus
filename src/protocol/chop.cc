@@ -3,16 +3,20 @@
  */
 
 #include "util.h"
-#include "chop_blk.h"
-#include "connections.h"
 #include "crypt.h"
+#include "chop_blk.h"
+#include "chop_handshaker.h"
+#include "connections.h"
 #include "protocol.h"
 #include "rng.h"
 #include <algorithm>
 #include "steg.h"
 
+#include "transparent_proxy.h"
+
 #include <tr1/unordered_map>
 #include <sstream>
+#include <string>
 
 #include <tr1/unordered_set>
 #include <vector>
@@ -20,6 +24,8 @@
 
 #include <event2/event.h>
 #include <event2/buffer.h>
+#include <event2/util.h>
+
 
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
@@ -49,6 +55,9 @@ struct chop_conn_t : conn_t
   chop_circuit_t *upstream;
   steg_t *steg;
   struct evbuffer *recv_pending;
+  uint8_t *originally_received; //Keep a copy of pending in case we need 
+  size_t received_length;
+  //to become a transparent proxy
   struct event *must_send_timer;
   bool sent_handshake : 1;
   bool no_more_transmissions : 1;
@@ -120,7 +129,7 @@ struct chop_circuit_t : circuit_t
      @return the first connection whose steg has data to send
   */
   chop_conn_t* check_for_steg_protocol_data();
-  chop_conn_t *pick_connection(size_t desired, size_t minimum,
+  chop_conn_t* pick_connection(size_t desired, size_t minimum,
                                size_t *blocksize);
 
   int recv_block(uint32_t seqno, opcode_t op, evbuffer *payload, conn_t *conn);
@@ -162,6 +171,19 @@ struct chop_config_t : config_t
   unsigned long total_transmited_data_bytes;
   unsigned long total_transmited_cover_bytes;
 
+  /*ecb encryptor and decryptor for the handshake*/
+  ecb_encryptor* handshake_encryptor;
+  ecb_decryptor* handshake_decryptor;
+
+  /**
+     create the approperiate block cipher with 
+     approperiate keys for the handshake
+   */
+  void init_handshake_encryption();
+  /* Transparent proxy and cover server */
+  std::string cover_server_address; //is the server that is going to serve covers
+  //in case the steg module expect a cover server.
+  TransparentProxy* transparent_proxy;
 
   double noise2signal; //to protect against statistical analysis
 
@@ -171,7 +193,11 @@ struct chop_config_t : config_t
 // Configuration methods
 
 chop_config_t::chop_config_t()
-  : total_transmited_data_bytes(0), total_transmited_cover_bytes(1) 
+  : total_transmited_data_bytes(0), 
+    total_transmited_cover_bytes(1),
+    handshake_encryptor(NULL),
+    handshake_decryptor(NULL),
+    transparent_proxy(NULL)
                                     //just to evade div by 0
 {
   ignore_socks_destination = true;
@@ -245,6 +271,18 @@ chop_config_t::init(int n_options, const char *const *options)
       retransmit = true;
     } else if (!strcmp(options[1], "--minimum-noise-to-signal")) {
       noise2signal = atoi(options[2]);
+      options++;
+      n_options--;
+    } else if (!strcmp(options[1], "--cover-server")) {
+      cover_server_address = options[2];
+      transparent_proxy = new TransparentProxy(base, options[2]);
+      //This is not related to an specific steg module hence, we store it under
+      //"protocol" tag
+      steg_mod_user_configs["protocol"]["cover_server"] = cover_server_address;
+      //we neet to move the option pointer one forward cause
+      //our option has an argument
+      options++;
+      n_options--;
     } else {
       log_warn("chop: unrecognized option '%s'", options[1]);
       goto usage;
@@ -258,6 +296,9 @@ chop_config_t::init(int n_options, const char *const *options)
     log_warn("chop: invalid up address: %s", options[1]);
     goto usage;
   }
+
+  //init the header encryptor and the decryptor
+  init_handshake_encryption();
 
   // From here on out, arguments alternate between downstream
   // addresses and steg targets.
@@ -337,6 +378,33 @@ chop_config_t::get_steg(size_t n) const
 
 const char passphrase[] =
   "did you buy one of therapist reawaken chemists continually gamma pacifies?";
+
+void
+chop_config_t::init_handshake_encryption()
+{
+  key_generator *kgen = 0;
+
+  if (encryption)
+    kgen = key_generator::from_passphrase((const uint8_t *)passphrase,
+                                          sizeof(passphrase) - 1,
+                                          0, 0, 0, 0);
+  if (mode == LSN_SIMPLE_SERVER) {
+    if (encryption) {
+      handshake_decryptor = ecb_decryptor::create(kgen, 16);
+    } else {
+      handshake_decryptor = ecb_decryptor::create_noop();
+    }
+  } else {
+    if (encryption) {
+      handshake_encryptor = ecb_encryptor::create(kgen, 16);
+    } else {
+      handshake_encryptor = ecb_encryptor::create_noop();
+    }
+  }
+
+  delete kgen;
+
+}
 
 circuit_t *
 chop_config_t::circuit_create(size_t)
@@ -616,7 +684,7 @@ chop_circuit_t::send()
     if (no_target_connection) {
       log_debug(this, "number of open connections on this circuit %u, golobally %u", (unsigned int)downstreams.size(), (unsigned int) conn_count());
       if (config->mode != LSN_SIMPLE_SERVER &&
-          (int)downstreams.size() < min(MAX_CONN_PER_CIRCUIT, ((int)(MAX_GLOBAL_CONN_COUNT - conn_count() + (int)circuit_count() - 1)/(int)circuit_count()))) //min(8, and ceilling of (MAX - count)/no of circ)
+          (int)downstreams.size() < min(MAX_CONN_PER_CIRCUIT, ((int)(MAX_GLOBAL_CONN_COUNT - conn_count() + (int)circuit_count() - 1)/(int)circuit_count()))) //min(8, and ceilling of (MAX - count)/no of circ) 
         circuit_reopen_downstreams(this);
       else {
         log_debug(this,"no more connection available at this time");
@@ -1549,7 +1617,12 @@ chop_conn_t::send(struct evbuffer *block)
       log_abort(this, "handshake: can't happen: up%c cid=%u",
                 upstream ? '+' : '-',
                 upstream ? upstream->circuit_id : 0);
-    if (evbuffer_prepend(block, (void *)&upstream->circuit_id,
+    /*hear we need to cook the handshake */
+    uint8_t conn_handshake[HANDSHAKE_LEN];
+    ChopHandshaker handshaker(upstream->circuit_id);
+    handshaker.generate(conn_handshake, *(config->handshake_encryptor));
+    
+    if (evbuffer_prepend(block, (void *)conn_handshake,
                          HANDSHAKE_LEN)) {
       log_warn(this, "failed to prepend handshake to first block");
       return -1;
@@ -1585,6 +1658,13 @@ chop_conn_t::handshake()
   return 0;
 }
 
+/**
+ checks if the handshake is correctly authenticated
+
+ @return 0 success
+         1 failed, transparentized the connection
+        -1 failed, unrecoverable, please close the connection
+*/
 int
 chop_conn_t::recv_handshake()
 {
@@ -1592,9 +1672,27 @@ chop_conn_t::recv_handshake()
   log_assert(config->mode == LSN_SIMPLE_SERVER);
 
   uint32_t circuit_id;
-  if (evbuffer_remove(recv_pending, (void *)&circuit_id,
-                      sizeof circuit_id) != sizeof circuit_id)
+  ChopHandshaker handshaker;
+  uint8_t conn_handshake[HANDSHAKE_LEN];
+
+  if (evbuffer_remove(recv_pending, (void *)conn_handshake,
+                      HANDSHAKE_LEN) != HANDSHAKE_LEN)
     return -1;
+
+  if (!handshaker.verify_and_extract(conn_handshake, *(config->handshake_decryptor))) {
+    //invalid handshake, if we have a transparent proxy we 
+    //we'll act as one for this connection
+    log_warn("handshake authentication faild.");
+    if (config->transparent_proxy) {
+      log_info("stegotorus turning into a transparent proxy.");
+      config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
+      return 1;
+    }
+    
+    return -1;
+  }
+
+  circuit_id = handshaker.circuit_id;
 
   chop_circuit_table::value_type in(circuit_id, (chop_circuit_t *)0);
   std::pair<chop_circuit_table::iterator, bool> out
@@ -1631,8 +1729,27 @@ chop_conn_t::recv_handshake()
 int
 chop_conn_t::recv()
 {
-  if (steg->receive(recv_pending))
+  //TODO: This is too slow, we need to do it more cleverly.
+  //we keep a copy of value of recv_pending, in case we need to
+  //transparentize the connection
+  received_length = evbuffer_get_length(bufferevent_get_input(buffer));
+  originally_received = new uint8_t[received_length];
+  if (evbuffer_copyout(bufferevent_get_input(buffer), originally_received, received_length) != (ssize_t) received_length)
+    log_abort("was not able to make a copy of received data");
+
+  if (steg->receive(recv_pending)) {
+    //If steg fails in recovering the data
+    //then maybe it wasn't an steg data to begin with
+    //so we have transparent proxy we will become 
+    //transparent at this moment
+    if (config->transparent_proxy) {
+      log_info("stegotorus turning into a transparent proxy.");
+      config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
+      return 0;
+    }
+ 
     return -1;
+  }
 
   // If that succeeded but did not copy anything into recv_pending,
   // wait for more data.
@@ -1653,8 +1770,16 @@ chop_conn_t::recv()
     }
 
     // We're the server. Try to receive a handshake.
-    if (recv_handshake())
-      return -1;
+    switch(recv_handshake()) 
+      {
+      case 1:
+        //this connection was transparentized return 0 and don't 
+        //worry about it any more
+        return 0;
+      case -1:
+        //unrecoverable error, close the connection
+        return -1;
+      }
 
     // If we get here and ->upstream is not set, this is a connection
     // for a stale circuit: that is, a new connection made by the

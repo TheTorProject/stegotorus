@@ -3,8 +3,8 @@
  */
 
 #include "util.h"
-#include "chop_blk.h"
 #include "crypt.h"
+#include "chop_blk.h"
 #include "connections.h"
 
 #include <event2/buffer.h>

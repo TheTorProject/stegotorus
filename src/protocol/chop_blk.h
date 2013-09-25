@@ -8,10 +8,6 @@
 #include <tr1/unordered_set>
 #include <ostream>
 
-struct ecb_encryptor;
-struct ecb_decryptor;
-struct gcm_encryptor;
-
 namespace chop_blk
 {
 
@@ -62,7 +58,7 @@ const size_t SECTION_LEN = UINT16_MAX;
 const size_t MIN_BLOCK_SIZE = HEADER_LEN + TRAILER_LEN;
 const size_t MAX_BLOCK_SIZE = MIN_BLOCK_SIZE + SECTION_LEN*2;
 
-const size_t HANDSHAKE_LEN = sizeof(uint32_t);
+//const size_t HANDSHAKE_LEN; //defined in the ChopHandshaker = sizeof(uint32_t);
 
 enum opcode_t
 {

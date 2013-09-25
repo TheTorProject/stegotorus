@@ -219,7 +219,6 @@ PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
   if (!strncmp(ext, ".png", 4) || !strncmp(ext, ".PNG", 4))
     return HTTP_CONTENT_PNG;
 
-
   free(buf);
   return -1;
   

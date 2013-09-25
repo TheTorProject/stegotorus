@@ -41,7 +41,7 @@ FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_fr
            find the start of body) or RESPONSE_BAD (<0) in case of other
            errors
 */
-size_t 
+ssize_t 
 FileStegMod::extract_appropriate_respones_body(char* payload_buf, size_t payload_size)
 {
   (void) payload_size;
@@ -54,14 +54,14 @@ FileStegMod::extract_appropriate_respones_body(char* payload_buf, size_t payload
 
   //hLen = hend+4-*payload_buf;
 
-  return (size_t)hend+4;
+  return hend-payload_buf+4;
 
 }
 
 /**
    The overloaded version with evbuffer
 */
-size_t 
+ssize_t 
 FileStegMod::extract_appropriate_respones_body(evbuffer* payload_buf)
 {
   //TODO: this need to be investigated, we might need two functions
@@ -98,7 +98,7 @@ ssize_t FileStegMod::pick_appropriate_cover_payload(size_t data_len, char** payl
     return -1;
   }
 
-  ssize_t payload_size;
+  ssize_t payload_size = 0;
   if (_payload_server->get_payload(c_content_type, data_len, payload_buf,
                                    (int*)&payload_size, noise2signal) == 1) {
     log_debug("SERVER found the next HTTP response template with size %d",
@@ -151,20 +151,28 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
       log_warn("Failed to aquire approperiate payload.");
       return -1;
     }
-  size_t hLen = body_offset - (size_t)cover_payload;
-  memcpy(outbuf, (const void*)body_offset, (cnt-hLen)*sizeof(char));
+
+  size_t body_len = cnt-body_offset;
+  size_t hLen = body_offset;
+  log_info("coping body of %lu size", (body_len));
+  if ((body_len) > c_HTTP_MSG_BUF_SIZE)
+  {
+    log_warn("HTTP response doesn't fit in the buffer %lu > %lu", (body_len)*sizeof(char), c_HTTP_MSG_BUF_SIZE);
+    return -1;
+  }
+  memcpy(outbuf, (const void*)(cover_payload + body_offset), (body_len)*sizeof(char));
 
   //int hLen = body_offset - (size_t)cover_payload - 4 + 1;
   //extracting the body part of the payload
   log_debug("SERVER embeding data1 with length %d into type %d", (int)cnt, c_content_type);
-  outbuflen = encode(data1, sbuflen, outbuf, cnt - hLen);
+  outbuflen = encode(data1, sbuflen, outbuf, body_len);
 
   if (outbuflen < 0) {
     log_warn("SERVER embeding fails fails");
     return -1;
   }
   log_debug("SERVER FileSteg sends resp with hdr len %lu body len %lu",
-            hLen, outbuflen);
+            body_offset, outbuflen);
 
   //TODO instead of generating the header we should just manipulate
   //it
@@ -177,8 +185,8 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     return -1;
     }*/
   //I'm not crazy, these are filler for later change
-  assert((size_t)outbuflen == cnt - hLen); //changing length is not supported yet
-  memcpy(newHdr, cover_payload, hLen*sizeof(char)+4);
+  assert((size_t)outbuflen == body_len); //changing length is not supported yet
+  memcpy(newHdr, cover_payload,hLen);
   newHdrLen = hLen;
 
   evbuffer *dest = conn->outbound();

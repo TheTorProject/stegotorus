@@ -1,14 +1,26 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
  * Copyright 2011, 2012 SRI International
+ * Copyright 2012, 2013 Tor Project Inc.
  * See LICENSE for other credits and copying information
  */
 
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
+#include <string>
+#include <map>
+
 struct proto_module;
 struct steg_config_t;
 
+/** 
+    Because it is the protocol which process user command line data 
+    it needs a way to convey the config to the steg modules. a map 
+    of [steg module name] to list of steg_mod_user_config_t object 
+    serves this purpose. 
+*/
+
+typedef std::map<std::string, std::string> user_config_dict_t;
 /** A 'config_t' is a set of addresses to listen on, and what to do
     when connections are received.  A protocol module must define a
     private subclass of this type that implements all the methods
@@ -23,6 +35,8 @@ struct config_t
   enum listen_mode           mode;
   /* stopgap, see create_outbound_connections_socks */
   bool ignore_socks_destination : 1;
+
+  std::map<std::string, user_config_dict_t> steg_mod_user_configs;
 
   config_t() : base(0), mode((enum listen_mode)-1) {}
   virtual ~config_t();
