@@ -179,7 +179,7 @@ int PayloadScraper::scrape()
     ftp_unmount_command_string += TEMP_MOUNT_DIR;
     
     if (system(ftp_unmount_command_string.c_str()))
-      log_warn("fusermount is unable to unmount the remote cover folder");
+      log_warn("fusermount was unable to unmount the remote cover folder");
   }
   _payload_db.close();
   return 0;
