@@ -1669,7 +1669,7 @@ chop_conn_t::recv_handshake()
   uint8_t conn_handshake[HANDSHAKE_LEN];
 
   if (evbuffer_remove(recv_pending, (void *)conn_handshake,
-                      HANDSHAKE_LEN) != HANDSHAKE_LEN)
+                      HANDSHAKE_LEN) != (signed)HANDSHAKE_LEN)
     return -1;
 
   if (!handshaker.verify_and_extract(conn_handshake, *(config->handshake_decryptor))) {
