@@ -4,3 +4,5 @@ cd stegotorus
 apt-get install libevent-dev libcurl4-openssl-dev libboost-dev libboost-system libboost-filesystem-dev
 
 make PKG_CONFIG_PATH=`pwd`
+./pgen_fake
+./stegotorus chop client --disable-retransmit 127.0.0.1:4999 38.79.65.84:80 http
