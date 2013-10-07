@@ -103,6 +103,7 @@ UTGROUPS = \
 	src/test/unittest_compression.cc \
 	src/test/unittest_crypt.cc \
 	src/test/unittest_pdfsteg.cc \
+	src/test/unittest_pngsteg.cc \
 	src/test/unittest_socks.cc
 
 unittests_SOURCES = \
