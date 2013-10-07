@@ -93,6 +93,10 @@ class PNGChunkData
 
 class PNGSteg : public FileStegMod
 {
+protected:
+   const string c_data_chunk_type = "IDAT";
+   static const size_t c_magic_header_length = 8;
+
 public:
 
     /**
@@ -111,13 +115,9 @@ public:
     */
    PNGSteg(PayloadServer* payload_provider, double noise2signal = 0);
 
-protected:
-   const string c_data_chunk_type = "IDAT";
-   static const size_t c_magic_header_length = 8;
-
    virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len);
     
-	virtual ssize_t decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
+   virtual ssize_t decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
 
 };
 

@@ -8,10 +8,10 @@ AM_CXXFLAGS = -Werror -Wall -Wextra -Wformat=2 -std=c++0x
 # Took off _FROTYFY_SOURCE because stdlib doesn't allow it with -O0 -g2
 # So it is only for releaes time
 #AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
-AM_CPPFLAGS = -I. -I$(srcdir)/src $(lib_CPPFLAGS)
+AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods $(lib_CPPFLAGS)
 
 noinst_LIBRARIES = libstegotorus.a
-noinst_PROGRAMS  = unittests tltester tester_proxy webpage_tester
+noinst_PROGRAMS  = unittests g_unittests tltester tester_proxy webpage_tester
 bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \
@@ -103,7 +103,6 @@ UTGROUPS = \
 	src/test/unittest_compression.cc \
 	src/test/unittest_crypt.cc \
 	src/test/unittest_pdfsteg.cc \
-	src/test/unittest_pngsteg.cc \
 	src/test/unittest_socks.cc
 
 unittests_SOURCES = \
@@ -114,6 +113,15 @@ unittests_SOURCES = \
 nodist_unittests_SOURCES = unitgrplist.cc
 
 unittests_LDADD = libstegotorus.a $(lib_LIBS)
+
+g_unittests_SOURCES = \
+	src/test/steg_test/pngSteg_unittest.cc
+
+g_unittests_LDADD = libstegotorus.a $(lib_LIBS)
+
+g_unittests_LDFLAGS = \
+	-lgtest_main \
+	-lgtest
 
 tltester_SOURCES = src/test/tltester.cc src/util.cc src/util-net.cc
 tltester_LDADD   = $(libevent_LIBS)
@@ -139,7 +147,7 @@ noinst_HEADERS = \
 	src/protocol/chop_blk.h \
 	src/steg/b64cookies.h \
 	src/steg/cookies.h \
-	src/steg/payloads.h \
+	src/steg/payload_server.h \
 	src/steg/http.h \
 	src/steg/http_steg_mods/jsSteg.h \
 	src/steg/http_steg_mods/pdfSteg.h \

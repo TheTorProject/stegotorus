@@ -60,6 +60,7 @@ protected:
   ssize_t 
   extract_appropriate_respones_body(evbuffer* payload_buf);
 
+ public:
   /**
      embed the data in the cover buffer, the assumption is that
      the function doesn't expand the buffer size
@@ -87,7 +88,6 @@ protected:
    */
   virtual ssize_t decode(const uint8_t *cover_payload, size_t cover_len, uint8_t* data) = 0;
   
- public:
   const list<string> extensions;
   virtual ssize_t capacity(const uint8_t* buffer, size_t len) = 0;
 
@@ -115,7 +115,6 @@ protected:
   */
   virtual int http_client_receive(conn_t *conn, evbuffer *dest, 
                                   evbuffer *source);
-
   /**
      constructor, sets the playoad server
 
