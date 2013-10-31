@@ -346,8 +346,12 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
   if (contentType <= 0 ||
       contentType >= MAX_CONTENT_TYPE ||
       pl.initTypePayload[contentType] == 0 ||
-      pl.typePayloadCount[contentType] == 0 ||
-      cap <= 0) //why should you ask for no or negative capacity?
+      pl.typePayloadCount[contentType] == 0 
+      )
+    //|| (cap <= 0) //why should you ask for no or negative capacity?
+    //Aparently negative capacity means your cap doesn't matter
+    //I'll stuff as much as I can in it. This is in the case of
+    //swf format.
     return 0;
 
   cnt = pl.typePayloadCount[contentType];
@@ -362,8 +366,10 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
     i++;
     current = (r+i)%cnt;
 
-    if (pl.typePayloadCap[contentType][current] <= cap || pl.payload_hdrs[pl.typePayload[contentType][current]].length/(double)cap < noise2signal)
-      continue;
+    //If the cap <= 0 is asked then we are not responsible for the consequence
+    if (cap > 0)
+      if (pl.typePayloadCap[contentType][current] <= cap || pl.payload_hdrs[pl.typePayload[contentType][current]].length/(double)cap < noise2signal)
+        continue;
 
     if (found) {
       if (pl.payload_hdrs[pl.typePayload[contentType][best]].length >

@@ -394,7 +394,7 @@ reassembly_queue::remove_next()
     cbuf[front].data = 0;
     cbuf[front].do_ack = true;
     cbuf[front].op   = op_DAT;
-    cbuf[front].conn = NULL;
+    cbuf[front].steg_cfg = NULL;
     next_to_process++;
     count--;
   }
@@ -403,24 +403,24 @@ reassembly_queue::remove_next()
 
 bool
 reassembly_queue::insert(uint32_t seqno, opcode_t op, 
-                         evbuffer *data, conn_t *conn)
+                         evbuffer *data, steg_config_t *steg_cfg)
 {
   if (seqno - window() > 255) {
-    log_info(conn, "block outside receive window");
+    log_info("block outside receive window");
     evbuffer_free(data);
     return false;
   }
   uint8_t front = next_to_process & 0xFF;
   uint8_t pos = front + (seqno - window());
   if (cbuf[pos].data) {
-    log_info(conn, "duplicate block");
+    log_info("duplicate block");
     evbuffer_free(data);
     return false;
   }
 
   cbuf[pos].data = data;
   cbuf[pos].op   = op;
-  cbuf[pos].conn = conn;
+  cbuf[pos].steg_cfg = steg_cfg;
   count++;
   return true;
 }

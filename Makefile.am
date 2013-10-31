@@ -115,7 +115,7 @@ nodist_unittests_SOURCES = unitgrplist.cc
 unittests_LDADD = libstegotorus.a $(lib_LIBS)
 
 g_unittests_SOURCES = \
-	src/test/steg_test/pngSteg_unittest.cc
+	src/test/steg_test/steg_mod_unittest.cc
 
 g_unittests_LDADD = libstegotorus.a $(lib_LIBS)
 

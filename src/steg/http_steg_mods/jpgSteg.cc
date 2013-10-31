@@ -56,6 +56,7 @@ int JPGSteg::starting_point(const uint8_t *raw_data, int len)
 		if (raw_data[i] == FRAME && raw_data[i+1] == FRAME_SCAN) {
 			lm = i;
 			LOG("0xFFDA at %06X\n", i)
+              break;
 		} else if (raw_data[i] == FRAME && raw_data[i+1] == FRAME_RST) {
 			LOG("0xFFDD at %06X\n", i)
 		} else if (raw_data[i] == FRAME && raw_data[i+1] == FRAME_RST0) {
@@ -79,7 +80,27 @@ int JPGSteg::starting_point(const uint8_t *raw_data, int len)
 	*/
 	//int c = lf - lm - *flen - 2;
 
-	return lm + 2 + *flen; // 2 for FFDA, and skip the header
+	return lm + 2 + swapped; // *flen; // 2 for FFDA, and skip the header
+
+}
+
+ssize_t JPGSteg::headless_capacity(char *cover_body, int body_length)
+{
+  return static_headless_capacity((char*)cover_body, body_length);
+}
+
+/**
+   compute the capcaity of the cover by getting a pointer to the
+   beginig of the body in the response
+
+   @param cover_body pointer to the begiing of the body
+   @param body_length the total length of message body
+ */
+unsigned int JPGSteg::static_headless_capacity(char *cover_body, int body_length)
+{  
+  int from = starting_point((uint8_t*)cover_body, (size_t)body_length);
+  return max(body_length - from - 2 - sizeof(int), (size_t)0); // 2 for FFD9, 4 for len
+
 }
 
 ssize_t JPGSteg::capacity(const uint8_t *cover_payload, size_t len)
@@ -94,19 +115,20 @@ unsigned int JPGSteg::static_capacity(char *cover_payload, int len)
   if (body_offset == -1) //couldn't find the end of header
     return 0;  //useless payload
  
-  size_t header_length = body_offset - (size_t)cover_payload;
-  
-  int from = starting_point((uint8_t*)body_offset, (size_t)len - header_length);
-  return min(len - header_length - from - 2 - sizeof(int), (size_t)0); // 2 for FFD9, 4 for len
+   return static_headless_capacity(cover_payload + body_offset, len - body_offset);
 }
-
 
 int JPGSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len)
 {
-	int from = starting_point(cover_payload, cover_len);
-	memcpy(cover_payload+from, &data_len, sizeof(data_len));
-	memcpy(cover_payload+from+sizeof(data_len), data, data_len);
-	return 0;
+  if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
+    log_warn("not enough cover capacity to embed data");
+    return 0;
+  }
+
+  int from = starting_point(cover_payload, cover_len);
+  memcpy(cover_payload+from, &data_len, sizeof(data_len));
+  memcpy(cover_payload+from+sizeof(data_len), data, data_len);
+  return cover_len;
     
 }
 
@@ -115,11 +137,11 @@ ssize_t JPGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
 	// TODO: There may be FFDA in the data
     ssize_t from = starting_point(cover_payload, cover_len);
     assert(from >= 0);
-    size_t s = (size_t)*(cover_payload+from);
+    size_t s = *((size_t*)(cover_payload+from));
 
     //We assume the enough mem is allocated for the data
     assert((size_t)s < c_HTTP_MSG_BUF_SIZE);
-	memcpy(data, cover_payload+from+sizeof(int), s);
+	memcpy(data, cover_payload+from+sizeof(size_t), s);
 	return s;
 
 }

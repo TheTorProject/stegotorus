@@ -21,11 +21,16 @@ using namespace boost::filesystem;
   The constructor reads the payload database prepared by scraper
   and initialize the payload table.
 */
+
+typedef string (*RetrievingFunc)(const string&);
+
 ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& database_filename, const string& cover_server)
   :PayloadServer(init_side),_database_filename(database_filename),
    _apache_host_name((cover_server.empty()) ? "127.0.0.1" : cover_server),
    c_max_buffer_size(1000000),
-   chosen_payload_choice_strategy(c_most_efficient_payload_choice)
+   _payload_cache(this, &ApachePayloadServer::fetch_hashed_url, 
+   c_PAYLOAD_CACHE_ELEMENT_CAPACITY),   
+   chosen_payload_choice_strategy(/*c_random_payload_choice*/c_most_efficient_payload_choice)
 {
   /* Ideally this should check the side and on client side
      it should not attempt openning the the database file but
@@ -185,23 +190,9 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
                 numCandidate,
                 cap);
 
-      if (!itr_best->cached) {
-          stringstream tmp_stream_buf;
-          string payload_uri = "http://" + _apache_host_name + "/" + (*itr_best).url;
-
-          itr_best->cached_size = fetch_url_raw(_curl_obj, payload_uri, tmp_stream_buf);
-          if (itr_best->cached_size == 0)
-            {
-              log_abort("Failed fetch the url %s", (*itr_best).url.c_str());
-              return 0;
-            }
-
-          itr_best->cached = new char[itr_best->cached_size];
-          tmp_stream_buf.read(itr_best->cached, itr_best->cached_size);
-      }
-      
-      *buf = itr_best->cached;
-      *size = itr_best->cached_size;
+      string best_payload = _payload_cache((itr_best->url));
+      *buf = (char*)best_payload.c_str();
+      *size = best_payload.length();
       return 1;
       
     } 
@@ -210,6 +201,28 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
   return 0;
 }
 
+
+/**
+   This function is supposed to be given to the cache class to be used to retrieve the
+   the element when it isn't in the hash table
+
+   @param url_hash the sha-1 hash of the url
+ */
+string
+ApachePayloadServer::fetch_hashed_url(const string& url)
+{
+  stringstream tmp_stream_buf;
+  string payload_uri = "http://" + _apache_host_name + "/" + url;
+
+  log_debug("asking cover server for payload %s", payload_uri.c_str());
+  size_t payload_size = fetch_url_raw(_curl_obj, payload_uri, tmp_stream_buf);
+  if (payload_size) {
+      log_warn("Failed fetch the url %s", payload_uri.c_str());
+  }
+
+  return tmp_stream_buf.str();
+
+}
 
 bool
 ApachePayloadServer::init_uri_dict()
@@ -321,7 +334,7 @@ ApachePayloadServer::find_url_type(const char* uri)
 
   if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
       || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))
-    return HTTP_CONTENT_PNG;//HTML;
+    return HTTP_CONTENT_HTML;
 
   if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
     return HTTP_CONTENT_JAVASCRIPT;
@@ -335,6 +348,12 @@ ApachePayloadServer::find_url_type(const char* uri)
 
   if (!strncmp(ext, ".png", 4) || !strncmp(ext, ".PNG", 4))
     return HTTP_CONTENT_PNG;
+
+  if (!strncmp(ext, ".jpg", 4) || !strncmp(ext, ".JPG", 4))
+    return HTTP_CONTENT_JPEG;
+
+  if (!strncmp(ext, ".gif", 4) || !strncmp(ext, ".GIF", 4))
+    return HTTP_CONTENT_GIF;
 
   return 0;
 }

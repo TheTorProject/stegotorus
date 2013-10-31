@@ -329,7 +329,6 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   type = ((ApachePayloadServer*)_apache_config->payload_server)->find_url_type(chosen_url.c_str());
 
   string uri_to_send("http://");
-  string test_uri("http://127.0.0.1");
   if (sbuflen > _apache_config->uri_byte_cut)
     {
       sbuflen -= _apache_config->uri_byte_cut;
@@ -344,7 +343,6 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
 
       uri_to_send += conn->peername;
       uri_to_send += "/"+ chosen_url + "?q=" + data2;
-      test_uri += "/" + chosen_url + "?q=" + data2;
 
       if (uri_to_send.size() > c_max_uri_length)
         {
@@ -429,7 +427,7 @@ http_apache_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, str
     if (type == -1) { //If we can't recognize the type we assign a random type
       //type = rng_int(NO_CONTENT_TYPES) + 1; //For now, till we decide about the type
       log_debug("Could not recognize request type. Assume html");
-      type = HTTP_CONTENT_PNG; //Fail safe to html
+      type = HTTP_CONTENT_HTML; //Fail safe to html
     }
 
     if (strstr((char*) data, "Cookie") != NULL) {
@@ -726,6 +724,7 @@ http_apache_steg_config_t::process_protocol_data()
 {
   char status_to_send;
   size_t avail = evbuffer_get_length(protocol_data_in);
+  log_info("There are %lu bytes of protocol data is available to process", avail);
   evbuffer_ptr fin_location;
   log_assert(avail); //do not call process protocol if there's no data
 
@@ -941,6 +940,7 @@ size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, si
   http_apache_steg_t*  steg_mod = (http_apache_steg_t*) userp;
   conn_t *down = (conn_t *)(steg_mod->conn);
 
+  log_debug(down, "curl receiving data...");
   down->ever_received = 1;
   //this also seems a hackish way that curl leaves me with no choice
   if (!steg_mod->curl_send_complete) {

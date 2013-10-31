@@ -68,6 +68,8 @@ int PayloadScraper::scrape_dir(const path dir_path)
             pair<unsigned long, unsigned long> fileinfo = compute_capacity(cur_url, cur_steg);
             unsigned long cur_filelength = fileinfo.first;
             unsigned long capacity = fileinfo.second;
+
+            log_debug("capacity %lu:", capacity);
             
             if (capacity < chop_blk::MIN_BLOCK_SIZE) continue; //This is not the 
             //what you want, I think chop should be changed so the steg be allowed
@@ -112,19 +114,19 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server, s
   _available_stegs = new steg_type[c_no_of_steg_protocol];
 
   _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = NULL;
-  _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js0";  _available_stegs[0].capacity_function = PayloadServer::capacityJS;
+  _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js";  _available_stegs[0].capacity_function = PayloadServer::capacityJS;
 
   _available_file_stegs[HTTP_CONTENT_PDF] = NULL;
-  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf0"; _available_stegs[1].capacity_function = PayloadServer::capacityPDF;
+  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PayloadServer::capacityPDF;
 
   _available_file_stegs[HTTP_CONTENT_SWF] = NULL;
-  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf0";  _available_stegs[2].capacity_function = PayloadServer::capacitySWF;
+  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = PayloadServer::capacitySWF;
 
   _available_file_stegs[HTTP_CONTENT_HTML] = NULL; 
-  _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html0";  _available_stegs[3].capacity_function = PayloadServer::capacityJS;
+  _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html";  _available_stegs[3].capacity_function = PayloadServer::capacityJS;
 
   //in new model, extensions are stored in list so one type can have more ext.
-  _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm0";  _available_stegs[4].capacity_function = PayloadServer::capacityJS;
+  _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  _available_stegs[4].capacity_function = PayloadServer::capacityJS;
 
   _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(NULL); //We are only using the capacity function so we don't need a payload server
   _available_stegs[5].type = HTTP_CONTENT_JPEG; _available_stegs[5].extension = ".jpg"; _available_stegs[5].capacity_function = JPGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
@@ -157,6 +159,9 @@ int PayloadScraper::scrape()
   // looking for doc root dir...
   // If the http server is localhost, then try read localy...
   bool remote_mount = false; //true if the doc_root is mounted from remote host
+  string ftp_unmount_command_string = "fusermount -u ";
+  ftp_unmount_command_string += TEMP_MOUNT_DIR;
+
   if (_cover_server == "127.0.0.1")
     if (apache_conf_parser())
       log_warn("error in retrieving apache doc root: %s",strerror(errno));
@@ -168,7 +173,7 @@ int PayloadScraper::scrape()
     //   and mount the www dir
   
     // we need to make directory to mount the remote www dir
-    boost::filesystem::path mount_dir(TEMP_MOUNT_DIR);
+    boost::filesystem::path mount_dir(TEMP_MOUNT_DIR);  
     if (!(boost::filesystem::exists(mount_dir) ||
           boost::filesystem::create_directory(mount_dir))) {
       log_warn("Failed to create a temp dir to mount remote filesystem");
@@ -176,12 +181,15 @@ int PayloadScraper::scrape()
       return -1;
     }
 
+    //just try to unmount in case it is already mounted
+    system(ftp_unmount_command_string.c_str());
+
     string ftp_mount_command_string = "curlftpfs ftp://";
     ftp_mount_command_string += _cover_server + " " + TEMP_MOUNT_DIR;
 
     int mount_result = system(ftp_mount_command_string.c_str());
     if (mount_result) {
-      log_warn("Failed to mount the remote filesystem");
+      log_abort("Failed to mount the remote filesystem");
       _payload_db.close();
       return -1;
     }
@@ -200,9 +208,6 @@ int PayloadScraper::scrape()
     }
     
   if (remote_mount) {
-    string ftp_unmount_command_string = "fusermount -u ";
-    ftp_unmount_command_string += TEMP_MOUNT_DIR;
-    
     system(ftp_unmount_command_string.c_str());
   }
   _payload_db.close();
@@ -278,18 +283,21 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
   //cur_file.read(payload_buf, cur_filelength);
             
   //cur_file.close();
-  string url_to_retreive = "http://127.0.0.1/" + payload_url;
+  string url_to_retreive = "http://" + _cover_server +"/" + payload_url;
 
   unsigned long apache_size = fetch_url_raw(capacity_handle, url_to_retreive, payload_buf);
 
   char* buf = new char[apache_size]; log_assert(buf);
   payload_buf.read(buf, apache_size);
 
-  unsigned int capacity = cur_steg->capacity_function(buf, apache_size);
+  unsigned long capacity = cur_steg->capacity_function(buf, apache_size);
+  log_debug("capacity: %lu", capacity);
 
   //no delete need for buf because new is overloaded to handle that
   //TODO:or is it? i see a relative huge memory consumption when the payload 
   //scraperneeds to recompute the db
+  delete buf; //needs further investigation
+  buf = NULL;
   return pair<unsigned long, unsigned long>(cur_filelength, capacity);
 
 }

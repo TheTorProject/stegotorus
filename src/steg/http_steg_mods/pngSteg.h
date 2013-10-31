@@ -20,14 +20,14 @@ class PNGChunkData
   */
   inline void compute_length()
   {
-    assert(chunk_offset);
-    length = (*(chunk_offset + 0) << 24) | (*(chunk_offset+1) << 16) | (*(chunk_offset+2) << 8) | *(chunk_offset + 3);
+    length = (chunk_offset) ? (*(chunk_offset + 0) << 24) | (*(chunk_offset+1) << 16) | (*(chunk_offset+2) << 8) | *(chunk_offset + 3) : 0;
   }
 
  public:
   uint8_t* chunk_offset;
   uint8_t* payload_end;
   const char* type = "IDAT";
+  static const size_t c_chunk_header_length = 8;
   static const size_t chunk_header_footer_length = 12;
   size_t length;
   
@@ -42,16 +42,35 @@ class PNGChunkData
   */
   uint8_t* get_next_IDAT_chunk(PNGChunkData* next_chunk)
   {
-    assert(chunk_offset);
+    if (not chunk_offset) return 0;
+
+    if (chunk_offset + length + chunk_header_footer_length > payload_end) {
+      chunk_offset = 0; //invalid chunk
+      length = 0;
+      return 0;
+    }
 
     next_chunk->chunk_offset = chunk_offset + length + chunk_header_footer_length;
     next_chunk->compute_length();
+
+    //If the length is invalid then the file is either corrupted or invalid format
+    if (next_chunk->chunk_offset + next_chunk->length + chunk_header_footer_length > payload_end) {
+      next_chunk->chunk_offset = 0;
+      next_chunk->length = 0;
+      return 0;
+    }
 
     while(next_chunk->chunk_offset < payload_end) {
       if  (!memcmp(type, next_chunk->chunk_offset + 4, 4 * sizeof(uint8_t)))
         return next_chunk->chunk_offset;
 
-      next_chunk->chunk_offset += next_chunk->length + (size_t)12;
+      if (next_chunk->chunk_offset + next_chunk->length + chunk_header_footer_length > payload_end) {
+        next_chunk->chunk_offset = 0;
+        next_chunk->length = 0;
+        return 0; //corrupted: something is wrong!
+      }
+
+      next_chunk->chunk_offset += next_chunk->length + chunk_header_footer_length;
       next_chunk->compute_length();
            
     }
@@ -84,10 +103,14 @@ class PNGChunkData
       aux_chunk.chunk_offset = cur_chunk_offset;
       aux_chunk.payload_end = payload_end;
       aux_chunk.compute_length();
-      assert(aux_chunk.get_next_IDAT_chunk(this));
-      
+      /*if (aux_chunk.chunk_offset + aux_chunk.length + chunk_header_footer_length > payload_end) {// || not aux_chunk.get_next_IDAT_chunk(this)) { //not a valid chunk
+        chunk_offset = 0;
+        length = 0;
+      }
+      else*/
+        aux_chunk.get_next_IDAT_chunk(this);
     }
-
+  
 };
 
 
@@ -109,6 +132,17 @@ public:
      */
 	virtual ssize_t capacity(const uint8_t *buffer, size_t len);
 	static unsigned int static_capacity(char *buffer, int len);
+
+    /**
+       compute the capcaity of the cover by getting a pointer to the
+       beginig of the body in the response
+
+       @param cover_body pointer to the begiing of the body
+       @param body_length the total length of message body
+    */
+    virtual ssize_t headless_capacity(char *cover_body, int body_length);
+    static unsigned int static_headless_capacity(char *cover_body, int body_length);
+
 
     /**
        constructor just to call parent constructor

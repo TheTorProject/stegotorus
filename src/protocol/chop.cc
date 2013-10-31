@@ -132,7 +132,7 @@ struct chop_circuit_t : circuit_t
   chop_conn_t* pick_connection(size_t desired, size_t minimum,
                                size_t *blocksize);
 
-  int recv_block(uint32_t seqno, opcode_t op, evbuffer *payload, conn_t *conn);
+  int recv_block(uint32_t seqno, opcode_t op, evbuffer *payload, steg_config_t *steg_cfg);
   int process_queue();
   int check_for_eof();
 
@@ -1315,7 +1315,7 @@ chop_circuit_t::maybe_send_ack()
 
 int
 chop_circuit_t::recv_block(uint32_t seqno, opcode_t op, 
-                           evbuffer *data, conn_t *conn)
+                           evbuffer *data, steg_config_t *steg_cfg)
 {
   switch (op) {
   case op_DAT:
@@ -1363,7 +1363,7 @@ chop_circuit_t::recv_block(uint32_t seqno, opcode_t op,
   data = evbuffer_new();
 
  insert:
-  recv_queue.insert(seqno, op, data, conn);
+  recv_queue.insert(seqno, op, data, steg_cfg);
   return 0;
 }
 
@@ -1419,14 +1419,14 @@ chop_circuit_t::process_queue()
       //FIX ME I need to check if the conn is still 
       //alive/valid
       if (evbuffer_get_length(blk.data))
-        evbuffer_add_buffer(((chop_conn_t*)blk.conn)->steg->cfg()->protocol_data_in, blk.data);
+        evbuffer_add_buffer(((steg_config_t*)blk.steg_cfg)->protocol_data_in, blk.data);
       
       //now ask the steg to process the data
-      ((chop_conn_t*)blk.conn)->steg->cfg()->process_protocol_data();
+      ((steg_config_t*)blk.steg_cfg)->process_protocol_data();
       //if steg needs to reply to the data it writes it to the same 
       //buffer and we need to send them
-      if (evbuffer_get_length(((chop_conn_t*)blk.conn)->steg->cfg()->protocol_data_out))
-          send();
+      //if (evbuffer_get_length(((steg_config_t*)blk.steg_cfg)->protocol_data_out))
+        send();
       break;
       
     // no other opcodes should get this far
@@ -1508,7 +1508,7 @@ chop_circuit_t::retransmit()
        i != tx_queue.end();
        ++i) {
     transmit_elt &el = *i;
-    size_t lo = MIN_BLOCK_SIZE + el.hdr.dlen();
+    size_t lo = MIN_BLOCK_SIZE + el.hdr.dlen(); //we don't need to add the min block size as it is done in pick_connections, maybe we sends these with double headers
     size_t room;
     chop_conn_t *conn = pick_connection(lo, lo, &room);
     if (!conn)
@@ -1900,7 +1900,7 @@ chop_conn_t::recv()
       return -1;
     }
 
-    if (upstream->recv_block(hdr.seqno(), hdr.opcode(), data, this))
+    if (upstream->recv_block(hdr.seqno(), hdr.opcode(), data, this->steg->cfg()))
       return -1; // insert() logs an error
   }
 

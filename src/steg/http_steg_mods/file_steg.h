@@ -23,11 +23,13 @@ protected:
   const int RESPONSE_INCOMPLETE = -1;
   const int RESPONSE_BAD = -2;
 
-  const size_t c_HTTP_MSG_BUF_SIZE = 1000000;
   PayloadServer* _payload_server;
   double noise2signal; //making sure that the cover is bigger enough than the 
                        //the data to protect against statistical analysis
   const int c_content_type; //The inheriting class will set the type
+
+  uint8_t* outbuf; //this is where the payload sit after being injected by the
+  //the message. it is define as class member to avoid allocation and delocation
 
   /**
      Finds a payload of approperiate type and size
@@ -61,6 +63,8 @@ protected:
   extract_appropriate_respones_body(evbuffer* payload_buf);
 
  public:
+  static const size_t c_HTTP_MSG_BUF_SIZE = 10000000;
+  static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
   /**
      embed the data in the cover buffer, the assumption is that
      the function doesn't expand the buffer size
@@ -90,6 +94,7 @@ protected:
   
   const list<string> extensions;
   virtual ssize_t capacity(const uint8_t* buffer, size_t len) = 0;
+  virtual ssize_t headless_capacity(char *cover_body, int body_length) = 0;
 
   /**
      Find appropriate payload calls virtual embed to embed it appropriate
@@ -123,6 +128,11 @@ protected:
      @child_type?
   */
   FileStegMod(PayloadServer* payload_provider, double noise2signal, int child_type);
+  /** 
+      Destructor, just releases the http buffer 
+  */
+  ~FileStegMod();
+
   
 };
 

@@ -2,7 +2,9 @@
 #define _APACHE_PAYLOAD_SERVER_H
 
 #include <openssl/sha.h> 
+#include <unordered_map>
 
+#include "payload_lru_cache.h"
 #include "payload_server.h"
 
 
@@ -48,6 +50,22 @@ class ApachePayloadServer: public PayloadServer
      
   */
   const uint8_t* compute_uri_dict_mac();
+
+  //Cache stuff
+  static const size_t c_PAYLOAD_CACHE_ELEMENT_CAPACITY = 500;
+  /**
+     LRU cache to prevent out of memory when there are lots of payload
+     on the server, for now we work with number of payload and can 
+     be improved to the limit by total size
+   */
+  PayloadLRUCache<std::string, std::string, ApachePayloadServer, unordered_map> _payload_cache;
+  /**
+     This function is supposed to be given to the cache class to be used to retrieve the
+     the element when it isn't in the hash table
+
+     @param url_hash the sha-1 hash of the url
+  */
+  string fetch_hashed_url(const string& url_hash);
 
  public:
   enum PayloadChoiceStrategy {

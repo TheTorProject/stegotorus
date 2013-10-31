@@ -33,6 +33,15 @@ protected:
 	int corrupt_reset_interval(uint8_t *raw, int len);
 
 public:
+    /**
+       compute the capcaity of the cover by getting a pointer to the
+       beginig of the body in the response
+
+       @param cover_body pointer to the begiing of the body
+       @param body_length the total length of message body
+    */
+    virtual ssize_t headless_capacity(char *cover_body, int body_length);
+    static unsigned int static_headless_capacity(char *cover_body, int body_length);
 
     /**
        returns the capacity of the data you can store in jpeg response

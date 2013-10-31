@@ -182,9 +182,12 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
       hi = MAX_COOKIE_SIZE*3/4;
   }
   else {
-    if (!have_received)
+    if (!have_received) {
+      log_debug(conn, "yet have to receive");
       return 0;
+    }
 
+    log_debug(conn, "checking available capacity for type %u", type);
     switch (type)
       {
       case HTTP_CONTENT_SWF:
@@ -207,7 +210,7 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
           hi = PDF_MIN_AVAIL_SIZE;
         break;
 
-      case HTTP_CONTENT_ENCRYPTEDZIP: //We need to prevent this
+      case HTTP_CONTENT_ENCRYPTEDZIP: //We need to prevent thi
         return 0;
 
       default:
@@ -216,11 +219,16 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
         
   }
 
-  if (hi < lo) 
+  if (hi < lo) { 
     /* cannot satisfy this request, doesn't make sense */
-    log_abort("hi<lo: client=%d type=%d hi=%ld lo=%ld",
+    log_warn("hi<lo: client=%d type=%d hi=%ld lo=%ld",
               config->is_clientside, type,
               (unsigned long)hi, (unsigned long)lo);
+    //this might because of the max size of the connection
+    //type can not handle that much data. so we return 0
+    //so the pick_connection finds another connection
+    return 0;
+  }
 
   return clamp(pref + rng_range_geom(hi - lo + 1, 8), lo, hi); //vmon I've added the randomness
   //but don't know why, (I think zack took it away) also I would get into  

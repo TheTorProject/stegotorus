@@ -8,6 +8,8 @@
 #include <event2/buffer.h>
 #include <assert.h>
 
+#include <fstream> //for decode failure test
+
 using namespace std;
 
 #include "util.h"
@@ -22,12 +24,19 @@ using namespace std;
          to this module.
 */
 FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_from_cfg, int child_type = -1)
-  :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type)
+  :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type), outbuf(new uint8_t[c_HTTP_MSG_BUF_SIZE])
 {
-  
+  assert(outbuf);
 
 }
 
+/** 
+    Destructor, just releases the http buffer 
+*/
+FileStegMod::~FileStegMod()
+{
+  delete outbuf;
+}
 /**
    Encapsulate the repetative task of checking for the respones of content_type
    choosing one with appropriate size and extracting the body from header
@@ -128,7 +137,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   uint8_t* data1;
   //call this from util to find to extract the buffer into memory block
   int sbuflen = evbuffer_to_memory_block(source, &data1);
-  uint8_t outbuf[c_HTTP_MSG_BUF_SIZE];
+  //uint8_t outbuf[c_HTTP_MSG_BUF_SIZE]; //moving this guy to heap?
   ssize_t outbuflen = 0;
 
   uint8_t newHdr[MAX_RESP_HDR_SIZE];
@@ -154,7 +163,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   size_t body_len = cnt-body_offset;
   size_t hLen = body_offset;
-  log_info("coping body of %lu size", (body_len));
+  log_debug("coping body of %lu size", (body_len));
   if ((body_len) > c_HTTP_MSG_BUF_SIZE)
   {
     log_warn("HTTP response doesn't fit in the buffer %lu > %lu", (body_len)*sizeof(char), c_HTTP_MSG_BUF_SIZE);
@@ -164,11 +173,29 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   //int hLen = body_offset - (size_t)cover_payload - 4 + 1;
   //extracting the body part of the payload
-  log_debug("SERVER embeding data1 with length %d into type %d", (int)cnt, c_content_type);
+  log_debug("SERVER embeding data1 with length %d into type %d", sbuflen, c_content_type);
   outbuflen = encode(data1, sbuflen, outbuf, body_len);
 
+  //TEST!!!!
+  //only for test get rid of this after problems have been solved:
+  uint8_t recovered_data_for_test[sbuflen];
+  decode(outbuf, outbuflen, recovered_data_for_test);
+
+  if (memcmp(data1, recovered_data_for_test, sbuflen)) { //barf!!
+    //keep the evidence for testing
+    ofstream failure_evidence_file("fail_cover.log", ios::binary | ios::out);
+    failure_evidence_file.write(cover_payload + body_offset, body_len);
+    failure_evidence_file.write(cover_payload + body_offset, body_len);
+    failure_evidence_file.close();
+    ofstream failure_embed_evidence_file("failed_embeded_cover.log", ios::binary | ios::out);
+    failure_embed_evidence_file.write((const char*)outbuf, outbuflen);
+    failure_embed_evidence_file.close();
+    log_abort("decoding cannot recovers the encoded data consistantly for type %d", c_content_type);
+  }
+  ///END TEST!!!
+
   if (outbuflen < 0) {
-    log_warn("SERVER embeding fails fails");
+    log_warn("SERVER embeding fails");
     return -1;
   }
   log_debug("SERVER FileSteg sends resp with hdr len %lu body len %lu",
@@ -255,6 +282,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   }
 
   httpBody = httpHdr + hdrLen;
+  log_debug("CLIENT unwrapping data out of type %d payload", c_content_type);
 
   outbuflen = decode(httpBody, content_len, outbuf);
   if (outbuflen < 0) {
@@ -262,7 +290,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
     return RECV_BAD;
   }
 
-  log_debug("CLIENT unwrapped data of length %d:", content_len);
+  log_debug("CLIENT unwrapped data of length %d:", outbuflen);
 
   if (evbuffer_add(dest, outbuf, outbuflen)) {
     log_warn("CLIENT ERROR: evbuffer_add to dest fails\n");

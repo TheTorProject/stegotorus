@@ -8,6 +8,8 @@
 #include <tr1/unordered_set>
 #include <ostream>
 
+struct steg_config_t;
+
 namespace chop_blk
 {
 
@@ -425,7 +427,8 @@ struct reassembly_elt
 {
   evbuffer *data;
   opcode_t op;
-  conn_t* conn;
+  //conn_t* conn;
+  steg_config_t* steg_cfg;
   bool do_ack;
 };
 
@@ -462,7 +465,7 @@ public:
    * the queue (both of these cases indicate protocol errors).
    * DATA is consumed no matter what the return value is.
    */
-  bool insert(uint32_t seqno, opcode_t op, evbuffer *data, conn_t *conn);
+  bool insert(uint32_t seqno, opcode_t op, evbuffer *data, steg_config_t *conn);
 
   /**
    * Return the current lowest acceptable sequence number in the

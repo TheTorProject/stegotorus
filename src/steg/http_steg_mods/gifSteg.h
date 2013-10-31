@@ -41,6 +41,16 @@ public:
 	static unsigned int static_capacity(char *buffer, int len);
 
     /**
+       compute the capcaity of the cover by getting a pointer to the
+       beginig of the body in the response
+
+       @param cover_body pointer to the begiing of the body
+       @param body_length the total length of message body
+    */
+    virtual ssize_t headless_capacity(char *cover_body, int body_length);
+    static unsigned int static_headless_capacity(char *cover_body, int body_length);
+
+    /**
        constructor just to call parent constructor
     */
    GIFSteg(PayloadServer* payload_provider, double noise2signal = 0);

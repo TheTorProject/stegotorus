@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
+using namespace std;
+
 #include <event2/buffer.h>
 
 #include "util.h"
@@ -24,17 +27,25 @@ ssize_t PNGSteg::capacity(const uint8_t *raw, size_t len)
   return static_capacity((char*)raw, len);
 }
 
-//Temp: should get rid of ASAP
-unsigned int PNGSteg::static_capacity(char *cover_payload, int cover_length)
+ssize_t PNGSteg::headless_capacity(char *cover_body, int body_length)
 {
-  
+  return static_headless_capacity((char*)cover_body, body_length);
+}
+
+/**
+   compute the capcaity of the cover by getting a pointer to the
+   beginig of the body in the response
+
+   @param cover_body pointer to the begiing of the body
+   @param body_length the total length of message body
+ */
+unsigned int PNGSteg::static_headless_capacity(char *cover_body, int body_length)
+{
   size_t total_capacity = 0;
 
-  ssize_t body_offset = extract_appropriate_respones_body(cover_payload, cover_length);
-  if (body_offset == -1) //couldn't find the end of header
-    return 0;  //useless payload
-  
-  PNGChunkData cur_data_chunk((uint8_t*)body_offset + c_magic_header_length, (uint8_t*)cover_payload + cover_length), next_data_chunk;
+  PNGChunkData cur_data_chunk((uint8_t*)cover_body + c_magic_header_length, (uint8_t*)cover_body + body_length), next_data_chunk;
+  if (not cur_data_chunk.chunk_offset) //corrupted or invalid format
+    return 0;
   total_capacity = cur_data_chunk.length;
   while(cur_data_chunk.get_next_IDAT_chunk(&next_data_chunk)) {
       total_capacity += next_data_chunk.length;
@@ -44,8 +55,25 @@ unsigned int PNGSteg::static_capacity(char *cover_payload, int cover_length)
   return (total_capacity <= sizeof(uint32_t)) ? 0 : total_capacity - sizeof(uint32_t); //counting for the data length
 }
 
+//Temp: should get rid of ASAP
+unsigned int PNGSteg::static_capacity(char *cover_payload, int cover_length)
+{
+  ssize_t body_offset = extract_appropriate_respones_body(cover_payload, cover_length);
+  if (body_offset == -1) //coulodn't find the end of header
+    return 0;  //useless payload
+
+  return static_headless_capacity(cover_payload + body_offset, cover_length - body_offset);
+
+}
+
 int PNGSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len)
 {
+
+  if (data_len > c_MAX_MSG_BUF_SIZE) {
+    log_warn("To much data to be fit into recovering buffer during the decode process");
+    return -1;
+  }
+    
   //Make a new block of data with data length attached
   uint8_t lengthed_data[data_len + sizeof(uint32_t)]; //This is in stack I hope
   uint32_t data_len_encode = (uint32_t)data_len;
@@ -58,8 +86,9 @@ int PNGSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
 
   do {
     cur_data_chunk = next_data_chunk;
-    memcpy(cur_data_chunk.chunk_offset+8, cur_data_offset, cur_data_chunk.length);
-    cur_data_offset += cur_data_chunk.length;
+    size_t length_to_embed = min(cur_data_chunk.length, (size_t) (end_of_data - cur_data_offset));
+    memcpy(cur_data_chunk.chunk_offset+ PNGChunkData::c_chunk_header_length, cur_data_offset, length_to_embed); 
+    cur_data_offset += length_to_embed;
 
   }while((cur_data_offset < end_of_data) && (cur_data_chunk.get_next_IDAT_chunk(&next_data_chunk)));
 
@@ -81,10 +110,13 @@ ssize_t PNGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
 
   //recovering data length
   size_t data_recovered_length = 0;
+  uint32_t data_length;
+  size_t header_recovering_length;
   do {
     cur_data_chunk = next_data_chunk;
-    memcpy(data + data_recovered_length, cur_data_chunk.chunk_offset+8,cur_data_chunk.length);
-    data_recovered_length += cur_data_chunk.length;
+    header_recovering_length = min(cur_data_chunk.length, sizeof(uint32_t) - data_recovered_length);
+    memcpy((void*)((&data_length) + data_recovered_length), cur_data_chunk.chunk_offset+PNGChunkData::c_chunk_header_length, header_recovering_length);
+    data_recovered_length += header_recovering_length;
 
   }while(data_recovered_length < sizeof(uint32_t) && (cur_data_chunk.get_next_IDAT_chunk(&next_data_chunk)));
 
@@ -92,23 +124,30 @@ ssize_t PNGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
     log_warn("Ran out of PNG cover before reocovering the whole data, something is wrong :'(, probably corrupted cover");
     return -1;
   }
-  cur_data_chunk = next_data_chunk;
-  
   //now we know the exact length 
-  size_t data_length = (size_t)(*((uint32_t*)data));
-  
+  if (data_length > c_MAX_MSG_BUF_SIZE) {
+    log_warn("Data buffer too small to contains decoded data with length %u", (unsigned int) data_length);
+    return -1;
+  }
+
+  //If the last chunk had any residue let's put them in data buffer
+  size_t valid_data_in_chunk = min(cur_data_chunk.length-header_recovering_length, (size_t)data_length);
+  memcpy(data, cur_data_chunk.chunk_offset + PNGChunkData::c_chunk_header_length + header_recovering_length, valid_data_in_chunk);
+  data_recovered_length += valid_data_in_chunk;
+
   //moving stuff
-  data_recovered_length -= sizeof(uint32_t);
-  memcpy(data, data + sizeof(uint32_t), data_recovered_length);
+  //memcpy(data, data + sizeof(uint32_t), data_recovered_length);
+  //you can't move stuff like that :(
   
-  while(data_recovered_length < data_length) {
-    cur_data_chunk = next_data_chunk;
-    data_recovered_length += cur_data_chunk.length;
-    memcpy(data + data_recovered_length, cur_data_chunk.chunk_offset + 8,cur_data_chunk.length);
+  while(data_recovered_length < data_length + sizeof(uint32_t)) {
     if (!cur_data_chunk.get_next_IDAT_chunk(&next_data_chunk)) {
       log_warn("Ran out of PNG cover before reocovering the whole data, something is wrong :'(, probably corrupted cover");
       return -1;
     }
+    cur_data_chunk = next_data_chunk;
+    valid_data_in_chunk = min(cur_data_chunk.length, data_length - data_recovered_length);
+    memcpy(data + data_recovered_length, cur_data_chunk.chunk_offset + PNGChunkData::c_chunk_header_length, valid_data_in_chunk);
+    data_recovered_length += valid_data_in_chunk;
   }
 
   return (ssize_t)data_length;

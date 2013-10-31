@@ -1,0 +1,16 @@
+- You need to inherit from FileStegMod class and write:
+  - headless capacity
+  - encode
+  - decode
+
+Functions.
+
+- define HTTP_CONTENT_BLAH in payload_server and update c_no_of_steg_protocol
+
+- You need to add your new type to payload_scraper.cc constructor and increase
+  the size of _available_stegs.
+
+- in http.cc constructor calls the steg module constructor to make new steg modes.
+
+- Update [Apache]PayloadServer::find_url_type approperiately.
+
