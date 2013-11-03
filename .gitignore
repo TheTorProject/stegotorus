@@ -41,6 +41,7 @@
 /stegotorus
 /tltester
 /unittests
+/g_unittests
 /pgen_fake
 /pgen_pcap
 /tester_proxy

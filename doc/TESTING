@@ -1,9 +1,10 @@
 Debian Wheezy:
+apt-get install build-essential git pkg-config libssl-dev libevent-dev libcurl4-openssl-dev libboost-dev libboost-system-dev libboost-filesystem-dev
+
 git clone https://github.com/zackw/stegotorus
 cd stegotorus
-git checkout f--chop-handshaker
+git checkout tor-improve
 
-apt-get install libevent-dev libcurl4-openssl-dev libboost-dev libboost-system-dev libboost-filesystem-dev
-
-
-make PKG_CONFIG_PATH=`pwd`
+autoreconf
+./configure PKG_CONFIG_PATH=`pwd`
+make 
