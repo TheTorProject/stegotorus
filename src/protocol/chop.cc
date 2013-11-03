@@ -837,7 +837,7 @@ chop_circuit_t::send_special(opcode_t f, struct evbuffer *payload)
   chop_conn_t *conn = pick_connection(d, d, &blocksize);
   if (!conn || blocksize < MIN_BLOCK_SIZE + d) {
     char fallbackbuf[4];
-    log_info("no usable connection for special block "
+    log_debug("no usable connection for special block "
              "(opcode %s, need %lu bytes, have %lu)",
              opname(f, fallbackbuf), (unsigned long)(d + MIN_BLOCK_SIZE),
              (unsigned long)blocksize);
@@ -1684,7 +1684,7 @@ chop_conn_t::recv_handshake()
     //we'll act as one for this connection
     log_warn("handshake authentication faild.");
     if (config->transparent_proxy) {
-      log_info("stegotorus turning into a transparent proxy.");
+      log_debug("stegotorus turning into a transparent proxy.");
       config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
       return 1;
     }
@@ -1743,7 +1743,7 @@ chop_conn_t::recv()
     //so we have transparent proxy we will become 
     //transparent at this moment
     if (config->transparent_proxy) {
-      log_info("stegotorus turning into a transparent proxy.");
+      log_debug("stegotorus turning into a transparent proxy.");
       config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
       return 0;
     }
@@ -1888,7 +1888,7 @@ chop_conn_t::recv()
             char* data_4_log =  new char[hdr.dlen() + 1];
             memcpy(data_4_log, decodebuf, hdr.dlen());
             data_4_log[hdr.dlen()] = '\0';
-            log_info("Data received: %s",  data_4_log);
+            log_debug("Data received: %s",  data_4_log);
             
           }
       }

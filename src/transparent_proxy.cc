@@ -101,7 +101,7 @@ TransparentProxy::readcb(struct bufferevent *bev, void *ctx)
   // char* data_4_log =  new char[len + 1];
   // evbuffer_copyout(src, data_4_log, len);
   // data_4_log[len] = '\0';
-  // log_info("Data received: %s",  data_4_log);
+  // log_debug("Data received: %s",  data_4_log);
 
   if ((!partner) || ((drop_rate != 0) && ((double)rand()/RAND_MAX < drop_rate)))
   {

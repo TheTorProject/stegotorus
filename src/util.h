@@ -171,12 +171,24 @@ size_t xgetline(char **lineptr, size_t *nptr, FILE *stream);
 /** We don't want no logs. */
 #define LOG_METHOD_NULL 3
 
+/** Logging severities */
+
+#define LOG_SEV_ERR     4
+#define LOG_SEV_WARN    3
+#define LOG_SEV_INFO    2
+#define LOG_SEV_DEBUG   1
+
 /** Set the log method, and open the logfile 'filename' if appropriate. */
 int log_set_method(int method, const char *filename);
 
 /** Set the minimum severity that will be logged.
     'sev_string' may be "warn", "info", or "debug" (case-insensitively). */
 int log_set_min_severity(const char* sev_string);
+
+/**
+   returns the log severity as integer. This helps programmer to 
+   write codes that only run during debug mode. */
+int log_get_min_severity();
 
 /** Request timestamps on all log messages. */
 void log_enable_timestamps();

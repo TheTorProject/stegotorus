@@ -267,13 +267,6 @@ ascii_strlower(char *s)
 /* strlen(TRUNCATED_STR) */
 #define TRUNCATED_STR_LEN 14
 
-/** Logging severities */
-
-#define LOG_SEV_ERR     4
-#define LOG_SEV_WARN    3
-#define LOG_SEV_INFO    2
-#define LOG_SEV_DEBUG   1
-
 /* logging destination; NULL for no logging. */
 static FILE *log_dest;
 /* minimum logging severity */
@@ -399,6 +392,16 @@ log_set_min_severity(const char* sev_string)
   }
   log_min_sev = severity;
   return 0;
+}
+
+/**
+   returns the log severity as integer. This helps programmer to 
+   write codes that only run during debug mode
+ */
+int
+log_get_min_severity()
+{
+  return log_min_sev;
 }
 
 /** Enable timestamps on all log messages. */

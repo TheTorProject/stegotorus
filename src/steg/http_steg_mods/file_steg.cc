@@ -176,23 +176,24 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   log_debug("SERVER embeding data1 with length %d into type %d", sbuflen, c_content_type);
   outbuflen = encode(data1, sbuflen, outbuf, body_len);
 
-  //TEST!!!!
-  //only for test get rid of this after problems have been solved:
-  uint8_t recovered_data_for_test[sbuflen];
-  decode(outbuf, outbuflen, recovered_data_for_test);
+  //New steg module test:
+  if (!(LOG_SEV_DEBUG < log_get_min_severity())) { //only perform this during debug
+    uint8_t recovered_data_for_test[sbuflen];
+    decode(outbuf, outbuflen, recovered_data_for_test);
 
-  if (memcmp(data1, recovered_data_for_test, sbuflen)) { //barf!!
-    //keep the evidence for testing
-    ofstream failure_evidence_file("fail_cover.log", ios::binary | ios::out);
-    failure_evidence_file.write(cover_payload + body_offset, body_len);
-    failure_evidence_file.write(cover_payload + body_offset, body_len);
-    failure_evidence_file.close();
-    ofstream failure_embed_evidence_file("failed_embeded_cover.log", ios::binary | ios::out);
-    failure_embed_evidence_file.write((const char*)outbuf, outbuflen);
-    failure_embed_evidence_file.close();
-    log_abort("decoding cannot recovers the encoded data consistantly for type %d", c_content_type);
+    if (memcmp(data1, recovered_data_for_test, sbuflen)) { //barf!!
+      //keep the evidence for testing
+      ofstream failure_evidence_file("fail_cover.log", ios::binary | ios::out);
+      failure_evidence_file.write(cover_payload + body_offset, body_len);
+      failure_evidence_file.write(cover_payload + body_offset, body_len);
+      failure_evidence_file.close();
+      ofstream failure_embed_evidence_file("failed_embeded_cover.log", ios::binary | ios::out);
+      failure_embed_evidence_file.write((const char*)outbuf, outbuflen);
+      failure_embed_evidence_file.close();
+      log_abort("decoding cannot recovers the encoded data consistantly for type %d", c_content_type);
+    }
   }
-  ///END TEST!!!
+  ///End of steg test!!
 
   if (outbuflen < 0) {
     log_warn("SERVER embeding fails");

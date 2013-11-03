@@ -198,7 +198,6 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
     log_abort("failed to initiate curl multi object.");
 
   if (!(protocol_data_in || protocol_data_out)) {
-    log_info("I'm really here");
     log_abort("failed to allocate evbuffer for protocol data");
   }
 
@@ -724,7 +723,7 @@ http_apache_steg_config_t::process_protocol_data()
 {
   char status_to_send;
   size_t avail = evbuffer_get_length(protocol_data_in);
-  log_info("There are %lu bytes of protocol data is available to process", avail);
+  log_debug("There are %lu bytes of protocol data is available to process", avail);
   evbuffer_ptr fin_location;
   log_assert(avail); //do not call process protocol if there's no data
 

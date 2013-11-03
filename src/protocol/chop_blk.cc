@@ -406,14 +406,14 @@ reassembly_queue::insert(uint32_t seqno, opcode_t op,
                          evbuffer *data, steg_config_t *steg_cfg)
 {
   if (seqno - window() > 255) {
-    log_info("block outside receive window");
+    log_debug("block outside receive window");
     evbuffer_free(data);
     return false;
   }
   uint8_t front = next_to_process & 0xFF;
   uint8_t pos = front + (seqno - window());
   if (cbuf[pos].data) {
-    log_info("duplicate block");
+    log_debug("duplicate block");
     evbuffer_free(data);
     return false;
   }
