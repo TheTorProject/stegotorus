@@ -4,11 +4,11 @@
 
 ACLOCAL_AMFLAGS = -I config-aux --install
 
-AM_CXXFLAGS = -Werror -Wall -Wextra -Wformat=2 -std=c++0x
+AM_CXXFLAGS = -Werror -Wall -Wextra -Wno-missing-field-initializers -Wformat=2 -std=c++0x
 # Took off _FROTYFY_SOURCE because stdlib doesn't allow it with -O0 -g2
 # So it is only for releaes time
 #AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
-AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods $(lib_CPPFLAGS)
+AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods $(lib_CPPFLAGS) -I$(srcdir)/src/test/gtest/include 
 
 noinst_LIBRARIES = libstegotorus.a
 noinst_PROGRAMS  = unittests g_unittests tltester tester_proxy webpage_tester
@@ -114,14 +114,19 @@ nodist_unittests_SOURCES = unitgrplist.cc
 
 unittests_LDADD = libstegotorus.a $(lib_LIBS)
 
+GTEST_SOURCES = \
+	src/test/gtest/gtest_main.cc \
+	src/test/gtest/gtest-all.cc
+
 g_unittests_SOURCES = \
+	$(GTEST_SOURCES) \
 	src/test/steg_test/steg_mod_unittest.cc
 
 g_unittests_LDADD = libstegotorus.a $(lib_LIBS)
 
-g_unittests_LDFLAGS = \
-	-lgtest_main \
-	-lgtest
+#g_unittests_LDFLAGS = \
+#	-lgtest_main \
+#	-lgtest
 
 tltester_SOURCES = src/test/tltester.cc src/util.cc src/util-net.cc
 tltester_LDADD   = $(libevent_LIBS)
@@ -216,6 +221,7 @@ stamp-audit-globals: src/audit-globals.sh Makefile \
 check-local:
 	@echo --- Unit tests ---
 	$(AM_V_at) ./unittests
+	$(AM_V_at) ./g_unittests
 if INTEGRATION_TESTS
 	@echo --- Integration tests ---
 	@set -ex; if [ ! -e traces ]; then \

@@ -2,13 +2,16 @@
  * See LICENSE for other credits and copying information
  */
 
+#include "util.h" //this need to be included early cause : "C++ implementations should define these macros only when __STDC_LIMIT_MACROS is defined before is included"
+// From: http://stackoverflow.com/a/3233069/1039165
 #include <event2/buffer.h>
 
-#include "util.h"
-#include "../payload_server.h"
-#include "pdfSteg.h"
+
 #include "connections.h"
 #include "compression.h"
+
+#include "payload_server.h"
+#include "pdfSteg.h"
 
 /* pdfSteg: A PDF-based steganography module */
 

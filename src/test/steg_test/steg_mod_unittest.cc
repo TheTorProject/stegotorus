@@ -82,7 +82,7 @@ class StegModTest : public testing::Test {
     
     EXPECT_EQ(cover_len, test_steg_mod->encode((uint8_t*)test_phrase, data_len, cover_payload, cover_len));
     
-   EXPECT_EQ(strlen(test_phrase)+1, test_steg_mod->decode(cover_payload, cover_len, recovered_phrase));
+    EXPECT_EQ((signed)(strlen(test_phrase)+1), test_steg_mod->decode(cover_payload, cover_len, recovered_phrase));
    EXPECT_FALSE(memcmp(test_phrase,recovered_phrase, data_len));
    //  cout << test_phrase << endl;
    //  cout << recovered_phrase << endl;
