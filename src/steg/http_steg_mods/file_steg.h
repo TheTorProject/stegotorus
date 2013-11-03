@@ -131,7 +131,8 @@ protected:
   /** 
       Destructor, just releases the http buffer 
   */
-  ~FileStegMod();
+  ~FileStegMod();make
+
 
   
 };
