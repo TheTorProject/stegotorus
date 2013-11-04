@@ -142,13 +142,40 @@ struct chop_circuit_t : circuit_t
     // could have returned; otherwise, we might axe the connection when
     // it was just that there was nothing to say for a while.
     // For simplicity's sake, right now we hardwire this to be 30 minutes.
-    return 30 * 60 * 1000;
+
+    //However, this approach expose server to a simple and powerful
+    //DoS attack: do 10^10 times: asks for 1GB file drop the upstream connection,
+    //soon the server is out of memory cause it keeps the content in the evbuff
+    //This should depends on global state of memory but as a simple rule of thumb, 
+    //for now under 
+    // 0        30 min
+    // 100K     29 min
+    // 1MB      5  min
+    // 10MB     1  min
+    // However this should be only applied when we get enough dead cycle that
+    // indicates the client is no longer interested in the content
+    // 30min - rng(log(size(0), cycles)
+
+    const static unsigned int max_idle_min = 30;
+    if (!dead_cycles)
+      return max_idle_min * 60 * 1000;
+
+    //Anti dos measures
+    size_t memory_consumed = evbuffer_get_length(bufferevent_get_input(up_buffer));
+
+    unsigned int max_penalty_mins = std::min(max_idle_min-1, ui64_log2(memory_consumed)) + 2;
+    unsigned int penalty_mins = rng_range_geom(max_penalty_mins, std::min((unsigned int)(max_penalty_mins - 1), dead_cycles));
+    //dead_cycles > 0 and this never become equal to max_penalty 
+
+    return std::max((unsigned int)(max_idle_min - penalty_mins) * 60 * 1000, 100u);
+
   }
   uint32_t flush_interval() {
     // 10*60*1000 lies between 2^19 and 2^20.
     uint32_t shift = std::max(1u, std::min(19u, dead_cycles));
     uint32_t xv = std::max(1u, std::min(10u * 60 * 1000, 1u << shift));
-    //TODO: this needs to be formalised
+    //TODO: this needs to be formalised but the original formula sometimes gives 1min
+    //that is totally unacceptable
     if (dead_cycles == 0)
       return 100;
 
