@@ -8,7 +8,7 @@ AM_CXXFLAGS = -Werror -Wall -Wextra -Wno-missing-field-initializers -Wformat=2 -
 # Took off _FROTYFY_SOURCE because stdlib doesn't allow it with -O0 -g2
 # So it is only for releaes time
 #AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
-AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods $(lib_CPPFLAGS) -I$(srcdir)/src/test/gtest/include 
+AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods $(lib_CPPFLAGS) -I$(srcdir)/src/test/gtest -I$(srcdir)/src/test/gtest/include 
 
 noinst_LIBRARIES = libstegotorus.a
 noinst_PROGRAMS  = unittests g_unittests tltester tester_proxy webpage_tester
