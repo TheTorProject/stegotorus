@@ -31,9 +31,9 @@
 /Makefile.in
 /stamp-*
 /config-aux/depcomp
-/config-aux/install-sh
-/config-aux/missing
-/config-aux/compile
+#/config-aux/install-sh
+#/config-aux/missing
+#/config-aux/compile
 
 /protolist.cc
 /steglist.cc
@@ -63,4 +63,3 @@
 #debugging stuff
 tools
 tmp
-setup_stegotorus.sh
