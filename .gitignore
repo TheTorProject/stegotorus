@@ -30,7 +30,7 @@
 /Makefile
 /Makefile.in
 /stamp-*
-/config-aux/depcomp
+#/config-aux/depcomp
 #/config-aux/install-sh
 #/config-aux/missing
 #/config-aux/compile
