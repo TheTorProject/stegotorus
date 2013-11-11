@@ -226,10 +226,10 @@ cd "${HOME}"
 # XXX Someday we should pass whatever command-line arguments we got
 # (probably filenames or URLs) to Firefox.
 # check if the trace file exists
-if [ -f "traces/client.out" ]; then
+if [ ! -f "traces/client.out" ]; then
 ./App/pgen_fake
 fi
-./App/stegotorus chop 127.0.0.1:4999 194.14.179.176:5000 http &
+./App/stegotorus chop client --disable-retransmit 127.0.0.1:4999 194.14.179.176:5000 http &
 ./App/vidalia --datadir Data/Vidalia/ -style Cleanlooks
 exitcode="$?"
 if [ "$exitcode" -ne 0 ]; then
