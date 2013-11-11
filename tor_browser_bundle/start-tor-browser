@@ -238,3 +238,4 @@ if [ "$exitcode" -ne 0 ]; then
 else
 	printf '\nVidalia exited cleanly.\n'
 fi
+killall stegotorus
