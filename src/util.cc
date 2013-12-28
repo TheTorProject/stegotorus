@@ -605,7 +605,30 @@ void  buf2hex(uint8_t* buf, size_t len, std::string& res)
   res = res_stream.str();
 }
 
+/**
+   strips off the scheme and the domain part from the url
+
+   @param absolute_url the aboslute url optionally with the scheme
+
+   @return only the relative part of the url
+ */
+std::string 
+relativize_url(const std::string& absolute_url)
+{
+  if (absolute_url[0] == '/') //already relative
+    return absolute_url;
+  else { 
+    size_t schemes_end = absolute_url.find("://");
+    if (schemes_end == std::string::npos) //no scheme
+      return absolute_url.substr(absolute_url.find("/"));
+    else {
+      return absolute_url.substr(absolute_url.find("/", schemes_end+3));
+    }
+  }
+
+  return string();
   
+}
 /************************* Time Functions **************************/
 
 int timeval_subtract(struct timeval *x, struct timeval *y,

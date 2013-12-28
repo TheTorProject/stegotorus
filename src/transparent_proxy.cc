@@ -175,6 +175,8 @@ TransparentProxy::eventcb(struct bufferevent *bev, short what, void *ctx)
           evbuffer_copyout(bufferevent_get_input(partner), (void*) debug_buf, sizeof(char)* buffer_size);
           debug_buf[buffer_size] = '\0';
           fprintf(stderr, "Received: %s\n", debug_buf);
+
+          delete[] debug_buf;
         }
         /* We still have to flush data from the other
          * side, but when that's done, close the other

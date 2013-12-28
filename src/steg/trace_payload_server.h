@@ -11,7 +11,7 @@
    so we do not need following structs. */
 struct pentry_header {
   PacketType ptype;
-  int length;
+  int length; 
   ushort port; /* network format */
 };
 
@@ -61,7 +61,7 @@ class TracePayloadServer: public PayloadServer
   /**virtual functions */
   unsigned int find_client_payload(char* buf, int len, int type);
 
-  int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal = 0);
+  int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal = 0, std::string* payload_id_hash = NULL);
 
   /** Moved untouched from payloads.c */
   int init_JS_payload_pool(int len, int type, int minCapacity);

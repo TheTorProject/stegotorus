@@ -322,4 +322,13 @@ int timeval_subtract(struct timeval *x, struct timeval *y,
 */
 int evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block);
 
+/**
+   strips off the scheme and the domain part from the url
+
+   @param absolute_url the aboslute url optionally with the scheme
+
+   @return only the relative part of the url
+ */
+std::string relativize_url(const std::string& absolute_url);
+
 #endif

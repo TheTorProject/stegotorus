@@ -167,7 +167,7 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
     uri_dict_up2date(false)
 {
   string payload_filename;
-  string cover_server;
+  string cover_server, cover_list;
 
   if (is_clientside)
     payload_filename = "apache_payload/client_list.txt";
@@ -177,13 +177,17 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
     //We absolutely need a cover server, it is either provided by the protocol or we 
     //try to use local
     cover_server = "127.0.0.1";
-    if (!cfg->steg_mod_user_configs["protocol"].empty())
+    if (!cfg->steg_mod_user_configs["protocol"].empty()) {
       cover_server = cfg->steg_mod_user_configs["protocol"]["cover_server"] != "" ?
         cfg->steg_mod_user_configs["protocol"]["cover_server"] : cover_server;
 
+      cover_list = cfg->steg_mod_user_configs["protocol"]["cover_list"] != "" ?
+        cfg->steg_mod_user_configs["protocol"]["cover_list"] : "";
+    }
+
   }
 
-  payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename, cover_server);
+  payload_server = new ApachePayloadServer(is_clientside ? client_side : server_side, payload_filename, cover_server, cover_list);
 
   init_file_steg_mods();
 
@@ -211,6 +215,8 @@ http_apache_steg_config_t::~http_apache_steg_config_t()
   log_debug("%u handles are still running",_curl_running_handle);
   curl_multi_cleanup(_curl_multi_handle);
 
+  delete payload_server;
+
 }
 
 steg_t *
@@ -225,7 +231,6 @@ http_apache_steg_t::http_apache_steg_t(http_apache_steg_config_t *cf, conn_t *cn
     c_max_uri_length(2000),
     _curl_client_event(NULL),
     curl_inbound(NULL)
-
 {
 
   if (!_apache_config->payload_server)
@@ -326,6 +331,8 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   }
 
   type = ((ApachePayloadServer*)_apache_config->payload_server)->find_url_type(chosen_url.c_str());
+  
+  assert(type != 0 || type != -1);
 
   string uri_to_send("http://");
   if (sbuflen > _apache_config->uri_byte_cut)
@@ -792,6 +799,8 @@ http_apache_steg_config_t::process_protocol_data()
           log_debug("uri dict updated"); 
           _cur_operation = op_STEG_NO_OP;
           
+          delete[] dict_buf;
+          
         }
     }
     return 0;
@@ -941,6 +950,16 @@ size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, si
 
   log_debug(down, "curl receiving data...");
   down->ever_received = 1;
+
+  size_t no_bytes_2_read = size * nmemb;
+  log_debug(down, "%lu bytes available (received by curl)", no_bytes_2_read);
+
+  //move everything to the steg evbuffer
+  if (evbuffer_add(steg_mod->curl_inbound, buffer, size * no_bytes_2_read)) {
+    log_debug("Error reading data from curl buffer");
+    return 0;
+  }
+
   //this also seems a hackish way that curl leaves me with no choice
   if (!steg_mod->curl_send_complete) {
     steg_mod->curl_send_complete = true;
@@ -952,15 +971,6 @@ size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, si
 
     //bufferevent_enable(down->buffer, EV_WRITE);
     down->cease_transmission();
-  }
-
-  size_t no_bytes_2_read = size * nmemb;
-  log_debug(down, "%lu bytes available (received by curl)", no_bytes_2_read);
-
-  //move everything to the steg evbuffer
-  if (evbuffer_add(steg_mod->curl_inbound, buffer, size * no_bytes_2_read)) {
-    log_debug("Error reading data from curl buffer");
-    return 0;
   }
 
   //following network.cc pattern

@@ -917,7 +917,6 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   struct evbuffer * scratch;
   char c;
 
-
   s2 = evbuffer_search(source, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
   if (s2.pos == -1) {
     log_debug("CLIENT Did not find end of HTTP header %d", (int) evbuffer_get_length(source));
@@ -930,6 +929,7 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   evbuffer_copyout(source, (void*) buf2print, sizeof(char)* (s2.pos+1));
   buf2print[s2.pos+1] = '\0';
   log_debug("header: %s", buf2print);
+  delete[] buf2print;
 
   response_len = 0;
   hdrLen = s2.pos + strlen("\r\n\r\n");

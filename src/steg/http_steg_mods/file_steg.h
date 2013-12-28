@@ -39,7 +39,7 @@ protected:
 
      @return payload size or < 0 in case of error
   */
-  ssize_t pick_appropriate_cover_payload(size_t data_len, char** payload_buf);
+  ssize_t pick_appropriate_cover_payload(size_t data_len, char** payload_buf, string& cover_id_hash);
   
   /**
      Encapsulate the repetative task of checking for the respones of content_type
@@ -63,7 +63,7 @@ protected:
   extract_appropriate_respones_body(evbuffer* payload_buf);
 
  public:
-  static const size_t c_HTTP_MSG_BUF_SIZE = 10000000;
+  static const size_t c_HTTP_MSG_BUF_SIZE = HTTP_MSG_BUF_SIZE; //TODO: one constant
   static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
   /**
      embed the data in the cover buffer, the assumption is that
@@ -131,7 +131,7 @@ protected:
   /** 
       Destructor, just releases the http buffer 
   */
-  ~FileStegMod();
+  virtual ~FileStegMod();
 
 
   

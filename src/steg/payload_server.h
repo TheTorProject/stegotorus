@@ -39,7 +39,7 @@ using namespace std;
 
 #define HTML_MIN_AVAIL_SIZE 1026
 
-#define HTTP_MSG_BUF_SIZE 1000000
+#define HTTP_MSG_BUF_SIZE 500000
 
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
@@ -100,25 +100,23 @@ typedef short StateFlag;
 
 class PayloadInfo{
  public:
-  char* url_hash;
+  string url_hash;
   unsigned int type;
   unsigned int capacity;
   unsigned int length;
+  string absolute_url;
   string url;
+  bool absolute_url_is_absolute; //true if the url contains domain name
+  bool corrupted;
   char* cached;
   unsigned int cached_size;
-
-  /**
-     constructor fills up the elements  
-  */
-  PayloadInfo(unsigned int type, unsigned int capacity, unsigned int length,  unsigned int url);
 
   /** 
       Default constructor
   */
   PayloadInfo()
+    :corrupted(false)
     {
-      url_hash = NULL;
       cached = NULL;
       cached_size = 0;
       
@@ -185,16 +183,6 @@ class PayloadDatabase{
 
   map<unsigned int, TypeDetail> type_detail;
 
-  /**
-   */
-  inline void add_payload(char* url_hash, unsigned int type, unsigned int capacity, unsigned int length,  unsigned int url)
-  {
-    string string_hash(url_hash);
-    PayloadInfo new_payload(type, capacity, length, url);
-    payloads.insert(pair<string, PayloadInfo>(url_hash, new_payload));
-
-  }
-
   /** Returns the max capacity of certain type of cover we have in our
       data base
 
@@ -231,11 +219,28 @@ class PayloadServer
       _side = init_side;
     }
   
-  //virtual ~PayloadServer();
+  virtual ~PayloadServer(){};
 
   virtual unsigned int find_client_payload(char* buf, int len, int type) = 0;
 
-  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal=0) = 0;
+  /**
+     @param payload_id_hash if payload_id_has is not NULL, then the function
+            copy the payload identifier hash into for further reference like
+            disqualifiying the payload
+   */
+  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal=0, std::string* payload_id_hash = NULL) = 0;
+
+  /**
+     turn on the corrupted flag for the payload identified by payload_id_hash
+     
+     by default the payload server doesn't support disqualification and just
+     returns. The payload server which support disqualification need to 
+     overload this function.
+   */
+  virtual void disqualify_payload(const std::string& payload_id_hash) {
+    (void) payload_id_hash; //nop
+    return;
+  }
 
   virtual int find_uri_type(const char* buf, int size);
 

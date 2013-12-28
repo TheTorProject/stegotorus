@@ -1,4 +1,4 @@
-#ifndef _APACHE_PAYLOAD_SERVER_H
+﻿#ifndef _APACHE_PAYLOAD_SERVER_H
 #define _APACHE_PAYLOAD_SERVER_H
 
 #include <openssl/sha.h> 
@@ -118,11 +118,11 @@ class ApachePayloadServer: public PayloadServer
      The constructor reads the payload database prepared by scraper
      and initialize the payload table.
     */
-  ApachePayloadServer(MachineSide init_side, const string& database_filename, const string& cover_server); 
+  ApachePayloadServer(MachineSide init_side, const string& database_filename, const string& cover_server, const string& cover_list); 
 
   /** virtual functions */
   virtual unsigned int find_client_payload(char* buf, int len, int type);
-  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal = 0);
+  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal = 0, std::string* payload_id_hash = NULL);
 
   /**
      Gets \0 ended uri char* and determines its type based on
@@ -133,6 +133,17 @@ class ApachePayloadServer: public PayloadServer
      @return the type of url
   */
   virtual int find_url_type(const char* url);
+
+  /**
+     turn on the corrupted flag for the payload identified by payload_id_hash
+     
+     by default the payload server doesn't support disqualification and just
+     returns. The payload server which support disqualification need to 
+     overload this function.
+   */
+  virtual void disqualify_payload(const std::string& payload_id_hash) {
+    _payload_database.payloads[payload_id_hash].corrupted = true;
+  }
 
   /** 
       Destructor to clean up curl

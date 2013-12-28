@@ -1,4 +1,4 @@
-#include <fstream>
+﻿#include <fstream>
 #include <sstream>
 #include <vector>
 #include <boost/filesystem.hpp>
@@ -24,10 +24,10 @@ using namespace boost::filesystem;
 
 typedef string (*RetrievingFunc)(const string&);
 
-ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& database_filename, const string& cover_server)
+ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& database_filename, const string& cover_server, const string& cover_list)
   :PayloadServer(init_side),_database_filename(database_filename),
    _apache_host_name((cover_server.empty()) ? "127.0.0.1" : cover_server),
-   c_max_buffer_size(1000000),
+   c_max_buffer_size(HTTP_MSG_BUF_SIZE),
    _payload_cache(this, &ApachePayloadServer::fetch_hashed_url, 
    c_PAYLOAD_CACHE_ELEMENT_CAPACITY),   
    chosen_payload_choice_strategy(/*c_random_payload_choice*/c_most_efficient_payload_choice)
@@ -50,36 +50,34 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
     //we are in trouble need to change the type to pointer
     //_payload_database.type_detail = new TypeDetail[c_no_of_steg_protocol];
 
-    if (!boost::filesystem::exists(_database_filename))
-      {
+    if (!boost::filesystem::exists(_database_filename)) {
         log_debug("payload database does not exists.");
         log_debug("scarping payloads to create the database...");
 
-        PayloadScraper my_scraper(_database_filename, _apache_host_name);
+        PayloadScraper my_scraper(_database_filename, _apache_host_name,  cover_list);
         my_scraper.scrape();
 
       }
     
     payload_info_stream.open(_database_filename, ifstream::in);
-    if (!payload_info_stream.is_open())
-        {
-          log_abort("Cannot open payload info file.");
-        }
+    if (!payload_info_stream.is_open()) {
+      log_abort("Cannot open payload info file.");
+    }
       
     unsigned long file_id;
     while (payload_info_stream >> file_id) {
-    
       PayloadInfo cur_payload_info;
-      string cur_hash;
 
       payload_info_stream >>  cur_payload_info.type;
-      payload_info_stream >>  cur_hash;
+      payload_info_stream >>  cur_payload_info.url_hash;
       payload_info_stream >>  cur_payload_info.capacity;
       payload_info_stream >>  cur_payload_info.length;
       payload_info_stream >>  cur_payload_info.url;
+      payload_info_stream >>  cur_payload_info.absolute_url_is_absolute;
+      payload_info_stream >>  cur_payload_info.absolute_url;
 
-      _payload_database.payloads.insert(pair<string, PayloadInfo>(cur_hash, cur_payload_info));
-      _payload_database.sorted_payloads.push_back(EfficiencyIndicator(cur_hash, cur_payload_info.length));
+      _payload_database.payloads.insert(pair<string, PayloadInfo>(cur_payload_info.url_hash, cur_payload_info));
+      _payload_database.sorted_payloads.push_back(EfficiencyIndicator(cur_payload_info.url_hash, cur_payload_info.length));
                                                   
       //update type related global data 
       _payload_database.type_detail[cur_payload_info.type].count++;
@@ -134,7 +132,7 @@ ApachePayloadServer::find_client_payload(char* buf, int len, int type)
 }
 
 int
-ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* size, double noise2signal)
+ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* size, double noise2signal, std::string* payload_id_hash)
 {
   int found = 0, numCandidate = 0;
 
@@ -151,7 +149,11 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
     list<EfficiencyIndicator>::iterator  itr_payloads = _payload_database.sorted_payloads.begin();
     
     cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
-    while(itr_payloads != _payload_database.sorted_payloads.end() && (cur_payload_candidate->capacity < (unsigned int)cap || cur_payload_candidate->type != (unsigned int)contentType || cur_payload_candidate->length/(double)cap < noise2signal)) {
+    while(itr_payloads != _payload_database.sorted_payloads.end() && 
+          (cur_payload_candidate->corrupted ||
+           cur_payload_candidate->capacity < (unsigned int)cap || 
+           cur_payload_candidate->type != (unsigned int)contentType || 
+           cur_payload_candidate->length/(double)cap < noise2signal)) {
     itr_payloads++; numCandidate++;
     cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
     }
@@ -167,7 +169,11 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
       while(numCandidate < MAX_CANDIDATE_PAYLOADS) {
         itr_payloads = _payload_database.payloads.begin();
         advance(itr_payloads, rng_int(_payload_database.payloads.size()));  
-        if ((*itr_payloads).second.capacity <= (unsigned int)cap || (*itr_payloads).second.type != (unsigned int)contentType || (*itr_payloads).second.length > c_max_buffer_size ||  (*itr_payloads).second.length/(double)cap < noise2signal)
+        if ((*itr_payloads).second.corrupted ||
+            (*itr_payloads).second.capacity <= (unsigned int)cap || 
+            (*itr_payloads).second.type != (unsigned int)contentType || 
+            (*itr_payloads).second.length > c_max_buffer_size || 
+            (*itr_payloads).second.length/(double)cap < noise2signal)
             continue;
 
         found = true;
@@ -190,9 +196,12 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
                 numCandidate,
                 cap);
 
-      string best_payload = _payload_cache((itr_best->url));
+      string best_payload = _payload_cache((itr_best->absolute_url_is_absolute ? "" : "http://" + _apache_host_name + "/") + (itr_best->absolute_url));
       *buf = (char*)best_payload.c_str();
       *size = best_payload.length();
+      if (payload_id_hash)
+        *payload_id_hash = itr_best->url_hash;
+
       return 1;
       
     } 
@@ -212,7 +221,7 @@ string
 ApachePayloadServer::fetch_hashed_url(const string& url)
 {
   stringstream tmp_stream_buf;
-  string payload_uri = "http://" + _apache_host_name + "/" + url;
+  string payload_uri = url;
 
   log_debug("asking cover server for payload %s", payload_uri.c_str());
   size_t payload_size = fetch_url_raw(_curl_obj, payload_uri, tmp_stream_buf);
@@ -330,29 +339,43 @@ int
 ApachePayloadServer::find_url_type(const char* uri)
 {
 
-  const char* ext = strrchr(uri, '.');
+  string file_url(uri);
+  string ext, filename;
 
-  if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
-      || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))
+  log_debug("uri %s", file_url.c_str());
+  size_t last_slash = file_url.rfind("/");
+  if (last_slash == string::npos) //AFAIK url needs one slash
+    filename = file_url;
+  else
+    filename = (last_slash == file_url.length() - 1) ? "" : file_url.substr(last_slash+1);
+  log_debug("filename %s", filename.c_str());
+  size_t last_dot = filename.rfind(".");
+  if (last_dot == string::npos) 
+    ext = ".html"; //no filename assume html
+  else
+    ext = filename.substr(last_dot);
+
+  log_debug("ext %s", ext.c_str());
+  if (ext == ".html" || ext == ".htm" || ext == ".php"
+      || ext == ".jsp" || ext == ".asp")
     return HTTP_CONTENT_HTML;
 
-  if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
+  if (ext == ".js" || ext ==".JS")
     return HTTP_CONTENT_JAVASCRIPT;
 
-  if (!strncmp(ext, ".pdf", 4) || !strncmp(ext, ".PDF", 4))
+  if ( ext ==".pdf" || ext == ".PDF")
     return HTTP_CONTENT_PDF;
 
-
-  if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
+  if (ext ==".swf" || ext == ".SWF")
     return HTTP_CONTENT_SWF;
 
-  if (!strncmp(ext, ".png", 4) || !strncmp(ext, ".PNG", 4))
+  if (ext == ".png" || ext == ".PNG")
     return HTTP_CONTENT_PNG;
 
-  if (!strncmp(ext, ".jpg", 4) || !strncmp(ext, ".JPG", 4))
+  if (ext == ".jpg" || ext == ".JPG")
     return HTTP_CONTENT_JPEG;
 
-  if (!strncmp(ext, ".gif", 4) || !strncmp(ext, ".GIF", 4))
+  if (ext == ".gif" || ext == ".GIF")
     return HTTP_CONTENT_GIF;
 
   return 0;

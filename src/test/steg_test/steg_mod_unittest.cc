@@ -123,8 +123,6 @@ la chaleur lourde qui épaissit l'air.";
 
 //PNG
 TEST_F(StegModTest, png_encode_decode_small) {
-  // This test is named "Negative", and belongs to the "FactorialTest"
-  // test case.
   PNGSteg png_test_steg(NULL, 0);
   encode_decode("src/test/steg_test/test1.png", short_message, &png_test_steg);
   //ASSERT_TRUE(false);
@@ -132,16 +130,12 @@ TEST_F(StegModTest, png_encode_decode_small) {
 }
 
 TEST_F(StegModTest, png_encode_decode_large) {
-  // This test is named "Negative", and belongs to the "FactorialTest"
-  // test case.
   PNGSteg png_test_steg(NULL, 0);
   encode_decode("src/test/steg_test/test2.png", long_message, &png_test_steg);
 
 }
 
 TEST_F(StegModTest, png_gracefully_invalid) {
-  // This test is named "Negative", and belongs to the "FactorialTest"
-  // test case.
   PNGSteg png_test_steg(NULL, 0);
 
   read_cover("src/test/steg_test/test3.png");
@@ -163,36 +157,57 @@ TEST_F(StegModTest, png_gracefully_invalid) {
 
 //JPG
 TEST_F(StegModTest, jpg_encode_decode_small) {
-  // This test is named "Negative", and belongs to the "FactorialTest"
-  // test case.
   JPGSteg jpg_test_steg(NULL, 0);
   encode_decode("src/test/steg_test/test1.jpg", short_message, &jpg_test_steg);
 
 }
 
 TEST_F(StegModTest, jpg_encode_decode_large) {
-  // This test is named "Negative", and belongs to the "FactorialTest"
-  // test case.
   JPGSteg jpg_test_steg(NULL, 0);
   encode_decode("src/test/steg_test/test2.jpg", long_message, &jpg_test_steg);
 
 }
 
+TEST_F(StegModTest, jpg_gracefully_invalid) {
+  JPGSteg jpg_test_steg(NULL, 0);
+
+  read_cover("src/test/steg_test/test3.jpg"); //html page actually
+  EXPECT_FALSE(jpg_test_steg.headless_capacity((char*)cover_payload, cover_len));
+  delete cover_payload;
+
+  encode_decode("src/test/steg_test/test4.jpg", long_message, &jpg_test_steg);
+
+}
+
 //GIF
 TEST_F(StegModTest, gif_encode_decode_small) {
-  // This test is named "Negative", and belongs to the "FactorialTest"
-  // test case.
   GIFSteg gif_test_steg(NULL, 0);
   encode_decode("src/test/steg_test/test1.gif", short_message, &gif_test_steg);
 
 }
 
 TEST_F(StegModTest, gif_encode_decode_large) {
-  // This test is named "Negative", and belongs to the "FactorialTest"
-  // test case.
   GIFSteg gif_test_steg(NULL, 0);
   encode_decode("src/test/steg_test/test2.gif", long_message, &gif_test_steg);
 
 }
 
+TEST_F(StegModTest, gif_gracefully_invalid) {
+  GIFSteg gif_test_steg(NULL, 0);
+
+  /*
+    As long as there is , in the file the embedder embed after that no matter
+    what so it is not like that if you don't adhere to gif struture you gonna
+    fail.
+  read_cover("src/test/steg_test/test3.gif"); //png file actually
+  EXPECT_FALSE(gif_test_steg.headless_capacity((char*)cover_payload, cover_len));
+  delete cover_payload;*/
+
+  read_cover("src/test/steg_test/test4.gif"); //html page actually
+  EXPECT_FALSE(gif_test_steg.headless_capacity((char*)cover_payload, cover_len));
+  delete cover_payload;
+
+  encode_decode("src/test/steg_test/test5.gif", long_message, &gif_test_steg);
+
+}
 

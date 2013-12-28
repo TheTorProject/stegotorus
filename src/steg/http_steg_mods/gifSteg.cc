@@ -49,6 +49,10 @@ ssize_t GIFSteg::headless_capacity(char *cover_body, int body_length)
 unsigned int GIFSteg::static_headless_capacity(char *cover_body, int body_length)
 {
   int from = starting_point((uint8_t*)cover_body, (size_t)body_length);
+  if (from < 0) { //corrupted format
+    log_warn("corrupted gif payload.");
+    return 0;
+  }
   return max(body_length - from - 1 - sizeof(int), (size_t)0); // 2 for FFD9, 4 for len
 }
 ssize_t GIFSteg::capacity(const uint8_t *raw, size_t len)
@@ -71,10 +75,14 @@ int GIFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
 {
   if (headless_capacity((char*)cover_payload, cover_len) < (int) data_len) {
     log_warn("not enough cover capacity to embed data");
-    return 0;
+    return -1; //this is an error cause you need to check the capacity first
   }
 
-  int from = starting_point(cover_payload, cover_len);
+  ssize_t from = starting_point(cover_payload, cover_len);
+  
+  if (from <= 0)
+    return -1;
+
   memcpy(cover_payload+from, &data_len, sizeof(data_len));
   memcpy(cover_payload+from+sizeof(data_len), data, data_len);
   return cover_len;
@@ -85,7 +93,10 @@ ssize_t GIFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
 {
 	// TODO: There may be FFDA in the data
     ssize_t from = starting_point(cover_payload, cover_len);
-    assert(from >= 0);
+    //assert(from >= 0); the file  maybe is invalid just fail
+    if (from <= 0)
+      return -1;
+    
     size_t s = *((size_t*)(cover_payload+from));
 
     assert(s < c_HTTP_MSG_BUF_SIZE);

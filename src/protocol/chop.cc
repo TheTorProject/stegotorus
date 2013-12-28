@@ -209,7 +209,7 @@ struct chop_config_t : config_t
   void init_handshake_encryption();
   /* Transparent proxy and cover server */
   std::string cover_server_address; //is the server that is going to serve covers
-  //in case the steg module expect a cover server.
+  std::string cover_list; //is the name of the file the contain the url of the covers which are going to be used by the steg module
   TransparentProxy* transparent_proxy;
 
   double noise2signal; //to protect against statistical analysis
@@ -251,6 +251,8 @@ chop_config_t::~chop_config_t()
        i != circuits.end(); i++)
     if (i->second)
       delete i->second;
+
+  delete transparent_proxy;
 }
 
 bool
@@ -306,6 +308,15 @@ chop_config_t::init(int n_options, const char *const *options)
       //This is not related to an specific steg module hence, we store it under
       //"protocol" tag
       steg_mod_user_configs["protocol"]["cover_server"] = cover_server_address;
+      //we neet to move the option pointer one forward cause
+      //our option has an argument
+      options++;
+      n_options--;
+    } else if (!strcmp(options[1], "--cover-list")) {
+      cover_list = options[2];
+      //This is not related to an specific steg module hence, we store it under
+      //"protocol" tag
+      steg_mod_user_configs["protocol"]["cover_list"] = cover_list;
       //we neet to move the option pointer one forward cause
       //our option has an argument
       options++;
@@ -610,7 +621,6 @@ chop_circuit_t::drop_downstream(conn_t *cn)
 int
 chop_circuit_t::send()
 {
- 
   circuit_disarm_flush_timer(this);
 
   //First we check if there's steg data that we need to send
@@ -1710,6 +1720,7 @@ chop_conn_t::recv_handshake()
     //invalid handshake, if we have a transparent proxy we 
     //we'll act as one for this connection
     log_warn("handshake authentication faild.");
+    
     if (config->transparent_proxy) {
       log_debug("stegotorus turning into a transparent proxy.");
       config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
@@ -1759,25 +1770,28 @@ chop_conn_t::recv()
   //TODO: This is too slow, we need to do it more cleverly.
   //we keep a copy of value of recv_pending, in case we need to
   //transparentize the connection
-  received_length = evbuffer_get_length(bufferevent_get_input(buffer));
-  originally_received = new uint8_t[received_length];
-  if (evbuffer_copyout(bufferevent_get_input(buffer), originally_received, received_length) != (ssize_t) received_length)
-    log_abort("was not able to make a copy of received data");
-
-  if (steg->receive(recv_pending)) {
-    //If steg fails in recovering the data
-    //then maybe it wasn't an steg data to begin with
-    //so we have transparent proxy we will become 
-    //transparent at this moment
-    if (config->transparent_proxy) {
-      log_debug("stegotorus turning into a transparent proxy.");
-      config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
-      return 0;
-    }
- 
-    return -1;
+  if (config->mode == LSN_SIMPLE_SERVER && config->transparent_proxy) {
+    received_length = evbuffer_get_length(bufferevent_get_input(buffer));
+    originally_received = new uint8_t[received_length];
+    if (evbuffer_copyout(bufferevent_get_input(buffer), originally_received, received_length) != (ssize_t) received_length)
+      log_abort("was not able to make a copy of received data");
   }
 
+  if (steg->receive(recv_pending)) {
+    if ((config->mode == LSN_SIMPLE_SERVER ) && config->transparent_proxy) {
+      //If steg fails in recovering the data
+      //then maybe it wasn't an steg data to begin with
+      //so we have transparent proxy we will become 
+      //transparent at this moment
+      log_debug("stegotorus turning into a transparent proxy.");
+      config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
+
+      delete[] originally_received;
+      return 0;
+    }
+    else
+      return -1;
+  }
   // If that succeeded but did not copy anything into recv_pending,
   // wait for more data.
   if (evbuffer_get_length(recv_pending) == 0)
@@ -1797,7 +1811,11 @@ chop_conn_t::recv()
     }
 
     // We're the server. Try to receive a handshake.
-    switch(recv_handshake()) 
+    int handshake_result = recv_handshake();
+    if (config->transparent_proxy) 
+      delete [] originally_received; //done with this
+
+    switch(handshake_result) 
       {
       case 1:
         //this connection was transparentized return 0 and don't 

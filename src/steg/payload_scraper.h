@@ -4,7 +4,6 @@
 #ifndef PAYLOADSCRAPER_H
 #define PAYLOADSCRAPER_H
 
-
 //TODO: This structure should be depricated as the FileSteg as
 //parent type should replace it
 struct steg_type
@@ -37,6 +36,7 @@ protected:
                                       
     
     string _cover_server;
+    string _cover_list;  //List of url of the covers on _cover_server
     string _apache_conf_filename;
     string _apache_doc_root; /* the directory that apache serve where
                                the html doc*/
@@ -44,6 +44,26 @@ protected:
     CURL* capacity_handle;    /* We use this auxiliary curl handle
                                in task of computing the capacity of the 
                                payloads */
+
+    /**
+       Computes the capacity and length of a filename indicated by a url as well as the  hash of the url.
+
+       @param cur_url url to the resource
+       @param cur_steg pointer to the steg_type object corresponding to the 
+              type of the url
+       
+       @return space separated string of hash, capacity, length
+    */
+    const string scrape_url(const string& cur_url, steg_type* cur_steg, bool absolute_url = false);
+
+    /**
+       Scrapes list of urls of cover filename
+       
+       @param list_filename the name of the file that contains the list of urls
+
+       @return number of payload if successful -1 if it fails.
+    */
+    int scrape_url_list(const string list_filename);
 
     /**
        Scrapes current directory, recursively calls itself for
@@ -67,21 +87,35 @@ protected:
        
        @param payload_url The relative (to the apache_root) filename of the 
                           payload
+       @param cur_steg    The steg correspond to the type of the file to 
+                          to compute the capacity
+       @param absolute_url true if the url has the scheme and the server name
+                          false if it is just an address on the server
    */
-   pair<unsigned long, unsigned long>  compute_capacity(string payload_url, steg_type* cur_steg);
+   pair<unsigned long, unsigned long>  compute_capacity(string payload_url, steg_type* cur_steg, bool absolute_url = false);
    
 public:
    /**
       The constructor, calls the scraper by default
 
       @param database_filename the name of the file to store the payload list   
+      @param cover_list a list of potential cover on the cover server to avoid ftp access
     */
-   PayloadScraper(string database_filename,  string cover_server, const string apache_conf = "/etc/httpd/conf/httpd.conf");
+   PayloadScraper(string database_filename,  string cover_server, const string& cover_list = "", const string apache_conf = "/etc/httpd/conf/httpd.conf");
 
    /**
       reads all the files in the Doc root and classifies them. return the number of payload file founds. -1 if it fails
    */
    int scrape();
+
+   virtual ~PayloadScraper()
+     {
+       for(unsigned int i = 0; i < c_no_of_steg_protocol; i++)
+         delete _available_file_stegs[i];
+       
+       delete[] _available_stegs;
+     }
+     
 
 };
 #endif

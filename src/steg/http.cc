@@ -84,7 +84,10 @@ http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
 
 http_steg_config_t::~http_steg_config_t()
 {
-  //delete payload_server; maybe we don't need it
+  delete payload_server; //maybe we don't need it
+  for(unsigned int i = 0; i < c_no_of_steg_protocol; i++)
+    delete file_steg_mods[i];
+    
 
 }
 
@@ -688,6 +691,7 @@ int
 http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
 {
   int rval = RECV_BAD;
+  log_debug(conn, "sur1.5.1");
 
   switch(type) {
   case HTTP_CONTENT_SWF:
@@ -704,6 +708,7 @@ http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
     break;
 
   default:
+    log_debug(conn, "receiving a payload of type %i", type);
     rval = config->file_steg_mods[type]->http_client_receive(conn, dest, source);
     break;
      

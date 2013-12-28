@@ -27,7 +27,6 @@ PayloadServer::capacityJS3 (char* buf, int len, int mode) {
   }
   bp = hEnd + 4;
 
-
   if (mode == CONTENT_JAVASCRIPT) {
     j = offset2Hex(bp, (buf+len)-bp, 0);
     while (j != -1) {
@@ -62,16 +61,15 @@ PayloadServer::capacityJS3 (char* buf, int len, int mode) {
            bp = bp+j+1;
          }
 
-	 if (len < jsEnd - buf || len < jsEnd - bp) {
-	   fprintf(stderr, "HERE2\n");
-	 }
-
-
+         if (len < jsEnd - buf || len < jsEnd - bp) {
+           fprintf(stderr, "HERE2\n");
+         }
          j = offset2Hex(bp, jsEnd-bp, 1);
+
        } // while (j != -1)
 
        if (buf + len < bp + 9) {
-	 fprintf(stderr, "HERE3\n");
+         fprintf(stderr, "HERE3\n");
        }
 
 

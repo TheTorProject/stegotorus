@@ -92,28 +92,30 @@ FileStegMod::extract_appropriate_respones_body(evbuffer* payload_buf)
 
    @return payload size or < 0 in case of error
 */
-ssize_t FileStegMod::pick_appropriate_cover_payload(size_t data_len, char** payload_buf)
+ssize_t FileStegMod::pick_appropriate_cover_payload(size_t data_len, char** payload_buf, string& cover_id_hash)
 {
   size_t max_capacity = _payload_server->_payload_database.typed_maximum_capacity(c_content_type);
 
   if (max_capacity <= 0) {
-    log_warn("SERVER ERROR: No payload of approperiate type=%d was found\n", (int) c_content_type);
+    log_abort("SERVER ERROR: No payload of approperiate type=%d was found\n", (int) c_content_type);
     return -1;
   }
 
   if (data_len > (size_t) max_capacity) {
-    log_warn("SERVER ERROR: type %d cannot accommodate data %d",
+    log_abort("SERVER ERROR: type %d cannot accommodate data %d",
              (int) c_content_type, (int) data_len);
     return -1;
   }
 
   ssize_t payload_size = 0;
   if (_payload_server->get_payload(c_content_type, data_len, payload_buf,
-                                   (int*)&payload_size, noise2signal) == 1) {
+                                   (int*)&payload_size, noise2signal, &cover_id_hash) == 1) {
     log_debug("SERVER found the next HTTP response template with size %d",
               (int)payload_size);
-  } else {
-    log_warn("SERVER couldn't find the next HTTP response template");
+  } else { //we can't do much here anymore, we need to add payload to payload
+    //database unless if the payload_server is serving randomly which means
+    //next time probably won't serve a corrupted payload
+    log_warn("SERVER couldn't find the next HTTP response template, enrich payload database and restart Stegotorus");
     return -1;
   }
 
@@ -150,7 +152,8 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   //now we need to choose a payload
   char* cover_payload;
-  size_t cnt = pick_appropriate_cover_payload(sbuflen, &cover_payload);
+  string payload_id_hash;
+  size_t cnt = pick_appropriate_cover_payload(sbuflen, &cover_payload, payload_id_hash);
 
   //we shouldn't touch the cover as there is only one copy of it in the
   //the cache
@@ -158,6 +161,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   if (body_offset < 0)
     {
       log_warn("Failed to aquire approperiate payload.");
+      _payload_server->disqualify_payload(payload_id_hash);
       return -1;
     }
 
@@ -167,6 +171,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   if ((body_len) > c_HTTP_MSG_BUF_SIZE)
   {
     log_warn("HTTP response doesn't fit in the buffer %lu > %lu", (body_len)*sizeof(char), c_HTTP_MSG_BUF_SIZE);
+    _payload_server->disqualify_payload(payload_id_hash);
     return -1;
   }
   memcpy(outbuf, (const void*)(cover_payload + body_offset), (body_len)*sizeof(char));
@@ -176,7 +181,14 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   log_debug("SERVER embeding data1 with length %d into type %d", sbuflen, c_content_type);
   outbuflen = encode(data1, sbuflen, outbuf, body_len);
 
-  //New steg module test:
+  ///End of steg test!!
+  if (outbuflen < 0) {
+    log_warn("SERVER embeding fails");
+    _payload_server->disqualify_payload(payload_id_hash);
+    return -1;
+  }
+
+  //If everything seemed to be fine, New steg module test:
   if (!(LOG_SEV_DEBUG < log_get_min_severity())) { //only perform this during debug
     uint8_t recovered_data_for_test[sbuflen];
     decode(outbuf, outbuflen, recovered_data_for_test);
@@ -190,15 +202,11 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
       ofstream failure_embed_evidence_file("failed_embeded_cover.log", ios::binary | ios::out);
       failure_embed_evidence_file.write((const char*)outbuf, outbuflen);
       failure_embed_evidence_file.close();
-      log_abort("decoding cannot recovers the encoded data consistantly for type %d", c_content_type);
+      log_warn("decoding cannot recovers the encoded data consistantly for type %d", c_content_type);
+      return -1;
     }
   }
-  ///End of steg test!!
 
-  if (outbuflen < 0) {
-    log_warn("SERVER embeding fails");
-    return -1;
-  }
   log_debug("SERVER FileSteg sends resp with hdr len %lu body len %lu",
             body_offset, outbuflen);
 
@@ -238,7 +246,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
                                struct evbuffer* source)
 {
   unsigned int response_len = 0;
-  uint8_t outbuf[HTTP_MSG_BUF_SIZE];
+  uint8_t* outbuf;
   int content_len = 0, outbuflen;
   uint8_t *httpHdr, *httpBody;
 
@@ -285,9 +293,11 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   httpBody = httpHdr + hdrLen;
   log_debug("CLIENT unwrapping data out of type %d payload", c_content_type);
 
+  outbuf = new uint8_t[c_HTTP_MSG_BUF_SIZE];
   outbuflen = decode(httpBody, content_len, outbuf);
   if (outbuflen < 0) {
     log_warn("CLIENT ERROR: FileSteg fails\n");
+    delete[] outbuf;
     return RECV_BAD;
   }
 
@@ -295,8 +305,10 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
   if (evbuffer_add(dest, outbuf, outbuflen)) {
     log_warn("CLIENT ERROR: evbuffer_add to dest fails\n");
+    delete[] outbuf;
     return RECV_BAD;
   }
+  delete[] outbuf; //done with outbuf anyway
 
   if (evbuffer_drain(source, response_len) == -1) {
     log_warn("CLIENT ERROR: failed to drain source\n");

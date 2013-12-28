@@ -336,8 +336,10 @@ TracePayloadServer::init_SWF_payload_pool(int len, int type, int /*unused */)
 }
 
 
-int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* size, double noise2signal) {
+int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* size, double noise2signal, string* payload_id_hash) {
   int r, i, cnt, found = 0, numCandidate = 0, first, best, current;
+
+  (void) payload_id_hash; //TracePayloadServer doesn't support disqualification
 
   log_debug("contentType = %d, initTypePayload = %d, typePayloadCount = %d",
             contentType, pl.initTypePayload[contentType],

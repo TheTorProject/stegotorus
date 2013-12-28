@@ -63,6 +63,13 @@ int JPGSteg::starting_point(const uint8_t *raw_data, int len)
 			LOG("0xFFD0 at %06X\n", i)
 		}
 	}
+
+    if (lm == 0) {
+      //couldn't find any marker probably corrupted file
+      log_warn("couldn't find the last marker in jpg payload, corrupted payload probably");
+      return -1;
+    }
+ 
 	const unsigned short *flen = (const unsigned short *)(raw_data+lm+2); // Frame length
 	unsigned short swapped = SWAP(*flen);
 	log_info("Size of the last DA frame: %hhu at %06X\n", swapped, lm);
@@ -80,7 +87,9 @@ int JPGSteg::starting_point(const uint8_t *raw_data, int len)
 	*/
 	//int c = lf - lm - *flen - 2;
 
-	return lm + 2 + swapped; // *flen; // 2 for FFDA, and skip the header
+    ssize_t start_point = lm + 2 + swapped;
+    if (start_point > (signed)(len - 2 - sizeof(int))) start_point = -1;
+	return start_point; // *flen; // 2 for FFDA, and skip the header
 
 }
 
@@ -99,6 +108,9 @@ ssize_t JPGSteg::headless_capacity(char *cover_body, int body_length)
 unsigned int JPGSteg::static_headless_capacity(char *cover_body, int body_length)
 {  
   int from = starting_point((uint8_t*)cover_body, (size_t)body_length);
+  if (from < 0) //invalid format 
+    return 0;
+    
   return max(body_length - from - 2 - sizeof(int), (size_t)0); // 2 for FFD9, 4 for len
 
 }
@@ -120,12 +132,19 @@ unsigned int JPGSteg::static_capacity(char *cover_payload, int len)
 
 int JPGSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len)
 {
+  assert(data_len < c_HTTP_MSG_BUF_SIZE);
   if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
     log_warn("not enough cover capacity to embed data");
-    return 0;
+    return -1; //not enough capacity is an error because you should have check 
+    //before requesting
   }
 
   int from = starting_point(cover_payload, cover_len);
+  if (from < 0) {
+    log_warn("corrupted jpg payload");
+    return -1;
+  }
+  log_debug("embeding %lu at %i", data_len,from);
   memcpy(cover_payload+from, &data_len, sizeof(data_len));
   memcpy(cover_payload+from+sizeof(data_len), data, data_len);
   return cover_len;
@@ -136,11 +155,20 @@ ssize_t JPGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
 {
 	// TODO: There may be FFDA in the data
     ssize_t from = starting_point(cover_payload, cover_len);
-    assert(from >= 0);
+    if (from < 0) {
+      log_warn("invalid jpg payload, corrupted?");
+      return -1;
+    }
+      
     size_t s = *((size_t*)(cover_payload+from));
+    if ((size_t)s > c_HTTP_MSG_BUF_SIZE) {
+      log_warn("too much embeded data, corrupted?");
+      return -1;
+    }
 
     //We assume the enough mem is allocated for the data
-    assert((size_t)s < c_HTTP_MSG_BUF_SIZE);
+    log_debug("recovering %lu from %lu", s, from);
+    
 	memcpy(data, cover_payload+from+sizeof(size_t), s);
 	return s;
 

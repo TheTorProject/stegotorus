@@ -2,10 +2,10 @@
    See LICENSE for other credits and copying information
 */
 
-#include <sstream>
 #include <algorithm> //removing quotes from path
 #include <fstream> 
 #include <string>
+#include <sstream> 
 #include <stdio.h>
 #include <boost/filesystem.hpp>
 
@@ -36,16 +36,64 @@ using namespace boost::filesystem;
 */
 
 /**
+   Computes the capacity and length of a filename indicated by a url as well as the  hash of the url.
+
+   @param cur_url url to the resource
+   @param cur_steg pointer to the steg_type object corresponding to the type 
+          of the url
+          
+   @return space separated string of hash, capacity, length
+*/
+const string
+PayloadScraper::scrape_url(const string& cur_url, steg_type* cur_steg, bool absolute_url)
+{
+  char url_hash[20];
+  char url_hash64[40];
+
+  string rel_url = absolute_url ? relativize_url(cur_url) : cur_url;
+
+  sha256((const unsigned char *)(rel_url.c_str()), rel_url.length(), (unsigned char*)url_hash);
+  base64::encoder url_hash_encoder;
+  url_hash_encoder.encode(url_hash, 20, url_hash64);
+                        
+  pair<unsigned long, unsigned long> fileinfo = compute_capacity(cur_url, cur_steg, absolute_url);
+  unsigned long cur_filelength = fileinfo.first;
+  unsigned long capacity = fileinfo.second;
+
+  log_debug("capacity %lu:", capacity);
+  
+  //if the file is too big then we don't will not be able to fit in HTTP_MSG_BUF
+  if (cur_filelength > HTTP_MSG_BUF_SIZE)
+    return "";
+        
+  if (capacity < chop_blk::MIN_BLOCK_SIZE) return ""; //This is not the 
+  //what you want, I think chop should be changed so the steg be allowed
+  //to ignore totally corrupted package and chop should be allowed to send
+  //package with 0 room.
+
+  //We are not going to transfer more than one block size per
+  //payload so If capacity is bigger than chop_blk::MAX_BLOCK_SIZE
+  //we set it back at that
+  if (capacity > chop_blk::MAX_BLOCK_SIZE) 
+    capacity = chop_blk::MAX_BLOCK_SIZE;
+
+  stringstream scraped_entry;
+  scraped_entry << url_hash64 << " " << capacity << " " << cur_filelength;
+
+  return scraped_entry.str();
+
+}
+
+/**
    Scrapes current directory, recursively. it uses a boost library.
    returns number of payload if successful -1 if it fails.
 
    @param cur_dir the name of the dir to be scraped
 */
-int PayloadScraper::scrape_dir(const path dir_path)
+int 
+PayloadScraper::scrape_dir(const path dir_path)
 {
   long int total_file_count = 0;
-  char url_hash[20];
-  char url_hash64[40];
 
   if ( !exists( dir_path ) ) 
       return -1;
@@ -61,30 +109,62 @@ int PayloadScraper::scrape_dir(const path dir_path)
             string cur_filename(itr->path().generic_string());
             log_debug("checking %s for capacity...", cur_filename.c_str());
             string cur_url(cur_filename.substr(_apache_doc_root.length(), cur_filename.length() -  _apache_doc_root.length()));
-            sha256((const unsigned char *)(cur_url.c_str()), cur_url.length(), (unsigned char*)url_hash);
-            base64::encoder url_hash_encoder;
-            url_hash_encoder.encode(url_hash, 20, url_hash64);
-                        
-            pair<unsigned long, unsigned long> fileinfo = compute_capacity(cur_url, cur_steg);
-            unsigned long cur_filelength = fileinfo.first;
-            unsigned long capacity = fileinfo.second;
 
-            log_debug("capacity %lu:", capacity);
-            
-            if (capacity < chop_blk::MIN_BLOCK_SIZE) continue; //This is not the 
-            //what you want, I think chop should be changed so the steg be allowed
-            //to ignore totally corrupted package and chop should be allowed to send
-            //package with 0 room.
-
-            //We are not going to transfer more than one block size per
-            //payload so If capacity is bigger than chop_blk::MAX_BLOCK_SIZE
-            //we set it back at that
-            if (capacity > chop_blk::MAX_BLOCK_SIZE) 
-              capacity = chop_blk::MAX_BLOCK_SIZE;
-
-            _payload_db << total_file_count << " " << cur_steg->type << " " << url_hash64 << " " << capacity << " " << cur_filelength << " " << cur_url <<"\n";
+            string scrape_result = scrape_url(cur_url, cur_steg);
+            if (!scrape_result.empty())
+              _payload_db << total_file_count << " " << cur_steg->type << " " << scrape_result  << " " << cur_url << " " << 0 << " " << cur_url << "\n"; //absolute_url false
           }
     }
+
+  return total_file_count; 
+
+}
+
+/**
+   Scrapes list of urls of cover filename
+
+   @param list_filename the name of the file that contains the list of urls
+
+   @return number of payload if successful -1 if it fails.
+*/
+int 
+PayloadScraper::scrape_url_list(const string list_filename)
+{
+  long int total_file_count = 0;
+
+  if ( !exists( list_filename ) ) {
+    log_warn("cover list file does not exsits.");
+    return -1;
+  }
+
+  ifstream url_list_stream(list_filename);
+  if (!url_list_stream.is_open()) {
+    log_warn("Cannot open url list file.");
+    return -1;
+  }
+  
+  string file_url, cur_url_ext;
+  while (url_list_stream >> file_url) {
+    total_file_count++;
+    size_t last_slash = file_url.rfind("/");
+    if (last_slash == string::npos) //AFAIK url needs one slash
+      continue; //bad url
+
+    string filename = file_url.substr(last_slash+1);
+    size_t last_dot = filename.rfind(".");
+    if (last_dot == string::npos) 
+      cur_url_ext = ".html"; //no filename assume html
+    else
+      cur_url_ext = filename.substr(last_dot);
+
+    for(steg_type* cur_steg = _available_stegs; cur_steg->type!= 0; cur_steg++) {
+      if (cur_steg->extension == cur_url_ext) {
+        string scrape_result = scrape_url(file_url, cur_steg, true);
+        if (!scrape_result.empty())
+            _payload_db << total_file_count << " " << cur_steg->type << " " << scrape_result  << " " << relativize_url(file_url) << " " << 1 << " " << file_url << "\n"; //absolute_url = true
+      }
+    }
+  }
 
   return total_file_count; 
 
@@ -95,8 +175,9 @@ int PayloadScraper::scrape_dir(const path dir_path)
     
     @param database_filename the name of the file to store the payload list   
 */
-PayloadScraper::PayloadScraper(string  database_filename, string cover_server, string apache_conf)
+PayloadScraper::PayloadScraper(string  database_filename, string cover_server,const string& cover_list, string apache_conf)
   :_available_stegs(NULL), 
+   _cover_list(cover_list),
    capacity_handle(curl_easy_init())
 {
   /* curl initiation */
@@ -146,6 +227,7 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server, s
 */
 int PayloadScraper::scrape()
 {
+  bool scrape_succeed = false;
   /* open the database file for write this will delete the
      current content */
   _payload_db.open(_database_filename.c_str());
@@ -156,60 +238,79 @@ int PayloadScraper::scrape()
       return -1;
     }
 
-  // looking for doc root dir...
-  // If the http server is localhost, then try read localy...
-  bool remote_mount = false; //true if the doc_root is mounted from remote host
-  string ftp_unmount_command_string = "fusermount -u ";
-  ftp_unmount_command_string += TEMP_MOUNT_DIR;
-
-  if (_cover_server == "127.0.0.1")
-    if (apache_conf_parser())
-      log_warn("error in retrieving apache doc root: %s",strerror(errno));
-
-
-  if (_apache_doc_root.empty()) {
-    // if the http server is remote or we failed to retrieve the 
-    //   doc_root then try to connect to the server through ftp
-    //   and mount the www dir
-  
-    // we need to make directory to mount the remote www dir
-    boost::filesystem::path mount_dir(TEMP_MOUNT_DIR);  
-    if (!(boost::filesystem::exists(mount_dir) ||
-          boost::filesystem::create_directory(mount_dir))) {
-      log_warn("Failed to create a temp dir to mount remote filesystem");
-      _payload_db.close();
-      return -1;
-    }
-
-    //just try to unmount in case it is already mounted
-    system(ftp_unmount_command_string.c_str());
-
-    string ftp_mount_command_string = "curlftpfs ftp://";
-    ftp_mount_command_string += _cover_server + " " + TEMP_MOUNT_DIR;
-
-    int mount_result = system(ftp_mount_command_string.c_str());
-    if (mount_result) {
-      log_abort("Failed to mount the remote filesystem");
-      _payload_db.close();
-      return -1;
-    }
-
-    remote_mount = true;
-    _apache_doc_root = TEMP_MOUNT_DIR;
-
-  }
-  /* now all we need to do is to call scrape */
-  path dir_path(_apache_doc_root);
-  if (scrape_dir(dir_path) < 0)
+  if (!_cover_list.empty()) {//If user gave us a cover list then we should
+    //use it for scraping
+    if (scrape_url_list(_cover_list) < 0)
     {
-      log_warn("error in retrieving payload dir: %s",strerror(errno));
-      _payload_db.close();
-      return -1;
+      log_warn("error in retrieving payload urls: %s",strerror(errno));
+      //fail to next scraping strategy
+    }
+    else {
+      scrape_succeed = true;
     }
     
-  if (remote_mount) {
-    system(ftp_unmount_command_string.c_str());
   }
+
+  if (!scrape_succeed) { //no url list is given, try to scrape file system
+    // looking for doc root dir...
+    // If the http server is localhost, then try read localy...
+    bool remote_mount = false; //true if the doc_root is mounted from remote host
+    string ftp_unmount_command_string = "fusermount -u ";
+    ftp_unmount_command_string += TEMP_MOUNT_DIR;
+    
+    
+    if (_cover_server == "127.0.0.1")
+      if (apache_conf_parser())
+        log_warn("error in retrieving apache doc root: %s",strerror(errno));
+    
+    if (_apache_doc_root.empty()) {
+      // if the http server is remote or we failed to retrieve the 
+      //   doc_root then try to connect to the server through ftp
+      //   and mount the www dir
+      
+      // we need to make directory to mount the remote www dir
+      boost::filesystem::path mount_dir(TEMP_MOUNT_DIR);  
+      if (!(boost::filesystem::exists(mount_dir) ||
+            boost::filesystem::create_directory(mount_dir))) {
+        log_warn("Failed to create a temp dir to mount remote filesystem");
+        _payload_db.close();
+        return -1;
+      }
+      
+      //just try to unmount in case it is already mounted
+      system(ftp_unmount_command_string.c_str());
+      
+      string ftp_mount_command_string = "curlftpfs ftp://";
+      ftp_mount_command_string += _cover_server + " " + TEMP_MOUNT_DIR;
+      
+      int mount_result = system(ftp_mount_command_string.c_str());
+      if (mount_result) {
+        log_abort("Failed to mount the remote filesystem");
+        _payload_db.close();
+        return -1;
+      }
+      
+      remote_mount = true;
+      _apache_doc_root = TEMP_MOUNT_DIR;
+      
+    }
+    
+    /* now all we need to do is to call scrape */
+    path dir_path(_apache_doc_root);
+    if (scrape_dir(dir_path) < 0)
+      {
+        log_warn("error in retrieving payload dir: %s",strerror(errno));
+        _payload_db.close();
+        return -1;
+      }
+    else
+      scrape_succeed = true;
+    
+    if (remote_mount) {
+      system(ftp_unmount_command_string.c_str());
+    }
+  }
+
   _payload_db.close();
   return 0;
   
@@ -261,7 +362,7 @@ int PayloadScraper::apache_conf_parser()
 
 }
 
-pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string payload_url, steg_type* cur_steg)
+pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string payload_url, steg_type* cur_steg, bool absolute_url)
 {
   /*cur_file.open(payload_filename.c_str()); //, ios::binary | ios::in);
             
@@ -277,26 +378,43 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
   //Maybe we need it in future, when we are able
   //to compute the capacity without using apache
   //cur_file.seekg (0, ios::beg);*/
-            
-  unsigned long cur_filelength = file_size(_apache_doc_root + payload_url);
+  unsigned long test_cur_filelength;
   stringstream  payload_buf;
+
+  if (!absolute_url) 
+    test_cur_filelength = file_size(_apache_doc_root + payload_url);
   //cur_file.read(payload_buf, cur_filelength);
             
   //cur_file.close();
-  string url_to_retreive = "http://" + _cover_server +"/" + payload_url;
+  string url_to_retreive = absolute_url ? payload_url : "http://" + _cover_server +"/" + payload_url;
 
   unsigned long apache_size = fetch_url_raw(capacity_handle, url_to_retreive, payload_buf);
-
-  char* buf = new char[apache_size]; log_assert(buf);
+  
+  if (apache_size <= 0) //just invalidate the url
+    return pair<unsigned long, unsigned long>(0, 0);
+    
+  char* buf = new char[apache_size];
   payload_buf.read(buf, apache_size);
 
+  //compute the size
+  const char* hend = strstr(buf, "\r\n\r\n");
+  if (hend == NULL) {
+    log_warn("unable to find end of header in the HTTP template");
+    return pair<unsigned long, unsigned long>(0, 0);
+  }
+  
+  unsigned long cur_filelength = apache_size - (hend - buf + 4);
+
+  if (!absolute_url)
+    assert(test_cur_filelength == cur_filelength);
+  
   unsigned long capacity = cur_steg->capacity_function(buf, apache_size);
   log_debug("capacity: %lu", capacity);
 
   //no delete need for buf because new is overloaded to handle that
   //TODO:or is it? i see a relative huge memory consumption when the payload 
   //scraperneeds to recompute the db
-  delete buf; //needs further investigation
+  delete[] buf; //needs further investigation
   buf = NULL;
   return pair<unsigned long, unsigned long>(cur_filelength, capacity);
 
