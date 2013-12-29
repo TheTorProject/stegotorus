@@ -56,7 +56,7 @@ PayloadScraper::scrape_url(const string& cur_url, steg_type* cur_steg, bool abso
   base64::encoder url_hash_encoder;
   url_hash_encoder.encode(url_hash, 20, url_hash64);
                         
-  pair<unsigned long, unsigned long> fileinfo = compute_capacity(cur_url, cur_steg, absolute_url);
+  pair<unsigned long, unsigend long> fileinfo = compute_capacity(cur_url, cur_steg, absolute_url);
   unsigned long cur_filelength = fileinfo.first;
   unsigned long capacity = fileinfo.second;
 
@@ -405,8 +405,12 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
     assert(test_cur_filelength == cur_filelength);
   }
   
-  unsigned long capacity = cur_steg->capacity_function(buf, apache_size);
+  long capacity = cur_steg->capacity_function(buf, apache_size);
   log_debug("capacity: %lu", capacity);
+  if (capacity < 0){ 
+    log_warn("error occurd during capacity computation");
+    capacity = 0;//zero capacity files are dropped
+  }
 
   //no delete need for buf because new is overloaded to handle that
   //TODO:or is it? i see a relative huge memory consumption when the payload 
