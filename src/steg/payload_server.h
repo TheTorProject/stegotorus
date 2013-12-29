@@ -59,7 +59,7 @@ using namespace std;
 
 //I could not find a single class that made
 //sense to put this in it so let it be global
-const int c_no_of_steg_protocol = 8;
+const unsigned int c_no_of_steg_protocol = 8;
 
 // used by the JavaScript steg module to distinguish two cases in which
 // JS may appear in the HTTP msg

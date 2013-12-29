@@ -381,11 +381,6 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
   unsigned long test_cur_filelength;
   stringstream  payload_buf;
 
-  if (!absolute_url) 
-    test_cur_filelength = file_size(_apache_doc_root + payload_url);
-  //cur_file.read(payload_buf, cur_filelength);
-            
-  //cur_file.close();
   string url_to_retreive = absolute_url ? payload_url : "http://" + _cover_server +"/" + payload_url;
 
   unsigned long apache_size = fetch_url_raw(capacity_handle, url_to_retreive, payload_buf);
@@ -405,8 +400,10 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
   
   unsigned long cur_filelength = apache_size - (hend - buf + 4);
 
-  if (!absolute_url)
+  if (!absolute_url) {
+    test_cur_filelength = file_size(_apache_doc_root + payload_url);
     assert(test_cur_filelength == cur_filelength);
+  }
   
   unsigned long capacity = cur_steg->capacity_function(buf, apache_size);
   log_debug("capacity: %lu", capacity);
