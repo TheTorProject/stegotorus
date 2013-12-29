@@ -1,0 +1,10 @@
+go to stegossidea folder
+open stegossidea/spiders/cover_spider.py
+
+edit start_urls ad allowed_domains to reflect your cover providers
+
+then in the stegossidea's root type
+
+scrapy crawl stego_cover -o mititems.csv -t csv
+
+copy the file in stegotorus/apache_payload
