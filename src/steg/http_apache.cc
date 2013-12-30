@@ -216,6 +216,7 @@ http_apache_steg_config_t::~http_apache_steg_config_t()
   curl_multi_cleanup(_curl_multi_handle);
 
   delete payload_server;
+  payload_server = NULL;
 
 }
 
@@ -982,6 +983,9 @@ size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, si
     return 0;
   }
 
+  log_debug(down, "sur2");
+
+  log_debug(down, "sur3");
   return no_bytes_2_read;
 
 }

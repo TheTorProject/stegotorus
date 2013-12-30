@@ -330,8 +330,9 @@ ApachePayloadServer::store_dict(char* dict_buf, size_t dict_buf_size)
 
 ApachePayloadServer::~ApachePayloadServer()
 {
-    /* always cleanup */ 
-    curl_easy_cleanup(_curl_obj);
+  /* always cleanup */ 
+  log_debug("cleaning up curl easy handle for payload retrieval");
+  curl_easy_cleanup(_curl_obj);
 
 }
 
