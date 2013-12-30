@@ -120,7 +120,9 @@ GTEST_SOURCES = \
 
 g_unittests_SOURCES = \
 	$(GTEST_SOURCES) \
-	src/test/steg_test/steg_mod_unittest.cc
+	src/test/steg_test/steg_mod_unittest.cc \
+	src/test/steg_test/payload_scraper_unittest.cc
+
 
 g_unittests_LDADD = libstegotorus.a $(lib_LIBS)
 
