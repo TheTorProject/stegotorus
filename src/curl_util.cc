@@ -76,7 +76,6 @@ discard_data(char *ptr, size_t size, size_t nmemb, void *userdata)
 unsigned long fetch_url_raw(CURL* curl_obj, string& url,  stringstream& buf)
 {
   CURLcode res;
-  pair<unsigned long, char*> res_payload;
 
   log_assert(curl_obj);
 

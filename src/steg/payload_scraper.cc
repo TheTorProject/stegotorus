@@ -56,7 +56,7 @@ PayloadScraper::scrape_url(const string& cur_url, steg_type* cur_steg, bool abso
   base64::encoder url_hash_encoder;
   url_hash_encoder.encode(url_hash, 20, url_hash64);
                         
-  pair<unsigned long, unsigend long> fileinfo = compute_capacity(cur_url, cur_steg, absolute_url);
+  pair<unsigned long, unsigned long> fileinfo = compute_capacity(cur_url, cur_steg, absolute_url);
   unsigned long cur_filelength = fileinfo.first;
   unsigned long capacity = fileinfo.second;
 
@@ -99,7 +99,7 @@ PayloadScraper::scrape_dir(const path dir_path)
       return -1;
 
   recursive_directory_iterator end_itr; // default construction yields past-the-end
-  for ( recursive_directory_iterator itr( dir_path );
+   for ( recursive_directory_iterator itr( dir_path );
         itr != end_itr;
         ++itr, total_file_count++)
     {
@@ -395,10 +395,16 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
   const char* hend = strstr(buf, "\r\n\r\n");
   if (hend == NULL) {
     log_warn("unable to find end of header in the HTTP template");
+    delete [] buf;
     return pair<unsigned long, unsigned long>(0, 0);
   }
   
   unsigned long cur_filelength = apache_size - (hend - buf + 4);
+  if (cur_filelength == 0) {
+    log_warn("unable to find end of header in the HTTP template");
+    delete [] buf;
+    return pair<unsigned long, unsigned long>(0, 0);
+  }
 
   if (!absolute_url) {
     test_cur_filelength = file_size(_apache_doc_root + payload_url);
