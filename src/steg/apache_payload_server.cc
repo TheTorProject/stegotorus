@@ -44,7 +44,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
     //Initializing type specific data, we initiate with max_capacity = 0, count = 0
     //I don't think we need this as we have the default constructor doing the same
     TypeDetail init_empty_type;
-    for(int cur_type = 1; cur_type < c_no_of_steg_protocol+1; cur_type++)
+    for(unsigned int cur_type = 1; cur_type < c_no_of_steg_protocol+1; cur_type++)
       _payload_database.type_detail[cur_type] = init_empty_type;
     //it should be like this but beacause they are not pointers 
     //we are in trouble need to change the type to pointer

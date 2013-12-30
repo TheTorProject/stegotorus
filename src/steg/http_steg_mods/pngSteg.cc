@@ -41,6 +41,9 @@ ssize_t PNGSteg::headless_capacity(char *cover_body, int body_length)
  */
 unsigned int PNGSteg::static_headless_capacity(char *cover_body, int body_length)
 {
+  if (body_length <= 0)
+    return 0;
+
   size_t total_capacity = 0;
 
   PNGChunkData cur_data_chunk((uint8_t*)cover_body + c_magic_header_length, (uint8_t*)cover_body + body_length), next_data_chunk;

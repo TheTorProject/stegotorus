@@ -107,6 +107,9 @@ ssize_t JPGSteg::headless_capacity(char *cover_body, int body_length)
  */
 unsigned int JPGSteg::static_headless_capacity(char *cover_body, int body_length)
 {  
+  if (body_length <= 0)
+    return 0;
+
   int from = starting_point((uint8_t*)cover_body, (size_t)body_length);
   if (from < 0) //invalid format 
     return 0;

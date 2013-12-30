@@ -5,7 +5,7 @@
 
 using namespace std;
 
-extern const int c_no_of_steg_protocol;
+extern const unsigned int c_no_of_steg_protocol;
 
 /**
    This is an abstract class that all steg modules should inherit from,
