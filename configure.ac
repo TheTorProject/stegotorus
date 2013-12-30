@@ -9,6 +9,7 @@ AC_CONFIG_AUX_DIR([config-aux])
 AC_LANG([C++])
 AM_INIT_AUTOMAKE([foreign nostdinc silent-rules subdir-objects])
 AM_MAINTAINER_MODE([enable])
+AC_PROG_RANLIB
 
 dnl This script deliberately does not check for a bunch of things
 dnl that 'autoscan' thinks we ought to check for.  Here is the list,
