@@ -31,26 +31,34 @@
 #include <fstream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <string>
+#include <boost/filesystem.hpp>
 
 #include <event2/buffer.h>
 
 #include "util.h"
 #include "connections.h"
+#include "util.h"
+#include "crypt.h"
+#include "curl_util.h"
+
 #include "payload_server.h"
-#include "payload_scraper.h"
 
 #include "file_steg.h"
 #include "pngSteg.h"
 #include "jpgSteg.h"
 #include "gifSteg.h"
 
+#include "payload_scraper.h"
+
 #include <gtest/gtest.h>
 
 using namespace std;
+using namespace boost::filesystem;
 
 class PayloadScraperTest : public testing::Test {
  protected:
+  friend PayloadScraper;
   ssize_t cover_len;
   uint8_t* cover_payload;
 
@@ -123,11 +131,14 @@ la chaleur lourde qui épaissit l'air.";
 };
 
 //GIF not found
-TEST_F(StegModTest, png_encode_decode_small) {
-  GIFSteg gif_test_steg(NULL, 0);
+TEST_F(PayloadScraperTest, nonexistance_capacity) {
+  steg_type gif_test_steg;
+
+  gif_test_steg.type = HTTP_CONTENT_GIF; gif_test_steg.extension = ".gif"; gif_test_steg.capacity_function = GIFSteg::static_capacity; //Temp measur
   PayloadScraper test_scraper("/tmp/test.txt", "127.0.0.1");
   
-  EXPECT_TRUE(pair<unsigned long, unsigned long>(0, 0) == test_scraper.compute_capacity("localhost/doesntexist.gif", &gif_test_steg, true);
+  pair<unsigned long, unsigned long> result = test_scraper.compute_capacity("mit.edu/doesntexist.gif", &gif_test_steg, true);
+  EXPECT_TRUE(result.first == 0 && result.second  == 0 );
 
 }
 

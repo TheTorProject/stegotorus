@@ -9,11 +9,12 @@
 struct steg_type
 {
    int type;
-   string  extension;
+  std::string  extension;
    unsigned int (*capacity_function)(char* payload, int len);
 
 };
 
+class PayloadScraperTest;
 /**
     We read the /etc/httpd/conf/httpd.conf (this need to be more dynamic)
     but I'm testing it on my system which is running arch) find
@@ -25,20 +26,21 @@ struct steg_type
 class PayloadScraper
 {
 protected:
-    string _database_filename;
-    ofstream _payload_db;
-    steg_type* _available_stegs;
-    FileStegMod* _available_file_stegs[c_no_of_steg_protocol+1]; //Later when all stegs
+  std::string _database_filename;
+  std::ofstream _payload_db;
+
+  steg_type* _available_stegs;
+  FileStegMod* _available_file_stegs[c_no_of_steg_protocol+1]; //Later when all stegs
                //were converted to this
                //we don't need _available_stegs type. At the moment I have to 
                //actually instantiate because the capacity function is virtual
                //from this
                                       
     
-    string _cover_server;
-    string _cover_list;  //List of url of the covers on _cover_server
-    string _apache_conf_filename;
-    string _apache_doc_root; /* the directory that apache serve where
+    std::string _cover_server;
+    std::string _cover_list;  //List of url of the covers on _cover_server
+    std::string _apache_conf_filename;
+    std::string _apache_doc_root; /* the directory that apache serve where
                                the html doc*/
     
     CURL* capacity_handle;    /* We use this auxiliary curl handle
@@ -54,7 +56,7 @@ protected:
        
        @return space separated string of hash, capacity, length
     */
-    const string scrape_url(const string& cur_url, steg_type* cur_steg, bool absolute_url = false);
+    const std::string scrape_url(const std::string& cur_url, steg_type* cur_steg, bool absolute_url = false);
 
     /**
        Scrapes list of urls of cover filename
@@ -63,7 +65,7 @@ protected:
 
        @return number of payload if successful -1 if it fails.
     */
-    int scrape_url_list(const string list_filename);
+    int scrape_url_list(const std::string list_filename);
 
     /**
        Scrapes current directory, recursively calls itself for
@@ -72,7 +74,7 @@ protected:
 
        @param cur_dir the name of the dir to be scraped
      */
-    int scrape_dir(const path cur_dir);
+    int scrape_dir(const boost::filesystem::path cur_dir);
 
    /**
        open the apache configuration file, search for DocumentRoot
@@ -80,6 +82,8 @@ protected:
    */
    int apache_conf_parser();
 
+   
+public:
    /**
        Use curl to get the payload in the way that Apache is going to serve
        it and compute it's capacity. return the pair (length of the payload,
@@ -92,16 +96,15 @@ protected:
        @param absolute_url true if the url has the scheme and the server name
                           false if it is just an address on the server
    */
-   pair<unsigned long, unsigned long>  compute_capacity(string payload_url, steg_type* cur_steg, bool absolute_url = false);
-   
-public:
+   pair<unsigned long, unsigned long>  compute_capacity(std::string payload_url, steg_type* cur_steg, bool absolute_url = false);
+
    /**
       The constructor, calls the scraper by default
 
       @param database_filename the name of the file to store the payload list   
       @param cover_list a list of potential cover on the cover server to avoid ftp access
     */
-   PayloadScraper(string database_filename,  string cover_server, const string& cover_list = "", const string apache_conf = "/etc/httpd/conf/httpd.conf");
+   PayloadScraper(std::string database_filename,  std::string cover_server, const std::string& cover_list = "", const std::string apache_conf = "/etc/httpd/conf/httpd.conf");
 
    /**
       reads all the files in the Doc root and classifies them. return the number of payload file founds. -1 if it fails

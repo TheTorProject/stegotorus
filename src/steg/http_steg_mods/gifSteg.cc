@@ -51,12 +51,13 @@ unsigned int GIFSteg::static_headless_capacity(char *cover_body, int body_length
   if (body_length <= 0)
     return 0;
 
-  int from = starting_point((uint8_t*)cover_body, (size_t)body_length);
+  ssize_t from = starting_point((uint8_t*)cover_body, (size_t)body_length);
   if (from < 0) { //corrupted format
     log_warn("corrupted gif payload.");
     return 0;
   }
-  return max(body_length - from - 1 - sizeof(int), (size_t)0); // 2 for FFD9, 4 for len
+  ssize_t hypothetical_capacity = ((ssize_t)body_length) - from - 1 - (ssize_t)sizeof(int);
+  return max(hypothetical_capacity, (ssize_t)0); // 2 for FFD9, 4 for len
 }
 ssize_t GIFSteg::capacity(const uint8_t *raw, size_t len)
 {

@@ -114,7 +114,9 @@ unsigned int JPGSteg::static_headless_capacity(char *cover_body, int body_length
   if (from < 0) //invalid format 
     return 0;
     
-  return max(body_length - from - 2 - sizeof(int), (size_t)0); // 2 for FFD9, 4 for len
+  ssize_t hypothetical_capacity = ((ssize_t)body_length) - from - 2 - (ssize_t)sizeof(int);
+
+  return max(hypothetical_capacity, (ssize_t)0); // 2 for FFD9, 4 for len
 
 }
 

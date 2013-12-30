@@ -176,7 +176,8 @@ PayloadScraper::scrape_url_list(const string list_filename)
     @param database_filename the name of the file to store the payload list   
 */
 PayloadScraper::PayloadScraper(string  database_filename, string cover_server,const string& cover_list, string apache_conf)
-  :_available_stegs(NULL), 
+  : _available_stegs(),
+    _available_file_stegs(), 
    _cover_list(cover_list),
    capacity_handle(curl_easy_init())
 {
@@ -192,7 +193,8 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
   _apache_conf_filename  = apache_conf;
 
   /** This is hard coded */
-  _available_stegs = new steg_type[c_no_of_steg_protocol];
+  _available_stegs = new steg_type[c_no_of_steg_protocol+1]; //one to be zero
+  //memset(_available_file_stegs[0], (int)NULL, sizeof(FileStegMod*)*(c_no_of_steg_protocol+1)); 
 
   _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = NULL;
   _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js";  _available_stegs[0].capacity_function = PayloadServer::capacityJS;
@@ -393,7 +395,7 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
 
   //compute the size
   const char* hend = strstr(buf, "\r\n\r\n");
-  if (hend == NULL) {
+  if (hend == NULL || (hend - buf + 4) > (ssize_t)apache_size) {
     log_warn("unable to find end of header in the HTTP template");
     delete [] buf;
     return pair<unsigned long, unsigned long>(0, 0);
@@ -401,7 +403,7 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
   
   unsigned long cur_filelength = apache_size - (hend - buf + 4);
   if (cur_filelength == 0) {
-    log_warn("unable to find end of header in the HTTP template");
+    log_warn("The HTTP body seems to be empty");
     delete [] buf;
     return pair<unsigned long, unsigned long>(0, 0);
   }
