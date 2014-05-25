@@ -11,7 +11,7 @@ AM_CXXFLAGS = -Werror -Wall -Wextra -Wno-missing-field-initializers -Wformat=2 -
 AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods $(lib_CPPFLAGS) -I$(srcdir)/src/test/gtest -I$(srcdir)/src/test/gtest/include 
 
 noinst_LIBRARIES = libstegotorus.a
-noinst_PROGRAMS  = unittests g_unittests tltester tester_proxy webpage_tester
+noinst_PROGRAMS  = unittests  tltester tester_proxy webpage_tester 
 bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \

@@ -20,6 +20,7 @@ using namespace boost::filesystem;
 #include "http_steg_mods/jpgSteg.h"
 #include "http_steg_mods/pngSteg.h"
 #include "http_steg_mods/gifSteg.h"
+#include "http_steg_mods/swfSteg.h"
 
 #include "payload_scraper.h"
 #include "base64.h"
@@ -202,13 +203,16 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
   _available_file_stegs[HTTP_CONTENT_PDF] = NULL;
   _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PayloadServer::capacityPDF;
 
-  _available_file_stegs[HTTP_CONTENT_SWF] = NULL;
-  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = PayloadServer::capacitySWF;
+ _available_file_stegs[HTTP_CONTENT_SWF] = new SWFSteg(NULL);
+  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = SWFSteg::static_capacity;  //Temp measure, later we don't need to do such acrobatics
+
 
   _available_file_stegs[HTTP_CONTENT_HTML] = NULL; 
   _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html";  _available_stegs[3].capacity_function = PayloadServer::capacityJS;
 
   //in new model, extensions are stored in list so one type can have more ext.
+
+  
   _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  _available_stegs[4].capacity_function = PayloadServer::capacityJS;
 
   _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(NULL); //We are only using the capacity function so we don't need a payload server
@@ -280,8 +284,8 @@ int PayloadScraper::scrape()
       }
       
       //just try to unmount in case it is already mounted
-      system(ftp_unmount_command_string.c_str());
-      
+     int res = system(ftp_unmount_command_string.c_str());
+      (void) res;
       string ftp_mount_command_string = "curlftpfs ftp://";
       ftp_mount_command_string += _cover_server + " " + TEMP_MOUNT_DIR;
       
@@ -309,7 +313,8 @@ int PayloadScraper::scrape()
       scrape_succeed = true;
     
     if (remote_mount) {
-      system(ftp_unmount_command_string.c_str());
+      int res = system(ftp_unmount_command_string.c_str());
+     (void) res;
     }
   }
 

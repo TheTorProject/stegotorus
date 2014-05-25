@@ -65,6 +65,7 @@ void http_steg_config_t::init_file_steg_mods()
   file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
 
 }
 http_steg_config_t::http_steg_config_t(config_t *cfg)
@@ -558,9 +559,9 @@ http_steg_t::transmit(struct evbuffer *source)
     int rval = -1;
     switch(type) {
 
-    case HTTP_CONTENT_SWF:                    
-      rval = http_server_SWF_transmit(config->payload_server, source, conn);
-      break;
+    //case HTTP_CONTENT_SWF:                    
+    //  rval = http_server_SWF_transmit(config->payload_server, source, conn);
+     // break;
 
     case HTTP_CONTENT_JAVASCRIPT:
       rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_JAVASCRIPT);
@@ -693,9 +694,9 @@ http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
   log_debug(conn, "sur1.5.1");
 
   switch(type) {
-  case HTTP_CONTENT_SWF:
-    rval = http_handle_client_SWF_receive(this, conn, dest, source);
-    break;
+  //case HTTP_CONTENT_SWF:
+    //rval = http_handle_client_SWF_receive(this, conn, dest, source);
+    //break;
 
   case HTTP_CONTENT_JAVASCRIPT:
   case HTTP_CONTENT_HTML:
