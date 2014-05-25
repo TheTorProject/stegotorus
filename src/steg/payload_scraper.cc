@@ -284,8 +284,10 @@ int PayloadScraper::scrape()
       }
       
       //just try to unmount in case it is already mounted
-     int res = system(ftp_unmount_command_string.c_str());
-      (void) res;
+      int res = system(ftp_unmount_command_string.c_str());
+      if (res)
+        log_warn("error while trying to unmount ftp folder");
+
       string ftp_mount_command_string = "curlftpfs ftp://";
       ftp_mount_command_string += _cover_server + " " + TEMP_MOUNT_DIR;
       
@@ -314,7 +316,8 @@ int PayloadScraper::scrape()
     
     if (remote_mount) {
       int res = system(ftp_unmount_command_string.c_str());
-     (void) res;
+      if (res)
+        log_warn("error while trying to unmount ftp folder");
     }
   }
 
