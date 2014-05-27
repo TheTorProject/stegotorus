@@ -5,6 +5,7 @@
 
 #include "util.h"
 #include "payload_server.h"
+#include "file_steg.h"
 #include "http_steg_mods/swfSteg.h"
 
 #include <ctype.h>
@@ -17,7 +18,7 @@ unsigned int
 PayloadServer::capacityJS3 (char* buf, int len, int mode) {
   char *hEnd, *bp, *jsStart, *jsEnd;
   int cnt=0;
-  int j;
+  int j;	
 
   // jump to the beginning of the body of the HTTP message
   hEnd = strstr(buf, "\r\n\r\n");
