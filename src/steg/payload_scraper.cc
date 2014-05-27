@@ -309,7 +309,9 @@ int PayloadScraper::scrape()
       scrape_succeed = true;
     
     if (remote_mount) {
-      system(ftp_unmount_command_string.c_str());
+      int res = system(ftp_unmount_command_string.c_str());
+      if (res)
+        log_warn("error while trying to unmount ftp folder");
     }
   }
 
