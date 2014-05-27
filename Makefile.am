@@ -8,10 +8,10 @@ AM_CXXFLAGS = -Werror -Wall -Wextra -Wno-missing-field-initializers -Wformat=2 -
 # Took off _FROTYFY_SOURCE because stdlib doesn't allow it with -O0 -g2
 # So it is only for releaes time
 #AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
-AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods $(lib_CPPFLAGS) -I$(srcdir)/src/test/gtest -I$(srcdir)/src/test/gtest/include 
+AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods -I$(srcdir)/src/test/gtest -I$(srcdir)/src/test/gtest/include $(lib_CPPFLAGS) -lpthread  
 
 noinst_LIBRARIES = libstegotorus.a
-noinst_PROGRAMS  = unittests g_unittests tltester tester_proxy webpage_tester
+noinst_PROGRAMS  = unittests tltester tester_proxy webpage_tester g_unittests
 bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \
@@ -124,7 +124,7 @@ g_unittests_SOURCES = \
 	src/test/steg_test/payload_scraper_unittest.cc
 
 
-g_unittests_LDADD = libstegotorus.a $(lib_LIBS)
+g_unittests_LDADD = libstegotorus.a $(lib_LIBS) -lpthread
 
 #g_unittests_LDFLAGS = \
 #	-lgtest_main \
