@@ -54,9 +54,9 @@ if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
   tmp_buf = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN);
   tmp_buf2 = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512);
 
-memcpy(tmp_buf, cover_payload + extract_appropriate_respones_body((evbuffer*)cover_payload) + 4+8, SWF_SAVE_HEADER_LEN); //why is 8 hardcoded? 4 is from former swf variable.
+memcpy(tmp_buf, cover_payload + 4+8, SWF_SAVE_HEADER_LEN); //why is 8 hardcoded? 4 is from former swf variable.
 memcpy(tmp_buf+SWF_SAVE_HEADER_LEN, data, data_len);
-memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, cover_payload+ extract_appropriate_respones_body((char*)cover_payload, cover_len) - SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
+memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, cover_payload- SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
   out_swf_len =
     compress((const uint8_t *)tmp_buf,
              SWF_SAVE_HEADER_LEN + data_len + SWF_SAVE_FOOTER_LEN,
