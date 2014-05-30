@@ -23,30 +23,17 @@ static const char http_response_1[] =
 //unsigned int
 //swf_wrap(PayloadServer* pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
 int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) {
-
- 
-
   char* tmp_buf;
   int out_swf_len;
-
-
 
   char hdr[512];
   unsigned int hdr_len;
 
   char* tmp_buf2;
   
-
-
-
-
-  
-if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
-
+  if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
     log_warn("not enough cover capacity to embed data");
-
-   return -1; //not enough capacity is an error because you should have check 
-
+    return -1; //not enough capacity is an error because you should have check 
     //before requesting
   }
 
@@ -54,9 +41,9 @@ if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
   tmp_buf = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN);
   tmp_buf2 = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512);
 
-memcpy(tmp_buf, cover_payload + 4+8, SWF_SAVE_HEADER_LEN); //why is 8 hardcoded? 4 is from former swf variable.
-memcpy(tmp_buf+SWF_SAVE_HEADER_LEN, data, data_len);
-memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, cover_payload- SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
+  memcpy(tmp_buf, cover_payload + 4+8, SWF_SAVE_HEADER_LEN); //why is 8 hardcoded? 4 is from former swf variable.
+  memcpy(tmp_buf+SWF_SAVE_HEADER_LEN, data, data_len);
+  memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, cover_payload- SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
   out_swf_len =
     compress((const uint8_t *)tmp_buf,
              SWF_SAVE_HEADER_LEN + data_len + SWF_SAVE_FOOTER_LEN,

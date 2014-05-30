@@ -50,6 +50,8 @@ http_steg_config_t::init_http_steg_config_t(bool init_payload_server)
   
     payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
 
+    init_file_steg_mods();
+
   }
 
 }
@@ -193,10 +195,13 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
     log_debug(conn, "checking available capacity for type %u", type);
     switch (type)
       {
-      case HTTP_CONTENT_SWF:
-        if (hi >= 1024)
-          hi = 1024;
-        break;
+        //TODO: This needs to be handle by the SWFSteg i.e. the
+        //default case but because there is no pre-generated
+        //swf payloads it needs a bit of tweak
+       case HTTP_CONTENT_SWF:
+         if (hi >= 1024)
+           hi = 1024;
+           break;
 
       case HTTP_CONTENT_JAVASCRIPT:
         if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2)

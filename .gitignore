@@ -34,6 +34,8 @@
 #/config-aux/install-sh
 #/config-aux/missing
 #/config-aux/compile
+/config-aux/*.m4
+/config-aux/ltmain.sh
 
 /protolist.cc
 /steglist.cc
