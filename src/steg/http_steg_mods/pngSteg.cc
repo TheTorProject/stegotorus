@@ -176,6 +176,6 @@ ssize_t PNGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
    constructor just to call parent constructor
 */
 PNGSteg::PNGSteg(PayloadServer* payload_provider, double noise2signal)
-  :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_PNG)
+  :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_PNG, 0)
 {
 }

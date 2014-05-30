@@ -158,7 +158,7 @@ PayloadScraper::scrape_url_list(const string list_filename)
     else
       cur_url_ext = filename.substr(last_dot);
 
-    for(steg_type* cur_steg = _available_stegs; cur_steg->type!= 0; cur_steg++) {
+    for(steg_type* cur_u = _available_stegs; cur_steg->type!= 0; cur_steg++) {
       if (cur_steg->extension == cur_url_ext) {
         string scrape_result = scrape_url(file_url, cur_steg, true);
         if (!scrape_result.empty())

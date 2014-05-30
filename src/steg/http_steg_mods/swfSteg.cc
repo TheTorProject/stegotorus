@@ -147,7 +147,7 @@ unsigned int SWFSteg::static_capacity(char *cover_payload, int len)
 
 
 SWFSteg::SWFSteg(PayloadServer* payload_provider, double noise2signal)
- :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_SWF)
+ :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_SWF, 1)
 
 {
 

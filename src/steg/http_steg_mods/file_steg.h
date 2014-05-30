@@ -1,6 +1,9 @@
 #ifndef FILE_STEG_H
 #define FILE_STEG_H
 
+#define SWF_SAVE_HEADER_LEN 1500
+#define SWF_SAVE_FOOTER_LEN 1500
+
 #include <list>
 
 using namespace std;
@@ -30,6 +33,8 @@ protected:
 
   uint8_t* outbuf; //this is where the payload sit after being injected by the
   //the message. it is define as class member to avoid allocation and delocation
+
+const int pgenflag; //tells us whether we are dealing with a payload taken from the database (0) or a generated on the fly one (1, for SWF only atm)
 
   /**
      Finds a payload of approperiate type and size
@@ -127,7 +132,7 @@ protected:
             to this module.
      @child_type?
   */
-  FileStegMod(PayloadServer* payload_provider, double noise2signal, int child_type);
+  FileStegMod(PayloadServer* payload_provider, double noise2signal, int child_type, int pgen);
   /** 
       Destructor, just releases the http buffer 
   */

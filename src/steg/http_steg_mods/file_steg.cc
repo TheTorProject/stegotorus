@@ -23,8 +23,8 @@ using namespace std;
   @param the payload server that is going to be used to provide cover
          to this module.
 */
-FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_from_cfg, int child_type = -1)
-  :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type), outbuf(new uint8_t[c_HTTP_MSG_BUF_SIZE])
+FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_from_cfg, int child_type = -1, int pgen = 0)
+  :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type), outbuf(new uint8_t[c_HTTP_MSG_BUF_SIZE]), pgenflag(pgen)
 {
   assert(outbuf);
 
@@ -139,11 +139,14 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   uint8_t* data1;
   //call this from util to find to extract the buffer into memory block
   int sbuflen = evbuffer_to_memory_block(source, &data1);
-  //uint8_t outbuf[c_HTTP_MSG_BUF_SIZE]; //moving this guy to heap?
-  ssize_t outbuflen = 0;
 
+  ssize_t outbuflen = 0;
+  ssize_t body_offset = 0;
   uint8_t newHdr[MAX_RESP_HDR_SIZE];
-  ssize_t newHdrLen;
+   ssize_t newHdrLen = 0;
+  size_t cnt = 0;
+  size_t body_len = 0;
+  size_t hLen = 0;
 
   if (sbuflen < 0) {
     log_warn("unable to extract the data from evbuffer");
@@ -153,7 +156,12 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   //now we need to choose a payload
   char* cover_payload;
   string payload_id_hash;
-  size_t cnt = pick_appropriate_cover_payload(sbuflen, &cover_payload, payload_id_hash);
+
+if(pgenflag == 0)
+{
+     
+
+     cnt = pick_appropriate_cover_payload(sbuflen, &cover_payload, payload_id_hash);
 
   //we shouldn't touch the cover as there is only one copy of it in the
   //the cache
@@ -165,8 +173,8 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
       return -1;
     }
 
-  size_t body_len = cnt-body_offset;
-  size_t hLen = body_offset;
+  body_len = cnt-body_offset;
+  hLen = body_offset;
   log_debug("coping body of %lu size", (body_len));
   if ((body_len) > c_HTTP_MSG_BUF_SIZE)
   {
@@ -188,17 +196,34 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     return -1;
   }
 
+  }
+  else if (pgenflag == 1)
+ {
+          outbuf = (uint8_t *)xmalloc(4*sbuflen + SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 512);
+ 	  outbuflen = encode(data1, sbuflen, outbuf,  4*sbuflen + SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 512);
+
+ if (outbuflen < 0) {
+    log_warn("SERVER SWF-type embedding fails");
+    _payload_server->disqualify_payload(payload_id_hash);
+    return -1;
+  }
+ }
   //If everything seemed to be fine, New steg module test:
+
+    
   if (!(LOG_SEV_DEBUG < log_get_min_severity())) { //only perform this during debug
     uint8_t recovered_data_for_test[sbuflen];
     decode(outbuf, outbuflen, recovered_data_for_test);
 
     if (memcmp(data1, recovered_data_for_test, sbuflen)) { //barf!!
       //keep the evidence for testing
-      ofstream failure_evidence_file("fail_cover.log", ios::binary | ios::out);
-      failure_evidence_file.write(cover_payload + body_offset, body_len);
-      failure_evidence_file.write(cover_payload + body_offset, body_len);
-      failure_evidence_file.close();
+      if(pgenflag == 1)
+     {
+      	ofstream failure_evidence_file("fail_cover.log", ios::binary | ios::out);
+      	failure_evidence_file.write(cover_payload + body_offset, body_len);
+      	failure_evidence_file.write(cover_payload + body_offset, body_len);
+      	failure_evidence_file.close();
+     }
       ofstream failure_embed_evidence_file("failed_embeded_cover.log", ios::binary | ios::out);
       failure_embed_evidence_file.write((const char*)outbuf, outbuflen);
       failure_embed_evidence_file.close();
@@ -207,6 +232,8 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     }
   }
 
+if(pgenflag == 0)
+{
   log_debug("SERVER FileSteg sends resp with hdr len %lu body len %lu",
             body_offset, outbuflen);
 
@@ -235,6 +262,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
     return -1;
   }
+}
 
   evbuffer_drain(source, sbuflen);
   return outbuflen;
