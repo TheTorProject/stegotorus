@@ -25,11 +25,15 @@ static const char http_response_1[] =
 int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) {
   char* tmp_buf;
   int out_swf_len;
+  int in_swf_len;
 
+  char* swf;
   char hdr[512];
   unsigned int hdr_len;
 
   char* tmp_buf2;
+  char* resp;
+  int resp_len;
   
   if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
     log_warn("not enough cover capacity to embed data");
@@ -37,13 +41,23 @@ int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     //before requesting
   }
 
+if (get_generated_payload(HTTP_CONTENT_SWF, -1, &resp, &resp_len)) {
+	log_warn("swfsteg: no suitable payload found\n");
+	return -1;
+ }
+
+
+
+swf = strstr(resp, "\r\n\r\n") + 4;
+
+in_swf_len = resp_len - (swf - resp);
 
   tmp_buf = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN);
   tmp_buf2 = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512);
 
-  memcpy(tmp_buf, cover_payload + 4+8, SWF_SAVE_HEADER_LEN); //why is 8 hardcoded? 4 is from former swf variable.
+  memcpy(tmp_buf, swf+8, SWF_SAVE_HEADER_LEN); //look at get_payload in trace_payload_server. 
   memcpy(tmp_buf+SWF_SAVE_HEADER_LEN, data, data_len);
-  memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, cover_payload- SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
+  memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, swf +in_swf_len-SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
   out_swf_len =
     compress((const uint8_t *)tmp_buf,
              SWF_SAVE_HEADER_LEN + data_len + SWF_SAVE_FOOTER_LEN,

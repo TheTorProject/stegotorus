@@ -40,6 +40,16 @@ FileStegMod::~FileStegMod()
 {
   delete outbuf;
 }
+
+/* Accessor for get_payload in case of generated payloads like SWF */
+int
+FileStegMod::get_generated_payload(int contentType, int cap, char** buf, int* size)
+{
+   
+  return _payload_server->get_payload(contentType, cap, buf, size);
+
+}
+
 /**
    Encapsulate the repetative task of checking for the respones of content_type
    choosing one with appropriate size and extracting the body from header
@@ -53,6 +63,8 @@ FileStegMod::~FileStegMod()
            find the start of body) or RESPONSE_BAD (<0) in case of other
            errors
 */
+
+
 ssize_t 
 FileStegMod::extract_appropriate_respones_body(char* payload_buf, size_t payload_size)
 {
@@ -69,6 +81,8 @@ FileStegMod::extract_appropriate_respones_body(char* payload_buf, size_t payload
   return hend-payload_buf+4;
 
 }
+
+
 
 /**
    The overloaded version with evbuffer
@@ -169,7 +183,7 @@ if(pgenflag == FILE_PAYLOAD)
   //we shouldn't touch the cover as there is only one copy of it in the
   //the cache
   ssize_t body_offset =  extract_appropriate_respones_body(cover_payload, cnt);
-  if (body_offset < 0)
+  if (body_offset < 0) //this never returns zero naturally 0 
     {
       log_warn("Failed to aquire approperiate payload.");
       _payload_server->disqualify_payload(payload_id_hash);
@@ -203,8 +217,8 @@ if(pgenflag == FILE_PAYLOAD)
   else if (pgenflag == GEN_PAYLOAD)
  {
         
- 	  outbuflen = encode(data1, sbuflen, outbuf,  4*sbuflen + SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 512);
-  
+ 	  outbuflen = encode(data1, sbuflen, outbuf,  4*sbuflen + c_HTTP_MSG_BUF_SIZE + 512);
+          body_len = 4*sbuflen + c_HTTP_MSG_BUF_SIZE + 512;
  }
   //If everything seemed to be fine, New steg module test:
 
@@ -215,13 +229,13 @@ if(pgenflag == FILE_PAYLOAD)
 
     if (memcmp(data1, recovered_data_for_test, sbuflen)) { //barf!!
       //keep the evidence for testing
-      if(pgenflag == FILE_PAYLOAD)
-     {
+     // if(pgenflag == FILE_PAYLOAD)
+     //{
       	ofstream failure_evidence_file("fail_cover.log", ios::binary | ios::out);
       	failure_evidence_file.write(cover_payload + body_offset, body_len);
       	failure_evidence_file.write(cover_payload + body_offset, body_len);
       	failure_evidence_file.close();
-     }
+     //}
       ofstream failure_embed_evidence_file("failed_embeded_cover.log", ios::binary | ios::out);
       failure_embed_evidence_file.write((const char*)outbuf, outbuflen);
       failure_embed_evidence_file.close();
@@ -230,8 +244,7 @@ if(pgenflag == FILE_PAYLOAD)
     }
   }
 
-if(pgenflag == FILE_PAYLOAD)
-{
+
   log_debug("SERVER FileSteg sends resp with hdr len %lu body len %lu",
             body_offset, outbuflen);
 
@@ -246,6 +259,7 @@ if(pgenflag == FILE_PAYLOAD)
     return -1;
     }*/
   //I'm not crazy, these are filler for later change
+ 
   assert((size_t)outbuflen == body_len); //changing length is not supported yet
   memcpy(newHdr, cover_payload,hLen);
   newHdrLen = hLen;
@@ -260,7 +274,7 @@ if(pgenflag == FILE_PAYLOAD)
     log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
     return -1;
   }
-}
+
 
   evbuffer_drain(source, sbuflen);
   return outbuflen;
