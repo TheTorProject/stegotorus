@@ -340,6 +340,9 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
   int r, i, cnt, found = 0, numCandidate = 0, first, best, current;
 
   (void) payload_id_hash; //TracePayloadServer doesn't support disqualification
+    if(cap <0) {
+	log_warn("swfsteg: calling this one\n");
+     }
 
   log_debug("contentType = %d, initTypePayload = %d, typePayloadCount = %d",
             contentType, pl.initTypePayload[contentType],

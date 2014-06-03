@@ -41,7 +41,7 @@ int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     //before requesting
   }
 
-if (get_generated_payload(HTTP_CONTENT_SWF, -1, &resp, &resp_len)) {
+if (!get_generated_payload(HTTP_CONTENT_SWF, -1, &resp, &resp_len)) {
 	log_warn("swfsteg: no suitable payload found\n");
 	return -1;
  }

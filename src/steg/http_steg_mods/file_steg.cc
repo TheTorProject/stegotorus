@@ -47,6 +47,7 @@ FileStegMod::get_generated_payload(int contentType, int cap, char** buf, int* si
 {
    
   return _payload_server->get_payload(contentType, cap, buf, size);
+log_warn("swfsteg: using accessor\n");
 
 }
 
