@@ -46,6 +46,10 @@ const int pgenflag; //tells us whether we are dealing with a payload taken from 
   */
   ssize_t pick_appropriate_cover_payload(size_t data_len, char** payload_buf, string& cover_id_hash);
   
+
+/* Accessor for get_payload in case of generated payload like SWF */
+int get_generated_payload(int contentType, int cap, char** buf, int* size);
+
   /**
      Encapsulate the repetative task of checking for the respones of content_type
      choosing one with appropriate size and extracting the body from header
