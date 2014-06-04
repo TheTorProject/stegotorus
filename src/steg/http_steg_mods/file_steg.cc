@@ -83,8 +83,6 @@ FileStegMod::extract_appropriate_respones_body(char* payload_buf, size_t payload
 
 }
 
-
-
 /**
    The overloaded version with evbuffer
 */
@@ -184,7 +182,7 @@ if(pgenflag == FILE_PAYLOAD)
   //we shouldn't touch the cover as there is only one copy of it in the
   //the cache
   ssize_t body_offset =  extract_appropriate_respones_body(cover_payload, cnt);
-  if (body_offset < 0) //this never returns zero naturally 0 
+  if (body_offset < 0)
     {
       log_warn("Failed to aquire approperiate payload.");
       _payload_server->disqualify_payload(payload_id_hash);
