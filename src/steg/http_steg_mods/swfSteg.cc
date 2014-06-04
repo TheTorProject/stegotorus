@@ -69,7 +69,7 @@ in_swf_len = resp_len - (swf - resp);
 
   //  fprintf(stderr, "hdr = %s\n", hdr);
 				       
-  memcpy(tmp_buf2, cover_payload, 4);
+  memcpy(tmp_buf2, swf, 4); 
   ((int*) (tmp_buf2))[1] = out_swf_len;
   
   memcpy(data, hdr, hdr_len);
