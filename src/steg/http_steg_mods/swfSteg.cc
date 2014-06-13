@@ -22,12 +22,13 @@ static const char http_response_1[] =
 
 //unsigned int
 //swf_wrap(PayloadServer* pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
-int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) {
+int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload=NULL, size_t cover_len=SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN) {
   char* tmp_buf;
   int out_swf_len;
   int in_swf_len;
 
   char* swf;
+  char* rend;
   char hdr[512];
   unsigned int hdr_len;
 
@@ -35,22 +36,34 @@ int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   char* resp;
   int resp_len;
   
-  if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
-    log_warn("not enough cover capacity to embed data");
-    return -1; //not enough capacity is an error because you should have check 
-    //before requesting
-  }
+
 
 if (!get_generated_payload(HTTP_CONTENT_SWF, -1, &resp, &resp_len)) {
 	log_warn("swfsteg: no suitable payload found\n");
 	return -1;
  }
 
+rend = strstr(resp, "\r\n\r\n");
 
-
-swf = strstr(resp, "\r\n\r\n") + 4;
+if(rend != NULL) {
+	swf = rend + 4;
+}
+else {
+	log_warn("swfsteg: CRLF not found in payload\n");
+	return -1;
+}
 
 in_swf_len = resp_len - (swf - resp);
+
+//cover_payload = (void *) swf;
+
+  if (headless_capacity((char*)swf, cover_len) <  (int) data_len) {
+    log_warn("not enough cover capacity to embed data");
+    return -1; //not enough capacity is an error because you should have check 
+    //before requesting
+  }
+
+
 
   tmp_buf = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN);
   tmp_buf2 = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512);
@@ -77,6 +90,7 @@ in_swf_len = resp_len - (swf - resp);
 
   free(tmp_buf);
   free(tmp_buf2);
+(void)cover_payload; //useless
   return out_swf_len + 8 + hdr_len;
 }
 
