@@ -7,3 +7,13 @@ aP, Pad, SHA256(abP+Pad) abP
 
 But for now all we do, is Pad:
 Circuit_id + Pad + HKDF_SHA256
+
+- Simplified Diffi-Hellman handshake:
+
+In this model the server public key bP is handed as the shared secret. On each connection the client generate a Elligator point aP and send the following in the connection handshake
+
+Enc_ecb_{bP}(Circuit ID + aP + Pading) | SHA-256(Circuit ID + aP + Pading)
+
+The server decrypt the handshake, recover aP, generate abP and from now all communication on that connection will be using SHA-256(abP) as the encryption key.
+ 
+

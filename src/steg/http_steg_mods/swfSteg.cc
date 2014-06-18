@@ -22,7 +22,7 @@ static const char http_response_1[] =
 
 //unsigned int
 //swf_wrap(PayloadServer* pl, char* inbuf, int in_len, char* outbuf, int out_sz) {
-int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload=NULL, size_t cover_len=SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN) {
+int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) {
   char* tmp_buf;
   int out_swf_len;
   int in_swf_len;
@@ -35,67 +35,34 @@ int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload=NULL,
   char* tmp_buf2;
   char* resp;
   int resp_len;
-  
 
-
-if (!get_generated_payload(HTTP_CONTENT_SWF, -1, &resp, &resp_len)) {
-	log_warn("swfsteg: no suitable payload found\n");
-	return -1;
- }
-
-rend = strstr(resp, "\r\n\r\n");
-
-if(rend != NULL) {
-	swf = rend + 4;
-}
-else {
-	log_warn("swfsteg: CRLF not found in payload\n");
-	return -1;
-}
-
-in_swf_len = resp_len - (swf - resp);
-
-//cover_payload = (void *) swf;
-
-  if (headless_capacity((char*)swf, cover_len) <  (int) data_len) {
+  if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
     log_warn("not enough cover capacity to embed data");
-    return -1; //not enough capacity is an error because you should have check 
-    //before requesting
+    return -1; //not enough capacity is an error because you should have check     //before requesting
   }
 
-
-
   tmp_buf = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN);
-  tmp_buf2 = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512);
-
-  memcpy(tmp_buf, swf+8, SWF_SAVE_HEADER_LEN); //look at get_payload in trace_payload_server. 
+  tmp_buf2 = (char *)xmalloc(data_len + );
+  
+  //we skip the first 8 bytes, because we don't want to compress them
+  //4 bytes magic and 4 bytes are the the length of the compressed blob
+  memcpy(tmp_buf, cover_payload+8, SWF_SAVE_HEADER_LEN); //look at get_payload in trace_payload_server. 
   memcpy(tmp_buf+SWF_SAVE_HEADER_LEN, data, data_len);
-  memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, swf +in_swf_len-SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
+  memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, swf + cover_len - SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
   out_swf_len =
     compress((const uint8_t *)tmp_buf,
              SWF_SAVE_HEADER_LEN + data_len + SWF_SAVE_FOOTER_LEN,
-             (uint8_t *)tmp_buf2+8,
+             (uint8_t *)cover_payload+8,
              data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN + 512-8,
              c_format_zlib);
 
-  hdr_len =   gen_response_header((char*) "application/x-shockwave-flash", 0, out_swf_len + 8, hdr, sizeof(hdr));
-
-  //  fprintf(stderr, "hdr = %s\n", hdr);
-				       
-  memcpy(tmp_buf2, swf, 4); 
-  ((int*) (tmp_buf2))[1] = out_swf_len;
+  ((int*) (cover_payload))[1] = out_swf_len; //this is not a good practice, implementation becomes machine dependent little/big indian wise.
   
-  memcpy(data, hdr, hdr_len);
-  memcpy(data+hdr_len, tmp_buf2, out_swf_len + 8);
-
   free(tmp_buf);
-  free(tmp_buf2);
-(void)cover_payload; //useless
-  return out_swf_len + 8 + hdr_len;
+
+  return out_swf_len + 8;
+
 }
-
-
-
 
 ssize_t SWFSteg::decode(const uint8_t *cover_payload, size_t cover_len, uint8_t* data)
 {
@@ -146,12 +113,12 @@ unsigned int SWFSteg::static_headless_capacity(char *cover_body, int body_length
   if (body_length <= 0)
      return 0;
   
+  //we don't care about body_length, the capacity is always at max
   (void)cover_body; //to get around warning
-  //int from = starting_point((uint8_t*)cover_body, (size_t)body_length);
-  //if (from < 0) //invalid format
-    //return 0;
-    
-  ssize_t hypothetical_capacity = ((ssize_t)body_length) - (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512);
+  (void)body_length;
+
+  //the http response header also need to be fit in the outbuf
+  ssize_t hypothetical_capacity = c_HTTP_MSG_BUF_SIZE - MAX_RESP_HDR_SIZE -  (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512);
 
   return max(hypothetical_capacity, (ssize_t)0);
 
