@@ -183,6 +183,6 @@ ssize_t JPGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
    constructor just to call parent constructor
 */
 JPGSteg::JPGSteg(PayloadServer* payload_provider, double noise2signal)
-  :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_JPEG, 0)
+  :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_JPEG)
 {
 }

@@ -25,16 +25,16 @@ static const char http_response_1[] =
 int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) {
   char* tmp_buf;
   int out_swf_len;
-  int in_swf_len;
+  //int in_swf_len;
 
-  char* swf;
-  char* rend;
-  char hdr[512];
-  unsigned int hdr_len;
+  char* swf = 0;
+  //char* rend;
+  //char hdr[512];
+  //unsigned int hdr_len;
 
-  char* tmp_buf2;
-  char* resp;
-  int resp_len;
+  //char* tmp_buf2;
+  //char* resp;
+  //int resp_len;
 
   if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
     log_warn("not enough cover capacity to embed data");
@@ -42,7 +42,7 @@ int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   }
 
   tmp_buf = (char *)xmalloc(data_len + SWF_SAVE_HEADER_LEN + SWF_SAVE_FOOTER_LEN);
-  tmp_buf2 = (char *)xmalloc(data_len + );
+  //tmp_buf2 = (char *)xmalloc(data_len);
   
   //we skip the first 8 bytes, because we don't want to compress them
   //4 bytes magic and 4 bytes are the the length of the compressed blob
@@ -142,7 +142,7 @@ unsigned int SWFSteg::static_capacity(char *cover_payload, int len)
 
 
 SWFSteg::SWFSteg(PayloadServer* payload_provider, double noise2signal)
- :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_SWF, 1)
+ :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_SWF)
 
 {
 

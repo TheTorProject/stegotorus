@@ -73,7 +73,7 @@ protected:
      changes the size of Content Length in HTTTP response header, in case
      the steg module changes  the size of the coverafter emebedding data
    */
-  size_t alter_length_in_response_header(uint8_t* oiginal_header, size_t original_header_length, size_t new_content_length, uint8_t* new_header);
+  size_t alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, uint8_t* new_header[]);
 
  public:
   static const size_t c_HTTP_MSG_BUF_SIZE = HTTP_MSG_BUF_SIZE; //TODO: one constant
@@ -140,7 +140,7 @@ protected:
             to this module.
      @child_type?
   */
-  FileStegMod(PayloadServer* payload_provider, double noise2signal, int child_type, int pgen);
+  FileStegMod(PayloadServer* payload_provider, double noise2signal, int child_type);
   /** 
       Destructor, just releases the http buffer 
   */

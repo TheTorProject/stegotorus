@@ -24,8 +24,8 @@ using namespace std;
   @param the payload server that is going to be used to provide cover
          to this module.
 */
-FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_from_cfg, int child_type = -1, int pgen = 0)
-  :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type), outbuf(new uint8_t[c_HTTP_MSG_BUF_SIZE])/*, pgenflag(pgen*/)
+FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_from_cfg, int child_type = -1)
+  :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type), outbuf(new uint8_t[c_HTTP_MSG_BUF_SIZE])
 {
   assert(outbuf);
 
@@ -39,15 +39,7 @@ FileStegMod::~FileStegMod()
   delete outbuf;
 }
 
-/* Accessor for get_payload in case of generated payloads like SWF */
-int
-FileStegMod::get_generated_payload(int contentType, int cap, char** buf, int* size)
-{
-   
-  return _payload_server->get_payload(contentType, cap, buf, size);
-log_warn("swfsteg: using accessor\n");
 
-}
 
 /**
    Encapsulate the repetative task of checking for the respones of content_type
@@ -156,7 +148,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   ssize_t outbuflen = 0;
   ssize_t body_offset = 0;
-  uint8_t newHdr[MAX_RESP_HDR_SIZE];
+  uint8_t * newHdr[MAX_RESP_HDR_SIZE];
   ssize_t newHdrLen = 0;
   size_t cnt = 0;
   size_t body_len = 0;
@@ -175,7 +167,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   
   //we shouldn't touch the cover as there is only one copy of it in the
   //the cache
-  ssize_t body_offset =  extract_appropriate_respones_body(cover_payload, cnt);
+  body_offset =  extract_appropriate_respones_body(cover_payload, cnt);
   if (body_offset < 0) {
     log_warn("Failed to aquire approperiate payload.");
     _payload_server->disqualify_payload(payload_id_hash);
@@ -256,7 +248,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     newHdrLen = hLen;
   }
   else { //if the length is different, then we need to update the header
-    newHdrLen = alter_length_in_response_header(cover_payload, hLen, newHdr);
+    newHdrLen = alter_length_in_response_header((uint8_t *)cover_payload, hLen, newHdr);
     if (!newHdrLen) {
       log_warn("SERVER ERROR: failed to alter length field in response headerr");
       _payload_server->disqualify_payload(payload_id_hash);
@@ -359,27 +351,27 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
 }
 
-size_t FileStegMod::alter_length_in_response_header(uint8_t* oiginal_header, size_t original_header_length, size_t new_content_length, uint8_t* new_header)
+size_t FileStegMod::alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, uint8_t* new_header[])
 {
 
-  uint8_t* length_field_start = strstr(original_header, "Content-Length:");
+  char * length_field_start = strstr(reinterpret_cast<char *>(original_header), "Content-Length:");
   if (length_field_start == NULL)
     return 0;
   
   length_field_start +=  + strlen("Content-Length:");
 
-  uint8_t* length_filed_end = strstr(length_field_start, "\r\n");
+  char * length_field_end = strstr(reinterpret_cast<char *>(length_field_start), "\r\n");
   if (length_field_end == NULL)
     return 0;
 
-  memcpy(new_header, original_header, length_field_start - original_header);
-  new_header+=length_field_start - original_header;
-  sprintf(new_header, " %d", new_content_length);
-  size_t length_of_content_length = strlen(new_header);
+  memcpy(new_header, original_header, ((uint8_t*)length_field_start - original_header));
+  new_header+= ((uint8_t*)length_field_start - original_header);
+  //sprintf(new_header, " %d", new_content_length);
+  size_t length_of_content_length = strlen(reinterpret_cast<const char *>(new_header));
   new_header += length_of_content_length;
-  memcpy(new_header, original_header + length_field_end,  original_header_length - (length_field_end - original_header));
+  memcpy(new_header, (original_header + (length_field_end-length_field_start)),  (original_header_length - ((uint8_t*)length_field_end - original_header)));
 
-  return original_header_length +  length_field_end - length_field_start + length_of_content_length; 
+  return original_header_length +  (length_field_end - length_field_start) + length_of_content_length; 
   
 
 }

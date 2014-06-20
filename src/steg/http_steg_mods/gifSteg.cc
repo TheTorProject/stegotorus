@@ -114,6 +114,6 @@ ssize_t GIFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
    constructor just to call parent constructor
 */
 GIFSteg::GIFSteg(PayloadServer* payload_provider, double noise2signal)
-  :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_GIF, 0)
+  :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_GIF)
 {
 }
