@@ -20,13 +20,14 @@
 
 #include "util.h"
 #include "crypt.h"
+#include "modus_operandi.h"
 #include "chop_blk.h"
 #include "chop_handshaker.h"
 #include "connections.h"
 #include "protocol.h"
 #include "rng.h"
 #include "steg.h"
-
+n
 #include "transparent_proxy.h"
 
 /* The chopper is the core StegoTorus protocol implementation.
@@ -271,16 +272,31 @@ chop_config_t::~chop_config_t()
 }
 
 bool
-chop_config_t::init(unsigned int n_options, const char *const *options)
+chop_config_t::init(unsigned int n_options, const char *const *options, modus_operandi_t &mo)
 {
   const char* defport;
+   const char* cmode;
   int listen_up;
   unsigned int cur_op = 0; //pointer to current option being processed
 
-  if (n_options < 3) {
+  
+   if (!mo.is_ok() && n_options < 3) {
     log_warn("chop: not enough parameters");
     goto usage;
   }
+
+  if(mo.is_ok() && n_options != 0){
+    log_warn("Starting with both a configuration file *and* commandline options is *currently* not supported. Sorry.");
+    return false;
+  }
+
+  if(!this->is_good(mo) && n_options == 0){
+    log_warn("Configuration file not good enough for chop (needs mode, up_address and at least one down_address)! Sorry.");
+    return false;
+  }
+
+  cmode = mo.is_ok() ? mo.mode().c_str() : options[0];
+ 
 
   if (!strcmp(options[0], "client")) {
     defport = "48988"; // bf5c
@@ -296,6 +312,64 @@ chop_config_t::init(unsigned int n_options, const char *const *options)
     listen_up = 0;
   } else
     goto usage;
+
+if(mo.is_ok()){
+    vector<string> addresses;
+    
+    up_address = resolve_address_port(mo.up_address().c_str(), 1, listen_up, defport);
+    
+    if (!up_address) {
+      log_warn("chop: invalid up address: %s", options[1]);
+      goto usage;
+    }
+
+    addresses = mo.down_addresses();
+
+    // the down address in the modus_operandi_t consists of both the address and the steg targets.
+    for (i = 0; i < (int)addresses.size(); i++) {
+      down_address_t da;
+      da.parse(addresses[i]);
+
+      if(da.ok){
+
+      struct evutil_addrinfo *addr =
+        resolve_address_port(da.ip.c_str(), 1, !listen_up, NULL);
+      if (!addr) {
+        log_warn("chop: invalid down address: %s", da.ip.c_str());
+        goto usage;
+      }
+
+      down_addresses.push_back(addr);
+      
+      
+      if (!steg_is_supported(da.steg.c_str())) {
+        log_warn("chop: steganographer '%s' not supported", da.steg.c_str());
+        goto usage;
+      }
+
+      steg_targets.push_back(steg_new(da.steg.c_str(), this));
+
+      } else {
+        log_warn("chop: invalid down address: %s", addresses[i].c_str());
+        goto usage;
+      }
+    }
+
+    if(mo.trace_packets()){
+      trace_packets = true;
+      log_enable_timestamps();
+    }
+    
+    persist_mode = mo.persist_mode();    
+    encryption = !mo.disable_encryption();
+    retransmit = !mo.disable_retransmit();
+
+    if(!mo.shared_secret().empty()){
+      shared_secret = xstrdup(mo.shared_secret().c_str());
+    }
+    
+    return true;
+  } 
 
   while (options[1][0] == '-') {
     if (!strncmp(options[1], "--server-key=", 13)) {

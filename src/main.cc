@@ -9,6 +9,7 @@
 #include "connections.h"
 #include "crypt.h"
 #include "listener.h"
+#include "modus_operandi.h"
 #include "protocol.h"
 #include "steg.h"
 #include "subprocess.h"
@@ -222,6 +223,7 @@ usage(void)
   for (p = supported_protos; *p; p++)
     fprintf(stderr,"[%s] ", (*p)->name);
   fprintf(stderr, "\n* Available arguments:\n"
+	  "--config-file=<file> ~ load the configuration file\n"
           "--log-file=<file> ~ set logfile\n"
           "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
           "--no-log ~ disable logging\n"
@@ -230,7 +232,7 @@ usage(void)
           "--registration-helper=<helper> ~ use <helper> to register with "
           "a relay database\n"
           "--pid-file=<file> ~ write process ID to <file> after startup\n"
-          "--daemon ~ run as a daemon\n");
+          "--daemon ~ run as a daemon");
 
   exit(1);
 }
@@ -246,7 +248,7 @@ usage(void)
    Note: this function should NOT use log_* to print diagnostics.
 */
 static int
-handle_generic_args(const char *const *argv)
+handle_generic_args(const char *const *argv, modus_operandi_t &mo)
 {
   bool logmethod_set = false;
   bool logsev_set = false;
@@ -258,7 +260,14 @@ handle_generic_args(const char *const *argv)
 
   while (argv[i] &&
          !strncmp(argv[i],"--",2)) {
-    if (!strncmp(argv[i], "--log-file=", 11)) {
+	if (!strncmp(argv[i], "--config-file=", strlen("--config-file="))) {
+      const char *path = argv[i]+strlen("--config-file=");
+      mo.load_file(path);
+      if (!mo.is_ok()){
+        fprintf(stderr, "The configuration file  \"%s\" did not load smoothly!\n", path);
+        exit(1);
+      }
+    else if (!strncmp(argv[i], "--log-file=", 11)) {
       if (logmethod_set) {
         fprintf(stderr, "you've already set a log file!\n");
         exit(1);
@@ -329,6 +338,23 @@ handle_generic_args(const char *const *argv)
     i++;
   }
 
+ /* if we have read in a valid modus_operandi
+     then we need to look at the process options here;
+     that are not acted upon in the reading process:
+     -- daemon
+     -- pid file
+     -- logmethod_set
+
+  */
+
+  if(mo.is_ok()){
+    daemon_mode = mo.daemon();
+    logmethod_set = mo.logmethod_set();
+    if(!mo.pid_file().empty()){
+      pidfile_name = mo.pid_file();
+      pidfile_set = true;
+    }
+  }
   /* Cross-option consistency checks. */
   if (daemon_mode && !logmethod_set) {
     log_warn("cannot log to stderr in daemon mode");
@@ -346,6 +372,7 @@ main(int, const char *const *argv)
   struct event *sig_term;
   struct event *stdin_eof;
   vector<config_t *> configs;
+  modus_operandi_t mo;
   const char *const *begin;
   const char *const *end;
   struct stat st;
@@ -362,8 +389,16 @@ main(int, const char *const *argv)
      Each configuration's subset consists of the entries in argv from
      its recognized protocol name, up to but not including the next
      recognized protocol name. */
-  if (!*begin || !config_is_supported(*begin))
+  if (!mo.is_ok() && (!*begin || !config_is_supported(*begin)))
     usage();
+  if(cmd_options == argc){
+    /* just using a configuration file */
+    const char *const spec[] = { mo.protocol().c_str(),  NULL};
+    config_t *cfg = config_create(1, spec, mo);
+    if (!cfg)
+      return 2; /* diagnostic already issued */
+    configs.push_back(cfg);
+  } else {
 
   //crypto should be initialized before protocol so the protocols
   //can use encryption
@@ -395,6 +430,9 @@ main(int, const char *const *argv)
     }
     begin = end;
   } while (*begin);
+
+}
+
   log_assert(configs.size() > 0);
 
   /* Configurations have been established; proceed with initialization. */
