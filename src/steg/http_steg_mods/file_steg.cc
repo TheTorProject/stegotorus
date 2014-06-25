@@ -148,7 +148,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   ssize_t outbuflen = 0;
   ssize_t body_offset = 0;
-  uint8_t * newHdr[MAX_RESP_HDR_SIZE];
+  uint8_t newHdr[MAX_RESP_HDR_SIZE];
   ssize_t newHdrLen = 0;
   size_t cnt = 0;
   size_t body_len = 0;
@@ -351,7 +351,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
 }
 
-size_t FileStegMod::alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, uint8_t* new_header[])
+size_t FileStegMod::alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, uint8_t new_header[])
 {
 
   char * length_field_start = strstr(reinterpret_cast<char *>(original_header), "Content-Length:");
@@ -369,9 +369,9 @@ size_t FileStegMod::alter_length_in_response_header(uint8_t* original_header, si
   //sprintf(new_header, " %d", new_content_length);
   size_t length_of_content_length = strlen(reinterpret_cast<const char *>(new_header));
   new_header += length_of_content_length;
-  memcpy(new_header, (original_header + (length_field_end-length_field_start)),  (original_header_length - ((uint8_t*)length_field_end - original_header)));
+  memcpy(new_header, length_field_end,  (original_header_length - ((uint8_t*)length_field_end - original_header)));
 
-  return original_header_length +  (length_field_end - length_field_start) + length_of_content_length; 
+  return original_header_length -  (length_field_end - length_field_start) + length_of_content_length; 
   
 
 }
