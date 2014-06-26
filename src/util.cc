@@ -70,6 +70,7 @@ xmalloc(size_t size)
   if (result == NULL) {
     print_trace();
     die_oom();
+  }
 
   return result;
 }
