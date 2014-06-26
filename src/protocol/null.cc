@@ -4,8 +4,10 @@
  */
 
 #include "util.h"
+#include "cpp.h"
 #include "connections.h"
 #include "protocol.h"
+#include "modus_operandi.h"
 
 #include <event2/buffer.h>
 #include <event2/event.h>
@@ -17,6 +19,8 @@ namespace {
     struct evutil_addrinfo *target_addr;
 
     CONFIG_DECLARE_METHODS(null);
+
+   DISALLOW_COPY_AND_ASSIGN(null_config_t);
   };
 
   struct null_circuit_t;
@@ -27,6 +31,8 @@ namespace {
     null_circuit_t *upstream;
 
     CONN_DECLARE_METHODS(null);
+
+   DISALLOW_COPY_AND_ASSIGN(null_conn_t);
   };
 
   struct null_circuit_t : circuit_t
@@ -35,6 +41,8 @@ namespace {
     null_conn_t *downstream;
 
     CIRCUIT_DECLARE_METHODS(null);
+
+   DISALLOW_COPY_AND_ASSIGN(null_circuit_t);
   };
 }
 
@@ -53,37 +61,89 @@ null_config_t::~null_config_t()
 }
 
 bool
-null_config_t::init(unsigned int n_options, const char *const *options)
+null_config_t::is_good(modus_operandi_t &mo)
+{
+  /* could be improved; but this is a good first sanity check */
+  return mo.protocol() == "null"     &&
+    !mo.mode().empty()               &&
+    !mo.up_address().empty();
+}
+
+bool
+null_config_t::init(unsigned int n_options, const char *const *options, modus_operandi_t &mo)
 {
   const char* defport;
 
-  if (n_options < 1)
+  const char* cmode;
+
+  if (!mo.is_ok() && n_options < 1)
     goto usage;
 
-  if (!strcmp(options[0], "client")) {
-    defport = "48988"; /* bf5c */
-    this->mode = LSN_SIMPLE_CLIENT;
-  } else if (!strcmp(options[0], "socks")) {
-    defport = "23548"; /* 5bf5 */
-    this->mode = LSN_SOCKS_CLIENT;
-  } else if (!strcmp(options[0], "server")) {
-    defport = "11253"; /* 2bf5 */
-    this->mode = LSN_SIMPLE_SERVER;
+
+  if(mo.is_ok() && n_options != 0){
+    log_warn("Starting with both a configuration file *and* commandline options is *currently* not supported. Sorry.");
+    return false;
+  }
+  
+  if(!this->is_good(mo) && n_options == 0){
+    log_warn("Configuration file not good enough for null (needs mode, and up_address)! Sorry.");
+    return false;
+  }
+
+  cmode = mo.is_ok() ? mo.mode().c_str() : options[0];
+
+   if (!strcmp(cmode, "client")) {
+    defport = "48988"; // bf5c
+    mode = LSN_SIMPLE_CLIENT;
+  } else if (!strcmp(cmode, "socks")) {
+    defport = "23548"; // 5bf5
+    mode = LSN_SOCKS_CLIENT;
+  } else if (!strcmp(cmode, "server")) {
+    defport = "11253"; // 2bf5
+    mode = LSN_SIMPLE_SERVER;
   } else
     goto usage;
 
-  if (n_options != (this->mode == LSN_SOCKS_CLIENT ? 2 : 3))
-    goto usage;
 
-  this->listen_addr = resolve_address_port(options[1], 1, 1, defport);
-  if (!this->listen_addr)
-    goto usage;
 
-  if (this->mode != LSN_SOCKS_CLIENT) {
-    this->target_addr = resolve_address_port(options[2], 1, 0, NULL);
-    if (!this->target_addr)
+  if(mo.is_ok()){
+    vector<string> addresses;
+    
+    this->listen_addr  = resolve_address_port(mo.up_address().c_str(), 1, 1, defport);
+    
+    if (!this->listen_addr) {
+      log_warn("chop: invalid up address: %s", options[1]);
       goto usage;
+    }
+    
+    addresses = mo.down_addresses();
+    
+    if(this->mode != LSN_SOCKS_CLIENT) {
+      if(addresses.size() > 0){
+        this->target_addr = resolve_address_port(addresses[0].c_str(), 1, 0, NULL);
+      }
+      if (!this->target_addr)
+        goto usage;
+    }
+
+
+  } else {
+
+    if (n_options != (this->mode == LSN_SOCKS_CLIENT ? 2 : 3))
+      goto usage;
+    
+    this->listen_addr = resolve_address_port(options[1], 1, 1, defport);
+    if (!this->listen_addr)
+      goto usage;
+    
+    if (this->mode != LSN_SOCKS_CLIENT) {
+      this->target_addr = resolve_address_port(options[2], 1, 0, NULL);
+      if (!this->target_addr)
+        goto usage;
+    }
+    
   }
+  return true;
 
   return true;
 

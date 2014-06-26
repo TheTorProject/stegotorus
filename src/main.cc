@@ -1,5 +1,5 @@
 /* Copyright 2011 Nick Mathewson, George Kadianakis
- * Copyright 2011, 2012 SRI International
+ * Copyright 2011, 2012, 2013 SRI International
  * See LICENSE for other credits and copying information
  */
 
@@ -69,27 +69,22 @@ start_shutdown(int barbaric, const char *label)
    This is called when we receive an asynchronous signal.
    It figures out the signal type and acts accordingly.
 
-   Current behavior:
+   Old behavior (never worked properly):
    SIGINT: On a single SIGINT we stop accepting new connections,
            keep the already existing connections open,
            and terminate when they all close.
            On a second SIGINT we shut down immediately but cleanly.
-   SIGTERM: Shut down immediately but cleanly.
+   Current behavior:
+   SIGINT/SIGTERM: Shut down immediately but cleanly.
 */
 static void
 handle_signal_cb(evutil_socket_t fd, short, void *)
 {
-  static int got_sigint = 0;
+  //static int got_sigint = 0;
   int signum = (int) fd;
 
   log_assert(signum == SIGINT || signum == SIGTERM);
-
-  if (signum == SIGINT && !got_sigint) {
-    got_sigint++;
-    start_shutdown(0, "SIGINT");
-  } else {
-    start_shutdown(1, signum == SIGINT ? "SIGINT" : "SIGTERM");
-  }
+  start_shutdown(1, signum == SIGINT ? "SIGINT" : "SIGTERM");
 }
 
 /**
@@ -232,7 +227,8 @@ usage(void)
           "--registration-helper=<helper> ~ use <helper> to register with "
           "a relay database\n"
           "--pid-file=<file> ~ write process ID to <file> after startup\n"
-          "--daemon ~ run as a daemon");
+          "--daemon ~ run as a daemon\n"
+          "--version ~ show version details and exit\n");
 
   exit(1);
 }
@@ -248,7 +244,7 @@ usage(void)
    Note: this function should NOT use log_* to print diagnostics.
 */
 static int
-handle_generic_args(const char *const *argv, modus_operandi_t &mo)
+handle_generic_args(const char *const *argv,  modus_operandi_t &mo)
 {
   bool logmethod_set = false;
   bool logsev_set = false;
@@ -258,16 +254,15 @@ handle_generic_args(const char *const *argv, modus_operandi_t &mo)
   bool pidfile_set = false;
   int i = 1;
 
-  while (argv[i] &&
-         !strncmp(argv[i],"--",2)) {
-	if (!strncmp(argv[i], "--config-file=", strlen("--config-file="))) {
+  while (argv[i] && !strncmp(argv[i],"--",2)) {
+    if (!strncmp(argv[i], "--config-file=", strlen("--config-file="))) {
       const char *path = argv[i]+strlen("--config-file=");
       mo.load_file(path);
       if (!mo.is_ok()){
         fprintf(stderr, "The configuration file  \"%s\" did not load smoothly!\n", path);
         exit(1);
       }
-    else if (!strncmp(argv[i], "--log-file=", 11)) {
+    } else if (!strncmp(argv[i], "--log-file=", 11)) {
       if (logmethod_set) {
         fprintf(stderr, "you've already set a log file!\n");
         exit(1);
@@ -331,6 +326,7 @@ handle_generic_args(const char *const *argv, modus_operandi_t &mo)
         exit(1);
       }
       daemon_mode = true;
+      
     } else {
       fprintf(stderr, "unrecognizable argument '%s'\n", argv[i]);
       exit(1);
@@ -355,6 +351,7 @@ handle_generic_args(const char *const *argv, modus_operandi_t &mo)
       pidfile_set = true;
     }
   }
+  
   /* Cross-option consistency checks. */
   if (daemon_mode && !logmethod_set) {
     log_warn("cannot log to stderr in daemon mode");
@@ -365,7 +362,7 @@ handle_generic_args(const char *const *argv, modus_operandi_t &mo)
 }
 
 int
-main(int, const char *const *argv)
+main(int argc, const char *const *argv)
 {
   struct event_config *evcfg;
   struct event *sig_int;
@@ -377,13 +374,21 @@ main(int, const char *const *argv)
   const char *const *end;
   struct stat st;
 
+  int cmd_options;
+    
   /* Set the logging defaults before doing anything else.  It wouldn't
      be necessary, but some systems don't let you initialize a global
      variable to stderr. */
   log_set_method(LOG_METHOD_STDERR, NULL);
 
-  /* Handle optional non-protocol-specific arguments. */
-  begin = argv + handle_generic_args(argv);
+  /* Handle optional non-protocol-specific arguments. If we are given a config file,
+     then it will be loaded into the modus_operandi_t object. Many of the config file options
+     are set at the time of loading, in particular the schemes enabled/disabled.      
+  */
+
+  cmd_options = handle_generic_args(argv, mo);
+  
+  begin = argv + cmd_options;
 
   /* Find the subsets of argv that define each configuration.
      Each configuration's subset consists of the entries in argv from
@@ -399,6 +404,7 @@ main(int, const char *const *argv)
       return 2; /* diagnostic already issued */
     configs.push_back(cfg);
   } else {
+    /* oh goodie; hodge podge  */
 
   //crypto should be initialized before protocol so the protocols
   //can use encryption
@@ -423,16 +429,16 @@ main(int, const char *const *argv)
                (unsigned long)configs.size()+1);
       usage();
     } else {
-      config_t *cfg = config_create(end - begin, begin);
+      config_t *cfg = config_create(end - begin, begin, mo);
       if (!cfg)
         return 2; /* diagnostic already issued */
       configs.push_back(cfg);
     }
     begin = end;
   } while (*begin);
-
-}
-
+  
+  }
+  
   log_assert(configs.size() > 0);
 
   /* Configurations have been established; proceed with initialization. */
@@ -454,6 +460,7 @@ main(int, const char *const *argv)
 #endif
 
   /* Configure and initialize libevent. */
+  log_debug("initialize libevent");
   evcfg = event_config_new();
   if (!evcfg)
     log_abort("failed to initialize networking (evcfg)");
@@ -463,9 +470,11 @@ main(int, const char *const *argv)
      backend exposes and figure out whose fault they are. There is
      a command line switch waiting for the person who will do this
      detective work. */
-  if (!allow_kq)
+  if (!allow_kq) {
+    log_debug("avoiding kqueue method");
     if (event_config_avoid_method(evcfg, "kqueue"))
       log_abort("failed to initialize networking (avoiding kqueue)");
+  }
 
   /* Possibly worth doing in the future: activating Windows IOCP and
      telling it how many CPUs to use. */
@@ -474,6 +483,7 @@ main(int, const char *const *argv)
   if (!the_event_base)
     log_abort("failed to initialize networking (evbase)");
 
+  log_debug("initialize eventbase");
   /* Most events are processed at the default priority (0), but
      connection cleanup events are processed at low priority (1)
      to ensure that all pending I/O is handled first.  */
@@ -482,6 +492,7 @@ main(int, const char *const *argv)
 
   conn_global_init(the_event_base);
 
+  log_debug("initialize evdns");
   /* ASN should this happen only when SOCKS is enabled? */
   if (init_evdns_base(the_event_base))
     log_abort("failed to initialize DNS resolver");
@@ -539,17 +550,20 @@ main(int, const char *const *argv)
 
   /* Open listeners for each configuration. */
   for (vector<config_t *>::iterator i = configs.begin(); i != configs.end();
-       i++)
+       i++) {
     if (!listener_open(the_event_base, *i))
       log_abort("failed to open listeners for configuration %lu",
                 (unsigned long)(i - configs.begin()) + 1);
+  }
 
-  if (!registration_helper.empty())
+  if (!registration_helper.empty()) {
     call_registration_helper(registration_helper);
+  }
 
   /* We are go for launch. As a signal to any monitoring process that may
      be running, close stdout now. */
   log_info("%s process %lu now initialized", argv[0], (unsigned long)getpid());
+
   fclose(stdout);
 
   event_base_dispatch(the_event_base);
@@ -560,18 +574,30 @@ main(int, const char *const *argv)
   /* By the time we get to this point, all listeners and connections
      have already been freed. */
 
+  log_debug("cleaning up configs");
   for (vector<config_t *>::iterator i = configs.begin(); i != configs.end();
-       i++)
+       i++) {
     delete *i;
+  }
 
-  evdns_base_free(get_evdns_base(), 0);
+  // Free events first
+  log_debug("cleaning up events");
   event_free(sig_int);
   event_free(sig_term);
-  free(stdin_eof);
+
+  // Free evdns base after that
+  evdns_base_free(get_evdns_base(), 0);
+
   event_base_free(the_event_base);
   event_config_free(evcfg);
+
+  log_debug("cleaning up config");
   free_crypto();
   log_close();
+
+  if (stdin_eof) {
+	free(stdin_eof); 
+  }
 
   return 0;
 }

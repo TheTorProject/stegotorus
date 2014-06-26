@@ -7,11 +7,13 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
+#include "cpp.h"
 #include <string>
 #include <map>
 
 struct proto_module;
 struct steg_config_t;
+class modus_operandi_t;
 
 /** 
     Because it is the protocol which process user command line data 
@@ -41,6 +43,8 @@ struct config_t
   config_t() : base(0), mode((enum listen_mode)-1) {}
   virtual ~config_t();
 
+    DISALLOW_COPY_AND_ASSIGN(config_t);
+
   /** Return the name of the protocol associated with this
       configuration.  You do not have to define this method in your
       subclass, PROTO_DEFINE_MODULE does it for you. */
@@ -56,7 +60,12 @@ struct config_t
       @return if the command line options are ill-formed, print a diagnostic
       on stderr and return false.  On success, return true. 
   */
-  virtual bool init(unsigned int n_opts, const char *const *opts) = 0;
+  virtual bool init(unsigned int n_opts, const char *const *opts, modus_operandi_t &mo) = 0;
+
+  /** Helper function that isolates what the protocol requires of the 
+       modus_operandi_t object. Or in other words what things must be defined
+      in the configuraion file. */
+  virtual bool is_good(modus_operandi_t &mo) = 0;
 
   /** Return a set of addresses to listen on, in the form of an
       'evutil_addrinfo' linked list.  There may be more than one list;
@@ -92,7 +101,7 @@ struct config_t
 };
 
 int config_is_supported(const char *name);
-config_t *config_create(int n_options, const char *const *options);
+config_t *config_create(int n_options, const char *const *options, modus_operandi_t &mo);
 
 /** PROTO_DEFINE_MODULE defines an object with this type, plus the
     function that it points to; there is a table of all such objects,
@@ -104,7 +113,7 @@ struct proto_module
 
   /** Create a config_t instance for this module from a set of command
       line options. */
-  config_t *(*config_create)(int n_options, const char *const *options);
+  config_t *(*config_create)(int n_options, const char *const *options, modus_operandi_t& mo);
 };
 
 extern const proto_module *const supported_protos[];
@@ -117,9 +126,9 @@ extern const proto_module *const supported_protos[];
   { return #mod; }                                              \
                                                                 \
   static config_t *                                             \
-  mod##_config_create(int n_opts, const char *const *opts)      \
+  mod##_config_create(int n_opts, const char *const *opts, modus_operandi_t& mo)      \
   { mod##_config_t *s = new mod##_config_t();                   \
-    if (s->init(n_opts, opts))                                  \
+    if (s->init(n_opts, opts, mo))                                  \
       return s;                                                 \
     delete s;                                                   \
     return 0;                                                   \
@@ -133,7 +142,8 @@ extern const proto_module *const supported_protos[];
   mod##_config_t();                                             \
   virtual ~mod##_config_t();                                    \
   virtual const char *name() const;                             \
-  virtual bool init(unsigned int n_opts, const char *const *opts);  \
+  virtual bool init(unsigned int n_opts, const char *const *opts, modus_operandi_t& mo);       \
+ virtual bool is_good(modus_operandi_t& mo);                            \
   virtual evutil_addrinfo *get_listen_addrs(size_t n) const;    \
   virtual evutil_addrinfo *get_target_addrs(size_t n) const;    \
   virtual const steg_config_t *get_steg(size_t n) const;        \

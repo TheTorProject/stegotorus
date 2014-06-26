@@ -55,9 +55,9 @@ class modus_operandi_t {
   /* chop options */
   bool trace_packets(void){ return _trace_packets; }
 
-  bool persist_mode(void){ return _persist_mode; }
+  //bool persist_mode(void){ return _persist_mode; }
 
-  string shared_secret(void){ return _shared_secret; }
+  //string shared_secret(void){ return _shared_secret; }
 
   bool disable_encryption(void){ return _disable_encryption; }
 
@@ -83,8 +83,8 @@ class modus_operandi_t {
   
   /* chop options */
  private: bool _trace_packets;
- private: bool _persist_mode;
- private: string _shared_secret;
+ //private: bool _persist_mode;
+ //private: string _shared_secret;
  private: bool _disable_encryption;
  private: bool _disable_retransmit;
  

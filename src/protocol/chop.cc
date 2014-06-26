@@ -298,15 +298,15 @@ chop_config_t::init(unsigned int n_options, const char *const *options, modus_op
   cmode = mo.is_ok() ? mo.mode().c_str() : options[0];
  
 
-  if (!strcmp(options[0], "client")) {
+  if (!strcmp(cmode, "client")) {
     defport = "48988"; // bf5c
     mode = LSN_SIMPLE_CLIENT;
     listen_up = 1;
-  } else if (!strcmp(options[0], "socks")) {
+  } else if (!strcmp(cmode, "socks")) {
     defport = "23548"; // 5bf5
     mode = LSN_SOCKS_CLIENT;
     listen_up = 1;
-  } else if (!strcmp(options[0], "server")) {
+  } else if (!strcmp(cmode, "server")) {
     defport = "11253"; // 2bf5
     mode = LSN_SIMPLE_SERVER;
     listen_up = 0;
@@ -360,13 +360,13 @@ if(mo.is_ok()){
       log_enable_timestamps();
     }
     
-    persist_mode = mo.persist_mode();    
+    //persist_mode = mo.persist_mode();    
     encryption = !mo.disable_encryption();
     retransmit = !mo.disable_retransmit();
 
-    if(!mo.shared_secret().empty()){
+   /* if(!mo.shared_secret().empty()){
       shared_secret = xstrdup(mo.shared_secret().c_str());
-    }
+    }*/
     
     return true;
   } 

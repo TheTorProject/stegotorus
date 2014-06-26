@@ -25,14 +25,14 @@ config_is_supported(const char *name)
    to the appropriate protocol-specific initalization function.
  */
 config_t *
-config_create(int n_options, const char *const *options)
+config_create(int n_options, const char *const *options, modus_operandi_t& mo)
 {
   const proto_module *const *p;
   for (p = supported_protos; *p; p++)
     if (!strcmp(options[0], (*p)->name))
       /* Remove the first element of 'options' (which is always the
          protocol name) from the list passed to the init method. */
-      return (*p)->config_create(n_options - 1, options + 1);
+      return (*p)->config_create(n_options - 1, options + 1, mo);
 
   return NULL;
 }

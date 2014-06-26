@@ -49,7 +49,7 @@ void down_address_t::parse(string line)
 modus_operandi_t::modus_operandi_t()
   :  _is_ok(false),
      _protocol(), _mode(), _up_address(), _down_addresses(),
-     _trace_packets(false), _persist_mode(false), _shared_secret(), _disable_encryption(false), _disable_retransmit(false),
+     _trace_packets(false), /*_persist_mode(false), _shared_secret(),*/ _disable_encryption(false), _disable_retransmit(false),
      _daemon(false), _logmethod_set(false), _pid_file() { }
 
 
@@ -135,7 +135,7 @@ bool modus_operandi_t::process_line(string &line, int32_t lineno){
     }
     return true;
   }
-  else if(line_is(line, "shared-secret", rest)){
+ /* else if(line_is(line, "shared-secret", rest)){
     rest = trim(rest);
     if(rest.empty()){
       fprintf(stderr, "Missing shared-secret value on line %" PRId32"\n", lineno);
@@ -144,7 +144,7 @@ bool modus_operandi_t::process_line(string &line, int32_t lineno){
       this->_shared_secret = rest;
       return true;
     }
-  }
+  }*/
   else if(line_is(line, "pid-file", rest)){
     rest = trim(rest);
     if(rest.empty()){
@@ -161,9 +161,9 @@ bool modus_operandi_t::process_line(string &line, int32_t lineno){
   else if(line_is(line, "uri-transmit", rest)){
     return set_scheme("uri-transmit", rest, lineno);
   }
-  else if(line_is(line, "json-post", rest)){
+  /*else if(line_is(line, "json-post", rest)){
     return set_scheme("json-post", rest, lineno);
-  }
+  }*/
   else if(line_is(line, "pdf-post", rest)){
     return set_scheme("pdf-post", rest, lineno);
   }
@@ -185,9 +185,9 @@ bool modus_operandi_t::process_line(string &line, int32_t lineno){
   else if(line_is(line, "html-get", rest)){
     return set_scheme("html-get", rest, lineno);
   }
-  else if(line_is(line, "json-get", rest)){
+  /*else if(line_is(line, "json-get", rest)){
      return set_scheme("json-get", rest, lineno);
-  }
+  }*/
   else if(line_is(line, "jpeg-get", rest)){
     return set_scheme("jpeg-get", rest, lineno);
   }
@@ -197,9 +197,9 @@ bool modus_operandi_t::process_line(string &line, int32_t lineno){
   else if(line_is(line, "trace-packets", rest)){
     return set_bool(this->_trace_packets, rest, lineno);
   }
-  else if(line_is(line, "persist-mode", rest)){
+ /* else if(line_is(line, "persist-mode", rest)){
     return set_bool(this->_persist_mode, rest, lineno);
-  }
+  }*/
   else if(line_is(line, "daemon", rest)){
     return set_bool(this->_daemon, rest, lineno);
   }
