@@ -8,6 +8,7 @@
 
 #include "util.h"
 #include "connections.h"
+#include "strncasestr.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -16,7 +17,32 @@
 #include <event2/buffer.h>
 
 using namespace std;
+#ifdef _WIN32
+void
+print_trace (void)
+{
 
+}
+#else
+#include <execinfo.h>
+
+/* Obtain a backtrace and print it to stderr. */
+void
+print_trace (void)
+{
+  void *array[10];
+  size_t size;
+  char **strings;
+  size_t i;
+
+  size = backtrace (array, 10);
+  strings = backtrace_symbols (array, size);
+  fprintf (stderr, "Obtained %zd stack frames.\n", size);
+  for (i = 0; i < size; i++)
+    fprintf (stderr, "%s\n", strings[i]);
+  free (strings);
+} 
+#endif
 /**************************** Memory Allocation ******************************/
 
 static void ATTR_NORETURN
@@ -40,7 +66,9 @@ xmalloc(size_t size)
     size = 1;
 
   result = malloc(size);
-  if (result == NULL)
+
+  if (result == NULL) {
+    print_trace();
     die_oom();
 
   return result;
@@ -294,13 +322,13 @@ sev_to_string(int severity)
 static int
 string_to_sev(const char *string)
 {
-  if (!strcasecmp(string, "error"))
+  if (!strncasecmp(string, "error", strlen("error")))
     return LOG_SEV_ERR;
-  if (!strcasecmp(string, "warn"))
+  if (!strncasecmp(string, "warn", strlen("warn")))
     return LOG_SEV_WARN;
-  else if (!strcasecmp(string, "info"))
+  else if (!strncasecmp(string, "info", strlen("info")))
     return LOG_SEV_INFO;
-  else if (!strcasecmp(string, "debug"))
+  else if (!strncasecmp(string, "debug", strlen("debug")))
     return LOG_SEV_DEBUG;
   else
     return -1;
@@ -424,6 +452,12 @@ log_get_timestamp()
   return delta.tv_sec + double(delta.tv_usec) / 1e6;
 }
 
+double log_get_abs_timestamp(){
+  struct timeval now;
+  gettimeofday(&now, 0);
+  return now.tv_sec + double(now.tv_usec) / 1e6;
+}
+
 /** True if the minimum log severity is "debug".  Used in a few places
     to avoid some expensive formatting work if we are going to ignore the
     result. */
@@ -437,6 +471,8 @@ log_do_debug()
     Logging worker function.  Accepts a logging 'severity' and a
     'format' string and logs the message in 'format' according to the
     configured minimum logging severity and logging method.  */
+static void
+logv(int severity, const char *format, va_list ap) ATTR_VPRINTF_2;
 static void
 logv(int severity, const char *format, va_list ap)
 {

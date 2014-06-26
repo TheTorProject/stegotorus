@@ -12,7 +12,7 @@
 #include "util.h"
 #include "protocol.h"
 #include "modus_operandi.h"
-#include "steg/schemes.h"
+//#include "steg/schemes.h"
 
 using std::ifstream;
 
@@ -155,15 +155,15 @@ bool modus_operandi_t::process_line(string &line, int32_t lineno){
       return true;
     }
   }
-  else if(line_is(line, "cookie-transmit", rest)){
+  /*else if(line_is(line, "cookie-transmit", rest)){
     return set_scheme("cookie-transmit", rest, lineno);
   }
   else if(line_is(line, "uri-transmit", rest)){
     return set_scheme("uri-transmit", rest, lineno);
   }
-  /*else if(line_is(line, "json-post", rest)){
+  else if(line_is(line, "json-post", rest)){
     return set_scheme("json-post", rest, lineno);
-  }*/
+  }
   else if(line_is(line, "pdf-post", rest)){
     return set_scheme("pdf-post", rest, lineno);
   }
@@ -185,15 +185,15 @@ bool modus_operandi_t::process_line(string &line, int32_t lineno){
   else if(line_is(line, "html-get", rest)){
     return set_scheme("html-get", rest, lineno);
   }
-  /*else if(line_is(line, "json-get", rest)){
+  else if(line_is(line, "json-get", rest)){
      return set_scheme("json-get", rest, lineno);
-  }*/
+  }
   else if(line_is(line, "jpeg-get", rest)){
     return set_scheme("jpeg-get", rest, lineno);
   }
   else if(line_is(line, "raw-get", rest)){
     return set_scheme("raw-get", rest, lineno);
-  }
+  }*/
   else if(line_is(line, "trace-packets", rest)){
     return set_bool(this->_trace_packets, rest, lineno);
   }
@@ -281,7 +281,7 @@ bool modus_operandi_t::load_file(const char* path){
   return _is_ok;
 }
 
-bool modus_operandi_t::set_scheme(const char *scheme_name, string& rest, int32_t lineno){
+/*bool modus_operandi_t::set_scheme(const char *scheme_name, string& rest, int32_t lineno){
   int scheme = schemes_string_to_scheme(scheme_name);
 
   assert(scheme != -1);
@@ -295,7 +295,7 @@ bool modus_operandi_t::set_scheme(const char *scheme_name, string& rest, int32_t
   }
 
   return false;
-}
+}*/
 
 bool modus_operandi_t::set_bool(bool& boolref, string& rest, int32_t lineno){
   rest = trim(rest);

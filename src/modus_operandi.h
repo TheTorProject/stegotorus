@@ -101,7 +101,7 @@ class modus_operandi_t {
 
  private: bool line_is(string&, const char *, string&);
 
- private: bool set_scheme(const char *, string&, int32_t);
+ //private: bool set_scheme(const char *, string&, int32_t);
   
  private: bool set_bool(bool&, string&, int32_t);
 

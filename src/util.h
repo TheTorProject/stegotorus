@@ -6,10 +6,19 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#if __llvm__
+// Workaround DEPRECATED_IN_MAC_OS_X_VERSION_10_7_AND_LATER
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 #include "config.h"
+//#include "types.h" just an SRI typedef for uchar to unsigned char
+
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_CONSTANT_MACROS
+#define __STDC_FORMAT_MACROS
+
 #include <limits.h>
 #include <stdarg.h> /* va_list */
 #include <stddef.h> /* size_t, ptrdiff_t, offsetof, NULL */
@@ -17,13 +26,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
+#include <inttypes.h>
 #include <string>
-
 #include <new>
 
 #include <event2/util.h> /* evutil_addrinfo */
 
 #ifdef _WIN32
+#include <ctype.h>
 #include <ws2tcpip.h> /* addrinfo (event2/util.h should do this,
                          but it doesn't) */
 
@@ -56,7 +67,14 @@ struct event_base;
 #define ATTR_PRINTF_1 __attribute__((format(printf, 1, 2)))
 #define ATTR_PRINTF_2 __attribute__((format(printf, 2, 3)))
 #define ATTR_PRINTF_3 __attribute__((format(printf, 3, 4)))
+#define ATTR_VPRINTF_1 __attribute__((format(printf, 1, 0)))
+#define ATTR_VPRINTF_2 __attribute__((format(printf, 2, 0)))
+#define ATTR_VPRINTF_3 __attribute__((format(printf, 3, 0)))
 #define ATTR_PURE     __attribute__((pure))
+
+
+/* Obtain a backtrace and print it to stdout. */
+void print_trace (void);
 
 /***** Memory allocation. *****/
 
@@ -79,6 +97,12 @@ char *xstrndup(const char *s, size_t maxsize) ATTR_MALLOC ATTR_NOTHROW;
    delete must forward to free). Clearing everything on allocation may
    become unnecessary in the future, but for now it's good defensiveness. */
 
+/*
+ * LLVM / OSX 10.9 headers do not match these (explicit versus implicit exception)
+ * Note that xmalloc effectively only checks if the malloc() succeeded thus little gain
+ * especially on Linux where all allocations are granted even if there is no space left
+ */
+#ifndef __llvm__
 inline void *operator new(size_t n)
 { return xzalloc(n); }
 inline void *operator new[](size_t n)
@@ -95,6 +119,7 @@ inline void operator delete(void *p, const std::nothrow_t &)
 { free(p); }
 inline void operator delete[](void *p, const std::nothrow_t &)
 { free(p); }
+#endif
 
 /***** Pseudo-inheritance. *****/
 
@@ -153,9 +178,8 @@ static inline int ascii_isxdigit(unsigned char c)
 void ascii_strstrip(char *s, const char *kill);
 void ascii_strlower(char *s);
 
-int xvsnprintf(char *str, size_t size, const char *format, va_list args);
-int xsnprintf(char *str, size_t size, const char *format, ...)
-  ATTR_PRINTF_3;
+int xvsnprintf(char *str, size_t size, const char *format, va_list args) ATTR_VPRINTF_3;
+int xsnprintf(char *str, size_t size, const char *format, ...) ATTR_PRINTF_3;
 
 size_t xgetline(char **lineptr, size_t *nptr, FILE *stream);
 
@@ -195,6 +219,10 @@ void log_enable_timestamps();
 /** Get a timestamp consistent with the timestamps used for log messages.
     You must have called log_enable_timestamps to use this.  */
 double log_get_timestamp();
+
+/** Get an absolute  timestamp.
+    You DO NOT have to call log_enable_timestamps to use this.  */
+double log_get_abs_timestamp();
 
 /** True if debug messages are being logged. Guard expensive debugging
     checks with this, to avoid doing useless work when the messages are
@@ -295,11 +323,15 @@ void log_debug(conn_t *conn,const char *format, ...)
     want precise control over the error messages, so we use our own
     assertion macro.  */
 #define log_assert(expr)                                \
+  assert(expr);
+
+#if 0
   do {                                                  \
     if (!(expr))                                        \
       log_abort("assertion failure at %s:%d: %s",       \
                 __FILE__, __LINE__, #expr);             \
   } while (0)
+#endif
 
 /** Converts the char* buffer data to pretty hex string 
     to be printed for debugging reason */
