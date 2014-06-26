@@ -9,3 +9,6 @@ See doc/TODO for open tasks.
 Happy hacking!
 
   -- nickm
+
+Config files do not support extra SRI schemes yet! (see commented out sections in modus_operandi.cc for details)
+--selimthegrim (6/25) 
