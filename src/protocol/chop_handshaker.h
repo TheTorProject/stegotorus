@@ -3,7 +3,6 @@
  *
  * AUTHOR:
  *    Vmon (vmon@riseup.net): August 2013: initial version
- *    Baronwolfenstein (selimthegrim@gmail.com): June 2014 extensions
  */
 
 #ifndef CHOP_HANDSHAKER_H
@@ -26,22 +25,15 @@
    | Enc_ecb(Circuit ID + Padding) | SHA-256(Circuit ID + Padding) |
 
    It is not the most secure header more secure header out-there
-   In PROGRESS: Elligator
+   TODO: Make a secure header with Elligator algorithm
 
-  Should now be (6/2014)
-
-  TODO: Use Elligator^2
-   - pipe PBKDF2 into HMAC is directly described but never done in crypt.cc
-   - turn ChopHandshaker into an abstract base class if we are going to keep making new handshakes
-   - add ocb encryptor
   */
 
 const size_t HANDSHAKE_LEN = 32;//sizeof(uint32_t);
-const size_t NO_ENCRYPTED_WORDS = 20; (4 + 16 for elligator representative)
+const size_t NO_ENCRYPTED_WORDS = 4;
 const size_t CIRCUIT_ID_LEN = sizeof(uint32_t);
 const size_t PADDING_LEN = 12;
-const size_t HANDSHAKE_DIGEST_LENGTH = HANDSHAKE_LEN - CIRCUIT_ID_LEN - PADDING_LEN-CLIENTREPR_LEN;
-const size_t CLIENTREPR_LEN= sizeof(uint32_t);
+const size_t HANDSHAKE_DIGEST_LENGTH = HANDSHAKE_LEN - CIRCUIT_ID_LEN - PADDING_LEN;
 
 class ChopHandshaker
 {
@@ -64,11 +56,10 @@ public:
     uint8_t digest_buffer[SHA256_DIGEST_LENGTH];
     log_debug("circ id to send %u", circuit_id);
     id_cat_padding[0] = circuit_id;
-    id_cat_padding[1] = *handshake; //aP from handshake.txt, or client Representative
-    rng_bytes((uint8_t*)(id_cat_padding + 32),  PADDING_LEN); //because Elligator representatives are 32 8-bit bytes 
-    ec.encrypt(handshake, (const uint8_t*)id_cat_padding); //this has already been given bP or server public key in chop, will overwrite aP with circuitid + aP + padding
-    sha256((uint8_t*)(id_cat_padding), CIRCUIT_ID_LEN + CLIENTREPR_LEN + PADDING_LEN, digest_buffer);
-    memcpy((uint8_t*)(handshake + CIRCUIT_ID_LEN + CLIENTREPR_LEN + PADDING_LEN), digest_buffer, HANDSHAKE_DIGEST_LENGTH);
+    rng_bytes((uint8_t*)(id_cat_padding + 1),  PADDING_LEN);
+    ec.encrypt(handshake, (const uint8_t*)id_cat_padding);
+    sha256((uint8_t*)(id_cat_padding), CIRCUIT_ID_LEN + PADDING_LEN, digest_buffer);
+    memcpy((uint8_t*)(handshake + CIRCUIT_ID_LEN + PADDING_LEN), digest_buffer, HANDSHAKE_DIGEST_LENGTH);
     
   }
 
@@ -84,16 +75,12 @@ public:
     uint8_t verify_buf[SHA256_DIGEST_LENGTH];
 
     dc.decrypt((uint8_t*)id_cat_padding,handshake);
-    sha256((uint8_t*)id_cat_padding, CIRCUIT_ID_LEN + CLIENTREPR_LEN + PADDING_LEN, verify_buf);
-    if (memcmp(verify_buf, handshake + (CIRCUIT_ID_LEN + CLIENTREPR_LEN + PADDING_LEN), HANDSHAKE_DIGEST_LENGTH))
+    sha256((uint8_t*)id_cat_padding, CIRCUIT_ID_LEN + PADDING_LEN, verify_buf);
+    if (memcmp(verify_buf, handshake + (CIRCUIT_ID_LEN + PADDING_LEN), HANDSHAKE_DIGEST_LENGTH))
       return false; //not a valid handshake
 
-    
-
     circuit_id = id_cat_padding[0];
-    
     log_debug("retrieved circ id %u", circuit_id);
-    log_debug("retrieved client representative %u", id_cat_padding[1])
     return true;
     
   }
