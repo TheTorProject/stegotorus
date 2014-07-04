@@ -31,6 +31,9 @@ extern "C" {
 extern int curve25519_donna(uint8_t*, const uint8_t*, const uint8_t*);
 }
  
+namespace elligator {
+extern void* (*volatile memset_volatile)(void *, int, size_t);
+}
 
 const size_t SharedSecretLength = 32;
 typedef uint8_t SharedSecret[SharedSecretLength];
@@ -475,12 +478,21 @@ chop_config_t::circuit_create(size_t)
   ckt->config = this;
 
   key_generator *kgen = 0;
+  key_generator *kgen_hdr = 0;
+
+ //call Yawning's implementation here to generate client representative and assign to handshake pointer
+    elligator::PrivateKey clientPriv; 
+    elligator::PublicKey clientPub;
+    elligator::Representative clientRepr;
+    bool ok = generateKeypair(clientPriv, clientPub, clientRepr);
+    assert(ok);
+  
 
   if (encryption)
     if (mode == LSN_SIMPLE_SERVER) {
-    	handshake(sharedsecret, serverPriv, clientRepr);
+    	//handshake(sharedsecret, serverPriv, clientRepr);
    
-    kgen = key_generator::from_passphrase((const uint8_t *) sharedsecret
+    //kgen = key_generator::from_passphrase((const uint8_t *) sharedsecret
                                           sizeof(sharedsecret),
                                           0, 0, 0, 0); //modify these parameters to include salt in future for pbkdf2?
      }
@@ -490,13 +502,17 @@ chop_config_t::circuit_create(size_t)
 	kgen = key_generator::from_passphrase((const uint8_t *) sharedsecret
                                           sizeof(sharedsecret),
                                           0, 0, 0, 0); //modify these parameters to include salt in future for pbkdf2?
+	kgen_hdr = key_generator::from_passphrase((const uint8_t *) passphrase,
+                                          sizeof(passphrase) - 1,
+                                          0, 0, 0, 0); 
+	elligator::memset_volatile(sharedsecret, 0, sizeof(SharedSecret));
        }
   if (mode == LSN_SIMPLE_SERVER) {
     if (encryption) {
-      ckt->send_crypt     = gcm_encryptor::create(kgen, 32);
-      ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 32);
-      ckt->recv_crypt     = gcm_decryptor::create(kgen, 32);
-      ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 32);
+      //ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
+      ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 16);
+      //ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
+      ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 16);
     } else {
       ckt->send_crypt     = gcm_encryptor::create_noop();
       ckt->send_hdr_crypt = ecb_encryptor::create_noop();
@@ -505,10 +521,10 @@ chop_config_t::circuit_create(size_t)
     }
   } else {
     if (encryption) {
-      ckt->recv_crypt     = gcm_decryptor::create(kgen, 32);
-      ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 32);
-      ckt->send_crypt     = gcm_encryptor::create(kgen, 32);
-      ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 32);
+      ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
+      ckt->recv_hdr_crypt = ecb_decryptor::create(kgen_hdr, 16);
+      ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
+      ckt->send_hdr_crypt = ecb_encryptor::create(kgen_hdr, 16);
     } else {
       ckt->recv_crypt     = gcm_decryptor::create_noop();
       ckt->recv_hdr_crypt = ecb_decryptor::create_noop();
@@ -655,7 +671,8 @@ chop_circuit_t::drop_downstream(conn_t *cn)
 int
 chop_circuit_t::send()
 {
- 
+  
+  struct evbuffer *xmit_pending = 0;
   circuit_disarm_flush_timer(this);
 
   //First we check if there's steg data that we need to send
@@ -663,8 +680,13 @@ chop_circuit_t::send()
     {
       log_debug("Error in transmiting steg protocol data");
     }
+  
+  if (tx_queue.next_to_send() == 0)
+    {
+        (void*)xmit_pending = clientPub;
+    }
 
-  struct evbuffer *xmit_pending = bufferevent_get_input(up_buffer);
+  *(xmit_pending + sizeof(sharedSecret)) = bufferevent_add_buffer(up_buffer);
   size_t avail = evbuffer_get_length(xmit_pending);
   size_t avail0 = avail;
   bool no_target_connection = false;
@@ -1691,13 +1713,14 @@ chop_conn_t::send(struct evbuffer *block)
     /*hear we need to cook the handshake */
     uint8_t conn_handshake[HANDSHAKE_LEN];
 
-    //call Yawning's implementation here to generate client representative and assign to handshake pointer
-    elligator::PrivateKey clientPriv; 
-    elligator::PublicKey clientPub;
-    elligator::Representative clientRepr;
-    bool ok = generateKeypair(clientPriv, clientPub, clientRepr);
-    assert(ok);
-    conn_handshake[0] = clientRepr; //see typedef in elligator.h
+    //call Yawning's implementation here to generate client representative and assign to handshake pointer, moved to chop_config_t::circuit_create(size_t)
+    //elligator::PrivateKey clientPriv; 
+    //elligator::PublicKey clientPub;
+    //elligator::Representative clientRepr;
+    //bool ok = generateKeypair(clientPriv, clientPub, clientRepr);
+    //assert(ok);
+   // conn_handshake[0] = clientRepr; see typedef in elligator.h, as per vmon's comments make sure this lines up with chop_conn_t::recv() instead of chop_handshaker.cc
+   
     ChopHandshaker handshaker(upstream->circuit_id);
     handshaker.generate(conn_handshake, *(config->handshake_encryptor));
     
@@ -1808,6 +1831,8 @@ chop_conn_t::recv_handshake()
 int
 chop_conn_t::recv()
 {
+  
+  key_ge
   //TODO: This is too slow, we need to do it more cleverly.
   //we keep a copy of value of recv_pending, in case we need to
   //transparentize the connection
@@ -1890,13 +1915,14 @@ chop_conn_t::recv()
     }
 
     uint8_t ciphr_hdr[HEADER_LEN];
+    key_generator *kgen = 0;
     if (evbuffer_copyout(recv_pending, ciphr_hdr, HEADER_LEN) !=
         (ssize_t)HEADER_LEN) {
       log_warn(this, "failed to copy out %lu bytes (header)",
                (unsigned long)HEADER_LEN);
       break;
     }
-
+    
     header hdr(ciphr_hdr, *upstream->recv_hdr_crypt,
                upstream->recv_queue.window());
     if (!hdr.valid()) {
@@ -1937,6 +1963,29 @@ chop_conn_t::recv()
       log_warn(this, "failed to copy block to decode buffer");
       return -1;
     }
+
+    if (mode == LSN_SIMPLE_SERVER && c[0] == 0 && c[1] == 0 && c[2] == 0 && c[3]  == 0) // assuming chop_config_t::init_handshake_encryption() has been called to generate serverPriv....
+    {
+	if(encryption && op_code < 128) //remove op_code restriction  later
+	{
+		//note direct cast and unions break C99 standard....
+		memcpy(clientRepr, decodebuf, sizeof(sharedSecret)) ;
+		handshake(sharedsecret, serverPriv, clientRepr);
+   		
+   		kgen = key_generator::from_passphrase((const uint8_t *) sharedsecret
+                                          sizeof(sharedsecret),
+                                          0, 0, 0, 0); //modify these parameters to include salt in future for pbkdf2?
+		elligator::memset_volatile(sharedsecret, 0, sizeof(SharedSecret));
+		upstream->send_crypt     = gcm_encryptor::create(kgen, 16);
+      
+      		upstream->recv_crypt     = gcm_decryptor::create(kgen, 16);
+  
+		
+	}
+       
+     }
+
+
     if (upstream->recv_crypt->decrypt(decodebuf,
                                       decodebuf, hdr.total_len() - HEADER_LEN,
                                       ciphr_hdr, HEADER_LEN)) {
