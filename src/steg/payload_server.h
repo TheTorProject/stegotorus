@@ -42,6 +42,8 @@ using namespace std;
 #define HTTP_MSG_BUF_SIZE 500000
 static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
 
+#define SWF_HYPO_CAPACITY HTTP_MSG_BUF_SIZE - MAX_RESP_HDR_SIZE - (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512)
+
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
 // PDF_MIN_AVAIL_SIZE should reflect the min number of data bytes

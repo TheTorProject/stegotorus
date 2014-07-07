@@ -309,6 +309,7 @@ TracePayloadServer::init_SWF_payload_pool(int len, int type, int /*unused */)
     mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_SWF);
     if (mode > 0) {
       pl.typePayload[contentType][cnt] = r;
+      pl.typePayloadCap[contentType][cnt] = c_MAX_MSG_BUF_SIZE;
       cnt++;
       // update stat
       if (cnt == 1) {

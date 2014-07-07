@@ -27,7 +27,6 @@ int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   int out_swf_len;
   //int in_swf_len;
 
-  char* swf = 0;
   //char* rend;
   //char hdr[512];
   //unsigned int hdr_len;
@@ -48,7 +47,7 @@ int SWFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   //4 bytes magic and 4 bytes are the the length of the compressed blob
   memcpy(tmp_buf, cover_payload+8, SWF_SAVE_HEADER_LEN); //look at get_payload in trace_payload_server. 
   memcpy(tmp_buf+SWF_SAVE_HEADER_LEN, data, data_len);
-  memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, swf + cover_len - SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
+  memcpy(tmp_buf+SWF_SAVE_HEADER_LEN+data_len, cover_payload + cover_len - SWF_SAVE_FOOTER_LEN, SWF_SAVE_FOOTER_LEN);
   out_swf_len =
     compress((const uint8_t *)tmp_buf,
              SWF_SAVE_HEADER_LEN + data_len + SWF_SAVE_FOOTER_LEN,
@@ -79,8 +78,8 @@ ssize_t SWFSteg::decode(const uint8_t *cover_payload, size_t cover_len, uint8_t*
     tmp_buf = (char *)xrealloc(tmp_buf, tmp_len);
   }
 
-  if (inf_len < 0 ||
-      sizeof(data) < c_HTTP_MSG_BUF_SIZE) {
+  if (inf_len < 0 /*|| //no need for this check it always comes this big
+      sizeof(data) < c_HTTP_MSG_BUF_SIZE */) {
     fprintf(stderr, "inf_len = %d\n", inf_len);
     free(tmp_buf);
     return -1;
