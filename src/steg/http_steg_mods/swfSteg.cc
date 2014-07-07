@@ -139,8 +139,6 @@ unsigned int SWFSteg::static_capacity(char *cover_payload, int len)
    return static_headless_capacity(cover_payload + body_offset, len - body_offset);
 }
 
-
-
 SWFSteg::SWFSteg(PayloadServer* payload_provider, double noise2signal)
  :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_SWF)
 

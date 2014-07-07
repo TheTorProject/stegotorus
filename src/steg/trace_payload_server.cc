@@ -19,7 +19,7 @@ TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
 
   init_SWF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
 
-  _payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(0, pl.typePayloadCount[HTTP_CONTENT_SWF]);
+  _payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(c_MAX_MSG_BUF_SIZE, pl.typePayloadCount[HTTP_CONTENT_SWF]);
 
   //TODO: Add FileTypeSteg Capability to trace server
 

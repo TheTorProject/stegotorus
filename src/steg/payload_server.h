@@ -40,6 +40,7 @@ using namespace std;
 #define HTML_MIN_AVAIL_SIZE 1026
 
 #define HTTP_MSG_BUF_SIZE 500000
+static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
 
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
