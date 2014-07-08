@@ -1,10 +1,12 @@
 Debian Wheezy:
 apt-get install build-essential git pkg-config libssl-dev libevent-dev libcurl4-openssl-dev libboost-dev libboost-system-dev libboost-filesystem-dev
 
-git clone https://github.com/zackw/stegotorus
+git clone https://github.com/TheTorProject/stegotorus
 cd stegotorus
 git checkout tor-improve
 
 autoreconf
 ./configure PKG_CONFIG_PATH=`pwd`
 make
+./pgen_fake
+./stegotorus chop client --disable-retransmit 127.0.0.1:4999 38.79.65.84:80 http
