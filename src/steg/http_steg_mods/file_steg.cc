@@ -248,7 +248,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     newHdrLen = hLen;
   }
   else { //if the length is different, then we need to update the header
-    newHdrLen = alter_length_in_response_header((uint8_t *)cover_payload, hLen, newHdr);
+    newHdrLen = alter_length_in_response_header((uint8_t *)cover_payload, hLen, outbuflen, newHdr);
     if (!newHdrLen) {
       log_warn("SERVER ERROR: failed to alter length field in response headerr");
       _payload_server->disqualify_payload(payload_id_hash);
@@ -351,7 +351,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
 }
 
-size_t FileStegMod::alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, size_t new_content_length, uint8_t new_header[])
+size_t FileStegMod::alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, ssize_t new_content_length, uint8_t new_header[])
 {
 
   char * length_field_start = strstr(reinterpret_cast<char *>(original_header), "Content-Length:");
@@ -366,7 +366,7 @@ size_t FileStegMod::alter_length_in_response_header(uint8_t* original_header, si
 
   memcpy(new_header, original_header, ((uint8_t*)length_field_start - original_header));
   new_header+= ((uint8_t*)length_field_start - original_header);
-  sprintf(new_header, " %lu", new_content_length);
+  sprintf(reinterpret_cast<char *>(new_header), " %ld", new_content_length);
   size_t length_of_content_length = strlen(reinterpret_cast<const char *>(new_header));
   new_header += length_of_content_length;
   memcpy(new_header, length_field_end,  (original_header_length - ((uint8_t*)length_field_end - original_header)));
