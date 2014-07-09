@@ -366,7 +366,7 @@ size_t FileStegMod::alter_length_in_response_header(uint8_t* original_header, si
 
   memcpy(new_header, original_header, ((uint8_t*)length_field_start - original_header));
   new_header+= ((uint8_t*)length_field_start - original_header);
-  sprintf(new_header, " %d", new_content_length);
+  sprintf(new_header, " %lu", new_content_length);
   size_t length_of_content_length = strlen(reinterpret_cast<const char *>(new_header));
   new_header += length_of_content_length;
   memcpy(new_header, length_field_end,  (original_header_length - ((uint8_t*)length_field_end - original_header)));
