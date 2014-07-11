@@ -126,14 +126,14 @@ la chaleur lourde qui épaissit l'air.";
 //SWF
 TEST_F(StegModTest, swf_encode_decode_small) {
   SWFSteg swf_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/test1.swf", short_message, &swf_test_steg);
+  encode_decode("src/test/steg_test/inrozxa.swf", short_message, &swf_test_steg);
   //ASSERT_TRUE(false);
 
 }
 
 TEST_F(StegModTest, swf_encode_decode_small) {
   SWFSteg swf_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/test1.swf", short_message, &swf_test_steg);
+  encode_decode("src/test/steg_test/zone.swf",long_message, &swf_test_steg);
   //ASSERT_TRUE(false);
 
 }
@@ -142,7 +142,7 @@ TEST_F(StegModTest, swf_gracefully_invalid) {
   SWFSteg swf_test_steg(NULL, 0);
 
   read_cover("src/test/steg_test/test3.swf");
-  EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
+  EXPECT_FALSE(swf_test_steg.headless_capacity((char*)cover_payload, cover_len));
   delete cover_payload;
 }
 
