@@ -141,7 +141,7 @@ TEST_F(StegModTest, swf_encode_decode_small) {
 TEST_F(StegModTest, swf_gracefully_invalid) {
   SWFSteg swf_test_steg(NULL, 0);
 
-  read_cover("src/test/steg_test/test3.swf");
+  read_cover("src/test/steg_test/inrozxa.swf");
   EXPECT_FALSE(swf_test_steg.headless_capacity((char*)cover_payload, cover_len));
   delete cover_payload;
 }
