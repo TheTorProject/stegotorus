@@ -131,7 +131,7 @@ TEST_F(StegModTest, swf_encode_decode_small) {
 
 }
 
-TEST_F(StegModTest, swf_encode_decode_small) {
+TEST_F(StegModTest, swf_encode_decode_large) {
   SWFSteg swf_test_steg(NULL, 0);
   encode_decode("src/test/steg_test/zone.swf",long_message, &swf_test_steg);
   //ASSERT_TRUE(false);
