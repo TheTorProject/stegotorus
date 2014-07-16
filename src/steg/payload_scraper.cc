@@ -200,7 +200,7 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
   _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = NULL;
   _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js";  _available_stegs[0].capacity_function = PayloadServer::capacityJS;
 
-  _available_file_stegs[HTTP_CONTENT_PDF] = NULL;
+  _available_file_stegs[HTTP_CONTENT_PDF] = new PDFSteg(NULL);
   _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PayloadServer::capacityPDF;
 
  _available_file_stegs[HTTP_CONTENT_SWF] = new SWFSteg(NULL);

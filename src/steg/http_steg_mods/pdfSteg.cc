@@ -25,6 +25,38 @@
 
 #define DEBUG
 
+
+unsigned int
+PDFSteg::capacity (const uint8_t* buffer, size_t len) {
+  char *hEnd, *bp, *streamStart, *streamEnd;
+  int cnt=0;
+  int size;
+
+  // jump to the beginning of the body of the HTTP message
+  hEnd = strstr((char *)buffer, "\r\n\r\n");
+  if (hEnd == NULL) {
+    // cannot find the separator between HTTP header and HTTP body
+    return 0;
+  }
+  bp = hEnd + 4;
+
+  while (bp < (buf+len)) {
+     streamStart = strInBinary("stream", 6, bp, (buf+len)-bp);
+     if (streamStart == NULL) break;
+     bp = streamStart+6;
+     streamEnd = strInBinary("endstream", 9, bp, (buf+len)-bp);
+     if (streamEnd == NULL) break;
+     // count the number of char between streamStart+6 and streamEnd
+     size = streamEnd - (streamStart+6) - 2; // 2 for \r\n before streamEnd
+     if (size > 0) {
+       cnt = cnt + size;
+       // log_debug("capacity of pdf increase by %d", size);
+     }
+     bp += 9;
+  }
+  return cnt;
+}
+
 /*
  * pdf_add_delimiter processes the input buffer (inbuf) of length
  * inbuflen, copies it to output buffer (outbuf) of size outbufsize,
@@ -172,6 +204,7 @@ pdf_remove_delimiter(const char *inbuf, size_t inbuflen,
  * starting from the end of blob, if found; otherwise, return NULL
  *
  */
+//change this to uint8_t * return
 char *
 strInBinaryRewind (const char *pattern, unsigned int patternLen,
              const char *blob, unsigned int blobLen) {
@@ -207,7 +240,7 @@ strInBinaryRewind (const char *pattern, unsigned int patternLen,
 ssize_t
 pdf_wrap(const char *data, size_t dlen,
          const char *pdfTemplate, size_t plen,
-         char *outbuf, size_t outbufsize)
+         char *outbuf, size_t outbufsize) //outbufsize is fixed, what to do about plen, pdftemplate?
 {
   int data2size = 2*dlen+10; 
   // see rfc 1950 for zlib format, in addition to compressed data, we have
@@ -367,6 +400,77 @@ pdf_unwrap(const char *data, size_t dlen,
   return cnt;
 }
 
+ssize_t
+PDFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) //const char *data, size_t dlen,
+           char *outbuf, size_t outbufsize
+{
+  const uint8_t *dp, *dlimit;
+  uint8_t *op;
+  char *streamStart, *streamEnd;
+  size_t cnt, size, size2;
+  size_t outbufsize = HTTP_MSG_BUF_SIZE;
+
+  int streamObjStartSkip=0;
+  int streamObjEndSkip=0;
+
+  if (dlen > SIZE_T_CEILING || outbufsize > SIZE_T_CEILING)
+    return -1;
+
+  dp = cover_payload;   // current pointer for data
+  op = outbuf; // current pointer for outbuf
+  cnt = 0;     // number of char decoded
+  dlimit = data+dlen;
+
+   
+  while (dp < dlimit) {
+    // find the next stream obj
+    streamStart = strInBinary(STREAM_BEGIN, STREAM_BEGIN_SIZE, dp, dlimit-dp);
+    if (streamStart == NULL) {
+      log_warn("Cannot find stream in pdf");
+      return -1;
+    }
+
+    dp = streamStart + STREAM_BEGIN_SIZE;
+
+    // streamObjStartSkip = size of end-of-line (EOL) char(s) after ">>stream"
+    if ( *dp == '\r' && *(dp+1) == '\n' ) { // Windows-style EOL
+      streamObjStartSkip = 2;
+    } else if ( *dp == '\n' ) { // Unix-style EOL
+      streamObjStartSkip = 1;
+    }
+
+    dp = dp + streamObjStartSkip;
+
+    streamEnd = strInBinary(STREAM_END, STREAM_END_SIZE, dp, dlimit-dp);
+    if (streamEnd == NULL) {
+      log_warn("Cannot find endstream in pdf");
+      return -1;
+    }
+
+    // streamObjEndSkip = size of end-of-line (EOL) char(s) at the end of stream obj
+    if (*(streamEnd-2) == '\r' && *(streamEnd-1) == '\n') {
+      streamObjEndSkip = 2;
+    } else if (*(streamEnd-1) == '\n') {
+      streamObjEndSkip = 1;
+    }
+
+    // compute the size of stream obj payload
+    size = (streamEnd-streamObjEndSkip) - dp;
+
+    size2 = decompress(dp, size, op, outbufsize);
+    if ((int)size2 < 0) {
+      log_warn("decompress failed; size2 = %d\n", (int)size2);
+      return -1;
+    } else {
+      op += size2;
+      cnt = size2;
+      break;  // done decoding
+    }
+  }
+
+  return (ssize_t) cnt;
+}
+
 int
 http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *conn)
 {
@@ -421,7 +525,7 @@ http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *con
                 (int) sbuflen, (int) mpdf);
     return -1;
   }
-
+//pdfTemplate should probably be added in PDFSteg constructor as member variable (protected)?
   if (pl->get_payload(HTTP_CONTENT_PDF, sbuflen, &pdfTemplate,
                   &pdfTemplateSize) == 1) {
     log_debug("SERVER found the next HTTP response template with size %d",
@@ -531,6 +635,7 @@ http_handle_client_PDF_receive(steg_t *, conn_t *conn, struct evbuffer *dest,
 
   log_debug("CLIENT unwrapped data of length %d:", outbuflen);
 
+  //make sure this takes an ssize_t outbuflen!
   if (evbuffer_add(dest, outbuf, outbuflen)) {
     log_warn("CLIENT ERROR: evbuffer_add to dest fails\n");
     return RECV_BAD;
