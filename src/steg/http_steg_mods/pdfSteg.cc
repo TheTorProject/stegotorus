@@ -237,10 +237,10 @@ strInBinaryRewind (const char *pattern, unsigned int patternLen,
  * inside, if succeed; otherwise, it returns -1 to indicate an error
  *
  */
-ssize_t
+/*ssize_t
 pdf_wrap(const char *data, size_t dlen,
          const char *pdfTemplate, size_t plen,
-         char *outbuf, size_t outbufsize) //outbufsize is fixed, what to do about plen, pdftemplate?
+         char *outbuf, size_t outbufsize) //outbufsize is fixed, what to do about plen, pdftemplate, pdftemplate is payloadbuf?
 {
   int data2size = 2*dlen+10; 
   // see rfc 1950 for zlib format, in addition to compressed data, we have
@@ -326,12 +326,100 @@ pdf_wrap(const char *data, size_t dlen,
   memcpy(op, tp, size);
   op += size;
   return (op-outbuf);
+}*/
+
+int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len)
+{
+  size_t data2size = 2*cover_len+10; 
+  // see rfc 1950 for zlib format, in addition to compressed data, we have
+  // 2-byte compression method and flags +
+  // 4-byte dict ID +
+  // 4-byte ADLER32 checksum
+   uint8_t * data2[data2size];
+  const char *tp, *plimit;
+  char *op, *streamStart, *streamEnd, *filterStart;
+  size_t data2len, size;
+  int np;
+
+  if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING ||
+      HTTP_MSG_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
+    return -1;
+
+  data2len = compress((const uint8_t *)data, cover_len, 
+                     data2, data2size, c_format_zlib);
+  if ((int)data2len < 0) {
+    log_warn("compress failed and returned %lu", (unsigned long)data2len);
+    return -1;
+  }
+
+  op = data;       // current pointer for output buffer
+  tp = pdfTemplate;  // current pointer for http msg template
+  plimit = pdfTemplate+plen;
+
+  while (tp < plimit) {
+    // find the next stream obj
+    streamStart = strInBinary(STREAM_BEGIN, STREAM_BEGIN_SIZE, tp, plimit-tp);
+    if (streamStart == NULL) {
+      log_warn("Cannot find stream in pdf");
+      return -1;
+    }
+
+    streamEnd = strInBinary(STREAM_END, STREAM_END_SIZE, tp, plimit-tp);
+    if (streamEnd == NULL) {
+      log_warn("Cannot find endstream in pdf");
+      return -1;
+    }
+
+    filterStart = strInBinaryRewind(" obj", 4, tp, streamStart-tp);
+    if (filterStart == NULL) {
+      log_warn("Cannot find obj\n");
+      return -1;
+    } else {
+      // copy everything between tp and up and and including "obj" to outbuf
+      size = filterStart - tp + 4;
+      memcpy(op, tp, size);
+      op[size] = 0;
+      op += size;
+
+      // write meta-data for stream object
+      np = sprintf(op, " <<\n/Length %d\n/Filter /FlateDecode\n>>\nstream\n", (int)data2len);
+      if (np < 0) {
+        log_warn("sprintf failed\n");
+        return -1;
+      }
+      op += np;
+
+      // copy compressed data to outbuf 
+      memcpy(op, data2, data2len);
+      op += data2len;
+
+      // write endstream to outbuf
+      np = sprintf(op, "\nendstream");
+      if (np < 0) {
+        log_warn("sprintf failed\n");
+        return -1;
+      }
+      op += np;
+    }
+
+    // done with encoding data
+    tp = streamEnd+STREAM_END_SIZE;
+    break;
+  }
+
+  // copy the rest of pdfTemplate to outbuf
+  size = plimit-tp;
+  log_debug("copying the rest of pdfTemplate to outbuf (size %lu)",
+            (unsigned long)size);
+  memcpy(op, tp, size);
+  op += size;
+  return (op-data);
 }
 
 /*
  * pdf_unwrap is the inverse operation of pdf_wrap
  */
-ssize_t
+/*ssize_t
 pdf_unwrap(const char *data, size_t dlen,
            char *outbuf, size_t outbufsize)
 {
@@ -398,7 +486,7 @@ pdf_unwrap(const char *data, size_t dlen,
   }
 
   return cnt;
-}
+}*/
 
 ssize_t
 PDFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) //const char *data, size_t dlen,
@@ -413,13 +501,13 @@ PDFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) /
   int streamObjStartSkip=0;
   int streamObjEndSkip=0;
 
-  if (dlen > SIZE_T_CEILING || outbufsize > SIZE_T_CEILING)
+  if (cover_len > SIZE_T_CEILING || outbufsize > SIZE_T_CEILING)
     return -1;
 
   dp = cover_payload;   // current pointer for data
-  op = outbuf; // current pointer for outbuf
+  op = data; // current pointer for outbuf
   cnt = 0;     // number of char decoded
-  dlimit = data+dlen;
+  dlimit = dp+cover_len;
 
    
   while (dp < dlimit) {
@@ -455,7 +543,7 @@ PDFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) /
     }
 
     // compute the size of stream obj payload
-    size = (streamEnd-streamObjEndSkip) - dp;
+    size = ((uint8_t *)streamEnd-streamObjEndSkip) - dp;
 
     size2 = decompress(dp, size, op, outbufsize);
     if ((int)size2 < 0) {
@@ -476,7 +564,7 @@ http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *con
 {
   struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
-  unsigned int mpdf;
+  unsigned int mpdf; //not needed
   char *pdfTemplate = NULL, *hend;
   int pdfTemplateSize = 0;
   char data1[sbuflen];
@@ -509,9 +597,10 @@ http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *con
   }
 
   free(iv);
+//put above in encode? But no access to evbuffer? Use evbuffer_
 
-  log_debug("SERVER sbuflen = %d; cnt = %d", (int)sbuflen, cnt);
-
+  /*log_debug("SERVER sbuflen = %d; cnt = %d", (int)sbuflen, cnt);
+//move into ssize_t FileStegMod::pick_appropriate_cover_payload(size_t data_len, char** payload_buf, string& cover_id_hash)
   //TODO: this need to be investigated, we might need two functions
   mpdf = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_PDF);
 
@@ -525,7 +614,7 @@ http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *con
                 (int) sbuflen, (int) mpdf);
     return -1;
   }
-//pdfTemplate should probably be added in PDFSteg constructor as member variable (protected)?
+//pdfTemplate should probably be added in PDFSteg constructor as member variable (protected)? == payload_buf, add cover_id_hash
   if (pl->get_payload(HTTP_CONTENT_PDF, sbuflen, &pdfTemplate,
                   &pdfTemplateSize) == 1) {
     log_debug("SERVER found the next HTTP response template with size %d",
@@ -533,8 +622,9 @@ http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *con
   } else {
     log_warn("SERVER couldn't find the next HTTP response template");
     return -1;
-  }
-
+  }*/
+ //ssize_t 
+//FileStegMod::extract_appropriate_respones_body(char* payload_buf, size_t payload_size)
   hend = strstr(pdfTemplate, "\r\n\r\n");
   if (hend == NULL) {
     log_warn("SERVER unable to find end of header in the HTTP template");
@@ -648,4 +738,11 @@ http_handle_client_PDF_receive(steg_t *, conn_t *conn, struct evbuffer *dest,
 
   conn->expect_close();
   return RECV_GOOD;
+}
+
+PDFSteg::PDFSteg(PayloadServer* payload_provider, double noise2signal)
+ :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_PDF)
+
+{
+
 }
