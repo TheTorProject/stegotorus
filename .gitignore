@@ -6,6 +6,7 @@
 *.gcov
 *.gcda
 *.gcno
+*.orig
 
 .deps/
 .dirstamp
@@ -34,6 +35,9 @@
 #/config-aux/install-sh
 #/config-aux/missing
 #/config-aux/compile
+config-aux/ltmain.sh
+config-aux/*.m4
+
 
 /protolist.cc
 /steglist.cc
