@@ -26,6 +26,40 @@
 #define DEBUG
 
 
+ssize_t PDFSteg::headless_capacity(char *cover_body, int body_length)
+{
+  return static_headless_capacity((char*)cover_body, body_length);
+}
+
+
+ssize_t PDFSteg::capacity(const uint8_t *cover_payload, size_t len)
+{
+  return static_capacity((char*)cover_payload, len);
+}
+
+unsigned int PDFSteg::static_capacity(char *cover_body, int body_length)
+{
+	return static_headless_capacity((char *)cover_body, body_length);
+}
+
+
+unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length)
+{
+  
+ 
+  if (body_length <= 0)
+     return 0;
+  
+  //we don't care about body_length, the capacity is always at max
+  (void)cover_body; //to get around warning
+  (void)body_length;
+
+  //the http response header also need to be fit in the outbuf
+  ssize_t hypothetical_capacity = c_HTTP_MSG_BUF_SIZE;
+
+  return max(hypothetical_capacity, (ssize_t)0);
+
+}
 unsigned int
 PDFSteg::capacity (const uint8_t* buffer, size_t len) {
   char *hEnd, *bp, *streamStart, *streamEnd;
@@ -204,7 +238,7 @@ pdf_remove_delimiter(const char *inbuf, size_t inbuflen,
  * starting from the end of blob, if found; otherwise, return NULL
  *
  */
-//change this to uint8_t * return
+//change this to uint8_t * return in future?
 char *
 strInBinaryRewind (const char *pattern, unsigned int patternLen,
              const char *blob, unsigned int blobLen) {
@@ -597,12 +631,12 @@ http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *con
   }
 
   free(iv);
-//put above in encode? But no access to evbuffer? Use evbuffer_
+//put above in encode? But no access to evbuffer? Use evbuffer_to_memory_block?
 
   /*log_debug("SERVER sbuflen = %d; cnt = %d", (int)sbuflen, cnt);
 //move into ssize_t FileStegMod::pick_appropriate_cover_payload(size_t data_len, char** payload_buf, string& cover_id_hash)
   //TODO: this need to be investigated, we might need two functions
-  mpdf = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_PDF);
+  mpdf = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_PDF); //doesn't this default to PDF_MIN_AVAIL_SIZE?
 
   if (mpdf <= 0) {
     log_warn("SERVER ERROR: No pdfTemplate found\n");

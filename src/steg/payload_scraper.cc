@@ -21,6 +21,7 @@ using namespace boost::filesystem;
 #include "http_steg_mods/pngSteg.h"
 #include "http_steg_mods/gifSteg.h"
 #include "http_steg_mods/swfSteg.h"
+#include "http_steg_mods/pdfSteg.h"
 
 #include "payload_scraper.h"
 #include "base64.h"
@@ -201,7 +202,7 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
   _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js";  _available_stegs[0].capacity_function = PayloadServer::capacityJS;
 
   _available_file_stegs[HTTP_CONTENT_PDF] = new PDFSteg(NULL);
-  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PayloadServer::capacityPDF;
+  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PDFSteg::static_capacity;
 
  _available_file_stegs[HTTP_CONTENT_SWF] = new SWFSteg(NULL);
   _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = SWFSteg::static_capacity;  //Temp measure, later we don't need to do such acrobatics

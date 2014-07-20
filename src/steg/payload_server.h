@@ -47,7 +47,7 @@ static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
 // PDF_MIN_AVAIL_SIZE should reflect the min number of data bytes
-// a pdf doc can encode
+// a pdf doc can encode...ignoring this for now.
 
 // specifying the type of contents as an input argument
 // for has_eligible_HTTP_content()

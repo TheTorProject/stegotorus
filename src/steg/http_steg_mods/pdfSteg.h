@@ -46,8 +46,8 @@ beginig of the body in the response
 @param cover_body pointer to the begiing of the body
 @param body_length the total length of message body
 */
-    //virtual ssize_t headless_capacity(char *cover_body, int body_length);
-    //static unsigned int static_headless_capacity(char *cover_body, int body_length);
+    virtual ssize_t headless_capacity(char *cover_body, int body_length);
+    static unsigned int static_headless_capacity(char *cover_body, int body_length);
 
     /**
 returns the capacity of the data you can store in jpeg response
@@ -59,7 +59,7 @@ given the jpeg file content in
 @return the capacity that the buffer can cover or < 0 in case of error
 */
 virtual unsigned int capacity(const uint8_t *buffer, size_t len);
-//static unsigned int static_capacity(char *buffer, int len);
+static unsigned int static_capacity(char *buffer, int len);
 
     /**
 constructor just to call parent constructor
