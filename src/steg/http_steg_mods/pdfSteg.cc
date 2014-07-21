@@ -370,7 +370,7 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   // 4-byte dict ID +
   // 4-byte ADLER32 checksum
    uint8_t * data2[data2size];
-  const char *tp, *plimit;
+  const uint8_t  *tp, *plimit;
   char *op, *streamStart, *streamEnd, *filterStart;
   size_t data2len, size;
   int np;
@@ -387,8 +387,8 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   }
 
   op = data;       // current pointer for output buffer
-  tp = pdfTemplate;  // current pointer for http msg template
-  plimit = pdfTemplate+plen;
+  tp = cover_payload  // current pointer for http msg template, replace with payloadbuf?
+  plimit = cover_payload+cover_len;
 
   while (tp < plimit) {
     // find the next stream obj
