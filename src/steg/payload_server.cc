@@ -7,7 +7,7 @@
 #include "payload_server.h"
 #include "file_steg.h"
 #include "http_steg_mods/swfSteg.h"
-
+#include "http_steg_mods/pdfSteg.h"
 #include <ctype.h>
 #include <time.h>
 

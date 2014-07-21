@@ -5,7 +5,7 @@
 #define _TRACE_PAYLOAD_SERVER_H
 
 #include "payload_server.h"
-
+//#include "http_steg_mods/pdfSteg.h"
 /* struct for reading in the payload_gen dump file */
 /* Our PayloadInfo class in payload_server should become universal enough 
    so we do not need following structs. */

@@ -1,7 +1,9 @@
 #include "util.h"
-#include "http_steg_mods/pdfSteg.h"
-#include "trace_payload_server.h"
 
+#include "trace_payload_server.h"
+#include "file_steg.h"
+//#include "http_steg_mods/swfSteg.h"
+#include "http_steg_mods/pdfSteg.h"
 
 
 TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
@@ -243,7 +245,7 @@ TracePayloadServer::init_PDF_payload_pool(int len, int type, int minCapacity)
       // use capacityPDF() to find out the amount of data that we
       // can encode in the pdf doc 
       // cap = minCapacity+1;
-      cap = PDFSteg::capacity(msgbuf, p->length);
+      cap = PDFSteg::static_capacity(msgbuf, p->length);
       if (cap > minCapacity) {
 	log_debug("pdf (index %d) greater than mincapacity %d", cnt, minCapacity);
 	pl.typePayloadCap[contentType][cnt] = (cap-PDF_DELIMITER_SIZE)/2;
