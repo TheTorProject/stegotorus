@@ -234,7 +234,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   //instead we need to check if not PDF, the payload length is changed
   //and in that case we need to update the header
   if ((size_t)outbuflen == body_len) {
-	if( c_content_type != HTTP_CONTENT_PDF) {
+	/*if( c_content_type != HTTP_CONTENT_PDF) {
 	  //TODO instead of generating the header we should just manipulate
   //it
   //The only possible problem is length but we are not changing 
@@ -245,13 +245,13 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     log_warn("SERVER ERROR: gen_response_header fails for pdfSteg");
     return -1;
     }
-   }
+   }*/
   //I'm not crazy, these are filler for later change
 
-    else {
+    //else {
     memcpy(newHdr, cover_payload,hLen);
     newHdrLen = hLen;
-	}
+	//}
   }
   else { //if the length is different, then we need to update the header
     newHdrLen = alter_length_in_response_header((uint8_t *)cover_payload, hLen, outbuflen, newHdr);
