@@ -58,7 +58,7 @@ given the jpeg file content in
 
 @return the capacity that the buffer can cover or < 0 in case of error
 */
-virtual unsigned int capacity(const uint8_t *buffer, size_t len);
+virtual ssize_t capacity(const uint8_t *buffer, size_t len);
 static unsigned int static_capacity(char *buffer, int len);
 
     /**
