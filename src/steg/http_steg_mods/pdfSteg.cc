@@ -7,13 +7,20 @@
 #include <event2/buffer.h>
 
 
+
+
+#include "payload_server.h"
+#include "file_steg.h"
+#include "pdfSteg.h"
+
 #include "connections.h"
 #include "compression.h"
 
-#include "payload_server.h"
-#include "pdfSteg.h"
-
 /* pdfSteg: A PDF-based steganography module */
+
+
+#define PDF_CONTENT_TYPE "application/pdf"
+//#define PDF_SIZE_CEILING 20480
 
 #define PDF_DELIMITER    '?'
 #define PDF_DELIMITER2   '.'
@@ -34,16 +41,20 @@ ssize_t PDFSteg::headless_capacity(char *cover_body, int body_length)
 
 ssize_t PDFSteg::capacity(const uint8_t *cover_payload, size_t len)
 {
-  return static_capacity((char*)cover_payload, len);
+  return static_capacity(cover_payload, len);
 }
 
 unsigned int PDFSteg::static_capacity(char *cover_body, int body_length)
 {
-	return static_headless_capacity((char *)cover_body, body_length);
+	  ssize_t body_offset = extract_appropriate_respones_body(cover_payload, len);
+  if (body_offset == -1) //couldn't find the end of header
+    return 0; //useless payload
+ 
+   return static_headless_capacity((const uint8_t *) cover_payload + body_offset, (size_t) (len - body_offset));
 }
 
 
-unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length)
+/*unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length)
 {
   
  
@@ -55,13 +66,13 @@ unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length
   (void)body_length;
 
   //the http response header also need to be fit in the outbuf
-  ssize_t hypothetical_capacity = c_HTTP_MSG_BUF_SIZE;
+  ssize_t hypothetical_capacity = PDF_MAX_AVAIL_SIZE; //could be too small?
 
   return max(hypothetical_capacity, (ssize_t)0);
 
-}
+}*/
 unsigned int
-PDFSteg::capacity (const uint8_t* buffer, size_t len) {
+PDFSteg::static_headless_capacity (const uint8_t* buffer, size_t len) {
   char *hEnd, *bp, *streamStart, *streamEnd;
   int cnt=0;
   int size;
@@ -371,7 +382,8 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   // 4-byte ADLER32 checksum
    uint8_t * data2[data2size];
   const uint8_t  *tp, *plimit;
-  char *op, *streamStart, *streamEnd, *filterStart;
+  uint8_t *op;
+  char *streamStart, *streamEnd, *filterStart;
   size_t data2len, size;
   int np;
 
@@ -379,15 +391,20 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
       HTTP_MSG_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
     return -1;
 
-  data2len = compress((const uint8_t *)data, cover_len, 
+   if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
+    log_warn("not enough cover capacity to embed data");
+    return -1; //not enough capacity is an error because you should have check     //before requesting
+  }
+
+  data2len = compress((const uint8_t *)data, data_len, 
                      data2, data2size, c_format_zlib);
   if ((int)data2len < 0) {
     log_warn("compress failed and returned %lu", (unsigned long)data2len);
     return -1;
   }
 
-  op = data;       // current pointer for output buffer
-  tp = cover_payload  // current pointer for http msg template, replace with payloadbuf?
+  op = outbuf;       // current pointer for output buffer
+  tp = cover_payload;  // current pointer for http msg template, replace with payloadbuf?
   plimit = cover_payload+cover_len;
 
   while (tp < plimit) {
@@ -524,7 +541,7 @@ pdf_unwrap(const char *data, size_t dlen,
 
 ssize_t
 PDFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) //const char *data, size_t dlen,
-           char *outbuf, size_t outbufsize
+           char *outbuf, size_t outbufsize...data here is outbuf being passed in!
 {
   const uint8_t *dp, *dlimit;
   uint8_t *op;
@@ -593,7 +610,7 @@ PDFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) /
   return (ssize_t) cnt;
 }
 
-int
+/*int
 http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *conn)
 {
   struct evbuffer *dest = conn->outbound();
@@ -697,9 +714,9 @@ http_server_PDF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *con
   evbuffer_drain(source, sbuflen);
   return 0;
 
-}
+}*/
 
-int
+/*int
 http_handle_client_PDF_receive(steg_t *, conn_t *conn, struct evbuffer *dest,
                                struct evbuffer* source)
 {
@@ -772,7 +789,7 @@ http_handle_client_PDF_receive(steg_t *, conn_t *conn, struct evbuffer *dest,
 
   conn->expect_close();
   return RECV_GOOD;
-}
+}*/
 
 PDFSteg::PDFSteg(PayloadServer* payload_provider, double noise2signal)
  :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_PDF)

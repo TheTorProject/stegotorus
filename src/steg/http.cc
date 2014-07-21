@@ -68,7 +68,7 @@ void http_steg_config_t::init_file_steg_mods()
   file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
- file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
 
 }
 http_steg_config_t::http_steg_config_t(config_t *cfg)

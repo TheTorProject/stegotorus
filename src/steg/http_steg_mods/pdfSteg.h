@@ -64,8 +64,7 @@ static unsigned int static_capacity(char *buffer, int len);
     /**
 constructor just to call parent constructor
 */
-    PDFSteg(PayloadServer* payload_provider, double noise2signal = 0); //pdf template in here or as struct member from payload_provider->?
-
+    PDFSteg(PayloadServer* payload_provider, double noise2signal = 0); 
     virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len);
     
      virtual ssize_t decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);

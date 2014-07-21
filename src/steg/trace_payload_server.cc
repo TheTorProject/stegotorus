@@ -1,6 +1,8 @@
 #include "util.h"
 #include "trace_payload_server.h"
 
+
+
 TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
   : PayloadServer(init_side), c_max_buffer_size(1000000)
 {
@@ -13,15 +15,15 @@ TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
   init_HTML_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
   _payload_database.type_detail[HTTP_CONTENT_HTML] =  TypeDetail(pl.max_HTML_capacity, pl.typePayloadCount[HTTP_CONTENT_HTML]);
 
-  init_PDF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE);
+  init_PDF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE); //should we continue to use PDF_MIN_AVAIL_SIZE?
 
-  _payload_database.type_detail[HTTP_CONTENT_PDF] =  TypeDetail(pl.max_PDF_capacity, pl.typePayloadCount[HTTP_CONTENT_PDF]);
+  _payload_database.type_detail[HTTP_CONTENT_PDF] =  TypeDetail(pl.max_PDF_capacity, pl.typePayloadCount[HTTP_CONTENT_PDF]); //deprecating use of pl.max_PDF_capacity ASAP
 
   init_SWF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
 
   _payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(c_MAX_MSG_BUF_SIZE, pl.typePayloadCount[HTTP_CONTENT_SWF]);
 
-  //TODO: Add FileTypeSteg Capability to trace server
+  //DONE (for SWF?): Add FileTypeSteg Capability to trace server
 
 }
 

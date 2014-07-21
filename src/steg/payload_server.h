@@ -46,6 +46,7 @@ static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
 
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
+#define PDF_MAX_AVAIL_SIZE 100000 //added from SRI build...just for testing for now
 // PDF_MIN_AVAIL_SIZE should reflect the min number of data bytes
 // a pdf doc can encode...ignoring this for now.
 
@@ -275,6 +276,9 @@ class PayloadServer
      to the new size.
 
      @return the length of new header
+
+     see also 
+  size_t alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, ssize_t new_content_length, uint8_t new_header[]) in file_steg.h
    */
   size_t adjust_header_size(char* original_header, size_t original_length,                            char* newHeader);
 };
