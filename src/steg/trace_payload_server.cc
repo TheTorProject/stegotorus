@@ -245,7 +245,7 @@ TracePayloadServer::init_PDF_payload_pool(int len, int type, int minCapacity)
       // use capacityPDF() to find out the amount of data that we
       // can encode in the pdf doc 
       // cap = minCapacity+1;
-      cap = PDFSteg::static_capacity(msgbuf, p->length);
+      cap = capacityPDF(msgbuf, p->length);
       if (cap > minCapacity) {
 	log_debug("pdf (index %d) greater than mincapacity %d", cnt, minCapacity);
 	pl.typePayloadCap[contentType][cnt] = (cap-PDF_DELIMITER_SIZE)/2;

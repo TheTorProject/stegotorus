@@ -55,7 +55,7 @@ unsigned int PDFSteg::static_capacity(char *cover_payload, int body_length)
 }
 
 
-/*unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length)
+unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length)
 {
   
  
@@ -71,8 +71,8 @@ unsigned int PDFSteg::static_capacity(char *cover_payload, int body_length)
 
   return max(hypothetical_capacity, (ssize_t)0);
 
-}*/
-unsigned int
+}
+/*unsigned int
 PDFSteg::static_headless_capacity (char* buf, size_t len) {
   char *hEnd, *bp, *streamStart, *streamEnd;
   int cnt=0;
@@ -101,7 +101,7 @@ PDFSteg::static_headless_capacity (char* buf, size_t len) {
      bp += 9;
   }
   return cnt;
-}
+}*/
 
 /*
  * pdf_add_delimiter processes the input buffer (inbuf) of length

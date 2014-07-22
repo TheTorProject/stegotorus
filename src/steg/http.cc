@@ -215,9 +215,9 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
         break;
 
       case HTTP_CONTENT_PDF:
-        //if (hi >= PDF_MIN_AVAIL_SIZE)
-          //hi = PDF_MIN_AVAIL_SIZE;
-        //break;
+        if (hi >= PDF_MIN_AVAIL_SIZE)
+          hi = PDF_MIN_AVAIL_SIZE;
+        break;
 
       case HTTP_CONTENT_ENCRYPTEDZIP: //We need to prevent thi
         return 0;
