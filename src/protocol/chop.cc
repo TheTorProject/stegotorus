@@ -1878,7 +1878,6 @@ int
 chop_conn_t::recv()
 {
   
-  key_ge
   //TODO: This is too slow, we need to do it more cleverly.
   //we keep a copy of value of recv_pending, in case we need to
   //transparentize the connection
