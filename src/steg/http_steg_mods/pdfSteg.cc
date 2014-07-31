@@ -44,18 +44,18 @@ ssize_t PDFSteg::capacity(const uint8_t *cover_payload, size_t len)
   return static_capacity((char *) cover_payload, (int) len);
 }
 
-unsigned int PDFSteg::static_capacity(char *cover_payload, int body_length)
+unsigned int PDFSteg::static_capacity(char *cover_payload, int len)
 {
-	  ssize_t body_offset = extract_appropriate_respones_body(cover_payload, body_length);
+	  ssize_t body_offset = extract_appropriate_respones_body(cover_payload, (size_t) len);
   if (body_offset == -1) {
     return 0; //useless payload
 }
  
-   return static_headless_capacity(cover_payload + body_offset, (size_t) (body_length - body_offset));
+   return static_headless_capacity(cover_payload + body_offset,  len - body_offset);
 }
 
 
-unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length)
+/*unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length)
 {
   
  
@@ -71,20 +71,20 @@ unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length
 
   return max(hypothetical_capacity, (ssize_t)0);
 
-}
-/*unsigned int
-PDFSteg::static_headless_capacity (char* buf, size_t len) {
-  char *hEnd, *bp, *streamStart, *streamEnd;
+}*/
+unsigned int
+PDFSteg::static_headless_capacity (char* buf, int len) {
+  char *bp, *streamStart, *streamEnd;
   int cnt=0;
   int size;
 
   // jump to the beginning of the body of the HTTP message
-  hEnd = strstr((char *)buf, "\r\n\r\n");
+  /*hEnd = strstr((char *)buf, "\r\n\r\n");
   if (hEnd == NULL) {
     // cannot find the separator between HTTP header and HTTP body
     return 0;
-  }
-  bp = hEnd + 4;
+  }*/
+  bp = buf;
 
   while (bp < (buf+len)) {
      streamStart = strInBinary("stream", 6, bp, (buf+len)-bp);
@@ -96,12 +96,12 @@ PDFSteg::static_headless_capacity (char* buf, size_t len) {
      size = streamEnd - (streamStart+6) - 2; // 2 for \r\n before streamEnd
      if (size > 0) {
        cnt = cnt + size;
-       // log_debug("capacity of pdf increase by %d", size);
+       log_debug("capacity of pdf increase by %d", size);
      }
      bp += 9;
   }
   return cnt;
-}*/
+}
 
 /*
  * pdf_add_delimiter processes the input buffer (inbuf) of length
