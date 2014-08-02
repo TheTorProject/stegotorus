@@ -96,7 +96,7 @@ PDFSteg::static_headless_capacity (char* buf, size_t len) {
      size = streamEnd - (streamStart+6) - 2; // 2 for \r\n before streamEnd
      if (size > 0) {
        cnt = cnt + size;
-       // log_debug("capacity of pdf increase by %d", size);
+       log_debug("capacity of pdf increase by %d", size);
      }
      bp += 9;
   }
