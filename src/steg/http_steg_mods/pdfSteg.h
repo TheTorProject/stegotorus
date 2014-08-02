@@ -36,7 +36,8 @@ beginig of the body in the response
 @param body_length the total length of message body
 */
     virtual ssize_t headless_capacity(char *cover_body, int body_length);
-    static unsigned int static_headless_capacity(char *cover_body, int body_length);
+    static unsigned int static_headless_capacity(char *buf, size_t len);
+    //static unsigned int static_headless_capacity(char *cover_body, int body_length);
 
     /**
 returns the capacity of the data you can store in jpeg response

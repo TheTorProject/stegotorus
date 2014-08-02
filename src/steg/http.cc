@@ -214,10 +214,10 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
           hi = config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML) / 2;
         break;
 
-      case HTTP_CONTENT_PDF:
-        if (hi >= PDF_MIN_AVAIL_SIZE)
-          hi = PDF_MIN_AVAIL_SIZE;
-        break;
+      //case HTTP_CONTENT_PDF:
+        //if (hi >= PDF_MIN_AVAIL_SIZE)
+         // hi = PDF_MIN_AVAIL_SIZE;
+       // break;
 
       case HTTP_CONTENT_ENCRYPTEDZIP: //We need to prevent thi
         return 0;

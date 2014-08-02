@@ -55,7 +55,7 @@ unsigned int PDFSteg::static_capacity(char *cover_payload, int body_length)
 }
 
 
-unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length)
+/*unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length)
 {
   
  
@@ -71,20 +71,20 @@ unsigned int PDFSteg::static_headless_capacity(char *cover_body, int body_length
 
   return max(hypothetical_capacity, (ssize_t)0);
 
-}
-/*unsigned int
+}*/
+unsigned int
 PDFSteg::static_headless_capacity (char* buf, size_t len) {
-  char *hEnd, *bp, *streamStart, *streamEnd;
+  char *bp, *streamStart, *streamEnd;
   int cnt=0;
   int size;
 
   // jump to the beginning of the body of the HTTP message
-  hEnd = strstr((char *)buf, "\r\n\r\n");
+  /*hEnd = strstr((char *)buf, "\r\n\r\n");
   if (hEnd == NULL) {
     // cannot find the separator between HTTP header and HTTP body
     return 0;
-  }
-  bp = hEnd + 4;
+  }*/
+  bp = buf;
 
   while (bp < (buf+len)) {
      streamStart = strInBinary("stream", 6, bp, (buf+len)-bp);
@@ -101,8 +101,7 @@ PDFSteg::static_headless_capacity (char* buf, size_t len) {
      bp += 9;
   }
   return cnt;
-}*/
-
+}
 /*
  * pdf_add_delimiter processes the input buffer (inbuf) of length
  * inbuflen, copies it to output buffer (outbuf) of size outbufsize,
