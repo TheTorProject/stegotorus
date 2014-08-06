@@ -14,6 +14,7 @@ using namespace std;
 
 #include "util.h"
 #include "../payload_server.h"
+//#include "jsSteg.h"
 
 #include "file_steg.h"
 #include "connections.h"
@@ -158,6 +159,37 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     log_warn("unable to extract the data from evbuffer");
     return -1;
   }
+  
+  if (c_content_type == HTTP_CONTENT_JAVASCRIPT) {
+  //cnt = 0;
+  //(size_t) sbuflen = evbuffer_get_length(source);
+  //unsigned int datalen = 0;
+  //char data[(int) sbuflen*2];
+  struct evbuffer_iovec *iv;
+  int nv;
+  nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
+  iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
+
+  if (evbuffer_peek(source, sbuflen, NULL, iv, nv) != nv) {
+    free(iv);
+    return -1;
+  }
+  for (i = 0; i < nv; i++) {
+    const unsigned char *p = (const unsigned char *)iv[i].iov_base;
+    const unsigned char *limit = p + iv[i].iov_len;
+    char c;
+
+    while (p < limit && cnt < sbuflen) {
+      c = *p++;
+      data1[datalen] = "0123456789abcdef"[(c & 0xF0) >> 4];
+      data1[datalen+1] = "0123456789abcdef"[(c & 0x0F) >> 0];
+      datalen += 2;
+      cnt++;
+    }
+  }
+
+  free(iv);
+}
 
   //now we need to choose a payload
   char* cover_payload;
@@ -340,6 +372,63 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
   log_debug("CLIENT unwrapped data of length %d:", outbuflen);
 
+  if( c_content_type == HTTP_CONTENT_JAVASCRIPT ) {
+  /*if (outbuflen % 2) {
+    log_debug("CLIENT ERROR: An odd number of hex characters received\n");
+    return RECV_BAD;
+  }
+
+  if (! isxString(outbuf)) {
+    log_debug("CLIENT ERROR: Data received not hex");
+    return RECV_BAD;
+  }*/
+
+  // log_debug("Hex data received:");
+  //    buf_dump ((unsigned char*)data, decCnt, stderr);
+
+  // get a scratch buffer
+  scratch = evbuffer_new();
+  if (!scratch) return RECV_BAD;
+
+  if (evbuffer_expand(scratch, decCnt/2)) {
+    log_warn("CLIENT ERROR: Evbuffer expand failed \n");
+    evbuffer_free(scratch);
+    return RECV_BAD;
+  }
+
+  // convert hex data back to binary
+  for (i=0, j=0; i< decCnt; i=i+2, ++j) {
+    sscanf(&outbuf[i], "%2x", (unsigned int*) &k);
+    c = (char)k;
+    evbuffer_add(scratch, &c, 1);
+  }
+
+  if (evbuffer_add_buffer(dest, scratch)) {
+    evbuffer_free(scratch);
+    log_warn("CLIENT ERROR: Failed to transfer buffer");
+    return RECV_BAD;
+  }
+  log_debug("Added scratch (buffer) to dest\n");
+
+  evbuffer_free(scratch);
+
+
+  if (response_len <= (int) evbuffer_get_length(source)) {
+    if (evbuffer_drain(source, response_len) == -1) {
+      log_warn("CLIENT ERROR: Failed to drain source");
+      return RECV_BAD;
+    }
+  }
+  else {
+    log_warn("response_len > buffer size... can't drain");
+    exit(-1);
+  }
+
+
+  log_debug("Drained source for %d char\n", response_len);
+}
+
+  else {
   if (evbuffer_add(dest, outbuf, outbuflen)) {
     log_warn("CLIENT ERROR: evbuffer_add to dest fails\n");
     delete[] outbuf;
@@ -350,6 +439,8 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   if (evbuffer_drain(source, response_len) == -1) {
     log_warn("CLIENT ERROR: failed to drain source\n");
     return RECV_BAD;
+  }
+   
   }
 
   conn->expect_close();

@@ -22,7 +22,57 @@
 
 void buf_dump(unsigned char* buf, int len, FILE *out);
 
+ssize_t JSSteg::headless_capacity(char *cover_body, int body_length)
+{
+  return static_headless_capacity(cover_body,(size_t) body_length);
+}
 
+
+ssize_t JSSteg::capacity(const uint8_t *cover_payload, size_t len)
+{
+  return static_capacity((char *) cover_payload, (int) len);
+}
+
+unsigned int JSSteg::static_capacity(char *cover_payload, int body_length)
+{
+    ssize_t body_offset = extract_appropriate_respones_body(cover_payload, body_length);
+  if (body_offset == -1) {
+    return 0; //useless payload
+}
+ 
+   return static_headless_capacity(cover_payload + body_offset, (size_t) (body_length - body_offset));
+}
+
+unsigned int
+JSSteg::static_headless_capacity (char* buf, size_t len) {
+  char *hEnd, *bp, *jsStart, *jsEnd;
+  int cnt=0;
+  int j;  
+
+  // jump to the beginning of the body of the HTTP message
+  /*hEnd = strstr(buf, "\r\n\r\n");
+  if (hEnd == NULL) {
+    // cannot find the separator between HTTP header and HTTP body
+    return 0;
+  }*/
+  bp = buf;
+
+  //if (mode == CONTENT_JAVASCRIPT) {
+    j = offset2Hex(bp, (buf+len)-bp, 0);
+    while (j != -1) {
+      cnt++;
+      if (j == 0) {
+        bp = bp+1;
+      } else {
+        bp = bp+j+1;
+      }
+
+      if (len < buf + len - bp) {
+  fprintf(stderr, "HERE\n");
+      }
+      j = offset2Hex(bp, (buf+len)-bp, 1);
+    } // while
+    return cnt;
 /*
  * jsSteg: A Javascript-based steganography module
  *
@@ -182,29 +232,27 @@ int findContentType (char *msg) {
  *   jData     = "01p_or2=M3th.r4n5om()*6789ABCDEF0000000; dfp_tile = 1;"
  *
  */
-int encode(char *data, char *jTemplate, char *jData,
+/*** int encode(char *data, char *jTemplate, char *jData,
            unsigned int dlen, unsigned int jtlen, unsigned int jdlen )
 {
-  unsigned int encCnt = 0;  /* num of data encoded in jData */
-  char *dp, *jtp, *jdp; /* current pointers for data, jTemplate, and jData */
+  unsigned int encCnt = 0;  
+  char *dp, *jtp, *jdp; 
 
   unsigned int j;
 
-  /*
-   *  insanity checks
-   */
+  
   if (jdlen < jtlen) { return INVALID_BUF_SIZE; }
 
   dp = data; jtp = jTemplate; jdp = jData;
 
   if (! isxString(dp) ) { return INVALID_DATA_CHAR; }
 
-  /* handling boundary case: dlen == 0 */
+  
   if (dlen < 1) { return 0; }
 
 
   for (j=0; j<jtlen; j++) {
-    /* found a hex char in jTemplate that can be used for encoding data */
+    
     if ( isxdigit(*jtp) ) {
       *jdp = *dp;
       dp++;
@@ -220,13 +268,13 @@ int encode(char *data, char *jTemplate, char *jData,
   }
 
 
-  /* copying the rest of jTemplate to jdata */
+  =
   while (jtp < (jTemplate+jtlen)) {
     *jdp++ = *jtp++;
   }
 
-  return encCnt;
-}
+  return encCnt; 
+  }  ***/
 
 
 #define startScriptTypeJS "<script type=\"text/javascript\">"
@@ -234,6 +282,54 @@ int encode(char *data, char *jTemplate, char *jData,
 // #define JS_DELIMITER "?"
 // #define JS_DELIMITER_REPLACEMENT "."
 
+
+
+
+ ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) /*char *jData, char *dataBuf, unsigned int jdlen,
+             unsigned int dataBufSize, int *fin */
+{
+  unsigned int decCnt = 0;  /* num of data decoded */
+  char *dp, *jdp; /* current pointers for dataBuf and jData */
+  int i,j;
+  int cjdlen = jdlen;
+
+  *fin = 0;
+  dp = dataBuf; jdp = jData;
+
+  i = offset2Hex(jdp, cjdlen, 0);
+  while (i != -1) {
+    // return if JS_DELIMITER exists between jdp and jdp+i
+    for (j=0; j<i; j++) {
+      if (*jdp == JS_DELIMITER) {
+        //*fin = 1;
+        return decCnt;
+      }
+      jdp = jdp+1; cjdlen--;
+    }
+    // copy hex data from jdp to dp
+    if (dataBufSize <= 0) {
+      return decCnt;
+    }
+    *dp = *jdp;
+    jdp = jdp+1; cjdlen--;
+    dp = dp+1; dataBufSize--;
+    decCnt++;
+
+    // find the next hex char
+    i = offset2Hex(jdp, cjdlen, 1);
+  }
+
+  // look for JS_DELIMITER between jdp to jData+jdlen
+  while (jdp < jData+jdlen) {
+    if (*jdp == JS_DELIMITER) {
+      //*fin = 1;
+      break;
+    }
+    jdp = jdp+1;
+  }
+
+  return decCnt;
+}
 
 /*
  * similar to encode(), but uses offset2Hex to look for usable hex char
@@ -245,7 +341,110 @@ int encode(char *data, char *jTemplate, char *jData,
  * fin - signal the caller whether all data has been encoded and
  *       a JS_DELIMITER has been added
  */
-int  encode2(char *data, char *jTemplate, char *jData,
+
+int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) /* char *data,  char *jData,
+             unsigned int dlen, unsigned int jtlen,
+             unsigned int jdlen, int *fin*/
+{
+  unsigned int encCnt = 0;  /* num of data encoded in jData */
+  char *dp, *jtp, *jdp; /* current pointers for data, jTemplate, and jData */
+  int i,j;
+
+  /*
+   *  insanity checks
+   */
+  //if (jdlen < jtlen) { return INVALID_BUF_SIZE; }
+    if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING ||
+      HTTP_MSG_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
+    return -1;
+
+   if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
+    log_warn("not enough cover capacity to embed data");
+    return -1; //not enough capacity is an error because you should have check     //before requesting
+  }
+
+  dp = (char *) data; jtp = (char *) cover_payload, jdp = (char *) outbuf;
+
+  if (! isxString(dp) ) { return INVALID_DATA_CHAR; }
+
+  /* handling boundary case: data_len == 0 */
+  if (data_len < 1) { return 0; }
+
+
+  i = offset2Hex(jtp, (int) cover_len, 0);
+  while (encCnt < data_len && i != -1) {
+    // copy next i char from jtp to jdp,
+    // except that if *jtp==JS_DELIMITER, copy
+    // JS_DELIMITER_REPLACEMENT to jdp instead
+    j = 0;
+    while (j < i) {
+      if (*jtp == JS_DELIMITER) {
+        *jdp = JS_DELIMITER_REPLACEMENT;
+      } else {
+        *jdp = *jtp;
+      }
+      jtp = jtp + 1; jdp = jdp + 1; j++;
+    }
+
+    *jdp = *dp;
+    encCnt++;
+    dp = dp + 1; jtp = jtp + 1; jdp = jdp + 1;
+
+    i = offset2Hex(jtp, (cover_payload+cover_len)-jtp, 1);
+  }
+
+
+
+  // copy the rest of jTemplate to jdata
+  // if we've encoded all data, replace the first
+  // char in jTemplate by JS_DELIMITER, if needed,
+  // to signal the end of data encoding
+
+#ifdef DEBUG2
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
+#endif
+
+  *fin = 0;
+  if (encCnt == dlen) {
+    // replace the next char in jTemplate by JS_DELIMITER
+    if (jtp < (jTemplate+jtlen)) {
+      *jdp = JS_DELIMITER;
+    }
+    jdp = jdp+1; jtp = jtp+1;
+    //*fin = 1;
+  }
+
+  while (jtp < (jTemplate+jtlen)) {
+    if (*jtp == JS_DELIMITER) {
+      if (encCnt < dlen) {
+        *jdp = JS_DELIMITER_REPLACEMENT;
+      } else {
+        *jdp = *jtp;
+      }
+      // else if (isxdigit(*jtp)) {
+      //   if (encCnt < dlen && *fin == 0) {
+      //     *jdp = JS_DELIMITER;
+      //     *fin = 1;
+      //   } else {
+      //     *jdp = *jtp;
+      //   }
+      // }
+    } else {
+      *jdp = *jtp;
+    }
+    jdp = jdp+1; jtp = jtp+1;
+  }
+
+#ifdef DEBUG2
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
+  //printf("encode: fin= %d\n", *fin);
+#endif
+
+  return encCnt;
+
+}
+
+int  encode(char *data, char *jTemplate, char *jData,
              unsigned int dlen, unsigned int jtlen,
              unsigned int jdlen, int *fin)
 {
@@ -296,7 +495,7 @@ int  encode2(char *data, char *jTemplate, char *jData,
   // to signal the end of data encoding
 
 #ifdef DEBUG2
-  printf("encode2: encCnt = %d; dlen = %d\n", encCnt, dlen);
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
 #endif
 
   *fin = 0;
@@ -331,8 +530,8 @@ int  encode2(char *data, char *jTemplate, char *jData,
   }
 
 #ifdef DEBUG2
-  printf("encode2: encCnt = %d; dlen = %d\n", encCnt, dlen);
-  printf("encode2: fin= %d\n", *fin);
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
+  printf("encode: fin= %d\n", *fin);
 #endif
 
   return encCnt;
@@ -358,10 +557,10 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
   jdp = jData;
 
 
-  if (mode == CONTENT_JAVASCRIPT) {
+  /*if (mode == CONTENT_JAVASCRIPT) {
     // assumption: the javascript pertaining to jTemplate has enough capacity
     // to encode jData. thus, we only invoke encode() once here.
-    encCnt = encode2(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
+    encCnt = encode(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
     // ensure that all dlen char from data have been encoded in jData
 #ifdef DEBUG
     if (encCnt != dlen || fin == 0) {
@@ -372,7 +571,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
 
   }
 
-  else if (mode == CONTENT_HTML_JAVASCRIPT) {
+  else */if (mode == CONTENT_HTML_JAVASCRIPT) {
     while (encCnt < dlen2) {
       jsStart = strstr(jtp, startScriptTypeJS);
       if (jsStart == NULL) {
@@ -398,7 +597,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
       // the JS for encoding data is between jsStart and jsEnd
       scriptLen = jsEnd - jtp;
       // n = encode2(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
-      n = encode2(dp, jtp, jdp, dlen, scriptLen, jdlen, &fin);
+      n = encode(dp, jtp, jdp, dlen, scriptLen, jdlen, &fin);
       // update encCnt, dp, and dlen based on n
       if (n > 0) {
         encCnt = encCnt+n; dp = dp+n; dlen = dlen-n;
@@ -427,7 +626,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
     return encCnt;
 
   } else {
-    log_warn("Unknown mode (%d) for encode2()", mode);
+    log_warn("Unknown mode (%d) for encode()", mode);
     return 0;
   }
 
@@ -468,11 +667,12 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
  *   dataBuf= "0123456789ABCDEF"
  *
  */
-int decode (char *jData, char *dataBuf, unsigned int jdlen,
+
+/***int decode (char *jData, char *dataBuf, unsigned int jdlen,
             unsigned int dlen, unsigned int dataBufSize )
 {
-  unsigned int decCnt = 0;  /* num of data decoded */
-  char *dp, *jdp; /* current pointers for dataBuf and jData */
+  unsigned int decCnt = 0;  
+  char *dp, *jdp; 
   unsigned int j;
 
   if (dlen > dataBufSize) { return INVALID_BUF_SIZE; }
@@ -491,7 +691,7 @@ int decode (char *jData, char *dataBuf, unsigned int jdlen,
     }
   }
   return decCnt;
-}
+} ***/
 
 
 /*
@@ -499,7 +699,7 @@ int decode (char *jData, char *dataBuf, unsigned int jdlen,
  * applicable hex char in JS for decoding. Also, the decoding process
  * stops when JS_DELIMITER is encountered.
  */
-int decode2 (char *jData, char *dataBuf, unsigned int jdlen,
+int decode(char *jData, char *dataBuf, unsigned int jdlen,
              unsigned int dataBufSize, int *fin )
 {
   unsigned int decCnt = 0;  /* num of data decoded */
@@ -557,13 +757,13 @@ int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
   int dlen = dataBufSize;
   dp = dataBuf; jdp = jData;
 
-  if (mode == CONTENT_JAVASCRIPT) {
-    decCnt = decode2(jData, dataBuf, jdlen, dataBufSize, fin);
+  /*if (mode == CONTENT_JAVASCRIPT) {
+    decCnt = decode(jData, dataBuf, jdlen, dataBufSize, fin);
     if (*fin == 0) {
       log_warn("Unable to find JS_DELIMITER");
     }
   }
-  else if (mode == CONTENT_HTML_JAVASCRIPT) {
+  else */if (mode == CONTENT_HTML_JAVASCRIPT) {
     *fin = 0;
     while (*fin == 0) {
       jsStart = strstr(jdp, startScriptTypeJS);
@@ -584,14 +784,14 @@ int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
 
       // the JS for decoding data is between jsStart and jsEnd
       scriptLen = jsEnd - jdp;
-      n = decode2(jdp, dp, scriptLen, dlen, fin);
+      n = decode(jdp, dp, scriptLen, dlen, fin);
       if (n > 0) {
         decCnt = decCnt+n; dlen=dlen-n; dp=dp+n;
       }
       jdp = jsEnd+strlen(endScriptTypeJS);
     } // while (*fin==0)
   } else {
-    log_warn("Unknown mode (%d) for encode2()", mode);
+    log_warn("Unknown mode (%d) for decode()", mode);
     return 0;
   }
 
@@ -612,7 +812,7 @@ void printerr(int err_no) /* name errno had conflict with other vars so I change
 }
 
 
-int testEncode(char *data, char *js, char *outBuf, unsigned int dlen, unsigned int jslen,
+/**int testEncode(char *data, char *js, char *outBuf, unsigned int dlen, unsigned int jslen,
                unsigned int outBufLen, int testNum) {
   int r;
 
@@ -718,6 +918,146 @@ int testDecode2(char *inBuf, char *outBuf,
   }
   printf ("***** End of testDecode2 (%i) *****\n", testNum);
   return r;
+}**/
+
+  int  encode(char *data, char *jTemplate, char *jData,
+             unsigned int dlen, unsigned int jtlen,
+             unsigned int jdlen, int *fin)
+{
+  unsigned int encCnt = 0;  /* num of data encoded in jData */
+  char *dp, *jtp, *jdp; /* current pointers for data, jTemplate, and jData */
+  int i,j;
+
+  /*
+   *  insanity checks
+   */
+  if (jdlen < jtlen) { return INVALID_BUF_SIZE; }
+
+  dp = data; jtp = jTemplate; jdp = jData;
+
+  if (! isxString(dp) ) { return INVALID_DATA_CHAR; }
+
+  /* handling boundary case: dlen == 0 */
+  if (dlen < 1) { return 0; }
+
+
+  i = offset2Hex(jtp, (jTemplate+jtlen)-jtp, 0);
+  while (encCnt < dlen && i != -1) {
+    // copy next i char from jtp to jdp,
+    // except that if *jtp==JS_DELIMITER, copy
+    // JS_DELIMITER_REPLACEMENT to jdp instead
+    j = 0;
+    while (j < i) {
+      if (*jtp == JS_DELIMITER) {
+        *jdp = JS_DELIMITER_REPLACEMENT;
+      } else {
+        *jdp = *jtp;
+      }
+      jtp = jtp + 1; jdp = jdp + 1; j++;
+    }
+
+    *jdp = *dp;
+    encCnt++;
+    dp = dp + 1; jtp = jtp + 1; jdp = jdp + 1;
+
+    i = offset2Hex(jtp, (jTemplate+jtlen)-jtp, 1);
+  }
+
+
+
+  // copy the rest of jTemplate to jdata
+  // if we've encoded all data, replace the first
+  // char in jTemplate by JS_DELIMITER, if needed,
+  // to signal the end of data encoding
+
+#ifdef DEBUG2
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
+#endif
+
+  *fin = 0;
+  if (encCnt == dlen) {
+    // replace the next char in jTemplate by JS_DELIMITER
+    if (jtp < (jTemplate+jtlen)) {
+      *jdp = JS_DELIMITER;
+    }
+    jdp = jdp+1; jtp = jtp+1;
+    *fin = 1;
+  }
+
+  while (jtp < (jTemplate+jtlen)) {
+    if (*jtp == JS_DELIMITER) {
+      if (encCnt < dlen) {
+        *jdp = JS_DELIMITER_REPLACEMENT;
+      } else {
+        *jdp = *jtp;
+      }
+      // else if (isxdigit(*jtp)) {
+      //   if (encCnt < dlen && *fin == 0) {
+      //     *jdp = JS_DELIMITER;
+      //     *fin = 1;
+      //   } else {
+      //     *jdp = *jtp;
+      //   }
+      // }
+    } else {
+      *jdp = *jtp;
+    }
+    jdp = jdp+1; jtp = jtp+1;
+  }
+
+#ifdef DEBUG2
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
+  printf("encode: fin= %d\n", *fin);
+#endif
+
+  return encCnt;
+
+}
+
+int decode(char *jData, char *dataBuf, unsigned int jdlen,
+             unsigned int dataBufSize, int *fin )
+{
+  unsigned int decCnt = 0;  /* num of data decoded */
+  char *dp, *jdp; /* current pointers for dataBuf and jData */
+  int i,j;
+  int cjdlen = jdlen;
+
+  *fin = 0;
+  dp = dataBuf; jdp = jData;
+
+  i = offset2Hex(jdp, cjdlen, 0);
+  while (i != -1) {
+    // return if JS_DELIMITER exists between jdp and jdp+i
+    for (j=0; j<i; j++) {
+      if (*jdp == JS_DELIMITER) {
+        *fin = 1;
+        return decCnt;
+      }
+      jdp = jdp+1; cjdlen--;
+    }
+    // copy hex data from jdp to dp
+    if (dataBufSize <= 0) {
+      return decCnt;
+    }
+    *dp = *jdp;
+    jdp = jdp+1; cjdlen--;
+    dp = dp+1; dataBufSize--;
+    decCnt++;
+
+    // find the next hex char
+    i = offset2Hex(jdp, cjdlen, 1);
+  }
+
+  // look for JS_DELIMITER between jdp to jData+jdlen
+  while (jdp < jData+jdlen) {
+    if (*jdp == JS_DELIMITER) {
+      *fin = 1;
+      break;
+    }
+    jdp = jdp+1;
+  }
+
+  return decCnt;
 }
 
 
@@ -741,7 +1081,7 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
 
   log_debug("sbuflen = %d\n", (int) sbuflen);
 
-  if (content_type != HTTP_CONTENT_JAVASCRIPT &&
+  if (/*content_type != HTTP_CONTENT_JAVASCRIPT &&*/
       content_type != HTTP_CONTENT_HTML) {
     log_warn("SERVER ERROR: Unknown content type (%d)", content_type);
     return -1;
@@ -758,9 +1098,9 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
     return -1;
   }
 
-  if (content_type == HTTP_CONTENT_JAVASCRIPT) {
+  /*if (content_type == HTTP_CONTENT_JAVASCRIPT) {
     mjs = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT);
-  } else if (content_type == HTTP_CONTENT_HTML) {
+  } else */if (content_type == HTTP_CONTENT_HTML) {
     mjs = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML);
   }
 
@@ -856,9 +1196,9 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
 
   // outbuf2 points to the HTTP payload (of length outbuf2len) to be sent
 
-  if (mode == CONTENT_JAVASCRIPT) { // JavaScript in HTTP body
-    newHdrLen = gen_response_header((char*) "application/x-javascript", gzipMode,
-                                    outbuf2len, newHdr, sizeof(newHdr));
+  //if (mode == CONTENT_JAVASCRIPT) { // JavaScript in HTTP body
+  //  newHdrLen = gen_response_header((char*) "application/x-javascript", gzipMode,
+  //                                  outbuf2len, newHdr, sizeof(newHdr));
   } else if (mode == CONTENT_HTML_JAVASCRIPT) { // JavaScript(s) embedded in HTML doc
     newHdrLen = gen_response_header((char*) "text/html", gzipMode,
                                     outbuf2len, newHdr, sizeof(newHdr));
@@ -1016,13 +1356,13 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
     httpBodyLen = buf2len;
   }
 
-  if (contentType == HTTP_CONTENT_JAVASCRIPT) {
+  /*if (contentType == HTTP_CONTENT_JAVASCRIPT) {
     decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_MSG_BUF_SIZE,
                             &fin, CONTENT_JAVASCRIPT);
-  } else {
+  } else {*/
     decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_MSG_BUF_SIZE,
                             &fin, CONTENT_HTML_JAVASCRIPT);
-  }
+  //}
   data[decCnt] = 0;
 
   log_debug("After decodeHTTPBody; decCnt: %d\n", decCnt);
@@ -1093,6 +1433,12 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   return RECV_GOOD;
 }
 
+JSSteg::JSSteg(PayloadServer* payload_provider, double noise2signal)
+ :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_JAVASCRIPT)
+
+{
+
+}
 
 /*****
       int

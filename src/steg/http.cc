@@ -69,7 +69,7 @@ void http_steg_config_t::init_file_steg_mods()
   file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
-
+  file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(payload_server, noise2signal);
 }
 http_steg_config_t::http_steg_config_t(config_t *cfg)
    : steg_config_t(cfg),
@@ -569,9 +569,9 @@ http_steg_t::transmit(struct evbuffer *source)
     //  rval = http_server_SWF_transmit(config->payload_server, source, conn);
      // break;
 
-    case HTTP_CONTENT_JAVASCRIPT:
-      rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_JAVASCRIPT);
-      break;
+    //case HTTP_CONTENT_JAVASCRIPT:
+      //rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_JAVASCRIPT);
+      //break;
 
     case HTTP_CONTENT_HTML:
       rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_HTML);
@@ -704,7 +704,7 @@ http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
     //rval = http_handle_client_SWF_receive(this, conn, dest, source);
     //break;
 
-  case HTTP_CONTENT_JAVASCRIPT:
+  //case HTTP_CONTENT_JAVASCRIPT:
   case HTTP_CONTENT_HTML:
     rval = http_handle_client_JS_receive(this, conn, dest, source);
     break;
