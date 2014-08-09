@@ -291,10 +291,11 @@ int findContentType (char *msg) {
   unsigned int decCnt = 0;  /* num of data decoded */
   char *dp, *jdp; /* current pointers for dataBuf and jData */
   int i,j;
-  int cjdlen = jdlen;
+  int cjdlen =  (int) cover_len;
+  size_t dataBufSize = HTTP_MSG_BUF_SIZE; //too big, performance hit from initialization on heap instead of stack?
 
   *fin = 0;
-  dp = dataBuf; jdp = jData;
+  dp = (char *) data; jdp = (char *) cover_payload;
 
   i = offset2Hex(jdp, cjdlen, 0);
   while (i != -1) {
@@ -320,7 +321,7 @@ int findContentType (char *msg) {
   }
 
   // look for JS_DELIMITER between jdp to jData+jdlen
-  while (jdp < jData+jdlen) {
+  while ((uint8_t *) jdp < cover_payload+cover_len) {
     if (*jdp == JS_DELIMITER) {
       //*fin = 1;
       break;
@@ -346,9 +347,11 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
              unsigned int dlen, unsigned int jtlen,
              unsigned int jdlen, int *fin*/
 {
-  unsigned int encCnt = 0;  /* num of data encoded in jData */
+  unsigned int encCnt = 0, cLen, outbuf2len;  /* num of data encoded in jData */
   char *dp, *jtp, *jdp; /* current pointers for data, jTemplate, and jData */
   int i,j;
+  uint8_t* outbuf2;
+
 
   /*
    *  insanity checks
@@ -358,7 +361,8 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
       HTTP_MSG_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
     return -1;
 
-   if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
+  cLen = headless_capacity((char*)cover_payload, cover_len)
+   if (cLen <  (int) data_len) {
     log_warn("not enough cover capacity to embed data");
     return -1; //not enough capacity is an error because you should have check     //before requesting
   }
@@ -405,18 +409,18 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
 #endif
 
   *fin = 0;
-  if (encCnt == dlen) {
+  if (encCnt == data_len) {
     // replace the next char in jTemplate by JS_DELIMITER
-    if (jtp < (jTemplate+jtlen)) {
+    if (jtp < (cover_payload+cover_len)) {
       *jdp = JS_DELIMITER;
     }
     jdp = jdp+1; jtp = jtp+1;
     //*fin = 1;
   }
 
-  while (jtp < (jTemplate+jtlen)) {
+  while (jtp < (cover_payload+cover_len)) {
     if (*jtp == JS_DELIMITER) {
-      if (encCnt < dlen) {
+      if (encCnt < data_len) {
         *jdp = JS_DELIMITER_REPLACEMENT;
       } else {
         *jdp = *jtp;
@@ -440,7 +444,31 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   //printf("encode: fin= %d\n", *fin);
 #endif
 
-  return encCnt;
+  if (gzipMode == 1) {
+    // conservative estimate:
+    // sizeof outbuf2 = cLen + 10-byte for gzip header + 8-byte for crc
+    outbuf2 = (char *)xmalloc(cLen+18);
+
+    outbuf2len = compress(outbuf, cLen,
+                          outbuf2, cLen+18, c_format_gzip);
+
+    if (outbuf2len <= 0) {
+      log_warn("gzDeflate for outbuf fails");
+      free(outbuf2);
+      return -1;
+    }
+    
+    //free(outbuf2);
+    outbuf=outbuf2;
+    
+    //free(outbuf);
+
+  } else {
+    //outbuf2 = outbuf;
+    outbuf2len = cLen;
+  }
+  //return encCnt;
+  return outbuf2len;
 
 }
 
@@ -1334,7 +1362,7 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   // buf_dump((unsigned char*)respMsg, hdrLen+80, stderr);
 
   contentType = findContentType (respMsg);
-  if (contentType != HTTP_CONTENT_JAVASCRIPT && contentType != HTTP_CONTENT_HTML) {
+  if (/*contentType != HTTP_CONTENT_JAVASCRIPT && */contentType != HTTP_CONTENT_HTML) {
     log_warn("ERROR: Invalid content type (%d)", contentType);
     return RECV_BAD;
   }

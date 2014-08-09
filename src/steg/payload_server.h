@@ -70,6 +70,7 @@ const unsigned int c_no_of_steg_protocol = 8;
 // 1) CONTENT-TYPE in HTTP header specifies that the HTTP body is a JS
 // 2) CONTENT-TYPE corresponds to HTML, and the HTTP body contains JS
 //    denoted by script type for JS
+//for now the second type is handled via the original non subclassed functions as it is a bit more complex
 #define CONTENT_JAVASCRIPT              1
 #define CONTENT_HTML_JAVASCRIPT         2
 
