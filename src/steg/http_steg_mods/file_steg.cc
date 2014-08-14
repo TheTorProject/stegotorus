@@ -19,6 +19,13 @@ using namespace std;
 #include "file_steg.h"
 #include "connections.h"
 
+// error codes
+#define INVALID_BUF_SIZE  -1
+#define INVALID_DATA_CHAR -2
+
+// controlling content gzipping for jsSteg
+#define JS_GZIP_RESP             1
+
 /**
   constructor, sets the playoad server
 
@@ -104,7 +111,7 @@ ssize_t FileStegMod::pick_appropriate_cover_payload(size_t data_len, char** payl
   size_t max_capacity = _payload_server->_payload_database.typed_maximum_capacity(c_content_type);
 
   if (max_capacity <= 0) {
-    log_abort("SERVER ERROR: No payload of approperiate type=%d was found\n", (int) c_content_type);
+    log_abort("SERVER ERROR: No payload of appropriate type=%d was found\n", (int) c_content_type);
     return -1;
   }
 
@@ -165,6 +172,9 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   //(size_t) sbuflen = evbuffer_get_length(source);
   //unsigned int datalen = 0;
   //char data[(int) sbuflen*2];
+
+  int gzipMode = JS_GZIP_RESP;
+
   struct evbuffer_iovec *iv;
   int nv;
   nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);

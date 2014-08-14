@@ -298,6 +298,17 @@ class PayloadServer
   int isalnum_ (char c);
   int offset2Alnum_ (char *p, int range);
   int offset2Hex (char *p, int range, int isLastCharHex);
+  int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
+                   unsigned int jtlen, unsigned int jdlen, int mode);
+
+int isxString(char *str);
+
+int isGzipContent (char *msg);
+
+int findContentType (char *msg);
+
+int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
+                    unsigned int dataBufSize, int *fin, int mode);
 
   int gen_response_header(char* content_type, int gzip, int length,
                           char* buf, int buflen);

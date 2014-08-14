@@ -293,6 +293,9 @@ int findContentType (char *msg) {
   int i,j;
   int cjdlen =  (int) cover_len;
   size_t dataBufSize = HTTP_MSG_BUF_SIZE; //too big, performance hit from initialization on heap instead of stack?
+  char buf2[HTTP_MSG_BUF_SIZE];
+  
+  int gzipMode = 0;
 
   contentType = findContentType (cover_payload);
   if (contentType != HTTP_CONTENT_JAVASCRIPT /*&& contentType != HTTP_CONTENT_HTML*/) {
@@ -303,18 +306,18 @@ int findContentType (char *msg) {
   //httpBody = respMsg + hdrLen;
   //httpBodyLen = response_len - hdrLen;
 
-  gzipMode = isGzipContent(cover_payload);
+  gzipMode = isGzipContent((char * )cover_payload);
   if (gzipMode) {
     log_debug("gzip content encoding detected");
-    buf2len = decompress((const uint8_t *)httpBody, httpBodyLen,
+    buf2len = decompress(cover_payload, cover_len,
                          (uint8_t *)buf2, HTTP_MSG_BUF_SIZE);
     if (buf2len <= 0) {
       log_warn("gzInflate for httpBody fails");
       return RECV_BAD;
     }
     buf2[buf2len] = 0;
-    httpBody = buf2;
-    httpBodyLen = buf2len;
+    cover_payload = buf2;
+    cover_len = buf2len;
   }
 
   *fin = 0;
@@ -375,7 +378,7 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   int i,j;
   uint8_t* outbuf2;
 
-
+   int gzipMode = JS_GZIP_RESP;
   /*
    *  insanity checks
    */
