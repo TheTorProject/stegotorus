@@ -294,6 +294,29 @@ int findContentType (char *msg) {
   int cjdlen =  (int) cover_len;
   size_t dataBufSize = HTTP_MSG_BUF_SIZE; //too big, performance hit from initialization on heap instead of stack?
 
+  contentType = findContentType (cover_payload);
+  if (contentType != HTTP_CONTENT_JAVASCRIPT /*&& contentType != HTTP_CONTENT_HTML*/) {
+    log_warn("ERROR: Invalid content type (%d)", contentType);
+    return RECV_BAD;
+  }
+
+  //httpBody = respMsg + hdrLen;
+  //httpBodyLen = response_len - hdrLen;
+
+  gzipMode = isGzipContent(cover_payload);
+  if (gzipMode) {
+    log_debug("gzip content encoding detected");
+    buf2len = decompress((const uint8_t *)httpBody, httpBodyLen,
+                         (uint8_t *)buf2, HTTP_MSG_BUF_SIZE);
+    if (buf2len <= 0) {
+      log_warn("gzInflate for httpBody fails");
+      return RECV_BAD;
+    }
+    buf2[buf2len] = 0;
+    httpBody = buf2;
+    httpBodyLen = buf2len;
+  }
+
   *fin = 0;
   dp = (char *) data; jdp = (char *) cover_payload;
 
@@ -329,7 +352,7 @@ int findContentType (char *msg) {
     jdp = jdp+1;
   }
 
-  return decCnt;
+  return decCnt;  //should be able to substitute for outbuflen, /2 can be accommodated.
 }
 
 /*
