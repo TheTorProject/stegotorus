@@ -9,18 +9,12 @@
 {
 
 public:
-
-int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
-                   unsigned int jtlen, unsigned int jdlen, int mode);
-
 int isxString(char *str);
 
 int isGzipContent (char *msg);
 
 int findContentType (char *msg);
 
-int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
-                    unsigned int dataBufSize, int *fin, int mode);
 
 /*int encode(char *data, char *jTemplate, char *jData,
            unsigned int dlen, unsigned int jtlen, unsigned int jdlen );*/
@@ -41,6 +35,8 @@ beginig of the body in the response
     virtual ssize_t headless_capacity(char *cover_body, int body_length);
     static unsigned int static_headless_capacity(char *buf, size_t len);
 
+    virtual ssize_t capacity(const uint8_t *cover_payload, size_t len);
+    static unsigned int static_capacity(char *cover_payload, int body_length);
 
 /*int decode (char *jData, char *dataBuf, unsigned int jdlen,
             unsigned int dlen, unsigned int dataBufSize );*/
@@ -52,6 +48,20 @@ beginig of the body in the response
 void printerr(int err_no);
 
 };
+
+int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
+                   unsigned int jtlen, unsigned int jdlen, int mode);
+
+
+
+int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
+                    unsigned int dataBufSize, int *fin, int mode);
+
+int isxString(char *str);
+
+int isGzipContent (char *msg);
+
+int findContentType (char *msg);
 
 /*int testEncode(char *data, char *js, char *outBuf,
                unsigned int dlen, unsigned int jslen,

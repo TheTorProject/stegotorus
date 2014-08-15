@@ -13,6 +13,7 @@
 using namespace std;
 
 #include "util.h"
+#include "evbuf_util.h" //why do I need this now?
 #include "../payload_server.h"
 //#include "jsSteg.h"
 
@@ -151,8 +152,11 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 {
 
   uint8_t* data1;
+  int sbuflen = 0;
   //call this from util to find to extract the buffer into memory block
-  int sbuflen = evbuffer_to_memory_block(source, &data1);
+  if (c_content_type != HTTP_CONTENT_JAVASCRIPT /*|| CONTENT_HTML_JAVASCRIPT*/) {
+  sbuflen = evbuffer_to_memory_block(source, &data1);
+  }
 
   ssize_t outbuflen = 0;
   ssize_t body_offset = 0;
@@ -162,45 +166,17 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   size_t body_len = 0;
   size_t hLen = 0;
 
-  if (sbuflen < 0) {
+ 
+  
+  if (c_content_type == HTTP_CONTENT_JAVASCRIPT/*|| CONTENT_HTML_JAVASCRIPT*/) {
+    //cnt = 0;
+    sbuflen = JS_evbuffer_to_memory_block(source, &data1); //actually returns size_t instead of int
+  }
+
+  if (sbuflen < 0 /*&& c_content_type != HTTP_CONTENT_JAVASCRIPT || CONTENT_HTML_JAVASCRIPT*/) {
     log_warn("unable to extract the data from evbuffer");
     return -1;
   }
-  
-  if (c_content_type == HTTP_CONTENT_JAVASCRIPT) {
-  //cnt = 0;
-  //(size_t) sbuflen = evbuffer_get_length(source);
-  //unsigned int datalen = 0;
-  //char data[(int) sbuflen*2];
-  
-  //might have to move these outside if block?
-  int gzipMode = JS_GZIP_RESP;
-
-  struct evbuffer_iovec *iv;
-  int nv, r;
-  nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
-  iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
-
-  if (evbuffer_peek(source, sbuflen, NULL, iv, nv) != nv) {
-    free(iv);
-    return -1;
-  }
-  for (i = 0; i < nv; i++) {
-    const unsigned char *p = (const unsigned char *)iv[i].iov_base;
-    const unsigned char *limit = p + iv[i].iov_len;
-    char c;
-
-    while (p < limit && cnt < sbuflen) {
-      c = *p++;
-      data1[datalen] = "0123456789abcdef"[(c & 0xF0) >> 4];
-      data1[datalen+1] = "0123456789abcdef"[(c & 0x0F) >> 0];
-      datalen += 2;
-      cnt++;
-    }
-  }
-
-  free(iv);
-}
 
   //now we need to choose a payload
   char* cover_payload;
@@ -334,8 +310,8 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   
   
 
-  int decCnt, i, j, k, buf2len;
-  ev_ssize_t r;
+  int i, j, k;
+  //ev_ssize_t r;
   struct evbuffer * scratch; //maybe move to filesteg class?
   char c;
 
@@ -418,7 +394,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
   // convert hex data back to binary
   for (i=0, j=0; i< outbuflen; i=i+2, ++j) {
-    sscanf(&outbuf[i], "%2x", (unsigned int*) &k);
+    sscanf((const char *) &outbuf[i], "%2x", (unsigned int*) &k);
     c = (char)k;
     evbuffer_add(scratch, &c, 1);
   }
@@ -433,7 +409,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   evbuffer_free(scratch);
 
 
-  if (response_len <= (int) evbuffer_get_length(source)) {
+  if (response_len <= evbuffer_get_length(source)) {
     if (evbuffer_drain(source, response_len) == -1) {
       log_warn("CLIENT ERROR: Failed to drain source");
       return RECV_BAD;
