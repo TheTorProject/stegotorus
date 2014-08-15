@@ -172,11 +172,12 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   //(size_t) sbuflen = evbuffer_get_length(source);
   //unsigned int datalen = 0;
   //char data[(int) sbuflen*2];
-
+  
+  //might have to move these outside if block?
   int gzipMode = JS_GZIP_RESP;
 
   struct evbuffer_iovec *iv;
-  int nv;
+  int nv, r;
   nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
   iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
 
@@ -330,6 +331,14 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   int content_len = 0, outbuflen;
   uint8_t *httpHdr, *httpBody;
 
+  
+  
+
+  int decCnt, i, j, k, buf2len;
+  ev_ssize_t r;
+  struct evbuffer * scratch; //maybe move to filesteg class?
+  char c;
+
   log_debug("Entering CLIENT receive");
 
   ssize_t body_offset = extract_appropriate_respones_body(source);
@@ -401,14 +410,14 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   scratch = evbuffer_new();
   if (!scratch) return RECV_BAD;
 
-  if (evbuffer_expand(scratch, decCnt/2)) {
+  if (evbuffer_expand(scratch, outbuflen/2)) {
     log_warn("CLIENT ERROR: Evbuffer expand failed \n");
     evbuffer_free(scratch);
     return RECV_BAD;
   }
 
   // convert hex data back to binary
-  for (i=0, j=0; i< decCnt; i=i+2, ++j) {
+  for (i=0, j=0; i< outbuflen; i=i+2, ++j) {
     sscanf(&outbuf[i], "%2x", (unsigned int*) &k);
     c = (char)k;
     evbuffer_add(scratch, &c, 1);
@@ -437,6 +446,8 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
 
   log_debug("Drained source for %d char\n", response_len);
+
+  //  downcast_steg(s)->have_received = 1;
 }
 
   else {

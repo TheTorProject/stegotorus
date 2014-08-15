@@ -294,7 +294,7 @@ int findContentType (char *msg) {
   int cjdlen =  (int) cover_len;
   size_t dataBufSize = HTTP_MSG_BUF_SIZE; //too big, performance hit from initialization on heap instead of stack?
   char buf2[HTTP_MSG_BUF_SIZE];
-  
+
   int gzipMode = 0;
 
   contentType = findContentType (cover_payload);
@@ -425,7 +425,7 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
 
 
 
-  // copy the rest of jTemplate to jdata
+  // copy the rest of cover_payload to jdata
   // if we've encoded all data, replace the first
   // char in jTemplate by JS_DELIMITER, if needed,
   // to signal the end of data encoding
@@ -493,6 +493,7 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     //outbuf2 = outbuf;
     outbuf2len = cLen;
   }
+  //encCnt isn't really needed any more except for debugging and tracking
   //return encCnt;
   return outbuf2len;
 
