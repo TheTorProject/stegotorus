@@ -5,19 +5,16 @@
 #include "util.h" //this need to be included early cause : "C++ implementations should define these macros only when __STDC_LIMIT_MACROS is defined before is included"
 // From: http://stackoverflow.com/a/3233069/1039165
 
-
-
-
+#include <event2/buffer.h>
+#include <assert.h>
 
 #include "../payload_server.h"
 #include "file_steg.h"
 #include "pdfSteg.h"
 #include "compression.h"
 #include "connections.h"
-#include <event2/buffer.h>
 
 /* pdfSteg: A PDF-based steganography module */
-
 
 #define PDF_CONTENT_TYPE "application/pdf"
 //#define PDF_SIZE_CEILING 20480
@@ -96,7 +93,7 @@ PDFSteg::static_headless_capacity (char* buf, size_t len) {
      size = streamEnd - (streamStart+6) - 2; // 2 for \r\n before streamEnd
      if (size > 0) {
        cnt = cnt + size;
-       log_debug("capacity of pdf increase by %d", size);
+       //log_debug("capacity of pdf increase by %d", size);
      }
      bp += 9;
   }
@@ -289,8 +286,8 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   size_t data2len, size;
   int np;
 
-  if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING ||
-      HTTP_MSG_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
+  assert(HTTP_MSG_BUF_SIZE < SIZE_T_CEILING); //zlib offsetting limit
+  if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING) 
     return -1;
 
    if (headless_capacity((char*)cover_payload, cover_len) <  (int) data_len) {
@@ -305,10 +302,14 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     return -1;
   }
 
-  op = (char *) outbuf;       // current pointer for output buffer
+  char* temp_out_buf = new char[c_HTTP_MSG_BUF_SIZE];  // current pointer for output buffer
+  op = (char*) temp_out_buf;
   tp = (const char*) cover_payload;  // current pointer for http msg template, replace with payloadbuf?
   plimit = (const char *) (cover_payload+cover_len);
 
+  //vmon: Here obviously the intent was to break data and put it in different chunks 
+  //(as the capcaity function suggests but they got lazy and dumped everything in the
+  //first chunk
   while (tp < plimit) {
     // find the next stream obj
     streamStart = strInBinary(STREAM_BEGIN, STREAM_BEGIN_SIZE, tp, plimit-tp);
@@ -326,18 +327,30 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     filterStart = strInBinaryRewind(" obj", 4, tp, streamStart-tp);
     if (filterStart == NULL) {
       log_warn("Cannot find obj\n");
+      delete[] temp_out_buf;
       return -1;
     } else {
+      const char stream_meta_data[] = " <<\n/Length %d\n/Filter /FlateDecode\n>>\nstream\n";
+      const char end_stream_flag[] = "\nendstream";
       // copy everything between tp and up and and including "obj" to outbuf
+
+      //but first check if we are overflowing our limit
       size = filterStart - tp + 4;
+      if (size + strlen(stream_meta_data) + sizeof(int)*(8.0/3.0) + data2len  + (plimit - streamEnd) > c_HTTP_MSG_BUF_SIZE) {
+        log_warn("pdf encoding would results in buffer overflow, tell SRI to fix their encoding to use all available chunks instead of dumping evenything in the first chunk.");
+        delete[] temp_out_buf;
+        return -1;
+      }
+
       memcpy(op, tp, size);
       op[size] = 0;
       op += size;
 
       // write meta-data for stream object
-      np = sprintf(op, " <<\n/Length %d\n/Filter /FlateDecode\n>>\nstream\n", (int)data2len);
+      np = sprintf(op, stream_meta_data, (int)data2len);
       if (np < 0) {
         log_warn("sprintf failed\n");
+        delete[] temp_out_buf;
         return -1;
       }
       op += np;
@@ -347,9 +360,10 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
       op += data2len;
 
       // write endstream to outbuf
-      np = sprintf(op, "\nendstream");
+      np = sprintf(op, end_stream_flag);
       if (np < 0) {
         log_warn("sprintf failed\n");
+        delete[] temp_out_buf;
         return -1;
       }
       op += np;
@@ -366,10 +380,15 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
             (unsigned long)size);
   memcpy(op, tp, size);
   op += size;
-  return (op-(char *)outbuf);
+
+  //now we need to copy the new buffer into what we were given
+  size_t  encoded_pdf_size = op - temp_out_buf;
+  memcpy(cover_payload, temp_out_buf, encoded_pdf_size);
+  delete[]temp_out_buf;
+  
+  return encoded_pdf_size;
+
 }
-
-
 
 ssize_t
 PDFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) //const char *data, size_t dlen,

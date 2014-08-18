@@ -162,7 +162,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   ssize_t body_offset = 0;
   uint8_t newHdr[MAX_RESP_HDR_SIZE];
   ssize_t newHdrLen = 0;
-  size_t cnt = 0;
+  ssize_t cnt = 0;
   size_t body_len = 0;
   size_t hLen = 0;
 
@@ -183,7 +183,11 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   string payload_id_hash;
 
   cnt = pick_appropriate_cover_payload(sbuflen, &cover_payload, payload_id_hash);
-  
+  if (cnt < 0) {
+    log_warn("Failed to aquire approperiate payload.");
+    return -1;
+  }
+
   //we shouldn't touch the cover as there is only one copy of it in the
   //the cache
   body_offset =  extract_appropriate_respones_body(cover_payload, cnt);
@@ -288,7 +292,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     return -1;
     }
 
-  if (evbuffer_add(dest, outbuf, cnt)) {
+  if (evbuffer_add(dest, outbuf, outbuflen)) {
     log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
     return -1;
   }
@@ -303,7 +307,6 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
                                struct evbuffer* source)
 {
   unsigned int response_len = 0;
-  uint8_t* outbuf;
   int content_len = 0, outbuflen;
   uint8_t *httpHdr, *httpBody;
 
@@ -358,11 +361,9 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   httpBody = httpHdr + hdrLen;
   log_debug("CLIENT unwrapping data out of type %d payload", c_content_type);
 
-  outbuf = new uint8_t[c_HTTP_MSG_BUF_SIZE];
   outbuflen = decode(httpBody, content_len, outbuf);
   if (outbuflen < 0) {
     log_warn("CLIENT ERROR: FileSteg fails\n");
-    delete[] outbuf;
     return RECV_BAD;
   }
 
@@ -429,10 +430,8 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   else {
   if (evbuffer_add(dest, outbuf, outbuflen)) {
     log_warn("CLIENT ERROR: evbuffer_add to dest fails\n");
-    delete[] outbuf;
     return RECV_BAD;
   }
-  delete[] outbuf; //done with outbuf anyway
 
   if (evbuffer_drain(source, response_len) == -1) {
     log_warn("CLIENT ERROR: failed to drain source\n");

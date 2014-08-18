@@ -245,25 +245,26 @@ TracePayloadServer::init_PDF_payload_pool(int len, int type, int minCapacity)
       // use capacityPDF() to find out the amount of data that we
       // can encode in the pdf doc 
       // cap = minCapacity+1;
-      cap = capacityPDF(msgbuf, p->length);
-      if (cap > minCapacity) {
-	log_debug("pdf (index %d) greater than mincapacity %d", cnt, minCapacity);
-	pl.typePayloadCap[contentType][cnt] = (cap-PDF_DELIMITER_SIZE)/2;
-	pl.typePayload[contentType][cnt] = r;
-	cnt++;
+      cap = PDFSteg::static_capacity(msgbuf, p->length);
+      if (cap > minCapacity) { //why checking this
+        log_debug("pdf (index %d) has capacity %d greater than mincapacity %d", cnt, cap, minCapacity);
+        cap = (cap-PDF_DELIMITER_SIZE)/2;
+        pl.typePayloadCap[contentType][cnt] = cap;
+        pl.typePayload[contentType][cnt] = r;
+        cnt++;
 	
-	// update stat
-	if (cnt == 1) {
-	  minPayloadSize = p->length; maxPayloadSize = p->length;
-	  minPayloadCap = cap; maxPayloadCap = cap;
-	} 
-	else {
-	  if (minPayloadSize > p->length) minPayloadSize = p->length; 
-	  if (maxPayloadSize < p->length) maxPayloadSize = p->length; 
-	  if (minPayloadCap > cap) minPayloadCap = cap;
-	  if (maxPayloadCap < cap) maxPayloadCap = cap;
-	}
-	sumPayloadSize += p->length; sumPayloadCap += cap;
+        // update stat
+        if (cnt == 1) {
+          minPayloadSize = p->length; maxPayloadSize = p->length;
+          minPayloadCap = cap; maxPayloadCap = cap;
+        } 
+        else {
+          if (minPayloadSize > p->length) minPayloadSize = p->length; 
+          if (maxPayloadSize < p->length) maxPayloadSize = p->length; 
+          if (minPayloadCap > cap) minPayloadCap = cap;
+          if (maxPayloadCap < cap) maxPayloadCap = cap;
+        }
+        sumPayloadSize += p->length; sumPayloadCap += cap;
       }
     }
   }
@@ -272,7 +273,7 @@ TracePayloadServer::init_PDF_payload_pool(int len, int type, int minCapacity)
   pl.initTypePayload[contentType] = 1;
   pl.typePayloadCount[contentType] = cnt;
   log_debug("init_payload_pool: typePayloadCount for contentType %d = %d",
-     contentType, pl.typePayloadCount[contentType]); 
+            contentType, pl.typePayloadCount[contentType]); 
   log_debug("minPayloadSize = %d", minPayloadSize); 
   log_debug("maxPayloadSize = %d", maxPayloadSize); 
   log_debug("avgPayloadSize = %f", (float)sumPayloadSize/(float)cnt); 
@@ -372,15 +373,17 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
 
   i = -1;
   // we look at MAX_CANDIDATE_PAYLOADS payloads that have enough capacity
-  // and select the best fit
+  // and select the best fit, we'll loop once
   while (i < (cnt-1) && numCandidate < MAX_CANDIDATE_PAYLOADS) {
     i++;
-    current = (r+i)%cnt;
+    current = (r+i)%cnt; //vmon:This is not a random choice of candidates!
 
     //If the cap <= 0 is asked then we are not responsible for the consequence
     if (cap > 0)
-      if (pl.typePayloadCap[contentType][current] <= cap || pl.payload_hdrs[pl.typePayload[contentType][current]].length/(double)cap < noise2signal)
+      if (pl.typePayloadCap[contentType][current] <= cap || pl.payload_hdrs[pl.typePayload[contentType][current]].length/(double)cap < noise2signal) {
+        //log_debug("payload %d only offer %d bytes \n", current, pl.typePayloadCap[contentType][current]);
         continue;
+      }
 
     if (found) {
       if (pl.payload_hdrs[pl.typePayload[contentType][best]].length >
@@ -403,9 +406,10 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
     *size = pl.payload_hdrs[pl.typePayload[contentType][best]].length;
     return 1;
   } else {
+    log_warn("couldn't find payload with desired capacity: r=%d, checked %d payloads\n", r, i);
     return 0;
   }
-}
+  }
 
 
 void TracePayloadServer::load_payloads(const char* fname)
