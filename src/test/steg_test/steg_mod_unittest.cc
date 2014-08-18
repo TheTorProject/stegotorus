@@ -146,6 +146,29 @@ TEST_F(StegModTest, swf_gracefully_invalid) {
   delete cover_payload;
 }
 
+//PDF - probably needs another capacity test and a chunking test too, depending on whatever SRI will be piping into here
+/*TEST_F(StegModTest, pdf_encode_decode_small) {
+  PDFSteg pdf_test_steg(NULL, 0);
+  encode_decode("src/test/steg_test/(insert pdf here)", short_message, &pdf_test_steg);
+  //ASSERT_TRUE(false);
+
+}
+
+TEST_F(StegModTest, pdf_encode_decode_large) {
+  PDFSteg pdf_test_steg(NULL, 0);
+  encode_decode("src/test/steg_test/(insert pdf here)",long_message, &pdf_test_steg);
+  //ASSERT_TRUE(false);
+
+}
+//whatever version of headless capacity this ends up calling should not be expanding!
+TEST_F(StegModTest, pdf_gracefully_invalid) {
+  PDFSteg pdf_test_steg(NULL, 0);
+
+  read_cover("src/test/steg_test/(insert pdf here)");
+  EXPECT_FALSE(pdf_test_steg.headless_capacity((char*)cover_payload, cover_len));
+  delete cover_payload;
+}*/
+
 //PNG
 TEST_F(StegModTest, png_encode_decode_small) {
   PNGSteg png_test_steg(NULL, 0);
