@@ -70,6 +70,7 @@ const unsigned int c_no_of_steg_protocol = 8;
 // 1) CONTENT-TYPE in HTTP header specifies that the HTTP body is a JS
 // 2) CONTENT-TYPE corresponds to HTML, and the HTTP body contains JS
 //    denoted by script type for JS
+//for now the second type is handled via the original non subclassed functions as it is a bit more complex
 #define CONTENT_JAVASCRIPT              1
 #define CONTENT_HTML_JAVASCRIPT         2
 
@@ -297,6 +298,17 @@ class PayloadServer
   int isalnum_ (char c);
   int offset2Alnum_ (char *p, int range);
   int offset2Hex (char *p, int range, int isLastCharHex);
+  int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
+                   unsigned int jtlen, unsigned int jdlen, int mode);
+
+int isxString(char *str);
+
+int isGzipContent (char *msg);
+
+int findContentType (char *msg);
+
+int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
+                    unsigned int dataBufSize, int *fin, int mode);
 
   int gen_response_header(char* content_type, int gzip, int length,
                           char* buf, int buflen);

@@ -4,6 +4,7 @@
 
 #include "util.h"
 #include "../payload_server.h"
+ #include "file_steg.h"
 #include "jsSteg.h"
 //#include "cookies.h"
 #include "compression.h"
@@ -22,7 +23,58 @@
 
 void buf_dump(unsigned char* buf, int len, FILE *out);
 
+ssize_t JSSteg::headless_capacity(char *cover_body, int body_length)
+{
+  return static_headless_capacity(cover_body,(size_t) body_length);
+}
 
+
+ssize_t JSSteg::capacity(const uint8_t *cover_payload, size_t len)
+{
+  return static_capacity((char *) cover_payload, (int) len);
+}
+
+unsigned int JSSteg::static_capacity(char *cover_payload, int body_length)
+{
+    ssize_t body_offset = extract_appropriate_respones_body(cover_payload, body_length);
+  if (body_offset == -1) {
+    return 0; //useless payload
+}
+ 
+   return static_headless_capacity(cover_payload + body_offset, (size_t) (body_length - body_offset));
+}
+
+unsigned int
+JSSteg::static_headless_capacity (char* buf, size_t len) {
+  char *bp;
+  int cnt=0;
+  int j;  
+
+  // jump to the beginning of the body of the HTTP message
+  /*hEnd = strstr(buf, "\r\n\r\n");
+  if (hEnd == NULL) {
+    // cannot find the separator between HTTP header and HTTP body
+    return 0;
+  }*/
+  bp = buf;
+
+  //if (mode == CONTENT_JAVASCRIPT) {
+    j = offset2Hex(bp, (buf+len)-bp, 0);
+    while (j != -1) {
+      cnt++;
+      if (j == 0) {
+        bp = bp+1;
+      } else {
+        bp = bp+j+1;
+      }
+
+      if ((int) len < buf + (int) len - bp) {
+  fprintf(stderr, "HERE\n");
+      }
+      j = offset2Hex(bp, (buf+len)-bp, 1);
+    } // while
+    return cnt;
+}
 /*
  * jsSteg: A Javascript-based steganography module
  *
@@ -48,6 +100,17 @@ int isxString(char *str) {
   return 1;
 }
 
+int JSSteg::isxString(char *str) {
+  unsigned int i;
+  char *dp = str;
+  for (i=0; i<strlen(str); i++) {
+    if (! isxdigit(*dp) ) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 
 /*
  * isGzipContent(char *msg)
@@ -60,6 +123,34 @@ int isxString(char *str) {
  *
  */
 int isGzipContent (char *msg) {
+  char *ptr = msg, *end;
+  int gzipFlag = 0;
+
+  if (!strstr(msg, "\r\n\r\n"))
+    return 0;
+
+  while (1) {
+    end = strstr(ptr, "\r\n");
+    if (end == NULL) {
+      break;
+    }
+
+    if (!strncmp(ptr, "Content-Encoding: gzip", 22)) {
+      gzipFlag = 1;
+      break;
+    }
+
+    if (!strncmp(end, "\r\n\r\n", 4)){
+      break;
+    }
+    ptr = end+2;
+  }
+
+  return gzipFlag;
+}
+
+
+int JSSteg::isGzipContent (char *msg) {
   char *ptr = msg, *end;
   int gzipFlag = 0;
 
@@ -142,7 +233,45 @@ int findContentType (char *msg) {
   return 0;
 }
 
+int JSSteg::findContentType (char *msg) {
+  char *ptr = msg, *end;
 
+  if (!strstr(msg, "\r\n\r\n"))
+    return 0;
+
+  while (1) {
+    end = strstr(ptr, "\r\n");
+    if (end == NULL) {
+      break;
+    }
+
+    if (!strncmp(ptr, "Content-Type:", 13)) {
+
+      if (!strncmp(ptr+14, "text/javascript", 15) ||
+          !strncmp(ptr+14, "application/javascript", 22) ||
+          !strncmp(ptr+14, "application/x-javascript", 24)) {
+        return HTTP_CONTENT_JAVASCRIPT;
+      }
+      if (!strncmp(ptr+14, "text/html", 9)) {
+        return HTTP_CONTENT_HTML;
+      }
+      if (!strncmp(ptr+14, "application/pdf", 15) ||
+          !strncmp(ptr+14, "application/x-pdf", 17)) {
+        return HTTP_CONTENT_PDF;
+      }
+      if (!strncmp(ptr+14, "application/x-shockwave-flash", strlen("application/x-shockwave-flash"))) {
+        return HTTP_CONTENT_SWF;
+      }
+    }
+
+    if (!strncmp(end, "\r\n\r\n", 4)){
+      break;
+    }
+    ptr = end+2;
+  }
+
+  return 0;
+}
 
 /*
  * int encode(char *data, char *jTemplate, char *jData,
@@ -182,29 +311,27 @@ int findContentType (char *msg) {
  *   jData     = "01p_or2=M3th.r4n5om()*6789ABCDEF0000000; dfp_tile = 1;"
  *
  */
-int encode(char *data, char *jTemplate, char *jData,
+/*** int encode(char *data, char *jTemplate, char *jData,
            unsigned int dlen, unsigned int jtlen, unsigned int jdlen )
 {
-  unsigned int encCnt = 0;  /* num of data encoded in jData */
-  char *dp, *jtp, *jdp; /* current pointers for data, jTemplate, and jData */
+  unsigned int encCnt = 0;  
+  char *dp, *jtp, *jdp; 
 
   unsigned int j;
 
-  /*
-   *  insanity checks
-   */
+  
   if (jdlen < jtlen) { return INVALID_BUF_SIZE; }
 
   dp = data; jtp = jTemplate; jdp = jData;
 
   if (! isxString(dp) ) { return INVALID_DATA_CHAR; }
 
-  /* handling boundary case: dlen == 0 */
+  
   if (dlen < 1) { return 0; }
 
 
   for (j=0; j<jtlen; j++) {
-    /* found a hex char in jTemplate that can be used for encoding data */
+    
     if ( isxdigit(*jtp) ) {
       *jdp = *dp;
       dp++;
@@ -220,13 +347,13 @@ int encode(char *data, char *jTemplate, char *jData,
   }
 
 
-  /* copying the rest of jTemplate to jdata */
+  =
   while (jtp < (jTemplate+jtlen)) {
     *jdp++ = *jtp++;
   }
 
-  return encCnt;
-}
+  return encCnt; 
+  }  ***/
 
 
 #define startScriptTypeJS "<script type=\"text/javascript\">"
@@ -234,6 +361,81 @@ int encode(char *data, char *jTemplate, char *jData,
 // #define JS_DELIMITER "?"
 // #define JS_DELIMITER_REPLACEMENT "."
 
+
+
+
+ ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) /*char *jData, char *dataBuf, unsigned int jdlen,
+             unsigned int dataBufSize, int *fin */
+{
+  unsigned int decCnt = 0;  /* num of data decoded */
+  char *dp, *jdp; /* current pointers for dataBuf and jData */
+  int i,j, contentType, buf2len=0; //for some reason buf2len is getting a maybe-uninitialized warning here, probably because gzipmode is starting out as 0 in this same scope now and buf2len is being used as a counter, check after decompress @ 316 and 339 should catch anything bad
+  int cjdlen =  (int) cover_len;
+  //size_t dataBufSize = HTTP_MSG_BUF_SIZE; //too big, performance hit from initialization on heap instead of stack?
+  char buf2[HTTP_MSG_BUF_SIZE];
+
+  int gzipMode = 0;
+
+  contentType = findContentType ((char *) cover_payload);
+  if (contentType != HTTP_CONTENT_JAVASCRIPT /*&& contentType != HTTP_CONTENT_HTML*/) {
+    log_warn("ERROR: Invalid content type (%d)", contentType);
+    return RECV_BAD;
+  }
+
+  //httpBody = respMsg + hdrLen;
+  //httpBodyLen = response_len - hdrLen;
+
+  gzipMode = isGzipContent((char * )cover_payload);
+  if (gzipMode) {
+    log_debug("gzip content encoding detected");
+    buf2len = decompress(cover_payload, cover_len,
+                         (uint8_t *)buf2, HTTP_MSG_BUF_SIZE);
+    if (buf2len <= 0) {
+      log_warn("gzInflate for httpBody fails");
+      return RECV_BAD;
+    }
+    buf2[buf2len] = 0;
+    cover_payload = (uint8_t *) buf2;
+    cover_len = (size_t) buf2len;
+  }
+
+  //*fin = 0;
+  dp = (char *) data; jdp = (char *) cover_payload;
+
+  i = offset2Hex(jdp, cjdlen, 0);
+  while (i != -1) {
+    // return if JS_DELIMITER exists between jdp and jdp+i
+    for (j=0; j<i; j++) {
+      if (*jdp == JS_DELIMITER) {
+        //*fin = 1;
+        return decCnt;
+      }
+      jdp = jdp+1; cjdlen--;
+    }
+    // copy hex data from jdp to dp
+    if (buf2len <= 0) {
+      return decCnt;
+    }
+    *dp = *jdp;
+    jdp = jdp+1; cjdlen--;
+    dp = dp+1; buf2len--;
+    decCnt++;
+
+    // find the next hex char
+    i = offset2Hex(jdp, cjdlen, 1);
+  }
+
+  // look for JS_DELIMITER between jdp to jData+jdlen
+  while ((uint8_t *) jdp < cover_payload+cover_len) {
+    if (*jdp == JS_DELIMITER) {
+      //*fin = 1;
+      break;
+    }
+    jdp = jdp+1;
+  }
+
+  return decCnt;  //should be able to substitute for outbuflen, /2 can be accommodated.
+}
 
 /*
  * similar to encode(), but uses offset2Hex to look for usable hex char
@@ -245,7 +447,138 @@ int encode(char *data, char *jTemplate, char *jData,
  * fin - signal the caller whether all data has been encoded and
  *       a JS_DELIMITER has been added
  */
-int  encode2(char *data, char *jTemplate, char *jData,
+
+int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) /* char *data,  char *jData,
+             unsigned int dlen, unsigned int jtlen,
+             unsigned int jdlen, int *fin*/
+{
+  unsigned int encCnt = 0, cLen, outbuf2len;  /* num of data encoded in jData */
+  char *dp, *jtp, *jdp; /* current pointers for data, jTemplate, and jData */
+  int i,j;
+  uint8_t* outbuf2;
+
+   int gzipMode = JS_GZIP_RESP;
+  /*
+   *  insanity checks
+   */
+  //if (jdlen < jtlen) { return INVALID_BUF_SIZE; }
+    if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING ||
+      HTTP_MSG_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
+    return -1;
+
+  cLen = headless_capacity((char*)cover_payload, cover_len);
+   if (cLen <  data_len) {
+    log_warn("not enough cover capacity to embed data");
+    return -1; //not enough capacity is an error because you should have check     //before requesting
+  }
+
+  dp = (char *) data; jtp = (char *) cover_payload, jdp = (char *) outbuf;
+
+  if (! isxString(dp) ) { return INVALID_DATA_CHAR; }
+
+  /* handling boundary case: data_len == 0 */
+  if (data_len < 1) { return 0; }
+
+
+  i = offset2Hex(jtp, (int) cover_len, 0);
+  while (encCnt < data_len && i != -1) {
+    // copy next i char from jtp to jdp,
+    // except that if *jtp==JS_DELIMITER, copy
+    // JS_DELIMITER_REPLACEMENT to jdp instead
+    j = 0;
+    while (j < i) {
+      if (*jtp == JS_DELIMITER) {
+        *jdp = JS_DELIMITER_REPLACEMENT;
+      } else {
+        *jdp = *jtp;
+      }
+      jtp = jtp + 1; jdp = jdp + 1; j++;
+    }
+
+    *jdp = *dp;
+    encCnt++;
+    dp = dp + 1; jtp = jtp + 1; jdp = jdp + 1;
+
+    i = offset2Hex(jtp, (cover_payload+cover_len)-(uint8_t *) jtp, 1); //change to uint8_t* parameters?
+  }
+
+
+
+  // copy the rest of cover_payload to jdata
+  // if we've encoded all data, replace the first
+  // char in jTemplate by JS_DELIMITER, if needed,
+  // to signal the end of data encoding
+
+#ifdef DEBUG2
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
+#endif
+
+  //*fin = 0;
+  if (encCnt == data_len) {
+    // replace the next char in jTemplate by JS_DELIMITER
+    if ((uint8_t *) jtp < (cover_payload+cover_len)) {
+      *jdp = JS_DELIMITER;
+    }
+    jdp = jdp+1; jtp = jtp+1;
+    //*fin = 1;
+  }
+
+  while ((uint8_t *) jtp < (cover_payload+cover_len)) {
+    if (*jtp == JS_DELIMITER) {
+      if (encCnt < data_len) {
+        *jdp = JS_DELIMITER_REPLACEMENT;
+      } else {
+        *jdp = *jtp;
+      }
+      // else if (isxdigit(*jtp)) {
+      //   if (encCnt < dlen && *fin == 0) {
+      //     *jdp = JS_DELIMITER;
+      //     *fin = 1;
+      //   } else {
+      //     *jdp = *jtp;
+      //   }
+      // }
+    } else {
+      *jdp = *jtp;
+    }
+    jdp = jdp+1; jtp = jtp+1;
+  }
+
+#ifdef DEBUG2
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
+  //printf("encode: fin= %d\n", *fin);
+#endif
+
+  if (gzipMode == 1) {
+    // conservative estimate:
+    // sizeof outbuf2 = cLen + 10-byte for gzip header + 8-byte for crc
+    outbuf2 = (uint8_t *)xmalloc(cLen+18); //could be overallocated due to differing size of 18 chars and 18 uint8_ts
+
+    outbuf2len = compress(outbuf, cLen,
+                          outbuf2, cLen+18, c_format_gzip);
+
+    if (outbuf2len <= 0) {
+      log_warn("gzDeflate for outbuf fails");
+      free(outbuf2);
+      return -1;
+    }
+    
+    //free(outbuf2);
+    outbuf=outbuf2;
+    
+    //free(outbuf);
+
+  } else {
+    //outbuf2 = outbuf;
+    outbuf2len = cLen;
+  }
+  //encCnt isn't really needed any more except for debugging and tracking
+  //return encCnt;
+  return outbuf2len;
+
+}
+
+int  encode(char *data, char *jTemplate, char *jData,
              unsigned int dlen, unsigned int jtlen,
              unsigned int jdlen, int *fin)
 {
@@ -296,7 +629,7 @@ int  encode2(char *data, char *jTemplate, char *jData,
   // to signal the end of data encoding
 
 #ifdef DEBUG2
-  printf("encode2: encCnt = %d; dlen = %d\n", encCnt, dlen);
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
 #endif
 
   *fin = 0;
@@ -331,8 +664,8 @@ int  encode2(char *data, char *jTemplate, char *jData,
   }
 
 #ifdef DEBUG2
-  printf("encode2: encCnt = %d; dlen = %d\n", encCnt, dlen);
-  printf("encode2: fin= %d\n", *fin);
+  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
+  printf("encode: fin= %d\n", *fin);
 #endif
 
   return encCnt;
@@ -358,10 +691,10 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
   jdp = jData;
 
 
-  if (mode == CONTENT_JAVASCRIPT) {
+  /*if (mode == CONTENT_JAVASCRIPT) {
     // assumption: the javascript pertaining to jTemplate has enough capacity
     // to encode jData. thus, we only invoke encode() once here.
-    encCnt = encode2(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
+    encCnt = encode(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
     // ensure that all dlen char from data have been encoded in jData
 #ifdef DEBUG
     if (encCnt != dlen || fin == 0) {
@@ -372,7 +705,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
 
   }
 
-  else if (mode == CONTENT_HTML_JAVASCRIPT) {
+  else */if (mode == CONTENT_HTML_JAVASCRIPT) {
     while (encCnt < dlen2) {
       jsStart = strstr(jtp, startScriptTypeJS);
       if (jsStart == NULL) {
@@ -398,7 +731,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
       // the JS for encoding data is between jsStart and jsEnd
       scriptLen = jsEnd - jtp;
       // n = encode2(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
-      n = encode2(dp, jtp, jdp, dlen, scriptLen, jdlen, &fin);
+      n = encode(dp, jtp, jdp, dlen, scriptLen, jdlen, &fin);
       // update encCnt, dp, and dlen based on n
       if (n > 0) {
         encCnt = encCnt+n; dp = dp+n; dlen = dlen-n;
@@ -427,7 +760,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
     return encCnt;
 
   } else {
-    log_warn("Unknown mode (%d) for encode2()", mode);
+    log_warn("Unknown mode (%d) for encode()", mode);
     return 0;
   }
 
@@ -468,11 +801,12 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
  *   dataBuf= "0123456789ABCDEF"
  *
  */
-int decode (char *jData, char *dataBuf, unsigned int jdlen,
+
+/***int decode (char *jData, char *dataBuf, unsigned int jdlen,
             unsigned int dlen, unsigned int dataBufSize )
 {
-  unsigned int decCnt = 0;  /* num of data decoded */
-  char *dp, *jdp; /* current pointers for dataBuf and jData */
+  unsigned int decCnt = 0;  
+  char *dp, *jdp; 
   unsigned int j;
 
   if (dlen > dataBufSize) { return INVALID_BUF_SIZE; }
@@ -491,7 +825,7 @@ int decode (char *jData, char *dataBuf, unsigned int jdlen,
     }
   }
   return decCnt;
-}
+} ***/
 
 
 /*
@@ -499,7 +833,7 @@ int decode (char *jData, char *dataBuf, unsigned int jdlen,
  * applicable hex char in JS for decoding. Also, the decoding process
  * stops when JS_DELIMITER is encountered.
  */
-int decode2 (char *jData, char *dataBuf, unsigned int jdlen,
+int decode(char *jData, char *dataBuf, unsigned int jdlen,
              unsigned int dataBufSize, int *fin )
 {
   unsigned int decCnt = 0;  /* num of data decoded */
@@ -554,17 +888,18 @@ int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
   int scriptLen;
   int decCnt = 0;
   int n;
-  int dlen = dataBufSize;
+  int dlen = jdlen; //gets rud of unused warning, useless tho
   dp = dataBuf; jdp = jData;
 
-  if (mode == CONTENT_JAVASCRIPT) {
-    decCnt = decode2(jData, dataBuf, jdlen, dataBufSize, fin);
+  /*if (mode == CONTENT_JAVASCRIPT) {
+    decCnt = decode(jData, dataBuf, jdlen, dataBufSize, fin);
     if (*fin == 0) {
       log_warn("Unable to find JS_DELIMITER");
     }
   }
-  else if (mode == CONTENT_HTML_JAVASCRIPT) {
+  else */if (mode == CONTENT_HTML_JAVASCRIPT) {
     *fin = 0;
+    dlen = dataBufSize; 
     while (*fin == 0) {
       jsStart = strstr(jdp, startScriptTypeJS);
       if (jsStart == NULL) {
@@ -584,14 +919,14 @@ int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
 
       // the JS for decoding data is between jsStart and jsEnd
       scriptLen = jsEnd - jdp;
-      n = decode2(jdp, dp, scriptLen, dlen, fin);
+      n = decode(jdp, dp, scriptLen, dlen, fin);
       if (n > 0) {
         decCnt = decCnt+n; dlen=dlen-n; dp=dp+n;
       }
       jdp = jsEnd+strlen(endScriptTypeJS);
     } // while (*fin==0)
   } else {
-    log_warn("Unknown mode (%d) for encode2()", mode);
+    log_warn("Unknown mode (%d) for decode()", mode);
     return 0;
   }
 
@@ -612,7 +947,7 @@ void printerr(int err_no) /* name errno had conflict with other vars so I change
 }
 
 
-int testEncode(char *data, char *js, char *outBuf, unsigned int dlen, unsigned int jslen,
+/**int testEncode(char *data, char *js, char *outBuf, unsigned int dlen, unsigned int jslen,
                unsigned int outBufLen, int testNum) {
   int r;
 
@@ -718,7 +1053,9 @@ int testDecode2(char *inBuf, char *outBuf,
   }
   printf ("***** End of testDecode2 (%i) *****\n", testNum);
   return r;
-}
+}**/
+
+
 
 
 int
@@ -741,7 +1078,7 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
 
   log_debug("sbuflen = %d\n", (int) sbuflen);
 
-  if (content_type != HTTP_CONTENT_JAVASCRIPT &&
+  if (/*content_type != HTTP_CONTENT_JAVASCRIPT &&*/
       content_type != HTTP_CONTENT_HTML) {
     log_warn("SERVER ERROR: Unknown content type (%d)", content_type);
     return -1;
@@ -758,9 +1095,9 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
     return -1;
   }
 
-  if (content_type == HTTP_CONTENT_JAVASCRIPT) {
+  /*if (content_type == HTTP_CONTENT_JAVASCRIPT) {
     mjs = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT);
-  } else if (content_type == HTTP_CONTENT_HTML) {
+  } else */if (content_type == HTTP_CONTENT_HTML) {
     mjs = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML);
   }
 
@@ -856,10 +1193,10 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
 
   // outbuf2 points to the HTTP payload (of length outbuf2len) to be sent
 
-  if (mode == CONTENT_JAVASCRIPT) { // JavaScript in HTTP body
-    newHdrLen = gen_response_header((char*) "application/x-javascript", gzipMode,
-                                    outbuf2len, newHdr, sizeof(newHdr));
-  } else if (mode == CONTENT_HTML_JAVASCRIPT) { // JavaScript(s) embedded in HTML doc
+  //if (mode == CONTENT_JAVASCRIPT) { // JavaScript in HTTP body
+  //  newHdrLen = gen_response_header((char*) "application/x-javascript", gzipMode,
+  //                                  outbuf2len, newHdr, sizeof(newHdr)); }
+  if (mode == CONTENT_HTML_JAVASCRIPT) { // JavaScript(s) embedded in HTML doc
     newHdrLen = gen_response_header((char*) "text/html", gzipMode,
                                     outbuf2len, newHdr, sizeof(newHdr));
   } else { // unknown mode
@@ -994,7 +1331,7 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   // buf_dump((unsigned char*)respMsg, hdrLen+80, stderr);
 
   contentType = findContentType (respMsg);
-  if (contentType != HTTP_CONTENT_JAVASCRIPT && contentType != HTTP_CONTENT_HTML) {
+  if (/*contentType != HTTP_CONTENT_JAVASCRIPT && */contentType != HTTP_CONTENT_HTML) {
     log_warn("ERROR: Invalid content type (%d)", contentType);
     return RECV_BAD;
   }
@@ -1016,13 +1353,13 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
     httpBodyLen = buf2len;
   }
 
-  if (contentType == HTTP_CONTENT_JAVASCRIPT) {
+  /*if (contentType == HTTP_CONTENT_JAVASCRIPT) {
     decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_MSG_BUF_SIZE,
                             &fin, CONTENT_JAVASCRIPT);
-  } else {
+  } else {*/
     decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_MSG_BUF_SIZE,
                             &fin, CONTENT_HTML_JAVASCRIPT);
-  }
+  //}
   data[decCnt] = 0;
 
   log_debug("After decodeHTTPBody; decCnt: %d\n", decCnt);
@@ -1093,6 +1430,12 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   return RECV_GOOD;
 }
 
+JSSteg::JSSteg(PayloadServer* payload_provider, double noise2signal)
+ :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_JAVASCRIPT)
+
+{
+
+}
 
 /*****
       int

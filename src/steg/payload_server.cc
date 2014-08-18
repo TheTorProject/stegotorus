@@ -8,8 +8,12 @@
 #include "file_steg.h"
 #include "http_steg_mods/swfSteg.h"
 #include "http_steg_mods/pdfSteg.h"
+//#include "http_steg_mods/jsSteg.h"
 #include <ctype.h>
 #include <time.h>
+
+
+
 
 /*
  * capacityJS3 is the next iteration for capacityJS
@@ -868,6 +872,7 @@ has_eligible_HTTP_content (char* buf, int len, int type) {
     }
   }
   
+  //check if we need to update this for current SWF implementation
   if (type == HTTP_CONTENT_SWF && swfFlag == 1 && 
       ((len + buf - end) > SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8))
     return 1;

@@ -44,3 +44,44 @@ evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block)
   return sbuflen;
 
 }
+
+int 
+JS_evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block)
+{
+
+  size_t sbuflen = evbuffer_get_length(scattered_buffer);
+  unsigned int data_len = 0;
+  int nv = evbuffer_peek(scattered_buffer, sbuflen, NULL, NULL, 0);
+  evbuffer_iovec* iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
+
+  if (evbuffer_peek(scattered_buffer, sbuflen, NULL, iv, nv) != nv) {
+    free(iv);
+    return -1;
+  }
+
+  assert(*memory_block = new uint8_t[sbuflen*2]); 
+  //Vmon: Should I use xzalloc? don't
+  //think so, new is overloaded to 
+  //handle delete: No new calls xzalloc.
+  
+  size_t cnt = 0;
+  for (int i = 0; i < nv; i++) {
+    const unsigned char *p = (const unsigned char *)iv[i].iov_base;
+    const unsigned char *limit = p + iv[i].iov_len;
+    char c;
+    while (p < limit && cnt < sbuflen) {
+      //(*memory_block)[cnt++] = *p++;
+      c = *p++;
+      *memory_block[data_len] = "0123456789abcdef"[(c & 0xF0) >> 4];
+      *memory_block[data_len+1] = "0123456789abcdef"[(c & 0x0F) >> 0];
+      data_len += 2;
+      cnt++;
+    }
+  }
+
+  free(iv);
+
+  return sbuflen;
+
+}
+

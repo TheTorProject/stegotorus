@@ -18,3 +18,4 @@
    @return the length of the memory block or < 0 in case of error
 */
 int evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block);
+int JS_evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block);
