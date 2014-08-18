@@ -272,7 +272,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     return -1;
     }
 
-  if (evbuffer_add(dest, outbuf, cnt)) {
+  if (evbuffer_add(dest, outbuf, outbuflen)) {
     log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
     return -1;
   }
