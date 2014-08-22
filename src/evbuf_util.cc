@@ -72,8 +72,8 @@ JS_evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block)
     while (p < limit && cnt < sbuflen) {
       //(*memory_block)[cnt++] = *p++; may need to move parentheses around a bit
       c = *p++;
-      *(memory_block)[data_len] = "0123456789abcdef"[(c & 0xF0) >> 4]; //does this need to change to 8, I don't think so, just hex encoding, this function is present elsewhere too
-      *(memory_block)[data_len+1] = "0123456789abcdef"[(c & 0x0F) >> 0];
+      (*memory_block)[data_len] = "0123456789abcdef"[(c & 0xF0) >> 4]; //does this need to change to 8, I don't think so, just hex encoding, this function is present elsewhere too
+      (*memory_block)[data_len+1] = "0123456789abcdef"[(c & 0x0F) >> 0];
       data_len += 2;
       cnt++;
     }
