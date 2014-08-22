@@ -377,7 +377,7 @@ int JSSteg::findContentType (char *msg) {
   int gzipMode = 0;
 
   contentType = findContentType ((char *) cover_payload);
-  if (contentType != HTTP_CONTENT_JAVASCRIPT /*&& contentType != HTTP_CONTENT_HTML*/) {
+  if (contentType != CONTENT_JAVASCRIPT /*&& contentType != HTTP_CONTENT_HTML*/) {
     log_warn("ERROR: Invalid content type (%d)", contentType);
     return RECV_BAD;
   }
@@ -572,7 +572,7 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     //outbuf2 = outbuf;
     outbuf2len = cLen;
   }
-  //encCnt isn't really needed any more except for debugging and tracking
+  //encCnt isn't really needed any more except for debugging and tracking, but return value outbuf2len is needed for new header
   //return encCnt;
   return outbuf2len;
 
