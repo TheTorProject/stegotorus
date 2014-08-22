@@ -153,6 +153,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   uint8_t* data1;
   int sbuflen = 0;
+  int gzipMode = JS_GZIP_RESP;
   //call this from util to find to extract the buffer into memory block
   if (c_content_type != HTTP_CONTENT_JAVASCRIPT /*|| CONTENT_HTML_JAVASCRIPT*/) {
   sbuflen = evbuffer_to_memory_block(source, &data1);
@@ -258,18 +259,17 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   //instead we need to check if SWF or PDF, the payload length is changed
   //and in that case we need to update the header
   
-	/*if( c_content_type == HTTP_CONTENT_PDF) {
+	if( c_content_type == HTTP_CONTENT_JAVASCRIPT) {
 	  //TODO instead of generating the header we should just manipulate
   //it
   //The only possible problem is length but we are not changing 
   //the length for now
-  newHdrLen = gen_response_header((char*) "application/pdf", 0,
-    outbuflen, (char*)newHdr, sizeof(newHdr));
+   newHdrLen = gen_response_header((char*) "application/x-javascript", gzipMode, outbuflen, (char *)newHdr, sizeof((char*)newHdr));
   if (newHdrLen < 0) {
-    log_warn("SERVER ERROR: gen_response_header fails for pdfSteg");
+    log_warn("SERVER ERROR: gen_response_header fails for JSSteg");
     return -1;
     }
-   }*/
+   }
   //I'm not crazy, these are filler for later change
 
    if ((size_t)outbuflen == body_len) { 
