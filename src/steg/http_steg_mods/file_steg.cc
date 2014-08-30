@@ -153,7 +153,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   uint8_t* data1;
   int sbuflen = 0;
-  int gzipMode = JS_GZIP_RESP;
+  //int gzipMode = JS_GZIP_RESP;
   //call this from util to find to extract the buffer into memory block
   if (c_content_type != HTTP_CONTENT_JAVASCRIPT /*|| CONTENT_HTML_JAVASCRIPT*/) {
   sbuflen = evbuffer_to_memory_block(source, &data1);
@@ -259,7 +259,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   //instead we need to check if SWF or PDF, the payload length is changed
   //and in that case we need to update the header
   
-	if( c_content_type == HTTP_CONTENT_JAVASCRIPT) {
+	/*if( c_content_type == HTTP_CONTENT_JAVASCRIPT) {
 	  //TODO instead of generating the header we should just manipulate
   //it
   //The only possible problem is length but we are not changing 
@@ -270,7 +270,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     return -1;
     }
    }
-  //I'm not crazy, these are filler for later change
+  //I'm not crazy, these are filler for later change*/
 
    if ((size_t)outbuflen == body_len) { 
     memcpy(newHdr, cover_payload,hLen);
@@ -370,15 +370,17 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   log_debug("CLIENT unwrapped data of length %d:", outbuflen);
 
   if( c_content_type == HTTP_CONTENT_JAVASCRIPT ) {
-  /*if (outbuflen % 2) {
+
+    outbuf[outbuflen] = 0;
+  if (outbuflen % 2) {
     log_debug("CLIENT ERROR: An odd number of hex characters received\n");
     return RECV_BAD;
   }
 
-  if (! isxString(outbuf)) {
+  if (! isxString((char *)outbuf)) {
     log_debug("CLIENT ERROR: Data received not hex");
     return RECV_BAD;
-  }*/
+  }
 
   // log_debug("Hex data received:");
   //    buf_dump ((unsigned char*)data, decCnt, stderr);
