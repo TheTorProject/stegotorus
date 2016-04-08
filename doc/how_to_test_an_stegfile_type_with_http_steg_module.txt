@@ -1,10 +1,16 @@
 - You need to generate some payloads which has that type, you may want to use pgenfake for that. Run pgenfake. The files will be crated in traces folder.
 
-- in http.cc in http_steg_t::transmit_room and http_steg_t::transmit_room set the type to the type you are checking before the switch statement.
+- in http.cc
+  - in http_steg_t::transmit_room and http_steg_t::transmit_room set the type to the type you are checking before the switch statement.
 
     type = HTTP_CONTENT_HTML;
     log_debug(conn, "checking available capacity for type %u", type);
     switch (type)
+
+  - http_steg_t::client receive set the type to the type you are checking before the switch statement.
+  
+    type = HTTP_CONTENT_HTML;
+    switch(type) {
 
 - Run stegotorus and check if it works:
 

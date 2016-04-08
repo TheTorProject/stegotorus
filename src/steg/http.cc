@@ -701,7 +701,7 @@ http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
 {
   int rval = RECV_BAD;
   log_debug(conn, "sur1.5.1");
-
+  type = HTTP_CONTENT_HTML;
   switch(type) {
   //case HTTP_CONTENT_SWF:
     //rval = http_handle_client_SWF_receive(this, conn, dest, source);
