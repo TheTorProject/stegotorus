@@ -38,7 +38,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
   
   //(_side == server_side) {
   /* First we read all the payload info from the db file  */
-  ifstream payload_info_stream;
+  std::ifstream payload_info_stream;
 
   if (_side == server_side) {
     //Initializing type specific data, we initiate with max_capacity = 0, count = 0
@@ -59,7 +59,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
 
       }
     
-    payload_info_stream.open(_database_filename, ifstream::in);
+    payload_info_stream.open(_database_filename, std::ifstream::in);
     if (!payload_info_stream.is_open()) {
       log_abort("Cannot open payload info file.");
     }
@@ -97,7 +97,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
     init_uri_dict();
   }
   else{ //client side
-    payload_info_stream.open(_database_filename, ifstream::in);
+    payload_info_stream.open(_database_filename, std::ifstream::in);
     if (!(payload_info_stream.is_open())) //on client side it is not a fatal error
       log_debug("payload info file doesn't exists. I need to request it from server ");
     else {
@@ -310,7 +310,7 @@ bool
 ApachePayloadServer::store_dict(char* dict_buf, size_t dict_buf_size)
 {
 
-  ofstream dict_file(_database_filename);
+  std::ofstream dict_file(_database_filename);
 
   if (!dict_file.is_open()){
     log_warn("error in openning file:%s to store the uri dict: %s", _database_filename.c_str(), strerror(errno));

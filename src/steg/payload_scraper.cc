@@ -139,7 +139,7 @@ PayloadScraper::scrape_url_list(const string list_filename)
     return -1;
   }
 
-  ifstream url_list_stream(list_filename);
+  std::ifstream url_list_stream(list_filename);
   if (!url_list_stream.is_open()) {
     log_warn("Cannot open url list file.");
     return -1;

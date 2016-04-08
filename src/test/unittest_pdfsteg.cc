@@ -80,3 +80,12 @@ struct testcase_t pdf_tests[] = {
   T(wrap_unwrap),
   END_OF_TESTCASES
 };*/
+
+#define T(name) \
+  { #name, test_pdf_##name, 0, 0, 0 }
+
+struct testcase_t pdf_tests[] = {
+  //  T(add_remove_delimiters),
+  // T(wrap_unwrap),
+  END_OF_TESTCASES
+};

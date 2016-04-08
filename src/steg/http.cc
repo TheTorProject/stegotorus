@@ -64,12 +64,13 @@ void http_steg_config_t::init_file_steg_mods()
   //initiating the steg modules
   //TODO: for now the first modules are set to void till their codes be
   //transformed into a FileStegMod child
-  file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(payload_server, noise2signal);
+  
 }
 http_steg_config_t::http_steg_config_t(config_t *cfg)
    : steg_config_t(cfg),
@@ -193,6 +194,7 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
       return 0;
     }
 
+    type = HTTP_CONTENT_HTML;
     log_debug(conn, "checking available capacity for type %u", type);
     switch (type)
       {
@@ -563,6 +565,7 @@ http_steg_t::transmit(struct evbuffer *source)
   }
   else {
     int rval = -1;
+    type = HTTP_CONTENT_HTML;
     switch(type) {
 
     //case HTTP_CONTENT_SWF:                    
@@ -698,7 +701,7 @@ http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
 {
   int rval = RECV_BAD;
   log_debug(conn, "sur1.5.1");
-
+  type = HTTP_CONTENT_HTML;
   switch(type) {
   //case HTTP_CONTENT_SWF:
     //rval = http_handle_client_SWF_receive(this, conn, dest, source);

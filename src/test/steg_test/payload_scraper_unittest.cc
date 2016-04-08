@@ -66,7 +66,7 @@ class PayloadScraperTest : public testing::Test {
   char* long_message;
 
   void read_cover(const char* cover_file_name) {
-    ifstream test_cover(cover_file_name, ios::binary | ios::ate);
+    std::ifstream test_cover(cover_file_name, ios::binary | ios::ate);
     ASSERT_TRUE(test_cover.is_open());
   
    //read the whole file
