@@ -64,11 +64,11 @@ void http_steg_config_t::init_file_steg_mods()
   //initiating the steg modules
   //TODO: for now the first modules are set to void till their codes be
   //transformed into a FileStegMod child
-  // file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
-  // file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
-  // file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
-  // file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
-  // file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(payload_server, noise2signal);
   
 }
@@ -572,9 +572,9 @@ http_steg_t::transmit(struct evbuffer *source)
     //  rval = http_server_SWF_transmit(config->payload_server, source, conn);
      // break;
 
-    //case HTTP_CONTENT_JAVASCRIPT:
-      //rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_JAVASCRIPT);
-      //break;
+    // case HTTP_CONTENT_JAVASCRIPT:
+    //   rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_JAVASCRIPT);
+    //   break;
 
     case HTTP_CONTENT_HTML:
       rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_HTML);
