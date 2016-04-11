@@ -194,7 +194,7 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
       return 0;
     }
 
-    type = HTTP_CONTENT_HTML;
+    type = HTTP_CONTENT_JAVASCRIPT;
     log_debug(conn, "checking available capacity for type %u", type);
     switch (type)
       {
@@ -565,7 +565,7 @@ http_steg_t::transmit(struct evbuffer *source)
   }
   else {
     int rval = -1;
-    type = HTTP_CONTENT_HTML;
+    type = HTTP_CONTENT_JAVASCRIPT;
     switch(type) {
 
     //case HTTP_CONTENT_SWF:                    
