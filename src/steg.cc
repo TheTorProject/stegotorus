@@ -1,6 +1,7 @@
 /* Copyright 2011 SRI International
  * See LICENSE for other credits and copying information
  */
+#include <vector>
 #include <event2/buffer.h>
 
 #include "util.h"
@@ -20,12 +21,12 @@ steg_is_supported(const char *name)
 
 /* Instantiate a steg module by name. */
 steg_config_t *
-steg_new(const char *name, config_t *cfg)
+steg_new(const char *name, config_t *cfg, const std::vector<std::string>& options)
 {
   const steg_module *const *s;
   for (s = supported_stegs; *s; s++)
     if (!strcmp(name, (**s).name))
-      return (**s).new_(cfg);
+      return (**s).new_(cfg, options);
   return 0;
 }
 

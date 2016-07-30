@@ -2,17 +2,8 @@
  * See LICENSE for other credits and copying information
  */
 
-#include "util.h"
-#include "crypt.h"
-#include "chop_blk.h"
-#include "chop_handshaker.h"
-#include "connections.h"
-#include "protocol.h"
-#include "rng.h"
 #include <algorithm>
-#include "steg.h"
-
-#include "transparent_proxy.h"
+#include <vector>
 
 #include <tr1/unordered_map>
 #include <sstream>
@@ -26,6 +17,17 @@
 #include <event2/buffer.h>
 #include <event2/util.h>
 
+
+#include "util.h"
+#include "crypt.h"
+#include "chop_blk.h"
+#include "chop_handshaker.h"
+#include "connections.h"
+#include "protocol.h"
+#include "rng.h"
+#include "steg.h"
+
+#include "transparent_proxy.h"
 
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
@@ -123,7 +125,7 @@ struct chop_circuit_t : circuit_t
   int send_targeted_steg_data(chop_conn_t *conn, size_t blocksize);
 
   /**
-     check the steg module of all connection to see if they have
+     checks the steg module of all connections to see if they have
      protocol data to send
      
      @return the first connection whose steg has data to send
@@ -253,14 +255,15 @@ chop_config_t::~chop_config_t()
       delete i->second;
 
   delete transparent_proxy;
+  
 }
 
 bool
-chop_config_t::init(int n_options, const char *const *options)
+chop_config_t::init(unsigned int n_options, const char *const *options)
 {
   const char* defport;
   int listen_up;
-  int i;
+  unsigned int cur_op = 0; //pointer to current option being processed
 
   if (n_options < 3) {
     log_warn("chop: not enough parameters");
@@ -303,6 +306,11 @@ chop_config_t::init(int n_options, const char *const *options)
       options++;
       n_options--;
     } else if (!strcmp(options[1], "--cover-server")) {
+      if (n_options <= 2) {
+        log_warn("chop: option --cover-server requires the cover server address");
+        goto usage;
+      }
+      
       cover_server_address = options[2];
       transparent_proxy = new TransparentProxy(base, options[2]);
       //This is not related to an specific steg module hence, we store it under
@@ -313,6 +321,10 @@ chop_config_t::init(int n_options, const char *const *options)
       options++;
       n_options--;
     } else if (!strcmp(options[1], "--cover-list")) {
+        //TODO: This should move to the steg mod option section
+      if (n_options <= 2)
+        goto usage;
+      
       cover_list = options[2];
       //This is not related to an specific steg module hence, we store it under
       //"protocol" tag
@@ -325,10 +337,13 @@ chop_config_t::init(int n_options, const char *const *options)
       log_warn("chop: unrecognized option '%s'", options[1]);
       goto usage;
     }
+
     options++;
     n_options--;
+      
   }
 
+  //immidiately after options user needs to specifcy upstream address
   up_address = resolve_address_port(options[1], 1, listen_up, defport);
   if (!up_address) {
     log_warn("chop: invalid up address: %s", options[1]);
@@ -338,43 +353,58 @@ chop_config_t::init(int n_options, const char *const *options)
   //init the header encryptor and the decryptor
   init_handshake_encryption();
 
-  // From here on out, arguments alternate between downstream
-  // addresses and steg targets.
-  for (i = 2; i < n_options; i++) {
+  // From here on out, arguments are blocks of steg target downsteam
+  // addresse and its options
+  
+  cur_op = 2;
+  while(cur_op < n_options) {
+    if (!steg_is_supported(options[cur_op])) {
+      log_warn("chop: steganographer '%s' not supported", options[cur_op]);
+      goto usage;
+    }
+    const char* cur_steg_name = options[cur_op];
+
+    cur_op++;
+    if (!(cur_op < n_options)) {
+      log_warn("chop: missing down stream address for steganographer %s", cur_steg_name);
+      goto usage;
+    }
+
     struct evutil_addrinfo *addr =
-      resolve_address_port(options[i], 1, !listen_up, NULL);
+      resolve_address_port(options[cur_op], 1, !listen_up, NULL);
     if (!addr) {
-      log_warn("chop: invalid down address: %s", options[i]);
+      log_warn("chop: invalid down address: %s", options[cur_op]);
       goto usage;
     }
     down_addresses.push_back(addr);
-
-    i++;
-    if (i == n_options) {
-      log_warn("chop: missing steganographer for %s", options[i-1]);
-      goto usage;
+    cur_op++;
+    //from now on till we reach another steg, all
+    //all the options of the curren steg
+    std::vector<std::string> steg_option_list;
+    while(cur_op < n_options && (!steg_is_supported(options[cur_op]))) {
+      steg_option_list.push_back(options[cur_op]);
+      cur_op++;
     }
 
-    if (!steg_is_supported(options[i])) {
-      log_warn("chop: steganographer '%s' not supported", options[i]);
-      goto usage;
-    }
-    steg_targets.push_back(steg_new(options[i], this));
+    steg_targets.push_back(steg_new(cur_steg_name, this, steg_option_list));
+
   }
+
   return true;
 
  usage:
   log_warn("chop syntax:\n"
-           "\tchop <mode> <up_address> (<down_address> [<steg>])...\n"
+           "\tchop <mode> <up_address> ([<steg> <down_address> --steg-option...])...\n"
            "\t\tmode ~ server|client|socks\n"
            "\t\tup_address, down_address ~ host:port\n"
            "\t\tA steganographer is required for each down_address.\n"
+           "\t\tsteganographer options follow the steganographer name.\n"
            "\t\tThe down_address list is still required in socks mode.\n"
            "Examples:\n"
            "\tstegotorus chop client 127.0.0.1:5000 "
-           "192.168.1.99:11253 http 192.168.1.99:11254 skype\n"
+           "http 192.168.1.99:11253  skype 192.168.1.99:11254 \n"
            "\tstegotorus chop server 127.0.0.1:9005 "
-           "192.168.1.99:11253 http 192.168.1.99:11254 skype");
+           "http 192.168.1.99:11253  skype 192.168.1.99:11254");
   return false;
 }
 
@@ -498,10 +528,13 @@ chop_config_t::circuit_create(size_t)
   return ckt;
 }
 
-/** This has to be here for the unfortunate macro game */
-chop_circuit_t::chop_circuit_t()
+/** This has to be here for the unfortunate macro game 
+    inline is added so gcc ignore the Wunused-function warning */
+inline chop_circuit_t::chop_circuit_t()
   :tx_queue(true)
 {
+  //MEANT_TO_BE_UNUSED
+  
 }
 
 chop_circuit_t::chop_circuit_t(bool retransmit = true)
@@ -1281,7 +1314,20 @@ chop_circuit_t::pick_connection(size_t desired, size_t minimum,
   }
 }
 
-chop_conn_t* chop_circuit_t::check_for_steg_protocol_data()
+/**
+     checks the steg module of all connections to see if they have
+     protocol data to send
+     
+     @return the first connection whose steg has data to send
+*/
+//inline because otherwise gcc will complain about the unused function
+//The function which needs to check if there is on steg data on
+//each steg is chop_circuit_t::send_all_steg_data but it does the check
+//on conn by conn basis and send immediately (does this connection has
+// steg data? then send it and then check next connection instead of
+// search all connection again). However, the function might be
+// useful in future
+inline chop_conn_t* chop_circuit_t::check_for_steg_protocol_data()
 {
   for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
        i != downstreams.end(); i++) {

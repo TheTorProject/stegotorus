@@ -2,7 +2,9 @@
 #define _PAYLOAD_SERVER_H
 #include <map>
 #include <string>
+#include <vector>
 #include <list>
+#include <algorithm>
 
 using namespace std; 
 
@@ -52,6 +54,8 @@ static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
 
 // specifying the type of contents as an input argument
 // for has_eligible_HTTP_content()
+#define HTTP_CONTENT_UNSUPPORTED       -1
+#define HTTP_CONTENT_RESERVED           0
 #define HTTP_CONTENT_JAVASCRIPT         1
 #define HTTP_CONTENT_PDF                2
 #define HTTP_CONTENT_SWF                3
@@ -213,6 +217,9 @@ class PayloadServer
 {
  protected:
   MachineSide _side;
+
+  //list of active steg mod, if the list is empty everything is active
+  std::vector<unsigned int> active_steg_mods;
   
  public:
   /** TODO: either change the name (no _) or the access */
@@ -225,6 +232,15 @@ class PayloadServer
     }
   
   virtual ~PayloadServer(){};
+
+  /**
+   get the file extension and return the numerical contstant representing the content type
+
+   @param extension file extension such as html, htm, js, jpg, 
+
+   @return content type constant or -1 if not found, a null extensions is considered as html type
+  */
+  int extension_to_content_type(const char* extension);
 
   virtual unsigned int find_client_payload(char* buf, int len, int type) = 0;
 
@@ -282,7 +298,39 @@ class PayloadServer
   size_t alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, ssize_t new_content_length, uint8_t new_header[]) in file_steg.h
    */
   size_t adjust_header_size(char* original_header, size_t original_length,                            char* newHeader);
+
+  /**
+     set the set of active type whose corresponding steg mode are permitted to use 
+     this is mostly for testing specific steg types
+
+     @param active_steg_mod_list comma separated string set of active steg mod indicated by extension. currently 
+            only one active steg is supported
+
+     @return true if successful false if there was a problem with the indicated type.
+   */
+  bool set_active_steg_mods(const std::string& active_steg_mod_list);
+
+  /**
+     return true if the content type has a steg mod assigned to it and is 
+     activated by user  or if user has not been restrict to any content type
+
+     @param content_type the content type to be check if is allowed to be served
+
+     @return true if the payload server is supposed to serve this type of content 
+     otherwise false
+  */
+  bool  is_activated_valid_content_type(int content_type) {
+    return (
+            ((content_type > 0 && content_type < MAX_CONTENT_TYPE)) && //validity
+            ((active_steg_mods.empty()) || //user hasn't restricted or
+             (std::find(active_steg_mods.begin(), active_steg_mods.end(), content_type) != active_steg_mods.end()))
+            ); //or it is part of the activated
+            //mods
+  }
+    
+      
 };
+
 
   /** Moved from payloads.c without a touch. needs clean up */
   char * strInBinary (const char *pattern, unsigned int patternLen,

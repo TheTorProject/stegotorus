@@ -47,7 +47,6 @@ TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
  * contentType - (e.g, HTTP_CONTENT_JAVASCRIPT for JavaScript content)
  */
 
-
 int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity) {
   // stat for usable payload
   int minPayloadSize = 0, maxPayloadSize = 0;
@@ -355,10 +354,9 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
             contentType, pl.initTypePayload[contentType],
             pl.typePayloadCount[contentType]);
 
-  if (contentType <= 0 ||
-      contentType >= MAX_CONTENT_TYPE ||
+  if ((!is_activated_valid_content_type(contentType)) ||
       pl.initTypePayload[contentType] == 0 ||
-      pl.typePayloadCount[contentType] == 0 
+      pl.typePayloadCount[contentType] == 0
       )
     //|| (cap <= 0) //why should you ask for no or negative capacity?
     //Aparently negative capacity means your cap doesn't matter
@@ -502,18 +500,18 @@ unsigned int TracePayloadServer::find_client_payload(char* buf, int len, int typ
     pentry_header* p = &pl.payload_hdrs[r];
     if (p->ptype == type) {
       inbuf = pl.payloads[r];
-      if (find_uri_type(inbuf, p->length) != HTTP_CONTENT_SWF &&
-          find_uri_type(inbuf, p->length) != HTTP_CONTENT_HTML &&
-	  find_uri_type(inbuf, p->length) != HTTP_CONTENT_JAVASCRIPT &&
-	  find_uri_type(inbuf, p->length) != HTTP_CONTENT_PDF) {
-	goto next;
-      }
+      int requested_uri_type = find_uri_type(inbuf, p->length);
+      //we also need to check if the user has restricted the type,
+      //empty active type list means no restriciton
+      if (!is_activated_valid_content_type(requested_uri_type))
+        goto next;
+            
       if (p->length > len) {
-	fprintf(stderr, "BUFFER TOO SMALL... \n");
-	goto next;
+        fprintf(stderr, "BUFFER TOO SMALL... \n");
+        goto next;
       }
       else
-	len = p->length;
+        len = p->length;
       break;
     }
   next:

@@ -4,7 +4,7 @@
   AUTHORS: Vmon July 2013, Initial version
 */
 
-#include <list>
+#include <vector>
 #include <event2/buffer.h>
 #include <assert.h>
 
@@ -166,8 +166,6 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   ssize_t cnt = 0;
   size_t body_len = 0;
   size_t hLen = 0;
-
- 
   
   if (c_content_type == HTTP_CONTENT_JAVASCRIPT/*|| CONTENT_HTML_JAVASCRIPT*/) {
     //cnt = 0;

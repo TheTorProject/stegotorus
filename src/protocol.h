@@ -46,11 +46,17 @@ struct config_t
       subclass, PROTO_DEFINE_MODULE does it for you. */
   virtual const char *name() const = 0;
 
-  /** Initialize yourself from a set of command line options.  This is
+  /** 
+      Initialize yourself from a set of command line options.  This is
       separate from the subclass constructor so that it can fail:
-      if the command line options are ill-formed, print a diagnostic
-      on stderr and return false.  On success, return true. */
-  virtual bool init(int n_opts, const char *const *opts) = 0;
+
+      @param n_opts number of command line parameters
+      @param opts pointer to the array of char* of parameters value
+
+      @return if the command line options are ill-formed, print a diagnostic
+      on stderr and return false.  On success, return true. 
+  */
+  virtual bool init(unsigned int n_opts, const char *const *opts) = 0;
 
   /** Return a set of addresses to listen on, in the form of an
       'evutil_addrinfo' linked list.  There may be more than one list;
@@ -127,7 +133,7 @@ extern const proto_module *const supported_protos[];
   mod##_config_t();                                             \
   virtual ~mod##_config_t();                                    \
   virtual const char *name() const;                             \
-  virtual bool init(int n_opts, const char *const *opts);       \
+  virtual bool init(unsigned int n_opts, const char *const *opts);  \
   virtual evutil_addrinfo *get_listen_addrs(size_t n) const;    \
   virtual evutil_addrinfo *get_target_addrs(size_t n) const;    \
   virtual const steg_config_t *get_steg(size_t n) const;        \

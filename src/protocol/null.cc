@@ -53,7 +53,7 @@ null_config_t::~null_config_t()
 }
 
 bool
-null_config_t::init(int n_options, const char *const *options)
+null_config_t::init(unsigned int n_options, const char *const *options)
 {
   const char* defport;
 

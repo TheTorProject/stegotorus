@@ -31,7 +31,6 @@
 #define SHUT_WR SD_SEND
 #endif
 
-
 /* event2/util.h finds ssize_t but refuses to actually call it ssize_t.
    Correct this. */
 #ifdef _EVENT_ssize_t

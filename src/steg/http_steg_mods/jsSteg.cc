@@ -361,10 +361,7 @@ int JSSteg::findContentType (char *msg) {
 // #define JS_DELIMITER "?"
 // #define JS_DELIMITER_REPLACEMENT "."
 
-
-
-
- ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) /*char *jData, char *dataBuf, unsigned int jdlen,
+ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) /*char *jData, char *dataBuf, unsigned int jdlen,
              unsigned int dataBufSize, int *fin */
 {
   unsigned int decCnt = 0;  /* num of data decoded */
@@ -452,12 +449,10 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
              unsigned int dlen, unsigned int jtlen,
              unsigned int jdlen, int *fin*/
 {
-  unsigned int encCnt = 0, cLen, outbuf2len;  /* num of data encoded in jData */
-  char *dp, *jtp, *jdp; /* current pointers for data, jTemplate, and jData */
-  int i,j;
+  unsigned int cLen, outbuf2len;  /* num of data encoded in jData */
   uint8_t* outbuf2;
 
-   int gzipMode = JS_GZIP_RESP;
+  int gzipMode = JS_GZIP_RESP;
   /*
    *  insanity checks
    */
@@ -472,90 +467,40 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     return -1; //not enough capacity is an error because you should have check     //before requesting
   }
 
-  dp = (char *) data; jtp = (char *) cover_payload, jdp = (char *) outbuf;
+   size_t hexed_datalen = 2*data_len;
+   uint8_t* hexed_data = new uint8_t[hexed_datalen];
+   size_t cnt = 0;
+   for(cnt = 0; cnt < data_len; cnt++) {
+       hexed_data[cnt*2] = "0123456789abcdef"[(data[cnt] & 0xF0) >> 4]; //does this need to change to 8, I don't think so, just hex encoding, this function is present elsewhere too
+       hexed_data[cnt*2+1] = "0123456789abcdef"[(data[cnt] & 0x0F) >> 0];
+       cnt++;
+   }
 
-  if (! isxString(dp) ) { return INVALID_DATA_CHAR; }
+  // log_debug("MJS %d %d", datalen, mjs);
+  //this should not happen
+   log_assert(cover_payload != NULL);
 
-  /* handling boundary case: data_len == 0 */
-  if (data_len < 1) { return 0; }
+  //mode = has_eligible_HTTP_content (cover_body, cover_len, HTTP_CONTENT_JAVASCRIPT);
+  //ignore this check as 1. the content is chosen by payload server and deemed to be correct
+  //2. payload has no header
 
+  outbuf = (uint8_t *)xmalloc(cover_len);
 
-  i = offset2Hex(jtp, (int) cover_len, 0);
-  while (encCnt < data_len && i != -1) {
-    // copy next i char from jtp to jdp,
-    // except that if *jtp==JS_DELIMITER, copy
-    // JS_DELIMITER_REPLACEMENT to jdp instead
-    j = 0;
-    while (j < i) {
-      if (*jtp == JS_DELIMITER) {
-        *jdp = JS_DELIMITER_REPLACEMENT;
-      } else {
-        *jdp = *jtp;
-      }
-      jtp = jtp + 1; jdp = jdp + 1; j++;
-    }
+  ssize_t r = encodeHTTPBody((char*)hexed_data, (char*)cover_payload, (char*)outbuf, hexed_datalen, cover_len, cover_len, HTTP_CONTENT_JAVASCRIPT);
 
-    *jdp = *dp;
-    encCnt++;
-    dp = dp + 1; jtp = jtp + 1; jdp = jdp + 1;
-
-    i = offset2Hex(jtp, (cover_payload+cover_len)-(uint8_t *) jtp, 1); //change to uint8_t* parameters?
+  if (r < 0 || ((unsigned int) r < hexed_datalen)) {
+    log_warn("SERVER ERROR: Incomplete data encoding");
+    return -1;
   }
 
-
-
-  // copy the rest of cover_payload to jdata
-  // if we've encoded all data, replace the first
-  // char in jTemplate by JS_DELIMITER, if needed,
-  // to signal the end of data encoding
-
-#ifdef DEBUG2
-  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
-#endif
-
-  //*fin = 0;
-  if (encCnt == data_len) {
-    // replace the next char in jTemplate by JS_DELIMITER
-    if ((uint8_t *) jtp < (cover_payload+cover_len)) {
-      *jdp = JS_DELIMITER;
-    }
-    jdp = jdp+1; jtp = jtp+1;
-    //*fin = 1;
-  }
-
-  while ((uint8_t *) jtp < (cover_payload+cover_len)) {
-    if (*jtp == JS_DELIMITER) {
-      if (encCnt < data_len) {
-        *jdp = JS_DELIMITER_REPLACEMENT;
-      } else {
-        *jdp = *jtp;
-      }
-      // else if (isxdigit(*jtp)) {
-      //   if (encCnt < dlen && *fin == 0) {
-      //     *jdp = JS_DELIMITER;
-      //     *fin = 1;
-      //   } else {
-      //     *jdp = *jtp;
-      //   }
-      // }
-    } else {
-      *jdp = *jtp;
-    }
-    jdp = jdp+1; jtp = jtp+1;
-  }
-
-#ifdef DEBUG2
-  printf("encode: encCnt = %d; dlen = %d\n", encCnt, dlen);
-  //printf("encode: fin= %d\n", *fin);
-#endif
-
+  // work in progressn
   if (gzipMode == 1) {
     // conservative estimate:
     // sizeof outbuf2 = cLen + 10-byte for gzip header + 8-byte for crc
-    outbuf2 = (uint8_t *)xmalloc(cLen+18); //could be overallocated due to differing size of 18 chars and 18 uint8_ts
+    outbuf2 = (uint8_t *)xmalloc(cover_len+18); //could be overallocated due to differing size of 18 chars and 18 uint8_ts
 
-    outbuf2len = compress(outbuf, cLen,
-                          outbuf2, cLen+18, c_format_gzip);
+    outbuf2len = compress(outbuf, cover_len,
+                          outbuf2, cover_len+18, c_format_gzip);
 
     if (outbuf2len <= 0) {
       log_warn("gzDeflate for outbuf fails");
@@ -691,7 +636,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
   jdp = jData;
 
 
-  /*if (mode == CONTENT_JAVASCRIPT) {
+  if (mode == CONTENT_JAVASCRIPT) {
     // assumption: the javascript pertaining to jTemplate has enough capacity
     // to encode jData. thus, we only invoke encode() once here.
     encCnt = encode(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
@@ -705,7 +650,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
 
   }
 
-  else */if (mode == CONTENT_HTML_JAVASCRIPT) {
+  else if (mode == CONTENT_HTML_JAVASCRIPT) {
     while (encCnt < dlen2) {
       jsStart = strstr(jtp, startScriptTypeJS);
       if (jsStart == NULL) {
@@ -1062,8 +1007,8 @@ int
 http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *conn,
                          unsigned int content_type)
 {
-
   struct evbuffer_iovec *iv;
+
   int nv;
   struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
@@ -1075,7 +1020,6 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
 
   int gzipMode = JS_GZIP_RESP;
 
-
   log_debug("sbuflen = %d\n", (int) sbuflen);
 
   if (/*content_type != HTTP_CONTENT_JAVASCRIPT &&*/
@@ -1086,7 +1030,6 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
 
   // log_debug("SERVER: dumping data with length %d:", (int) sbuflen);
   // evbuffer_dump(source, stderr);
-
   nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
   iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
 
@@ -1229,11 +1172,6 @@ http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *con
   free(outbuf2);
   return 0;
 }
-
-
-
-
-
 
 int
 http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
