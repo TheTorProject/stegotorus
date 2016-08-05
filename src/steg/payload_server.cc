@@ -163,6 +163,7 @@ PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
   std::string buf(buf_orig, buflen);
   buf[buflen] = 0; //make it a null terminated buffer for sake of strchr
 
+  log_debug("checking the type for %s of length %d", buf_orig, buflen);
   if (strncmp(buf.c_str(), "GET", 3) != 0
       && strncmp(buf.c_str(), "POST", 4) != 0) {
     log_debug("Unable to determine URI type. Not a GET/POST requests.\n");
@@ -198,6 +199,7 @@ PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
   //the uri end character ' ' or '?' in the filename
   size_t ext_pos = filename.find('.');
   //if an extension is found then there is a dot otherwise it is null
+  log_debug("payload extension is %s", filename.substr(ext_pos+1).c_str());
   return (ext_pos == std::string::npos) ?
     extension_to_content_type(NULL) :    
     extension_to_content_type(filename.substr(ext_pos+1).c_str());

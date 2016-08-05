@@ -19,7 +19,7 @@
 #define INVALID_DATA_CHAR	-2
 
 // controlling content gzipping for jsSteg
-#define JS_GZIP_RESP             1
+#define JS_GZIP_RESP             0
 
 void buf_dump(unsigned char* buf, int len, FILE *out);
 
@@ -364,74 +364,57 @@ int JSSteg::findContentType (char *msg) {
 ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) /*char *jData, char *dataBuf, unsigned int jdlen,
              unsigned int dataBufSize, int *fin */
 {
-  unsigned int decCnt = 0;  /* num of data decoded */
-  char *dp, *jdp; /* current pointers for dataBuf and jData */
-  int i,j, contentType, buf2len=0; //for some reason buf2len is getting a maybe-uninitialized warning here, probably because gzipmode is starting out as 0 in this same scope now and buf2len is being used as a counter, check after decompress @ 316 and 339 should catch anything bad
-  int cjdlen =  (int) cover_len;
-  //size_t dataBufSize = HTTP_MSG_BUF_SIZE; //too big, performance hit from initialization on heap instead of stack?
-  char buf2[HTTP_MSG_BUF_SIZE];
+  int gzipMode = JS_GZIP_RESP;
+  ssize_t decCnt;
+  int k, fin;
 
-  int gzipMode = 0;
-
-  contentType = findContentType ((char *) cover_payload);
-  if (contentType != CONTENT_JAVASCRIPT /*&& contentType != HTTP_CONTENT_HTML*/) {
-    log_warn("ERROR: Invalid content type (%d)", contentType);
-    return RECV_BAD;
-  }
-
-  //httpBody = respMsg + hdrLen;
-  //httpBodyLen = response_len - hdrLen;
-
-  gzipMode = isGzipContent((char * )cover_payload);
   if (gzipMode) {
+    char buf2[HTTP_MSG_BUF_SIZE];
     log_debug("gzip content encoding detected");
-    buf2len = decompress(cover_payload, cover_len,
+
+    ssize_t buf2len = decompress((const uint8_t *)cover_payload, cover_len,
                          (uint8_t *)buf2, HTTP_MSG_BUF_SIZE);
     if (buf2len <= 0) {
       log_warn("gzInflate for httpBody fails");
       return RECV_BAD;
     }
+
     buf2[buf2len] = 0;
-    cover_payload = (uint8_t *) buf2;
-    cover_len = (size_t) buf2len;
+    cover_payload = (uint8_t*)buf2;
+    cover_len = buf2len;
+
   }
 
-  //*fin = 0;
-  dp = (char *) data; jdp = (char *) cover_payload;
+  decCnt = decode_single_js_block((const char*)cover_payload, (char*)data, cover_len, HTTP_MSG_BUF_SIZE,
+                                  &fin);
 
-  i = offset2Hex(jdp, cjdlen, 0);
-  while (i != -1) {
-    // return if JS_DELIMITER exists between jdp and jdp+i
-    for (j=0; j<i; j++) {
-      if (*jdp == JS_DELIMITER) {
-        //*fin = 1;
-        return decCnt;
-      }
-      jdp = jdp+1; cjdlen--;
-    }
-    // copy hex data from jdp to dp
-    if (buf2len <= 0) {
-      return decCnt;
-    }
-    *dp = *jdp;
-    jdp = jdp+1; cjdlen--;
-    dp = dp+1; buf2len--;
-    decCnt++;
+  data[decCnt] = 0;
 
-    // find the next hex char
-    i = offset2Hex(jdp, cjdlen, 1);
+  log_debug("After decodeHTTPBody; decCnt: %ld\n", decCnt);
+
+  // decCnt is an odd number or data is not a hex string
+  if (decCnt % 2) {
+    log_debug("CLIENT ERROR: An odd number of hex characters received\n");
+    return -1;
   }
 
-  // look for JS_DELIMITER between jdp to jData+jdlen
-  while ((uint8_t *) jdp < cover_payload+cover_len) {
-    if (*jdp == JS_DELIMITER) {
-      //*fin = 1;
-      break;
-    }
-    jdp = jdp+1;
+  if (! isxString((char*)data)) {
+    log_debug("CLIENT ERROR: Data received not hex");
+    return -1;
   }
 
-  return decCnt;  //should be able to substitute for outbuflen, /2 can be accommodated.
+  // we are going to decode data in data live!
+  // convert hex data back to binary
+  char c;
+  int i,j;
+  for ( i=0, j=0; i< decCnt; i=i+2, ++j) {
+    sscanf((char*)&data[i], "%2x", (unsigned int*) &k);
+    c = (char)k;
+    data[j] = (uint8_t)c;
+  }
+
+  return decCnt / 2;
+
 }
 
 /*
@@ -473,7 +456,6 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
    for(cnt = 0; cnt < data_len; cnt++) {
        hexed_data[cnt*2] = "0123456789abcdef"[(data[cnt] & 0xF0) >> 4]; //does this need to change to 8, I don't think so, just hex encoding, this function is present elsewhere too
        hexed_data[cnt*2+1] = "0123456789abcdef"[(data[cnt] & 0x0F) >> 0];
-       cnt++;
    }
 
   // log_debug("MJS %d %d", datalen, mjs);
@@ -484,14 +466,14 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   //ignore this check as 1. the content is chosen by payload server and deemed to be correct
   //2. payload has no header
 
-  outbuf = (uint8_t *)xmalloc(cover_len);
+    //outbuf = (uint8_t *)xmalloc(cover_len);
+    int fin = 0;
+    ssize_t r = encode_in_single_js_block((char*)hexed_data, (char*)cover_payload, (char*)outbuf, hexed_datalen, cover_len, cover_len, &fin);
 
-  ssize_t r = encodeHTTPBody((char*)hexed_data, (char*)cover_payload, (char*)outbuf, hexed_datalen, cover_len, cover_len, HTTP_CONTENT_JAVASCRIPT);
-
-  if (r < 0 || ((unsigned int) r < hexed_datalen)) {
-    log_warn("SERVER ERROR: Incomplete data encoding");
-    return -1;
-  }
+    if (r < 0 || ((unsigned int) r < hexed_datalen) || fin == 0) {
+      log_warn("SERVER ERROR: Incomplete data encoding");
+      return -1;
+    }
 
   // work in progressn
   if (gzipMode == 1) {
@@ -508,14 +490,14 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
       return -1;
     }
     
-    //free(outbuf2);
     memcpy(outbuf,outbuf2, outbuf2len);
+    free(outbuf2);
     
     //free(outbuf);
 
   } else {
     //outbuf2 = outbuf;
-    outbuf2len = cLen;
+    outbuf2len = cover_len;
   }
   //encCnt isn't really needed any more except for debugging and tracking, but return value outbuf2len is needed for new header
   //return encCnt;
@@ -523,7 +505,7 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
 
 }
 
-int  encode(char *data, char *jTemplate, char *jData,
+int  encode_in_single_js_block(char *data, char *jTemplate, char *jData,
              unsigned int dlen, unsigned int jtlen,
              unsigned int jdlen, int *fin)
 {
@@ -542,7 +524,6 @@ int  encode(char *data, char *jTemplate, char *jData,
 
   /* handling boundary case: dlen == 0 */
   if (dlen < 1) { return 0; }
-
 
   i = offset2Hex(jtp, (jTemplate+jtlen)-jtp, 0);
   while (encCnt < dlen && i != -1) {
@@ -565,8 +546,6 @@ int  encode(char *data, char *jTemplate, char *jData,
 
     i = offset2Hex(jtp, (jTemplate+jtlen)-jtp, 1);
   }
-
-
 
   // copy the rest of jTemplate to jdata
   // if we've encoded all data, replace the first
@@ -617,8 +596,13 @@ int  encode(char *data, char *jTemplate, char *jData,
 
 }
 
-
-
+/**
+   
+  @param data hex data to be encoded in jTemplate
+  @param jTemplate the raw javascript payload
+  @param jData the buffer which will contain the data encoded into js cover
+  
+ */
 int encodeHTTPBody(char *data, char *jTemplate, char *jData,
                    unsigned int dlen, unsigned int jtlen,
                    unsigned int jdlen, int mode)
@@ -639,7 +623,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
   if (mode == CONTENT_JAVASCRIPT) {
     // assumption: the javascript pertaining to jTemplate has enough capacity
     // to encode jData. thus, we only invoke encode() once here.
-    encCnt = encode(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
+    encCnt = encode_in_single_js_block(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
     // ensure that all dlen char from data have been encoded in jData
 #ifdef DEBUG
     if (encCnt != dlen || fin == 0) {
@@ -660,7 +644,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
         return encCnt;
       }
       skip = strlen(startScriptTypeJS)+jsStart-jtp;
-#ifdef DEBUG2
+#ifdef DEBUG2h
       printf("copying %d (skip) char from jtp to jdp\n", skip);
 #endif
       memcpy(jdp, jtp, skip);
@@ -676,7 +660,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
       // the JS for encoding data is between jsStart and jsEnd
       scriptLen = jsEnd - jtp;
       // n = encode2(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
-      n = encode(dp, jtp, jdp, dlen, scriptLen, jdlen, &fin);
+      n = encode_in_single_js_block(dp, jtp, jdp, dlen, scriptLen, jdlen, &fin);
       // update encCnt, dp, and dlen based on n
       if (n > 0) {
         encCnt = encCnt+n; dp = dp+n; dlen = dlen-n;
@@ -778,7 +762,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
  * applicable hex char in JS for decoding. Also, the decoding process
  * stops when JS_DELIMITER is encountered.
  */
-int decode(char *jData, char *dataBuf, unsigned int jdlen,
+int decode_single_js_block(const char *jData, const char *dataBuf, unsigned int jdlen,
              unsigned int dataBufSize, int *fin )
 {
   unsigned int decCnt = 0;  /* num of data decoded */
@@ -787,7 +771,7 @@ int decode(char *jData, char *dataBuf, unsigned int jdlen,
   int cjdlen = jdlen;
 
   *fin = 0;
-  dp = dataBuf; jdp = jData;
+  dp = (char*)dataBuf; jdp = (char*)jData;
 
   i = offset2Hex(jdp, cjdlen, 0);
   while (i != -1) {
@@ -864,7 +848,7 @@ int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
 
       // the JS for decoding data is between jsStart and jsEnd
       scriptLen = jsEnd - jdp;
-      n = decode(jdp, dp, scriptLen, dlen, fin);
+      n = decode_single_js_block(jdp, dp, scriptLen, dlen, fin);
       if (n > 0) {
         decCnt = decCnt+n; dlen=dlen-n; dp=dp+n;
       }

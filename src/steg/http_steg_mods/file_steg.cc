@@ -153,11 +153,6 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   uint8_t* data1;
   int sbuflen = 0;
-  //int gzipMode = JS_GZIP_RESP;
-  //call this from util to find to extract the buffer into memory block
-  if (c_content_type != HTTP_CONTENT_JAVASCRIPT /*|| CONTENT_HTML_JAVASCRIPT*/) {
-  sbuflen = evbuffer_to_memory_block(source, &data1);
-  }
 
   ssize_t outbuflen = 0;
   ssize_t body_offset = 0;
@@ -167,10 +162,8 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   size_t body_len = 0;
   size_t hLen = 0;
   
-  if (c_content_type == HTTP_CONTENT_JAVASCRIPT/*|| CONTENT_HTML_JAVASCRIPT*/) {
-    //cnt = 0;
-    sbuflen = JS_evbuffer_to_memory_block(source, &data1); //actually returns size_t instead of int
-  }
+  //call this from util to find to extract the buffer into memory block
+  sbuflen = evbuffer_to_memory_block(source, &data1);
 
   if (sbuflen < 0 /*&& c_content_type != HTTP_CONTENT_JAVASCRIPT || CONTENT_HTML_JAVASCRIPT*/) {
     log_warn("unable to extract the data from evbuffer");
@@ -225,7 +218,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   //If everything seemed to be fine, New steg module test:
   if (!(LOG_SEV_DEBUG < log_get_min_severity())) { //only perform this during debug
-    uint8_t recovered_data_for_test[sbuflen];
+    uint8_t recovered_data_for_test[HTTP_MSG_BUF_SIZE]; //this is the size we have promised to decode func
     decode(outbuf, outbuflen, recovered_data_for_test);
 
     if (memcmp(data1, recovered_data_for_test, sbuflen)) { //barf!!
@@ -308,14 +301,6 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   int content_len = 0, outbuflen;
   uint8_t *httpHdr, *httpBody;
 
-  
-  
-
-  int i, j, k;
-  //ev_ssize_t r;
-  struct evbuffer * scratch; //maybe move to filesteg class?
-  char c;
-
   log_debug("Entering CLIENT receive");
 
   ssize_t body_offset = extract_appropriate_respones_body(source);
@@ -367,67 +352,6 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
   log_debug("CLIENT unwrapped data of length %d:", outbuflen);
 
-  if( c_content_type == HTTP_CONTENT_JAVASCRIPT ) {
-
-    outbuf[outbuflen] = 0;
-  if (outbuflen % 2) {
-    log_debug("CLIENT ERROR: An odd number of hex characters received\n");
-    return RECV_BAD;
-  }
-
-  if (! isxString((char *)outbuf)) {
-    log_debug("CLIENT ERROR: Data received not hex");
-    return RECV_BAD;
-  }
-
-  // log_debug("Hex data received:");
-  //    buf_dump ((unsigned char*)data, decCnt, stderr);
-
-  // get a scratch buffer
-  scratch = evbuffer_new();
-  if (!scratch) return RECV_BAD;
-
-  if (evbuffer_expand(scratch, outbuflen/2)) {
-    log_warn("CLIENT ERROR: Evbuffer expand failed \n");
-    evbuffer_free(scratch);
-    return RECV_BAD;
-  }
-
-  // convert hex data back to binary
-  for (i=0, j=0; i< outbuflen; i=i+2, ++j) {
-    sscanf((const char *) &outbuf[i], "%2x", (unsigned int*) &k);
-    c = (char)k;
-    evbuffer_add(scratch, &c, 1);
-  }
-
-  if (evbuffer_add_buffer(dest, scratch)) {
-    evbuffer_free(scratch);
-    log_warn("CLIENT ERROR: Failed to transfer buffer");
-    return RECV_BAD;
-  }
-  log_debug("Added scratch (buffer) to dest\n");
-
-  evbuffer_free(scratch);
-
-
-  if (response_len <= evbuffer_get_length(source)) {
-    if (evbuffer_drain(source, response_len) == -1) {
-      log_warn("CLIENT ERROR: Failed to drain source");
-      return RECV_BAD;
-    }
-  }
-  else {
-    log_warn("response_len > buffer size... can't drain");
-    exit(-1);
-  }
-
-
-  log_debug("Drained source for %d char\n", response_len);
-
-  //  downcast_steg(s)->have_received = 1;
-}
-
-  else {
   if (evbuffer_add(dest, outbuf, outbuflen)) {
     log_warn("CLIENT ERROR: evbuffer_add to dest fails\n");
     return RECV_BAD;
@@ -436,8 +360,6 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   if (evbuffer_drain(source, response_len) == -1) {
     log_warn("CLIENT ERROR: failed to drain source\n");
     return RECV_BAD;
-  }
-   
   }
 
   conn->expect_close();

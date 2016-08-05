@@ -372,12 +372,12 @@ http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
 {
   struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
-  int bufsize = 10000;
-  char* buf = (char*) xmalloc(bufsize);
+  const int bufsize = 10000; //TOOD: this shouldn't be defined here, this is a universal constant
+  char buf[bufsize];
 
   char* data;
-  char* data2 = (char*) xmalloc (sbuflen*4);
-  char* cookiebuf = (char*) xmalloc (sbuflen*8);
+  char data2[sbuflen*4];
+  char cookiebuf[sbuflen*8];
   size_t payload_len = 0;
   size_t cnt = 0;
   size_t cookie_len = 0;
@@ -399,7 +399,7 @@ http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
 
   // retry up to 10 times
   while (!payload_len) {
-    payload_len = config->payload_server->find_client_payload(buf, bufsize,
+    payload_len = config->payload_server->find_client_payload((char*)buf, bufsize,
                                       TYPE_HTTP_REQUEST);
     if (cnt++ == 10) {
       goto err;
@@ -474,19 +474,16 @@ http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
   transmit_len += 4;
 
   evbuffer_drain(source, sbuflen);
-  log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
+  type = 1; //config->payload_server->find_uri_type(buf, payload_len);
+
+  //log_debug("CLIENT TRANSMITTED payload %d requesting type %d\n", (int) sbuflen, type);
   conn->cease_transmission();
 
-  type = config->payload_server->find_uri_type(buf, bufsize);
   have_transmitted = true;
 
-  free(buf);
-  free(data2);
   return transmit_len;
 
 err:
-  free(buf);
-  free(data2);
   return -1;
 
 }
@@ -674,6 +671,10 @@ http_steg_t::transmit(struct evbuffer *source)
 
     if (rval >= 0) {
       have_transmitted = 1;
+      if (type == -1) {
+        log_debug(conn, "have transmited with invalid type!!!");
+      }
+          
       // FIXME: should decide whether or not to do this based on the
       // Connection: header.  (Needs additional changes elsewhere, esp.
       // in transmit_room.)
@@ -789,6 +790,10 @@ http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
   int rval = RECV_BAD;
 
   //basic sanity check
+  if (!(0 < type && type  <= (signed) c_no_of_steg_protocol && (config->file_steg_mods.find(type) != config->file_steg_mods.end())))
+    {
+      log_debug(conn,"something is phishy");
+    }
   log_assert(0 < type && type  <= (signed) c_no_of_steg_protocol && (config->file_steg_mods.find(type) != config->file_steg_mods.end()));
   //This just to make sure that the steg mod is initialized. if the content isn't actually of type .type, then the steg mod will reject it
   //gracefully

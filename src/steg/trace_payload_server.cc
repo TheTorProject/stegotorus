@@ -503,9 +503,13 @@ unsigned int TracePayloadServer::find_client_payload(char* buf, int len, int typ
       int requested_uri_type = find_uri_type(inbuf, p->length);
       //we also need to check if the user has restricted the type,
       //empty active type list means no restriciton
-      if (!is_activated_valid_content_type(requested_uri_type))
+      if (!is_activated_valid_content_type(requested_uri_type)) {
+        log_debug("type %d of payload %d is not actived trying next payload", requested_uri_type, r);
         goto next;
-            
+      }
+
+      log_debug("found payload %d of actived type %d", r, requested_uri_type);
+      
       if (p->length > len) {
         fprintf(stderr, "BUFFER TOO SMALL... \n");
         goto next;

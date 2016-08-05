@@ -79,10 +79,10 @@ int testEncode2(char *data, char *js, char *outBuf,
 int testDecode2(char *inBuf, char *outBuf,
              unsigned int inBufSize, unsigned int outBufSize,
                 int mode, int testNum);**/
-int encode(char *data, char *jTemplate, char *jData,
+int encode_in_single_js_block(char *data, char *jTemplate, char *jData,
              unsigned int dlen, unsigned int jtlen,
              unsigned int jdlen, int *fin);
-int decode (char *jData, char *dataBuf, unsigned int jdlen,
+int decode_single_js_block(const char *jData, const char *dataBuf, unsigned int jdlen,
              unsigned int dataBufSize, int *fin );
 
 int
