@@ -8,6 +8,24 @@
  class JSSteg : public FileStegMod
 {
 
+ protected:
+  /**
+     this function carry the only major part that is different between a
+     js file and html file. As such html file will re-implement it accordingly
+     As the result encode and decode function for both types remains the same.
+   */
+  virtual int encode_http_body(char *data, char *jTemplate, char *jData,
+                   unsigned int dlen, unsigned int jtlen,
+                             unsigned int jdlen);
+
+  /**
+     this function carry the only major part of decoding that is different between a
+     js file and html file. As such html file will re-implement it accordingly
+     As the result encode and decode function for both types remains the same.
+   */
+  virtual int decode_http_body(const char *jData, const char *dataBuf, unsigned int jdlen,
+                       unsigned int dataBufSize, int *fin );
+  
 public:
 int isxString(char *str);
 

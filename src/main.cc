@@ -446,9 +446,9 @@ main(int, const char *const *argv)
     log_abort("failed to initialize DNS resolver");
 
   /* Handle signals. */
-#ifdef SIGPIPE
+  #ifdef SIGPIPE
    signal(SIGPIPE, SIG_IGN);
-#endif
+  #endif
   sig_int = evsignal_new(the_event_base, SIGINT,
                          handle_signal_cb, NULL);
   sig_term = evsignal_new(the_event_base, SIGTERM,

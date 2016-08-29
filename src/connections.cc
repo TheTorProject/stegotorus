@@ -388,9 +388,15 @@ circuit_recv_eof(circuit_t *ckt)
     return;
   }
 
-  log_debug(ckt, "sending EOF to upstream");
-  ckt->write_eof = true;
-  shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
+  //check if we haven't sent eof already
+  if (!ckt->write_eof) {
+    log_debug(ckt, "sending EOF to upstream");
+    ckt->write_eof = true;
+    shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
+  } else {
+    log_debug(ckt, "upstream has already EOFed");
+  }
+  
 }
 
 void

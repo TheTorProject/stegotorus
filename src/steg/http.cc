@@ -370,6 +370,7 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name)
 int
 http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
 {
+  log_assert(!conn->write_eof);
   struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
   const int bufsize = 10000; //TOOD: this shouldn't be defined here, this is a universal constant
@@ -474,9 +475,9 @@ http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
   transmit_len += 4;
 
   evbuffer_drain(source, sbuflen);
-  type = 1; //config->payload_server->find_uri_type(buf, payload_len);
+  type = config->payload_server->find_uri_type(buf, payload_len);
 
-  //log_debug("CLIENT TRANSMITTED payload %d requesting type %d\n", (int) sbuflen, type);
+  log_debug("CLIENT TRANSMITTED payload %d requesting type %d\n", (int) sbuflen, type);
   conn->cease_transmission();
 
   have_transmitted = true;
@@ -792,7 +793,7 @@ http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
   //basic sanity check
   if (!(0 < type && type  <= (signed) c_no_of_steg_protocol && (config->file_steg_mods.find(type) != config->file_steg_mods.end())))
     {
-      log_debug(conn,"something is phishy");
+      log_debug(conn,"something is fishy");
     }
   log_assert(0 < type && type  <= (signed) c_no_of_steg_protocol && (config->file_steg_mods.find(type) != config->file_steg_mods.end()));
   //This just to make sure that the steg mod is initialized. if the content isn't actually of type .type, then the steg mod will reject it

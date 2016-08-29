@@ -331,8 +331,10 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
   response_len += content_len;
 
-  if (response_len > evbuffer_get_length(source))
+  if (response_len > evbuffer_get_length(source)) {
+    log_info("Incomplete response, waiting for more data.");
     return RECV_INCOMPLETE;
+  }
 
   httpHdr = evbuffer_pullup(source, response_len);
 

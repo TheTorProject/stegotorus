@@ -30,6 +30,7 @@ STEGANOGRAPHERS = \
 	src/steg/http_steg_mods/pdfSteg.cc \
 	src/steg/http_steg_mods/swfSteg.cc \
 	src/steg/http_steg_mods/jsSteg.cc \
+	src/steg/http_steg_mods/htmlSteg.cc \
 	src/steg/http_steg_mods/jpgSteg.cc \
 	src/steg/http_steg_mods/pngSteg.cc \
 	src/steg/http_steg_mods/gifSteg.cc \
@@ -157,6 +158,7 @@ noinst_HEADERS = \
 	src/steg/payload_server.h \
 	src/steg/http.h \
 	src/steg/http_steg_mods/jsSteg.h \
+	src/steg/http_steg_mods/htmlSteg.h \
 	src/steg/http_steg_mods/pdfSteg.h \
 	src/steg/http_steg_mods/swfSteg.h \
 	src/steg/http_steg_mods/jpgSteg.h \

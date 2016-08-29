@@ -59,21 +59,18 @@ JSSteg::static_headless_capacity (char* buf, size_t len) {
   bp = buf;
 
   //if (mode == CONTENT_JAVASCRIPT) {
-    j = offset2Hex(bp, (buf+len)-bp, 0);
-    while (j != -1) {
-      cnt++;
-      if (j == 0) {
-        bp = bp+1;
-      } else {
-        bp = bp+j+1;
-      }
+  j = offset2Hex(bp, (buf+len)-bp, 0);
+  while (j != -1) {
+    cnt++;
+    if (j == 0) {
+      bp = bp+1;
+    } else {
+      bp = bp+j+1;
+    }
 
-      if ((int) len < buf + (int) len - bp) {
-  fprintf(stderr, "HERE\n");
-      }
-      j = offset2Hex(bp, (buf+len)-bp, 1);
-    } // while
-    return cnt;
+    j = offset2Hex(bp, (buf+len)-bp, 1);
+  } // while
+  return cnt;
 }
 /*
  * jsSteg: A Javascript-based steganography module
@@ -385,7 +382,7 @@ ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* 
 
   }
 
-  decCnt = decode_single_js_block((const char*)cover_payload, (char*)data, cover_len, HTTP_MSG_BUF_SIZE,
+  decCnt = decode_http_body((const char*)cover_payload, (char*)data, cover_len, HTTP_MSG_BUF_SIZE,
                                   &fin);
 
   data[decCnt] = 0;
@@ -445,35 +442,27 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     return -1;
 
   cLen = headless_capacity((char*)cover_payload, cover_len);
-   if (cLen <  data_len) {
+  if (cLen <  data_len) {
     log_warn("not enough cover capacity to embed data");
     return -1; //not enough capacity is an error because you should have check     //before requesting
   }
 
-   size_t hexed_datalen = 2*data_len;
-   uint8_t* hexed_data = new uint8_t[hexed_datalen];
-   size_t cnt = 0;
-   for(cnt = 0; cnt < data_len; cnt++) {
-       hexed_data[cnt*2] = "0123456789abcdef"[(data[cnt] & 0xF0) >> 4]; //does this need to change to 8, I don't think so, just hex encoding, this function is present elsewhere too
-       hexed_data[cnt*2+1] = "0123456789abcdef"[(data[cnt] & 0x0F) >> 0];
-   }
+  size_t hexed_datalen = 2*data_len;
+  uint8_t hexed_data[hexed_datalen];
+
+  encode_data_to_hex(data, data_len, hexed_data);
 
   // log_debug("MJS %d %d", datalen, mjs);
   //this should not happen
-   log_assert(cover_payload != NULL);
+  log_assert(cover_payload != NULL);
 
-  //mode = has_eligible_HTTP_content (cover_body, cover_len, HTTP_CONTENT_JAVASCRIPT);
-  //ignore this check as 1. the content is chosen by payload server and deemed to be correct
-  //2. payload has no header
 
-    //outbuf = (uint8_t *)xmalloc(cover_len);
-    int fin = 0;
-    ssize_t r = encode_in_single_js_block((char*)hexed_data, (char*)cover_payload, (char*)outbuf, hexed_datalen, cover_len, cover_len, &fin);
+  ssize_t r = encode_http_body((char*)hexed_data, (char*)cover_payload, (char*)outbuf, hexed_datalen, cover_len, cover_len);
 
-    if (r < 0 || ((unsigned int) r < hexed_datalen) || fin == 0) {
-      log_warn("SERVER ERROR: Incomplete data encoding");
-      return -1;
-    }
+  if (r < 0 || ((unsigned int) r < hexed_datalen)) {
+    log_warn("SERVER ERROR: in data encoding");
+    return -1;
+  }
 
   // work in progressn
   if (gzipMode == 1) {
@@ -503,6 +492,43 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   //return encCnt;
   return outbuf2len;
 
+}
+
+/**
+   this function carry the only major part that is different between a
+   js file and html file. As such html file will re-implement it accordingly
+   As the result encode and decode function for both types remains the same.
+*/
+
+int JSSteg::encode_http_body(char *data, char *jTemplate, char *jData,
+                   unsigned int dlen, unsigned int jtlen,
+                             unsigned int jdlen)
+{
+  int fin;
+  ssize_t r = encode_in_single_js_block((char*)data, (char*)jTemplate, (char*)jData, dlen, jtlen, jdlen, &fin);
+
+  if (r < 0 || ((unsigned int) r < dlen) || fin == 0) {
+    log_warn("SERVER ERROR: Incomplete data encoding");
+    return -1;
+  }
+
+  return r;
+
+}
+
+/**
+   this function carry the only major part of decoding that is different between a
+   js file and html file. As such html file will re-implement it accordingly
+   As the result encode and decode function for both types remains the same.
+*/
+int
+JSSteg::decode_http_body(const char *jData, const char *dataBuf, unsigned int jdlen,
+                       unsigned int dataBufSize, int *fin )
+{
+  log_assert(dataBufSize >= HTTP_MSG_BUF_SIZE);
+  
+  return decode_single_js_block((const char*)jData, (char*)dataBuf, jdlen, HTTP_MSG_BUF_SIZE,
+                                  fin);
 }
 
 int  encode_in_single_js_block(char *data, char *jTemplate, char *jData,

@@ -1479,6 +1479,9 @@ chop_circuit_t::process_queue()
           // receiving data.
           if (evbuffer_get_length(blk.data) > 0)
             dead_cycles = 0;
+          log_debug(this, "writing into upstream buffer");
+          if (this->write_eof)
+            log_abort(this, "writing into upstream buffer after eof?");
           if (evbuffer_add_buffer(bufferevent_get_output(up_buffer),
                                   blk.data)) {
             log_warn(this, "buffer transfer failure");
@@ -2064,6 +2067,12 @@ chop_conn_t::send()
   if (!steg) {
     log_warn(this, "send() called with no steg module available");
     conn_do_flush(this);
+    return;
+  }
+
+  if (write_eof) {
+    log_warn(this, "send() called while connection buffer is shut down to write.");
+    //conn_do_flush(this);
     return;
   }
 

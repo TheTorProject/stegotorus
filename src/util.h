@@ -330,4 +330,16 @@ int evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block)
  */
 std::string relativize_url(const std::string& absolute_url);
 
+/**
+  convert char* buffer to hex string to be encoded in a text only
+  covers like js.
+
+  @param data the buffer which contains the raw data
+  @param data_len the length of data in data buffer in number of bytes
+  @param hexed_data should be initialized of double length of data_len 
+         and will contained the hex representation of the data.
+*/
+void encode_data_to_hex(uint8_t* data, size_t data_len, uint8_t* hexed_data);
+
+
 #endif
