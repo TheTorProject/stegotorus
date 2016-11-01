@@ -775,6 +775,13 @@ chop_circuit_t::send_all_steg_data()
       return 0;
   }
 
+  //It makes sense to check if there is any steg data to be sent
+  //otherwise we can just return.
+  //Now we check if the protocol_data has any data
+  size_t avail = evbuffer_get_length(target->steg->cfg()->protocol_data_out);
+  if (avail == 0)
+    return 0;
+  
   bool no_target_connection = true;
 
   //TODO: Instead of re-implementing pick connection here I should 
@@ -800,8 +807,6 @@ chop_circuit_t::send_all_steg_data()
 
     size_t avail0;
 
-    //Now we check if the protocol_data has any data
-    size_t avail = evbuffer_get_length(target->steg->cfg()->protocol_data_out);
     //we try to send all data
     //we don't send random block or retransmit from the transmit
     //queue because we are called by the this->send which will
@@ -1822,6 +1827,7 @@ chop_conn_t::recv()
   if (config->mode == LSN_SIMPLE_SERVER && config->transparent_proxy) {
     received_length = evbuffer_get_length(bufferevent_get_input(buffer));
     originally_received = new uint8_t[received_length];
+    log_assert(originally_received);
     if (evbuffer_copyout(bufferevent_get_input(buffer), originally_received, received_length) != (ssize_t) received_length)
       log_abort("was not able to make a copy of received data");
   }

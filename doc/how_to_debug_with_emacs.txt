@@ -1,0 +1,15 @@
+* First run a socks server:
+  ssh -ND 5002 localhost.
+
+* Both client and server:
+  open two emacs
+  
+  in one for server:
+  
+  open ../gdb_emacs/gdb_stegotorus.el and run the specific line C-x C-e
+
+  in another one for client 
+
+  open ../gdb_emacs/gdb_stegotorus_c.el and run the specific line C-x C-e
+
+

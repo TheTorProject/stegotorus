@@ -13,8 +13,22 @@
      this function carry the only major part that is different between a
      js file and html file. As such html file will re-implement it accordingly
      As the result encode and decode function for both types remains the same.
+     
+     @param data the to be encoded data which is converted to hex characters 
+            (two character represents an original binary byte)
+     @param the original jTemplate the javascript cover which is supposed to
+     contains the js data.
+
+     @param the buffer which will contains the the new js script which hides
+            the data in itself.
+
+     @param dlen size of the data buffer.
+     @param jtlen size of jTemplate buffer
+     @param maximum jdlen size of jData
+
+     @return 
    */
-  virtual int encode_http_body(char *data, char *jTemplate, char *jData,
+  virtual int encode_http_body(const char *data, char *jTemplate, char *jData,
                    unsigned int dlen, unsigned int jtlen,
                              unsigned int jdlen);
 
@@ -27,21 +41,21 @@
                        unsigned int dataBufSize, int *fin );
   
 public:
-int isxString(char *str);
+  int isxString(char *str);
 
-int isGzipContent (char *msg);
+  int isGzipContent (char *msg);
 
-int findContentType (char *msg);
+  int findContentType (char *msg);
 
 
-/*int encode(char *data, char *jTemplate, char *jData,
+  /*int encode(char *data, char *jTemplate, char *jData,
            unsigned int dlen, unsigned int jtlen, unsigned int jdlen );*/
 
-    JSSteg(PayloadServer* payload_provider, double noise2signal = 0); 
+  JSSteg(PayloadServer* payload_provider, double noise2signal = 0, int content_type = HTTP_CONTENT_JAVASCRIPT); 
 
-    virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len);
-    
-     virtual ssize_t decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
+  virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len);
+  
+  virtual ssize_t decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
 
  /**
 compute the capcaity of the cover by getting a pointer to the

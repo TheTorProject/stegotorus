@@ -5,6 +5,10 @@ edit start_urls ad allowed_domains to reflect your cover providers
 
 then in the stegossidea's root type
 
-scrapy crawl stego_cover -o mititems.csv -t csv
+scrapy crawl stego_cover -o outputs.csv -t csv
 
 copy the file in stegotorus/apache_payload
+
+delete stegotorus/apache_payload/server_list.txt
+
+NOT REALLY? You need curlftps install for stegotorus to be able to scrap the covers for capacity computation

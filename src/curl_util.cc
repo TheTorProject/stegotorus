@@ -72,6 +72,8 @@ discard_data(char *ptr, size_t size, size_t nmemb, void *userdata)
     @param payload_length the length of the requested file this is equal to
     the size of allocated memory for the buf
     @param buf the alocated memory to store the POST reply
+
+    @return 0 if it fails to retrieve the url
 */
 unsigned long fetch_url_raw(CURL* curl_obj, string& url,  stringstream& buf)
 {
@@ -92,6 +94,7 @@ unsigned long fetch_url_raw(CURL* curl_obj, string& url,  stringstream& buf)
   }
 
   log_debug("read total bytes of : %lu:", buf.str().size());
+  log_assert(buf.str()[0]=='H');
   return buf.tellp();
 
 }

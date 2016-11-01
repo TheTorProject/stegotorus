@@ -143,6 +143,10 @@ class ApachePayloadServer: public PayloadServer
    */
   virtual void disqualify_payload(const std::string& payload_id_hash) {
     _payload_database.payloads[payload_id_hash].corrupted = true;
+
+    //if the disqualified cover is the highest capacity cover then we need to
+    //decrease the max capacity
+    _payload_database.adjust_type_max_capacity(payload_id_hash);
   }
 
   /** 

@@ -38,8 +38,9 @@ public:
      js file and html file. As such html file will re-implement it accordingly
      As the result encode and decode function for both types remains the same.
     */
-    virtual int decode_http_body(char *data, char *jTemplate, char *jData,
-                               unsigned int dlen, unsigned int jtlen);
+    virtual int encode_http_body(const char *data, char *jTemplate, char *jData,
+                   unsigned int dlen, unsigned int jtlen,
+                             unsigned int jdlen);
 
     /**
        this function carry the only major part of decoding that is different between a

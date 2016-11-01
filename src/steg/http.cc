@@ -34,6 +34,7 @@ using namespace std;
 #include "http_steg_mods/jpgSteg.h"
 #include "http_steg_mods/pngSteg.h"
 #include "http_steg_mods/gifSteg.h"
+#include "http_steg_mods/htmlSteg.h"
 
 #include "http.h"
 
@@ -125,9 +126,8 @@ void http_steg_config_t::init_file_steg_mods()
   file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_HTML] = new JSSteg(payload_server, noise2signal); //TODO: It should be a
-  //childo fo JS but for test only we are doing this
   file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_HTML] = new HTMLSteg(payload_server, noise2signal);
 
 
   //TODO: for now only one steg module can be mentioned for testing.
@@ -148,9 +148,8 @@ void http_steg_config_t::init_file_steg_mods()
   if (http_steg_user_configs.find("steg_mod") != http_steg_user_configs.end()) {
     payload_server->set_active_steg_mods(http_steg_user_configs["steg_mod"]);
   }
-
-
 }
+
 http_steg_config_t::http_steg_config_t(config_t *cfg, const std::vector<std::string>& options)
   : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)

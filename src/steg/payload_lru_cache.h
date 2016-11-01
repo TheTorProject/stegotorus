@@ -51,48 +51,52 @@ public:
     assert(_capacity!=0); 
   } 
  
-  // Obtain value of the cached function for k 
-  value_type operator()(const key_type& k) { 
+  // Obtain reference to the value of the cached function for k
+  value_type& operator()(const key_type& k) { 
  
     // Attempt to find existing record 
-    const typename key_to_value_type::iterator it 
+    typename key_to_value_type::iterator it 
       =_key_to_value.find(k); 
  
     if (it==_key_to_value.end()) { 
-        log_debug("payload cache MISS");
- 
+      log_debug("payload cache MISS");
+      
       // We don't have it: 
  
       // Evaluate function and create new record 
-      const value_type v= (retriever->*_fn)(k); 
+      const value_type v = (retriever->*_fn)(k); 
       insert(k,v); 
  
-      // Return the freshly computed value 
-      return v; 
+      // now we should be able to find this key
+      // in the cache.
+      it = _key_to_value.find(k);
  
     } else { 
-        log_debug("payload cache HIT");
- 
       // We do have it: 
- 
-      // Update access record by moving 
-      // accessed key to back of list 
-_key_tracker.splice( 
-_key_tracker.end(), 
-  _key_tracker, 
-  (*it).second.second 
-  ); 
-// Return the retrieved value 
-return (*it).second.first; 
-} 
-} 
+      log_debug("payload cache HIT");
+
+    }
+  
+    assert(it != _key_to_value.end());
+    // Update access record by moving 
+    // accessed key to back of list 
+    _key_tracker.splice( 
+                        _key_tracker.end(), 
+                        _key_tracker, 
+                        (*it).second.second 
+                         ); 
+
+    // Return the retrieved value 
+    return (*it).second.first; 
+
+  } 
  
   // Obtain the cached keys, most recently used element 
   // at head, least recently used at tail. 
   // This method is provided purely to support testing. 
   template <typename IT> void get_keys(IT dst) const { 
     typename key_tracker_type::const_reverse_iterator src 
-        =_key_tracker.rbegin(); 
+      =_key_tracker.rbegin(); 
     while (src!=_key_tracker.rend()) { 
       *dst++ = *src++; 
     } 
@@ -101,7 +105,7 @@ return (*it).second.first;
 private: 
  
   // Record a fresh key-value pair in the cache 
-  void insert(const key_type& k,const value_type& v) { 
+  void insert(const key_type& k, const value_type& v) { 
  
     // Method is only called on cache misses 
     assert(_key_to_value.find(k)==_key_to_value.end()); 

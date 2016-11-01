@@ -169,6 +169,8 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg, const std::v
   string payload_filename;
   string cover_server, cover_list;
 
+  store_options(options);
+  
   if (is_clientside)
     payload_filename = "apache_payload/client_list.txt";
   else {
@@ -181,8 +183,8 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg, const std::v
       cover_server = cfg->steg_mod_user_configs["protocol"]["cover_server"] != "" ?
         cfg->steg_mod_user_configs["protocol"]["cover_server"] : cover_server;
 
-      cover_list = cfg->steg_mod_user_configs["protocol"]["cover_list"] != "" ?
-        cfg->steg_mod_user_configs["protocol"]["cover_list"] : "";
+      cover_list = http_steg_user_configs["cover_list"] != "" ?
+        http_steg_user_configs["cover_list"] : "";
     }
 
   }

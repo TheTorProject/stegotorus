@@ -12,5 +12,5 @@ Functions.
 
 - in http.cc constructor calls the steg module constructor to make new steg modes.
 
-- Update [Apache]PayloadServer::find_url_type approperiately.
+- Update PayloadServer::extension_to_content_type
 

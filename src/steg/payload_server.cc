@@ -946,4 +946,3 @@ find_content_length (char *hdr, int /*hlen*/) {
   contentLen = atoi(buf);
   return contentLen;
 }
-

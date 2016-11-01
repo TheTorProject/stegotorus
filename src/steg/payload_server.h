@@ -19,7 +19,7 @@ using namespace std;
 #define NO_NEXT_STATE -1
 
 #define MAX_PAYLOADS 10000
-#define MAX_RESP_HDR_SIZE 512
+#define MAX_RESP_HDR_SIZE 8192
 
 // max number of payloads that have enough capacity from which
 // we choose the best fit
@@ -57,10 +57,10 @@ static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
 #define HTTP_CONTENT_UNSUPPORTED       -1
 #define HTTP_CONTENT_RESERVED           0
 #define HTTP_CONTENT_JAVASCRIPT         1
-#define HTTP_CONTENT_PDF                2
-#define HTTP_CONTENT_SWF                3
-#define HTTP_CONTENT_ENCRYPTEDZIP       4
-#define HTTP_CONTENT_HTML               5
+#define HTTP_CONTENT_HTML               2
+#define HTTP_CONTENT_PDF                3
+#define HTTP_CONTENT_SWF                4
+#define HTTP_CONTENT_ENCRYPTEDZIP       5
 #define HTTP_CONTENT_JPEG               6
 #define HTTP_CONTENT_PNG                7
 #define HTTP_CONTENT_GIF                8
@@ -204,6 +204,32 @@ class PayloadDatabase{
     /*TODO: I need to look at TracePayloadServer::typed_maximum_capacity to figure out the morale behind the strange division in computing the capacity*/
   }
 
+  /**
+   reduce the maximum capacity of a specific type in case the cover with
+   maximum capacity get marked as corrupted 
+
+   @param payload_id_hash id_hash of the payload which got corrupted/became unavailable
+
+  */
+  void adjust_type_max_capacity(const std::string&  payload_id_hash ){
+      //see if adjustment is needed.
+    if (payloads[payload_id_hash].corrupted &&
+        payloads[payload_id_hash].capacity >= typed_maximum_capacity(payloads[payload_id_hash].type)) {
+      //then we need to probably decrease the maximum capacity
+      const unsigned int affected_type = payloads[payload_id_hash].type;
+      //searching for new max capacity among all eligible covers
+      type_detail[affected_type].max_capacity = 0;
+      for(auto cur_payload = payloads.begin(); cur_payload != payloads.end(); cur_payload++)
+        {
+          if ((cur_payload->second.type == affected_type) &&
+              (!cur_payload->second.corrupted) &&
+              (cur_payload->second.capacity > type_detail[affected_type].max_capacity)) {
+            type_detail[affected_type].max_capacity = cur_payload->second.capacity;
+          }
+        }
+    }
+  }
+  
 };
 
 /* The payload server needs to know which side we are at */

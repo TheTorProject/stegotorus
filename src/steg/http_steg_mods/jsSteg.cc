@@ -40,12 +40,14 @@ unsigned int JSSteg::static_capacity(char *cover_payload, int body_length)
   if (body_offset == -1) {
     return 0; //useless payload
 }
- 
+
+  log_debug("at js static headless capacity");
    return static_headless_capacity(cover_payload + body_offset, (size_t) (body_length - body_offset));
 }
 
 unsigned int
 JSSteg::static_headless_capacity (char* buf, size_t len) {
+
   char *bp;
   int cnt=0;
   int j;  
@@ -70,7 +72,8 @@ JSSteg::static_headless_capacity (char* buf, size_t len) {
 
     j = offset2Hex(bp, (buf+len)-bp, 1);
   } // while
-  return cnt;
+
+  return max(0, (cnt -JS_DELIMITER_SIZE)/2);
 }
 /*
  * jsSteg: A Javascript-based steganography module
@@ -425,6 +428,15 @@ ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* 
  *       a JS_DELIMITER has been added
  */
 
+/**
+ *    @param data: the data to be embeded
+ *    @param data_len: the length of the data
+ *    @param cover_payload: the cover to embed the data into
+ *    @param cover_len: cover size in byte
+ *
+ *    @return < 0 in case of error or length of the cover with embedded dat at success
+ *  
+ */
 int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) /* char *data,  char *jData,
              unsigned int dlen, unsigned int jtlen,
              unsigned int jdlen, int *fin*/
@@ -432,12 +444,13 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   unsigned int cLen, outbuf2len;  /* num of data encoded in jData */
   uint8_t* outbuf2;
 
+  log_debug("at jssteg encode");
   int gzipMode = JS_GZIP_RESP;
   /*
    *  insanity checks
    */
   //if (jdlen < jtlen) { return INVALID_BUF_SIZE; }
-    if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING ||
+  if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING ||
       HTTP_MSG_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
     return -1;
 
@@ -448,16 +461,15 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   }
 
   size_t hexed_datalen = 2*data_len;
-  uint8_t hexed_data[hexed_datalen];
+  std::vector<uint8_t> hexed_data(hexed_datalen);
 
-  encode_data_to_hex(data, data_len, hexed_data);
+  encode_data_to_hex(data, data_len, hexed_data.data());
 
   // log_debug("MJS %d %d", datalen, mjs);
   //this should not happen
   log_assert(cover_payload != NULL);
 
-
-  ssize_t r = encode_http_body((char*)hexed_data, (char*)cover_payload, (char*)outbuf, hexed_datalen, cover_len, cover_len);
+  ssize_t r = encode_http_body((const char*)hexed_data.data(), (char*)cover_payload, (char*)outbuf, hexed_datalen, cover_len, cover_len);
 
   if (r < 0 || ((unsigned int) r < hexed_datalen)) {
     log_warn("SERVER ERROR: in data encoding");
@@ -469,7 +481,6 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     // conservative estimate:
     // sizeof outbuf2 = cLen + 10-byte for gzip header + 8-byte for crc
     outbuf2 = (uint8_t *)xmalloc(cover_len+18); //could be overallocated due to differing size of 18 chars and 18 uint8_ts
-
     outbuf2len = compress(outbuf, cover_len,
                           outbuf2, cover_len+18, c_format_gzip);
 
@@ -481,12 +492,11 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     
     memcpy(outbuf,outbuf2, outbuf2len);
     free(outbuf2);
-    
     //free(outbuf);
-
   } else {
     //outbuf2 = outbuf;
     outbuf2len = cover_len;
+
   }
   //encCnt isn't really needed any more except for debugging and tracking, but return value outbuf2len is needed for new header
   //return encCnt;
@@ -499,8 +509,7 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
    js file and html file. As such html file will re-implement it accordingly
    As the result encode and decode function for both types remains the same.
 */
-
-int JSSteg::encode_http_body(char *data, char *jTemplate, char *jData,
+int JSSteg::encode_http_body(const char *data, char *jTemplate, char *jData,
                    unsigned int dlen, unsigned int jtlen,
                              unsigned int jdlen)
 {
@@ -623,7 +632,6 @@ int  encode_in_single_js_block(char *data, char *jTemplate, char *jData,
 }
 
 /**
-   
   @param data hex data to be encoded in jTemplate
   @param jTemplate the raw javascript payload
   @param jData the buffer which will contain the data encoded into js cover
@@ -1378,9 +1386,8 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   return RECV_GOOD;
 }
 
-JSSteg::JSSteg(PayloadServer* payload_provider, double noise2signal)
- :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_JAVASCRIPT)
-
+JSSteg::JSSteg(PayloadServer* payload_provider, double noise2signal, int content_type)
+ :FileStegMod(payload_provider, noise2signal, content_type)
 {
 
 }
