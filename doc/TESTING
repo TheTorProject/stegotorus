@@ -8,3 +8,12 @@ git checkout tor-improve
 autoreconf
 ./configure PKG_CONFIG_PATH=`pwd`
 make
+
+
+To test from command line using curl
+- ssh -ND 5001 localhost
+- run the server on ports 5000->5001
+- run client on 4999->5000
+- curl --socks4 localhost:4999 http://1112.net/lastpage
+- curl -x socks4://127.0.0.1:4999 http://download.thinkbroadband.com/1MB.zip -o /dev/null
+- curl -x socks4://127.0.0.1:4999 http://download.thinkbroadband.com/1GB.zip -o /dev/null

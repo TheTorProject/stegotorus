@@ -232,7 +232,7 @@ chop_config_t::chop_config_t()
   ignore_socks_destination = true;
   trace_packets = false;
   trace_packet_data = true;
-  encryption = false;
+  encryption = true;
   retransmit = true;
   noise2signal = 0;
 }
@@ -775,13 +775,11 @@ chop_circuit_t::send_all_steg_data()
       return 0;
   }
 
-  //It makes sense to check if there is any steg data to be sent
-  //otherwise we can just return.
-  //Now we check if the protocol_data has any data
-  size_t avail = evbuffer_get_length(target->steg->cfg()->protocol_data_out);
-  if (avail == 0)
-    return 0;
-  
+  // you might think that it makes sense to check if there is any steg data to be sent
+  //otherwise we can just return. but we can't do that cause each connection has
+  //its own steg module and some of the steg module might have steg data and others might
+  //not
+
   bool no_target_connection = true;
 
   //TODO: Instead of re-implementing pick connection here I should 
@@ -807,6 +805,8 @@ chop_circuit_t::send_all_steg_data()
 
     size_t avail0;
 
+    //Now we check if the protocol_data has any data
+    size_t avail = evbuffer_get_length(target->steg->cfg()->protocol_data_out);
     //we try to send all data
     //we don't send random block or retransmit from the transmit
     //queue because we are called by the this->send which will

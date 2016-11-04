@@ -68,6 +68,11 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
     while (payload_info_stream >> file_id) {
       PayloadInfo cur_payload_info;
 
+      if (_payload_database.payloads.find(cur_payload_info.url_hash) != _payload_database.payloads.end()) {
+        log_warn("duplicate url in the url list: %s", cur_payload_info.url.c_str());
+        continue;
+      }
+
       payload_info_stream >>  cur_payload_info.type;
       payload_info_stream >>  cur_payload_info.url_hash;
       payload_info_stream >>  cur_payload_info.capacity;
@@ -76,6 +81,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
       payload_info_stream >>  cur_payload_info.absolute_url_is_absolute;
       payload_info_stream >>  cur_payload_info.absolute_url;
 
+        
       _payload_database.payloads.insert(pair<string, PayloadInfo>(cur_payload_info.url_hash, cur_payload_info));
       _payload_database.sorted_payloads.push_back(EfficiencyIndicator(cur_payload_info.url_hash, cur_payload_info.length));
                                                   
