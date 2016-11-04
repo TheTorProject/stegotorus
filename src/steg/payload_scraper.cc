@@ -134,6 +134,7 @@ int
 PayloadScraper::scrape_url_list(const string list_filename)
 {
   long int total_file_count = 0;
+  std::map<std::string, bool> scraped_tracker; //keeping track of url repetition
 
   if ( !exists( list_filename ) ) {
     log_warn("cover list file does not exsits.");
@@ -147,7 +148,16 @@ PayloadScraper::scrape_url_list(const string list_filename)
   }
   
   string file_url, cur_url_ext;
+  unsigned long total_processed_items = 0;
   while (url_list_stream >> file_url) {
+    total_processed_items++;
+    if (scraped_tracker.find(file_url) != scraped_tracker.end()) {
+      //make sure it is not a repetition of a url we already have
+      //scraped
+      log_warn("already have scraped %s", file_url.c_str());
+      continue;
+    }
+    
     total_file_count++;
     size_t last_slash = file_url.rfind("/");
     if (last_slash == string::npos) //AFAIK url needs one slash
@@ -163,10 +173,16 @@ PayloadScraper::scrape_url_list(const string list_filename)
     for(steg_type* cur_steg = _available_stegs; cur_steg->type!= 0; cur_steg++) {
       if (cur_steg->extension == cur_url_ext) {
         string scrape_result = scrape_url(file_url, cur_steg, true);
-        if (!scrape_result.empty())
+        if (!scrape_result.empty()) {
             _payload_db << total_file_count << " " << cur_steg->type << " " << scrape_result  << " " << relativize_url(file_url) << " " << 1 << " " << file_url << "\n"; //absolute_url = true
+        }
+        
       }
     }
+
+    scraped_tracker[file_url] = true;
+    log_debug("processed: %ld, scraped: %ld", total_processed_items, total_file_count);
+
   }
 
   return total_file_count; 
