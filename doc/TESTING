@@ -17,3 +17,9 @@ To test from command line using curl
 - curl --socks4 localhost:4999 http://1112.net/lastpage
 - curl -x socks4://127.0.0.1:4999 http://download.thinkbroadband.com/1MB.zip -o /dev/null
 - curl -x socks4://127.0.0.1:4999 http://download.thinkbroadband.com/1GB.zip -o /dev/null
+
+while :; do echo 'Hit CTRL+C'; curl http://localhost:5000/ 1> /dev/null &  done
+
+or
+
+for i in {1..1000}; do echo "GET / $i times"; curl http://localhost:5000/ 1> /dev/null & done

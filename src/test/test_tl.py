@@ -93,7 +93,7 @@ class TimelineTest(object):
         test_proxy = TesterProxy(proxy_args)
 
         self.doTest(label, st_args)
-
+        
 
     # buggy, disabled
     #def test_embed(self):
@@ -136,6 +136,19 @@ class TimelineTest(object):
             "chop", "client", "127.0.0.1:4999",
             "127.0.0.1:8080","http","127.0.0.1:5011","http",
             ))
+
+    def test_http_apache_fail_auth_trans_proxy(self):
+        pass
+        # self.doTest("chop", 
+        #    ("chop", "server",
+        #     "--passphrase", "\"correct passphrase\"",
+        #     "127.0.0.1:5001",
+        #     "http_apache", "127.0.0.1:5011",
+        #     "chop", "client",
+        #     "--passphrase", "\"wrong passphrase\"",
+        #     "127.0.0.1:4999",
+        #     "http_apache", "127.0.0.1:5011"
+        #    ))
 
 # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
 # the test directory.

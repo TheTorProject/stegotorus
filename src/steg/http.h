@@ -35,7 +35,7 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
        a constructor inside another and we have to have another init function
        called by both constructors */
     void init_http_steg_config_t(const std::vector<std::string>& options, bool init_payload_server);
-
+    
     /**
        reads the http_steg related option off the option list and store them in
        a map.

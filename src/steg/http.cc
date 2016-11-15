@@ -168,7 +168,7 @@ http_steg_config_t::http_steg_config_t(config_t *cfg, const std::vector<std::str
 http_steg_config_t::~http_steg_config_t()
 {
   delete payload_server; //maybe we don't need it
-  for(unsigned int i = 0; i < c_no_of_steg_protocol; i++)
+  for(unsigned int i = 0; i <= c_no_of_steg_protocol; i++)
     delete file_steg_mods[i];
 
 }

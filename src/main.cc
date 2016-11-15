@@ -4,6 +4,7 @@
  */
 
 #include "util.h"
+//#include "debug_new.h"
 
 #include "connections.h"
 #include "crypt.h"
@@ -367,7 +368,7 @@ main(int, const char *const *argv)
   //crypto should be initialized before protocol so the protocols
   //can use encryption
   init_crypto();
-
+ 
   do {
     end = begin+1;
     while (*end && !config_is_supported(*end))

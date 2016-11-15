@@ -73,7 +73,15 @@ struct chop_conn_t : conn_t
   bool must_send_p() const;
   static void must_send_timeout(evutil_socket_t, short, void *arg);
 
+  /**
+   In case the connection is transparentized or needed to be closed
+   then chop circuit/protocol should no longer influence the
+   status of the connection
+ */
+  void emancipate_from_upstream();
+
 };
+
 
 struct chop_circuit_t : circuit_t
 {
@@ -216,6 +224,8 @@ struct chop_config_t : config_t
 
   double noise2signal; //to protect against statistical analysis
 
+  std::string passphrase = "did you buy one of therapist reawaken chemists continually gamma pacifies?";
+
   CONFIG_DECLARE_METHODS(chop);
 };
 
@@ -255,6 +265,8 @@ chop_config_t::~chop_config_t()
       delete i->second;
 
   delete transparent_proxy;
+  delete handshake_encryptor;
+  delete handshake_decryptor;
   
 }
 
@@ -292,6 +304,13 @@ chop_config_t::init(unsigned int n_options, const char *const *options)
         log_warn("chop: --server-key option is not valid in server mode");
         goto usage;
       }
+    } else if (!strcmp(options[1], "--passphrase")) {
+      if (n_options <= 2)
+        goto usage;
+      
+      passphrase = options[2];
+      options++;
+      n_options--;
     } else if (!strcmp(options[1], "--trace-packets")) {
       trace_packets = true;
       log_enable_timestamps();
@@ -444,17 +463,14 @@ chop_config_t::get_steg(size_t n) const
 
 // Circuit methods
 
-const char passphrase[] =
-  "did you buy one of therapist reawaken chemists continually gamma pacifies?";
-
 void
 chop_config_t::init_handshake_encryption()
 {
   key_generator *kgen = 0;
 
   if (encryption)
-    kgen = key_generator::from_passphrase((const uint8_t *)passphrase,
-                                          sizeof(passphrase) - 1,
+    kgen = key_generator::from_passphrase((const uint8_t *)passphrase.data(),
+                                          passphrase.length(),
                                           0, 0, 0, 0);
   if (mode == LSN_SIMPLE_SERVER) {
     if (encryption) {
@@ -483,8 +499,8 @@ chop_config_t::circuit_create(size_t)
   key_generator *kgen = 0;
 
   if (encryption)
-    kgen = key_generator::from_passphrase((const uint8_t *)passphrase,
-                                          sizeof(passphrase) - 1,
+    kgen = key_generator::from_passphrase((const uint8_t *)passphrase.data(),
+                                          passphrase.length(),
                                           0, 0, 0, 0);
 
   if (mode == LSN_SIMPLE_SERVER) {
@@ -1663,6 +1679,7 @@ chop_config_t::conn_create(size_t index)
 }
 
 chop_conn_t::chop_conn_t()
+  :upstream(NULL), must_send_timer(NULL), sent_handshake(false)
 {
 }
 
@@ -1678,13 +1695,28 @@ chop_conn_t::~chop_conn_t()
 void
 chop_conn_t::close()
 {
-  if (this->must_send_timer)
+  //delete the timer and tell upstream to drop me
+  emancipate_from_upstream();
+  
+  conn_t::close();
+}
+
+/**
+   In case the connection is handled to the transparent proxy
+   then chop circuit/protocol should no longer influence the
+   status of the connection
+ */
+void
+chop_conn_t::emancipate_from_upstream()
+{
+  if (this->must_send_timer) {
     event_del(this->must_send_timer);
+    must_send_timer = NULL;
+  }
 
   if (upstream)
     upstream->drop_downstream(this);
 
-  conn_t::close();
 }
 
 circuit_t *
@@ -1728,8 +1760,10 @@ chop_conn_t::send(struct evbuffer *block)
 
   config->total_transmited_cover_bytes += transmission_size;
   sent_handshake = true;
-  if (must_send_timer)
+  if (must_send_timer) {
     evtimer_del(must_send_timer);
+    must_send_timer = NULL;
+  }
   return 0;
 }
 
@@ -1774,6 +1808,11 @@ chop_conn_t::recv_handshake()
     //invalid handshake, if we have a transparent proxy we 
     //we'll act as one for this connection
     log_warn("handshake authentication faild.");
+
+    //so we need to axe the must send timer as the connection will be
+    //managed by the transparent proxy and also drop the connection from
+    //upstream circuit but not close it
+    emancipate_from_upstream();
     
     if (config->transparent_proxy) {
       log_debug("stegotorus turning into a transparent proxy.");
@@ -2044,8 +2083,11 @@ void
 chop_conn_t::cease_transmission()
 {
   no_more_transmissions = true;
-  if (must_send_timer)
+  if (must_send_timer) {
     evtimer_del(must_send_timer);
+    must_send_timer = NULL;
+  }
+  
   conn_do_flush(this);
 }
 
@@ -2067,8 +2109,10 @@ chop_conn_t::transmit_soon(unsigned long milliseconds)
 void
 chop_conn_t::send()
 {
-  if (must_send_timer)
+  if (must_send_timer) {
     evtimer_del(must_send_timer);
+    must_send_timer = NULL;
+  }
 
   if (!steg) {
     log_warn(this, "send() called with no steg module available");

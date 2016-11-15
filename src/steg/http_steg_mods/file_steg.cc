@@ -45,7 +45,7 @@ FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_fr
 */
 FileStegMod::~FileStegMod()
 {
-  delete outbuf;
+  delete [] outbuf;
 }
 
 
@@ -297,12 +297,12 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   }
 
   evbuffer_drain(source, sbuflen);
-  delete data1;
+  delete [] data1;
   
   return outbuflen;
 
  error:
-  delete data1;
+  delete [] data1;
   return -1;
 
 }
