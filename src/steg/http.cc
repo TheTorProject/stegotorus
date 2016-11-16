@@ -34,12 +34,13 @@ using namespace std;
 #include "http_steg_mods/jpgSteg.h"
 #include "http_steg_mods/pngSteg.h"
 #include "http_steg_mods/gifSteg.h"
+#include "http_steg_mods/htmlSteg.h"
 
 #include "http.h"
 
 STEG_DEFINE_MODULE(http);
 void
-http_steg_config_t::init_http_steg_config_t(bool init_payload_server)
+http_steg_config_t::init_http_steg_config_t(const std::vector<std::string>& options, bool init_payload_server)
 { 
   if (init_payload_server) {
     string payload_filename;
@@ -50,7 +51,61 @@ http_steg_config_t::init_http_steg_config_t(bool init_payload_server)
   
     payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
 
+    /** first get the user option cause they might influence the steg mods */
+    store_options(options);
+
+    /** init the steg mods */
+    init_file_steg_mods();
+
   }
+
+}
+
+/**
+   reads the http_steg related option off the option list and store them in
+   a map.
+
+   @param options a list of strings contating the options
+
+   @return true if the options are valid, otherwise false
+*/
+bool
+http_steg_config_t::store_options(const std::vector<string>& options)
+{
+  for(auto cur_option = options.begin(); cur_option != options.end(); cur_option++) {
+    if (*cur_option == "--steg-mod") {
+      if (cur_option + 1 == options.end()) {
+        log_warn("http_steg: option --steg_mod requires steg module name");
+        goto usage;
+      }
+      http_steg_user_configs["steg_mod"] = *(cur_option+1);
+      cur_option++;
+      
+    } else if (*cur_option == "--cover-list") {
+      if (cur_option + 1 == options.end()) {
+        log_warn("http_steg: option --cover_list requires the cover list filename");
+        goto usage;
+      }
+      http_steg_user_configs["cover_list"] = *(cur_option + 1);
+      cur_option++;
+      
+    } else {
+      log_warn("chop: unrecognized option '%s'", cur_option->c_str());
+      goto usage;
+    }
+  }
+
+  return true;
+
+usage:
+  log_abort("http steg syntax:\n"
+           "\thttp <down_address> [steg-options]\n"
+           "\t\tdown_address ~ host:port\n"
+           "\t\tsteg-options ~ --stegmod \n"
+           "Examples:\n"
+           "http 192.168.1.99:11253 stegmod javascript\n"
+           "http 192.168.1.99:11253");
+  return false;
 
 }
 
@@ -58,35 +113,62 @@ void http_steg_config_t::init_file_steg_mods()
 {
   // we can't call this in constructor cause 
   //it should be called after the payload server is initialized
-
+  
   //initiating the steg modules
+
+  //if the steg_mod option has set by the user, only those steg mods
+  //will be activated otherwise, all other steg mods will be activated
+  
   //TODO: for now the first modules are set to void till their codes be
   //transformed into a FileStegMod child
   file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
   file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_HTML] = new HTMLSteg(payload_server, noise2signal);
 
+
+  //TODO: for now only one steg module can be mentioned for testing.
+  //It should be that a comma separated list should be able to
+  //activate
+
+  //Note: ideally it is the payload_server, but 
+   // unforturantely in reality it is decided in client_transmit. The point is that it make not much fundamental 
+   // difference cause the restriction is coming from the server side. So the solution is that the client transmit
+   // knows and impose the restriction. There is a total mess here, because http steg choose the type based on 
+   // randomness and the http_apache choses a file because it is using it send message. So the client transmit
+   // should not make any change on the url but just impose type restriction for now. We can make it more 
+   // sophisticated later. (another solution is that the server only transmit info on the correct types).
+
+  //Actually I checked at least in case of http steg it is the payload server which dedicdes which type to
+  //serve. So perhapse we give the task to the payload server. In case of http_apache it is even easier
+  //because the server doesn't even transmit any file name whose type isn't in the steg list
+  if (http_steg_user_configs.find("steg_mod") != http_steg_user_configs.end()) {
+    payload_server->set_active_steg_mods(http_steg_user_configs["steg_mod"]);
+  }
 }
-http_steg_config_t::http_steg_config_t(config_t *cfg)
-   : steg_config_t(cfg),
+
+http_steg_config_t::http_steg_config_t(config_t *cfg, const std::vector<std::string>& options)
+  : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
-  init_http_steg_config_t(true);
+  init_http_steg_config_t(options, true);
 
 }
 
-http_steg_config_t::http_steg_config_t(config_t *cfg, bool init_payload_server)
-   : steg_config_t(cfg),
+http_steg_config_t::http_steg_config_t(config_t *cfg, const std::vector<std::string>& options, bool init_payload_server)
+  : steg_config_t(cfg),
      is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
-  init_http_steg_config_t(init_payload_server);
+  init_http_steg_config_t(options, init_payload_server);
 }
 
 http_steg_config_t::~http_steg_config_t()
 {
   delete payload_server; //maybe we don't need it
-  for(unsigned int i = 0; i < c_no_of_steg_protocol; i++)
+  for(unsigned int i = 0; i <= c_no_of_steg_protocol; i++)
     delete file_steg_mods[i];
 
 }
@@ -190,35 +272,41 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
       return 0;
     }
 
+    //for test
+    //type = HTTP_CONTENT_JAVASCRIPT;
     log_debug(conn, "checking available capacity for type %u", type);
-    switch (type)
-      {
-      case HTTP_CONTENT_SWF:
-        if (hi >= 1024)
-          hi = 1024;
-        break;
+    hi = config->payload_server->_payload_database.typed_maximum_capacity(type);
+    // switch (type)
+    //   {
+    //     //TODO: This needs to be handle by the SWFSteg i.e. the
+    //     //default case but because there is no pre-generated
+    //     //swf payloads it needs a bit of tweak
+    //    //case HTTP_CONTENT_SWF:
+    //      //if (hi >= 1024)
+    //        //hi = 1024;
+    //        //break;
 
-      case HTTP_CONTENT_JAVASCRIPT:
-        if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2)
-          hi = config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2;
-        break;
+    //   case HTTP_CONTENT_JAVASCRIPT:
+    //     if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2)
+    //       hi = config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2;
+    //     break;
 
-      case HTTP_CONTENT_HTML:
-        if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML) / 2)
-          hi = config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML) / 2;
-        break;
+    //   case HTTP_CONTENT_HTML:
+    //     if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML) / 2)
+    //       hi = config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML) / 2;
+    //     break;
 
-      case HTTP_CONTENT_PDF:
-        if (hi >= PDF_MIN_AVAIL_SIZE)
-          hi = PDF_MIN_AVAIL_SIZE;
-        break;
+    //   //case HTTP_CONTENT_PDF:
+    //     //if (hi >= PDF_MIN_AVAIL_SIZE)
+    //      // hi = PDF_MIN_AVAIL_SIZE;
+    //    // break;
 
-      case HTTP_CONTENT_ENCRYPTEDZIP: //We need to prevent thi
-        return 0;
+    //   case HTTP_CONTENT_ENCRYPTEDZIP: //We need to prevent thi
+    //     return 0;
 
-      default:
-        hi = config->payload_server->_payload_database.typed_maximum_capacity(type);
-      }
+    //   default:
+    //     hi = config->payload_server->_payload_database.typed_maximum_capacity(type);
+    //   }
         
   }
 
@@ -281,14 +369,15 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name)
 int
 http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
 {
+  log_assert(!conn->write_eof);
   struct evbuffer *dest = conn->outbound();
   size_t sbuflen = evbuffer_get_length(source);
-  int bufsize = 10000;
-  char* buf = (char*) xmalloc(bufsize);
+  const int bufsize = 10000; //TOOD: this shouldn't be defined here, this is a universal constant
+  char buf[bufsize];
 
   char* data;
-  char* data2 = (char*) xmalloc (sbuflen*4);
-  char* cookiebuf = (char*) xmalloc (sbuflen*8);
+  char data2[sbuflen*4];
+  char cookiebuf[sbuflen*8];
   size_t payload_len = 0;
   size_t cnt = 0;
   size_t cookie_len = 0;
@@ -310,7 +399,7 @@ http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
 
   // retry up to 10 times
   while (!payload_len) {
-    payload_len = config->payload_server->find_client_payload(buf, bufsize,
+    payload_len = config->payload_server->find_client_payload((char*)buf, bufsize,
                                       TYPE_HTTP_REQUEST);
     if (cnt++ == 10) {
       goto err;
@@ -385,19 +474,16 @@ http_steg_t::http_client_cookie_transmit (evbuffer *source, conn_t *conn)
   transmit_len += 4;
 
   evbuffer_drain(source, sbuflen);
-  log_debug("CLIENT TRANSMITTED payload %d\n", (int) sbuflen);
+  type = config->payload_server->find_uri_type(buf, payload_len);
+
+  log_debug("CLIENT TRANSMITTED payload %d requesting type %d\n", (int) sbuflen, type);
   conn->cease_transmission();
 
-  type = config->payload_server->find_uri_type(buf, bufsize);
   have_transmitted = true;
 
-  free(buf);
-  free(data2);
   return transmit_len;
 
 err:
-  free(buf);
-  free(data2);
   return -1;
 
 }
@@ -425,8 +511,6 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
       datalen--;
     }
 
-
-
     r = rand() % 8;
 
     if (r == 0 && datalen > 0)
@@ -434,7 +518,6 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 
     if (r == 2 && datalen > 0)
       uri[so_far++] = '_';
-
 
     if (so_far > uri_sz - 6) {
       log_warn("too small\n");
@@ -467,8 +550,6 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 int
 http_steg_t::http_client_uri_transmit (evbuffer *source, conn_t *conn)
 {
-
-
   struct evbuffer *dest = conn->outbound();
   struct evbuffer_iovec *iv;
   int i, nv;
@@ -541,9 +622,7 @@ http_steg_t::transmit(struct evbuffer *source)
   //  struct evbuffer *dest = conn_get_outbound(conn);
 
   //  fprintf(stderr, "in http_ transmit %d\n", downcast_steg(s)->type);
-
-
-
+  
   if (config->is_clientside) {
         /* On the client side, we have to embed the data in a GET query somehow;
 	   the only plausible places to put it are the URL and cookies.  */
@@ -557,32 +636,45 @@ http_steg_t::transmit(struct evbuffer *source)
   }
   else {
     int rval = -1;
-    switch(type) {
+    //basic sanity check
+    if (!config->payload_server->is_activated_valid_content_type(type)) {
+      log_warn("The content type %i requested by client is not valid or activated", type);
+      return rval;
+    }
+
+    log_assert(config->file_steg_mods.find(type) != config->file_steg_mods.end()); //sanity check
+    rval = config->file_steg_mods[type]->http_server_transmit(source, conn);
+
+    // switch(type) {
 
     //case HTTP_CONTENT_SWF:                    
     //  rval = http_server_SWF_transmit(config->payload_server, source, conn);
      // break;
 
-    case HTTP_CONTENT_JAVASCRIPT:
-      rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_JAVASCRIPT);
-      break;
+    // case HTTP_CONTENT_JAVASCRIPT:
+    //   rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_JAVASCRIPT);
+    //   break;
 
-    case HTTP_CONTENT_HTML:
-      rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_HTML);
-      break;
+    // case HTTP_CONTENT_HTML:
+    //   rval = http_server_JS_transmit(config->payload_server, source, conn, HTTP_CONTENT_HTML);
+    //   break;
 
-    case HTTP_CONTENT_PDF:
-      rval = http_server_PDF_transmit(config->payload_server, source, conn);
-      break;
+    //case HTTP_CONTENT_PDF:
+     // rval = http_server_PDF_transmit(config->payload_server, source, conn);
+      //break;
 
-    default:
-      //this we choose from the steg module array
-      rval = config->file_steg_mods[type]->http_server_transmit(source, conn);
-      break;
-    }
+    // default:
+    //   //this we choose from the steg module array
+    //   rval = config->file_steg_mods[type]->http_server_transmit(source, conn);
+    //   break;
+    // }
 
     if (rval >= 0) {
       have_transmitted = 1;
+      if (type == -1) {
+        log_debug(conn, "have transmited with invalid type!!!");
+      }
+          
       // FIXME: should decide whether or not to do this based on the
       // Connection: header.  (Needs additional changes elsewhere, esp.
       // in transmit_room.)
@@ -626,6 +718,9 @@ http_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, struct evb
     data[s2.pos+3] = 0;
 
     type = config->payload_server->find_uri_type((char *)data, s2.pos+4);
+    //so if the type is bad/unsupported what should we do? 1) we should not
+    //transmit on this, that is we should say the connection offers 0 capacity
+    //or 2) we should transmit another type. 3) return a 404 error? 
 
     if (strstr((char*) data, "Cookie") != NULL) {
       p = strstr((char*) data, "Cookie:") + sizeof "Cookie: "-1;
@@ -665,8 +760,10 @@ http_steg_t::http_server_receive(conn_t *conn, struct evbuffer *dest, struct evb
   this->type = type;
 
   // FIXME: should decide whether or not to do this based on the
-  // Connection: header. (Needs additional changes elsewhere, esp.
-  // in transmit_room.)
+  // Connection: header. Especially in http_apache case we need to
+  // to follow the lead of cover server on this.
+  // (Needs additional changes elsewhere, esp.
+  // in transmit_room.) 
   conn->expect_close();
 
   conn->transmit_soon(WAIT_BEFORE_TRANSMIT);
@@ -691,28 +788,39 @@ int
 http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
 {
   int rval = RECV_BAD;
-  log_debug(conn, "sur1.5.1");
 
-  switch(type) {
-  //case HTTP_CONTENT_SWF:
-    //rval = http_handle_client_SWF_receive(this, conn, dest, source);
-    //break;
+  //basic sanity check
+  if (!(0 < type && type  <= (signed) c_no_of_steg_protocol && (config->file_steg_mods.find(type) != config->file_steg_mods.end())))
+    {
+      log_debug(conn,"something is fishy");
+    }
+  log_assert(0 < type && type  <= (signed) c_no_of_steg_protocol && (config->file_steg_mods.find(type) != config->file_steg_mods.end()));
+  //This just to make sure that the steg mod is initialized. if the content isn't actually of type .type, then the steg mod will reject it
+  //gracefully
+  log_debug(conn, "receiving a payload of type %i", type);
+  rval = config->file_steg_mods[type]->http_client_receive(conn, dest, source);
 
-  case HTTP_CONTENT_JAVASCRIPT:
-  case HTTP_CONTENT_HTML:
-    rval = http_handle_client_JS_receive(this, conn, dest, source);
-    break;
+  // type = HTTP_CONTENT_HTML;
+  // switch(type) {
+  // //case HTTP_CONTENT_SWF:
+  //   //rval = http_handle_client_SWF_receive(this, conn, dest, source);
+  //   //break;
 
-  case HTTP_CONTENT_PDF:
-    rval = http_handle_client_PDF_receive(this, conn, dest, source);
-    break;
+  // //case HTTP_CONTENT_JAVASCRIPT:
+  // case HTTP_CONTENT_HTML:
+  //   rval = http_handle_client_JS_receive(this, conn, dest, source);
+  //   break;
 
-  default:
-    log_debug(conn, "receiving a payload of type %i", type);
-    rval = config->file_steg_mods[type]->http_client_receive(conn, dest, source);
-    break;
+  // //case HTTP_CONTENT_PDF:
+  //   //rval = http_handle_client_PDF_receive(this, conn, dest, source);
+  //  // break;
+
+  // default:
+  //   log_debug(conn, "receiving a payload of type %i", type);
+  //   rval = config->file_steg_mods[type]->http_client_receive(conn, dest, source);
+  //   break;
      
-  }
+  // }
 
   if (rval == RECV_GOOD) have_received = 1;
   return rval;

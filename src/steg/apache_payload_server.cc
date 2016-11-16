@@ -38,7 +38,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
   
   //(_side == server_side) {
   /* First we read all the payload info from the db file  */
-  ifstream payload_info_stream;
+  std::ifstream payload_info_stream;
 
   if (_side == server_side) {
     //Initializing type specific data, we initiate with max_capacity = 0, count = 0
@@ -59,7 +59,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
 
       }
     
-    payload_info_stream.open(_database_filename, ifstream::in);
+    payload_info_stream.open(_database_filename, std::ifstream::in);
     if (!payload_info_stream.is_open()) {
       log_abort("Cannot open payload info file.");
     }
@@ -67,6 +67,11 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
     unsigned long file_id;
     while (payload_info_stream >> file_id) {
       PayloadInfo cur_payload_info;
+
+      if (_payload_database.payloads.find(cur_payload_info.url_hash) != _payload_database.payloads.end()) {
+        log_warn("duplicate url in the url list: %s", cur_payload_info.url.c_str());
+        continue;
+      }
 
       payload_info_stream >>  cur_payload_info.type;
       payload_info_stream >>  cur_payload_info.url_hash;
@@ -76,6 +81,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
       payload_info_stream >>  cur_payload_info.absolute_url_is_absolute;
       payload_info_stream >>  cur_payload_info.absolute_url;
 
+        
       _payload_database.payloads.insert(pair<string, PayloadInfo>(cur_payload_info.url_hash, cur_payload_info));
       _payload_database.sorted_payloads.push_back(EfficiencyIndicator(cur_payload_info.url_hash, cur_payload_info.length));
                                                   
@@ -97,7 +103,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
     init_uri_dict();
   }
   else{ //client side
-    payload_info_stream.open(_database_filename, ifstream::in);
+    payload_info_stream.open(_database_filename, std::ifstream::in);
     if (!(payload_info_stream.is_open())) //on client side it is not a fatal error
       log_debug("payload info file doesn't exists. I need to request it from server ");
     else {
@@ -107,7 +113,6 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
     }
 
   }
-
     
   //init curl
   if (!(_curl_obj = curl_easy_init()))
@@ -156,6 +161,7 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
            cur_payload_candidate->length/(double)cap < noise2signal)) {
     itr_payloads++; numCandidate++;
     cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
+    
     }
 
     if (itr_payloads != _payload_database.sorted_payloads.end() && cur_payload_candidate->length < c_max_buffer_size)
@@ -196,7 +202,8 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
                 numCandidate,
                 cap);
 
-      string best_payload = _payload_cache((itr_best->absolute_url_is_absolute ? "" : "http://" + _apache_host_name + "/") + (itr_best->absolute_url));
+      string& best_payload = _payload_cache((itr_best->absolute_url_is_absolute ? "" : "http://" + _apache_host_name + "/") + (itr_best->absolute_url)); //this is a permanent object in cache so it is ok to get a reference to it.
+      //if curl fails the size will be zero.
       *buf = (char*)best_payload.c_str();
       *size = best_payload.length();
       if (payload_id_hash)
@@ -225,8 +232,10 @@ ApachePayloadServer::fetch_hashed_url(const string& url)
 
   log_debug("asking cover server for payload %s", payload_uri.c_str());
   size_t payload_size = fetch_url_raw(_curl_obj, payload_uri, tmp_stream_buf);
-  if (payload_size) {
-      log_warn("Failed fetch the url %s", payload_uri.c_str());
+  if (payload_size == 0) {
+    log_warn("Failed fetch the url %s", payload_uri.c_str()); //here we should signal that we failed
+    //to retreieve the file and mark it as unacceptable
+    return string();
   }
 
   return tmp_stream_buf.str();
@@ -291,6 +300,8 @@ ApachePayloadServer::export_dict(iostream& dict_stream)
     {
       dict_stream << itr_uri->URL.c_str() << endl;
     }
+
+  log_debug("uri dictionary of size %ld has been exported.", uri_dict.size());
   
 }
 
@@ -310,7 +321,7 @@ bool
 ApachePayloadServer::store_dict(char* dict_buf, size_t dict_buf_size)
 {
 
-  ofstream dict_file(_database_filename);
+  std::ofstream dict_file(_database_filename);
 
   if (!dict_file.is_open()){
     log_warn("error in openning file:%s to store the uri dict: %s", _database_filename.c_str(), strerror(errno));
@@ -352,32 +363,11 @@ ApachePayloadServer::find_url_type(const char* uri)
   log_debug("filename %s", filename.c_str());
   size_t last_dot = filename.rfind(".");
   if (last_dot == string::npos) 
-    ext = ".html"; //no filename assume html
+    ext = "html"; //no filename assume html
   else
-    ext = filename.substr(last_dot);
+    ext = filename.substr(last_dot+1);
 
   log_debug("ext %s", ext.c_str());
-  if (ext == ".html" || ext == ".htm" || ext == ".php"
-      || ext == ".jsp" || ext == ".asp")
-    return HTTP_CONTENT_HTML;
-
-  if (ext == ".js" || ext ==".JS")
-    return HTTP_CONTENT_JAVASCRIPT;
-
-  if ( ext ==".pdf" || ext == ".PDF")
-    return HTTP_CONTENT_PDF;
-
-  if (ext ==".swf" || ext == ".SWF")
-    return HTTP_CONTENT_SWF;
-
-  if (ext == ".png" || ext == ".PNG")
-    return HTTP_CONTENT_PNG;
-
-  if (ext == ".jpg" || ext == ".JPG")
-    return HTTP_CONTENT_JPEG;
-
-  if (ext == ".gif" || ext == ".GIF")
-    return HTTP_CONTENT_GIF;
-
-  return 0;
+  return extension_to_content_type(ext.c_str());
+  
 }

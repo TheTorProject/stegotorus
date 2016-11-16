@@ -3,10 +3,13 @@
  */
 
 #include "util.h"
+
+#include <vector>
+#include <event2/buffer.h>
+
 #include "connections.h"
 #include "protocol.h"
 #include "steg.h"
-#include <event2/buffer.h>
 
 namespace {
   struct nosteg_steg_config_t : steg_config_t
@@ -26,7 +29,7 @@ namespace {
 
 STEG_DEFINE_MODULE(nosteg);
 
-nosteg_steg_config_t::nosteg_steg_config_t(config_t *cfg)
+nosteg_steg_config_t::nosteg_steg_config_t(config_t *cfg, const std::vector<std::string>&)
   : steg_config_t(cfg)
 {
 }

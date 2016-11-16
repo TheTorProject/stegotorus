@@ -60,6 +60,7 @@ public:
     ec.encrypt(handshake, (const uint8_t*)id_cat_padding);
     sha256((uint8_t*)(id_cat_padding), CIRCUIT_ID_LEN + PADDING_LEN, digest_buffer);
     memcpy((uint8_t*)(handshake + CIRCUIT_ID_LEN + PADDING_LEN), digest_buffer, HANDSHAKE_DIGEST_LENGTH);
+    //log_debug("handshake: %s", handshake);
     
   }
 

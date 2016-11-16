@@ -3,6 +3,9 @@
  */
 
 #include "util.h"
+
+#include <vector>
+
 #include "connections.h"
 #include "protocol.h"
 #include "steg.h"
@@ -29,7 +32,7 @@ namespace {
 
 STEG_DEFINE_MODULE(nosteg_rr);
 
-nosteg_rr_steg_config_t::nosteg_rr_steg_config_t(config_t *cfg)
+nosteg_rr_steg_config_t::nosteg_rr_steg_config_t(config_t *cfg, const std::vector<std::string>&)
   : steg_config_t(cfg)
 {
 }

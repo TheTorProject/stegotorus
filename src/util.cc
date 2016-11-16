@@ -655,3 +655,25 @@ int timeval_subtract(struct timeval *x, struct timeval *y,
   /* Return 1 if result is negative. */
   return x->tv_sec < y->tv_sec;
 }
+
+/**
+  convert char* buffer to hex string to be encoded in a text only
+  covers like js.
+
+  @param data the buffer which contains the raw data
+  @param data_len the length of data in data buffer in number of bytes
+  @param hexed_data should be initialized of double length of data_len 
+         and will contained the hex representation of the data.
+*/
+void encode_data_to_hex(uint8_t* data, size_t data_len, uint8_t* hexed_data)
+{
+  log_assert(hexed_data);
+
+  for(size_t cnt = 0; cnt < data_len; cnt++) {
+    hexed_data[cnt*2] = "0123456789abcdef"[(data[cnt] & 0xF0) >> 4]; //does this need to change to 8, I don't think so, just hex encoding, this function is present elsewhere too
+    hexed_data[cnt*2+1] = "0123456789abcdef"[(data[cnt] & 0x0F) >> 0];
+  }
+  
+
+}
+

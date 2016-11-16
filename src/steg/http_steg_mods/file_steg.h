@@ -1,6 +1,9 @@
 #ifndef FILE_STEG_H
 #define FILE_STEG_H
 
+#define SWF_SAVE_HEADER_LEN 1500
+#define SWF_SAVE_FOOTER_LEN 1500
+
 #include <list>
 
 using namespace std;
@@ -31,6 +34,9 @@ protected:
   uint8_t* outbuf; //this is where the payload sit after being injected by the
   //the message. it is define as class member to avoid allocation and delocation
 
+  //const int pgenflag; //tells us whether we are dealing with a payload taken from the database (0) or a generated on the fly one (1, for SWF only atm) 
+  //not clear if we need this at all
+
   /**
      Finds a payload of approperiate type and size
 
@@ -41,6 +47,7 @@ protected:
   */
   ssize_t pick_appropriate_cover_payload(size_t data_len, char** payload_buf, string& cover_id_hash);
   
+
   /**
      Encapsulate the repetative task of checking for the respones of content_type
      choosing one with appropriate size and extracting the body from header
@@ -61,6 +68,12 @@ protected:
   */
   ssize_t 
   extract_appropriate_respones_body(evbuffer* payload_buf);
+
+  /**
+     changes the size of Content Length in HTTTP response header, in case
+     the steg module changes  the size of the coverafter emebedding data
+   */
+  size_t alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, ssize_t new_content_length, uint8_t new_header[]);
 
  public:
   static const size_t c_HTTP_MSG_BUF_SIZE = HTTP_MSG_BUF_SIZE; //TODO: one constant

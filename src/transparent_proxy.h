@@ -10,6 +10,7 @@
 #define TRANSPARENT_PROXY_H
 
 #include <iostream>
+#include <unordered_map>
 #include <assert.h>
 #include <event2/listener.h>
 
@@ -23,8 +24,21 @@ protected:
   struct sockaddr_storage listen_on_addr;
   struct evconnlistener *listener;
 
-public:
+  static std::unordered_map<bufferevent *, conn_t*> transparentized_connections; //we need to keep track of these connections
+  //to close them approperiately
 
+  //based on the fact if the connection was given to us or we have
+  //create it we either close it or free it
+  static void free_or_close(struct bufferevent *bev) {
+    if (transparentized_connections.find(bev) == transparentized_connections.end())
+      bufferevent_free(bev);
+    else {
+      transparentized_connections[bev]->close();
+      transparentized_connections.erase(bev);
+    }
+  }
+    
+public:
   static void drained_writecb(struct bufferevent *bev, void *ctx);
   static void eventcb(struct bufferevent *bev, short what, void *ctx);
   static void close_on_finished_writecb(struct bufferevent *bev, void *ctx);

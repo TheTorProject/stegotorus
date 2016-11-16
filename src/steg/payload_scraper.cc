@@ -20,6 +20,9 @@ using namespace boost::filesystem;
 #include "http_steg_mods/jpgSteg.h"
 #include "http_steg_mods/pngSteg.h"
 #include "http_steg_mods/gifSteg.h"
+#include "http_steg_mods/swfSteg.h"
+#include "http_steg_mods/pdfSteg.h"
+#include "http_steg_mods/htmlSteg.h"
 
 #include "payload_scraper.h"
 #include "base64.h"
@@ -131,20 +134,30 @@ int
 PayloadScraper::scrape_url_list(const string list_filename)
 {
   long int total_file_count = 0;
+  std::map<std::string, bool> scraped_tracker; //keeping track of url repetition
 
   if ( !exists( list_filename ) ) {
     log_warn("cover list file does not exsits.");
     return -1;
   }
 
-  ifstream url_list_stream(list_filename);
+  std::ifstream url_list_stream(list_filename);
   if (!url_list_stream.is_open()) {
     log_warn("Cannot open url list file.");
     return -1;
   }
   
   string file_url, cur_url_ext;
+  unsigned long total_processed_items = 0;
   while (url_list_stream >> file_url) {
+    total_processed_items++;
+    if (scraped_tracker.find(file_url) != scraped_tracker.end()) {
+      //make sure it is not a repetition of a url we already have
+      //scraped
+      log_warn("already have scraped %s", file_url.c_str());
+      continue;
+    }
+    
     total_file_count++;
     size_t last_slash = file_url.rfind("/");
     if (last_slash == string::npos) //AFAIK url needs one slash
@@ -160,10 +173,16 @@ PayloadScraper::scrape_url_list(const string list_filename)
     for(steg_type* cur_steg = _available_stegs; cur_steg->type!= 0; cur_steg++) {
       if (cur_steg->extension == cur_url_ext) {
         string scrape_result = scrape_url(file_url, cur_steg, true);
-        if (!scrape_result.empty())
+        if (!scrape_result.empty()) {
             _payload_db << total_file_count << " " << cur_steg->type << " " << scrape_result  << " " << relativize_url(file_url) << " " << 1 << " " << file_url << "\n"; //absolute_url = true
+        }
+        
       }
     }
+
+    scraped_tracker[file_url] = true;
+    log_debug("processed: %ld, scraped: %ld", total_processed_items, total_file_count);
+
   }
 
   return total_file_count; 
@@ -196,19 +215,20 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
   _available_stegs = new steg_type[c_no_of_steg_protocol+1]; //one to be zero
   //memset(_available_file_stegs[0], (int)NULL, sizeof(FileStegMod*)*(c_no_of_steg_protocol+1)); 
 
-  _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = NULL;
-  _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js";  _available_stegs[0].capacity_function = PayloadServer::capacityJS;
+  _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(NULL);
+  _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js";  _available_stegs[0].capacity_function = JSSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
 
-  _available_file_stegs[HTTP_CONTENT_PDF] = NULL;
-  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PayloadServer::capacityPDF;
+  _available_file_stegs[HTTP_CONTENT_PDF] = new PDFSteg(NULL);
+  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PDFSteg::static_capacity;
 
-  _available_file_stegs[HTTP_CONTENT_SWF] = NULL;
-  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = PayloadServer::capacitySWF;
+ _available_file_stegs[HTTP_CONTENT_SWF] = new SWFSteg(NULL);
+  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = SWFSteg::static_capacity;  //Temp measure, later we don't need to do such acrobatics
 
-  _available_file_stegs[HTTP_CONTENT_HTML] = NULL; 
-  _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html";  _available_stegs[3].capacity_function = PayloadServer::capacityJS;
+  _available_file_stegs[HTTP_CONTENT_HTML] = new HTMLSteg(NULL); 
+  _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html";  _available_stegs[3].capacity_function = HTMLSteg::static_capacity;
 
   //in new model, extensions are stored in list so one type can have more ext.
+  
   _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  _available_stegs[4].capacity_function = PayloadServer::capacityJS;
 
   _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(NULL); //We are only using the capacity function so we don't need a payload server

@@ -8,7 +8,7 @@ AM_CXXFLAGS = -Werror -Wall -Wextra -Wno-missing-field-initializers -Wformat=2 -
 # Took off _FROTYFY_SOURCE because stdlib doesn't allow it with -O0 -g2
 # So it is only for releaes time
 #AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
-AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods -I$(srcdir)/src/test/gtest -I$(srcdir)/src/test/gtest/include $(lib_CPPFLAGS)  
+AM_CPPFLAGS = -I. -I$(srcdir)/src -I$(srcdir)/src/steg -I$(srcdir)/src/steg/http_steg_mods -I$(srcdir)/src/test/gtest  -I$(srcdir)/src/test/gtest/include -I$(srcdir)/src/test/nvwa_leak_detector $(lib_CPPFLAGS)  
 
 noinst_LIBRARIES = libstegotorus.a
 noinst_PROGRAMS  = unittests tltester tester_proxy webpage_tester g_unittests
@@ -30,6 +30,7 @@ STEGANOGRAPHERS = \
 	src/steg/http_steg_mods/pdfSteg.cc \
 	src/steg/http_steg_mods/swfSteg.cc \
 	src/steg/http_steg_mods/jsSteg.cc \
+	src/steg/http_steg_mods/htmlSteg.cc \
 	src/steg/http_steg_mods/jpgSteg.cc \
 	src/steg/http_steg_mods/pngSteg.cc \
 	src/steg/http_steg_mods/gifSteg.cc \
@@ -157,6 +158,7 @@ noinst_HEADERS = \
 	src/steg/payload_server.h \
 	src/steg/http.h \
 	src/steg/http_steg_mods/jsSteg.h \
+	src/steg/http_steg_mods/htmlSteg.h \
 	src/steg/http_steg_mods/pdfSteg.h \
 	src/steg/http_steg_mods/swfSteg.h \
 	src/steg/http_steg_mods/jpgSteg.h \

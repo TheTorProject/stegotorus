@@ -4,6 +4,7 @@
  */
 
 #include "util.h"
+//#include "debug_new.h"
 
 #include "connections.h"
 #include "crypt.h"
@@ -364,6 +365,10 @@ main(int, const char *const *argv)
   if (!*begin || !config_is_supported(*begin))
     usage();
 
+  //crypto should be initialized before protocol so the protocols
+  //can use encryption
+  init_crypto();
+ 
   do {
     end = begin+1;
     while (*end && !config_is_supported(*end))
@@ -400,8 +405,6 @@ main(int, const char *const *argv)
   if (!pf)
     log_warn("failed to create pid-file '%s': %s", pf.pathname().c_str(),
              pf.errmsg());
-
-  init_crypto();
 
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */
@@ -446,9 +449,9 @@ main(int, const char *const *argv)
     log_abort("failed to initialize DNS resolver");
 
   /* Handle signals. */
-#ifdef SIGPIPE
+  #ifdef SIGPIPE
    signal(SIGPIPE, SIG_IGN);
-#endif
+  #endif
   sig_int = evsignal_new(the_event_base, SIGINT,
                          handle_signal_cb, NULL);
   sig_term = evsignal_new(the_event_base, SIGTERM,

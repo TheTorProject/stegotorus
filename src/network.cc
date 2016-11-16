@@ -496,10 +496,15 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
      connection, and replace this callback with the regular event_cb */
   if (what & BEV_EVENT_CONNECTED) {
     circuit_t *ckt = conn->circuit();
-    if (!ckt) {
+    if ((!ckt) || conn->write_eof) {
       // This can happen if the 3-way handshake for a new connection
       // began while the circuit was still active but ended after the
       // circuit was closed.  Just drop the connection.
+      // or
+      // downstream has sent FIN resulting into triggering check_for_eof
+      // which shutdown all connection buffers. In that case we can't
+      // proceed as writing in the connection buffer will result in
+      // broken pipe error.
       log_debug(conn, "successful connection for stale circuit");
       conn->close();
       return;
@@ -814,6 +819,7 @@ create_outbound_connections_socks(circuit_t *ckt)
 void
 circuit_do_flush(circuit_t *ckt)
 {
+  log_debug(ckt, "flushing");
   size_t remain = evbuffer_get_length(bufferevent_get_output(ckt->up_buffer));
   ckt->pending_write_eof = true;
 
@@ -828,6 +834,7 @@ circuit_do_flush(circuit_t *ckt)
 void
 conn_do_flush(conn_t *conn)
 {
+  log_debug(conn, "flushing");
   size_t remain = evbuffer_get_length(conn->outbound());
   conn->pending_write_eof = true;
 

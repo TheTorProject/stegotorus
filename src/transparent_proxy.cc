@@ -39,6 +39,8 @@ static double drop_rate = 0; //do not drop anything by default
 
 #include "transparent_proxy.h"
 
+
+std::unordered_map<bufferevent *, conn_t*> TransparentProxy::transparentized_connections;
 #define MAX_OUTPUT (512*1024)
 bool TransparentProxy::trace_packet_data = false;
 
@@ -150,7 +152,7 @@ TransparentProxy::close_on_finished_writecb(struct bufferevent *bev, void *ctx)
   (void)ctx; //to avoid Werror: unused
 
   if (evbuffer_get_length(b) == 0) {
-    bufferevent_free(bev);
+    free_or_close(bev);
   }
 }
 
@@ -188,10 +190,10 @@ TransparentProxy::eventcb(struct bufferevent *bev, short what, void *ctx)
       } else {
         /* We have nothing left to say to the other
          * side; close it. */
-        bufferevent_free(partner);
+        free_or_close(partner);
       }
     }
-    bufferevent_free(bev);
+    free_or_close(bev);
   }
 }
 
@@ -215,9 +217,9 @@ TransparentProxy::accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
   if (bufferevent_socket_connect(b_out, (struct sockaddr*)&cur_circuit->connect_to_addr, 
                                  cur_circuit->connect_to_addrlen)<0) {
-    log_warn("bufferevent_socket_connect");
-    bufferevent_free(b_out);
-    bufferevent_free(b_in);
+    log_warn("bufferevent_socket_connect problem");
+    free_or_close(b_out);
+    free_or_close(b_in);
     return;
   }
 
@@ -232,6 +234,8 @@ void TransparentProxy::transparentize_connection(conn_t* conn_in, uint8_t* aprio
 {
   assert(conn_in->buffer);
   struct bufferevent *b_out, *b_in = conn_in->buffer;
+
+  
   /* Create two linked bufferevent objects: one to connect, one for the
    * new connection */
 
@@ -245,12 +249,19 @@ void TransparentProxy::transparentize_connection(conn_t* conn_in, uint8_t* aprio
 
   assert(b_in && b_out);
 
+  //sanity check, you can't transparentize a connection twice
+  log_assert(transparentized_connections.find(b_in) == transparentized_connections.end());
+
+  //keep track of the connection object as the clean up should be done by the connection
+  //manager not us.
+  transparentized_connections[b_in] = conn_in;
+
   //TODO:we need to deal with this if it is blocking (or not)
   if (bufferevent_socket_connect(b_out, (struct sockaddr*)&connect_to_addr, 
                                  connect_to_addrlen)<0) {
     log_warn("bufferevent_socket_connect");
-    bufferevent_free(b_out);
-    bufferevent_free(b_in);
+    free_or_close(b_out);
+    free_or_close(b_in);
     return;
   }
 

@@ -15,11 +15,6 @@ class SWFSteg : public FileStegMod
 
 public:
 
-/*unsigned int
-swf_wrap(payloads& pl, char* inbuf, int in_len, char* outbuf, int out_sz);
-
-unsigned int
-swf_unwrap(char* inbuf, int in_len, char* outbuf, int out_sz);*/
 
  /**
 compute the capcaity of the cover by getting a pointer to the
@@ -55,10 +50,5 @@ constructor just to call parent constructor
 
 };
 
-int
-http_server_SWF_transmit(PayloadServer* pl, struct evbuffer *source, conn_t *conn);
 
-int
-http_handle_client_SWF_receive(steg_t *s, conn_t *conn, struct evbuffer *dest,
-                               struct evbuffer* source);
 #endif

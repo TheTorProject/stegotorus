@@ -36,7 +36,6 @@ struct steg_config_t
   /** provides the data that the steg protocol needs
       to communicate to its peer. Chop needs to check this buffer
       before serving the user data as these data have proirities.
-      returns the size of data block.
   */
   evbuffer* protocol_data_in;
   evbuffer* protocol_data_out;
@@ -133,20 +132,20 @@ struct steg_module
   const char *name;
 
   /** Create an appropriate steg_config_t subclass for this module. */
-  steg_config_t *(*new_)(config_t *cfg);
+  steg_config_t *(*new_)(config_t *cfg, const std::vector<std::string>& options);
 };
 
 extern const steg_module *const supported_stegs[];
 
 int steg_is_supported(const char *name);
-steg_config_t *steg_new(const char *name, config_t *cfg);
+steg_config_t *steg_new(const char *name, config_t *cfg, const std::vector<std::string>& options);
 
 /* Macros for use in defining steg modules. */
 
 #define STEG_DEFINE_MODULE(mod)                         \
   /* new_ dispatchers */                                \
-  static steg_config_t *mod##_new(config_t *cfg)        \
-  { return new mod##_steg_config_t(cfg); }              \
+  static steg_config_t *mod##_new(config_t *cfg, const std::vector<std::string>& options)       \
+  { return new mod##_steg_config_t(cfg, options); }                             \
                                                         \
   /* canned methods */                                  \
   const char *mod##_steg_config_t::name() const         \
@@ -158,7 +157,7 @@ steg_config_t *steg_new(const char *name, config_t *cfg);
   } /* deliberate absence of semicolon */
 
 #define STEG_CONFIG_DECLARE_METHODS(mod)                \
-  mod##_steg_config_t(config_t *);                      \
+  mod##_steg_config_t(config_t *, const std::vector<std::string>&);                     \
   virtual ~mod##_steg_config_t();                       \
   virtual const char *name() const;                     \
   virtual steg_t *steg_create(conn_t *)                 \

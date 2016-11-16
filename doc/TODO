@@ -38,3 +38,5 @@ Misc:
   - configuration file support
   - genericize configuration?
   - Make it obey the xxx-pluggable-transport spec in Tor.
+  - Noise to signal should be steg mod option instead of chop option:
+    Some steg mod might need more noise and some less.

@@ -119,12 +119,13 @@ close_cleanup_cb(evutil_socket_t, short, void *arg)
   cgs = 0;
 }
 
-static conn_global_state *cgs;
+static conn_global_state *cgs = NULL;
 
 void
 conn_global_init(struct event_base *evbase)
 {
   cgs = new conn_global_state(evbase);
+  
 }
 
 void
@@ -142,9 +143,9 @@ conn_start_shutdown(int barbaric)
     }
     if (!cgs->connections.empty()) {
       unordered_set<conn_t *> v;
-      v.swap(cgs->connections);
+      v.swap(cgs->connections); //this is for not earasing the current iterator
       for (unordered_set<conn_t *>::iterator i = v.begin();
-           i != v.end(); i++)
+           i != v.end(); i++) 
         (*i)->close();
     }
   }
@@ -388,9 +389,15 @@ circuit_recv_eof(circuit_t *ckt)
     return;
   }
 
-  log_debug(ckt, "sending EOF to upstream");
-  ckt->write_eof = true;
-  shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
+  //check if we haven't sent eof already
+  if (!ckt->write_eof) {
+    log_debug(ckt, "sending EOF to upstream");
+    ckt->write_eof = true;
+    shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
+  } else {
+    log_debug(ckt, "upstream has already EOFed");
+  }
+  
 }
 
 void

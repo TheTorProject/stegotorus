@@ -1,0 +1,41 @@
+To check for memory leak we use debug_new utility residing at src/test/nvwa_leak_detector/.
+
+1. Edit Makefile.am add
+
+   src/test/nvwa_leak_detector/debug_new.cpp
+
+to
+
+   libstegotorus_a_SOURCES = \
+
+2. Edit util.h comment the new/delete overload (conflict with the overload of debug_new):
+
+/* Global operator new forwards to xzalloc (therefore, global operator
+   delete must forward to free). Clearing everything on allocation may
+   become unnecessary in the future, but for now it's good defensiveness. */
+
+/* /\* inline void *operator new(size_t n) *\/ */
+/* /\* { return xzalloc(n); } *\/ */
+/* /\* inline void *operator new[](size_t n) *\/ */
+/* /\* { return xzalloc(n); } *\/ */
+/* /\* inline void operator delete(void *p) *\/ */
+/* /\* { free(p); } *\/ */
+/* /\* inline void operator delete[](void *p) *\/ */
+/* /\* { free(p); } *\/ */
+/* inline void* operator new(size_t n, const std::nothrow_t &) */
+/* { return xzalloc(n); } */
+/* inline void* operator new[](size_t n, const std::nothrow_t &) */
+/* { return xzalloc(n); } */
+/* inline void operator delete(void *p, const std::nothrow_t &) */
+/* { free(p); } */
+/* inline void operator delete[](void *p, const std::nothrow_t &) */
+/* { free(p); } */
+
+3. Not that:
+Leaked object at 0x19e7c70 (size 40, 0x7f9029a7d7ac)
+Leaked object at 0x19e7cf0 (size 66, 0x7f9029a7d7ac)
+*** 2 leaks found
+delete: freed 0x19e7cf0 (size 66, 50 bytes still allocated)
+delete: freed 0x19e7c70 (size 40, 10 bytes still allocated)
+
+Relates to libbost and will be cleared once we get rid of libbost.

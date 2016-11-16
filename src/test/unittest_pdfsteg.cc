@@ -5,9 +5,9 @@
 #include "util.h"
 #include "unittest.h"
 #include "../steg/payload_server.h"
-#include "../steg/http_steg_mods/pdfSteg.h"
+//#include "../steg/http_steg_mods/pdfSteg.h"
 
-static void
+/*static void
 test_pdf_add_remove_delimiters(void *)
 {
   const char *data1 = "this is a test?? yes!";
@@ -31,9 +31,9 @@ test_pdf_add_remove_delimiters(void *)
   tt_bool_op(escape, ==, false);
 
  end:;
-}
+}*/
 
-static void
+/*static void
 test_pdf_wrap_unwrap(void *)
 {
   const char *pdf =
@@ -78,5 +78,14 @@ test_pdf_wrap_unwrap(void *)
 struct testcase_t pdf_tests[] = {
   T(add_remove_delimiters),
   T(wrap_unwrap),
+  END_OF_TESTCASES
+};*/
+
+#define T(name) \
+  { #name, test_pdf_##name, 0, 0, 0 }
+
+struct testcase_t pdf_tests[] = {
+  //  T(add_remove_delimiters),
+  // T(wrap_unwrap),
   END_OF_TESTCASES
 };

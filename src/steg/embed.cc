@@ -2,15 +2,15 @@
  * See LICENSE for other credits and copying information
  */
 
+#include <errno.h>
+#include <event2/buffer.h>
+#include <vector>
+
 #include "util.h"
 #include "connections.h"
 #include "protocol.h"
 #include "steg.h"
 #include "rng.h"
-
-#include <errno.h>
-#include <event2/buffer.h>
-#include <vector>
 
 using std::vector;
 
@@ -64,7 +64,7 @@ millis_since(struct timeval *last)
   return diff;
 }
 
-embed_steg_config_t::embed_steg_config_t(config_t *cfg)
+embed_steg_config_t::embed_steg_config_t(config_t *cfg, const std::vector<std::string>&)
   : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {

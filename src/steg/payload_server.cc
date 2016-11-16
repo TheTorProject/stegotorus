@@ -7,7 +7,8 @@
 #include "payload_server.h"
 #include "file_steg.h"
 #include "http_steg_mods/swfSteg.h"
-
+#include "http_steg_mods/pdfSteg.h"
+//#include "http_steg_mods/jsSteg.h"
 #include <ctype.h>
 #include <time.h>
 
@@ -107,7 +108,7 @@ PayloadServer::capacityPDF (char* buf, int len) {
      size = streamEnd - (streamStart+6) - 2; // 2 for \r\n before streamEnd
      if (size > 0) {
        cnt = cnt + size;
-       // log_debug("capacity of pdf increase by %d", size);
+       //log_debug("capacity of pdf increase by %d", size);
      }
      bp += 9;
   }
@@ -159,76 +160,112 @@ PayloadServer::capacityJS (char* buf, int len) {
 int 
 PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
 
-  char* uri;
-  char* ext;
+  std::string buf(buf_orig, buflen);
+  buf[buflen] = 0; //make it a null terminated buffer for sake of strchr
 
-  char* buf = (char *)xmalloc(buflen+1);
-  char* uri_end;
-
-  memcpy(buf, buf_orig, buflen);
-  buf[buflen] = 0;
-
-  if (strncmp(buf, "GET", 3) != 0
-      && strncmp(buf, "POST", 4) != 0) {
+  if (strncmp(buf.c_str(), "GET", 3) != 0
+      && strncmp(buf.c_str(), "POST", 4) != 0) {
     log_debug("Unable to determine URI type. Not a GET/POST requests.\n");
     return -1;
   }
 
-  uri = strchr(buf, ' ') + 1;
+  size_t uri_pos = buf.find(' ');
 
-  if (uri == NULL) {
+  if (uri_pos == std::string::npos) {
     log_debug("Invalid URL\n");
     return -1;
   }
 
-  if (!(uri_end = strchr(uri, '?')))
-    uri_end = strchr(uri, ' ');
+  uri_pos += 1;
+
+  size_t uri_end_pos = buf.find('?', uri_pos);
+  if (uri_end_pos == std::string::npos)
+    uri_end_pos = buf.find(' ', uri_pos);
   
-
-  if (uri_end == NULL) {
-    log_debug("unterminated uri\n");
+  if (uri_end_pos == std::string::npos) {
+    log_debug("unterminated uri: %s", buf.substr(uri_pos).c_str());
     return -1;
   }
 
-  uri_end[0] = 0;
+  size_t filename_pos = buf.rfind('/', uri_end_pos);
 
-  ext = strrchr(uri, '/');
-
-  if (ext == NULL) {
-    log_debug("no / in url: find_uri_type...");
+  if (filename_pos == std::string::npos) {
+    log_debug("no / in url: %s", buf.substr(uri_pos, uri_end_pos - uri_pos + 1).c_str());
     return -1;
   }
 
-  ext = strchr(ext, '.');
+  std::string filename = buf.substr(filename_pos, uri_end_pos - filename_pos); //we don't want to include
+  //the uri end character ' ' or '?' in the filename
+  size_t ext_pos = filename.find('.');
+  //if an extension is found then there is a dot otherwise it is null
+  log_debug("payload extension is %s", filename.substr(ext_pos+1).c_str());
+  return (ext_pos == std::string::npos) ?
+    extension_to_content_type(NULL) :    
+    extension_to_content_type(filename.substr(ext_pos+1).c_str());
 
-  if (ext == NULL || !strncmp(ext, ".html", 5) || !strncmp(ext, ".htm", 4) || !strncmp(ext, ".php", 4)
-      || !strncmp(ext, ".jsp", 4) || !strncmp(ext, ".asp", 4))
+}
+
+/**
+   get the file extension and return the numerical contstant representing the content type
+
+   @param extension file extension such as html, htm, js, jpg, 
+
+   @return content type constant or -1 if not found, a null extensions is considered as html type
+*/
+int 
+PayloadServer::extension_to_content_type(const char* extension) {
+
+  if (extension == NULL || !strncmp(extension, "html", 5) || !strncmp(extension, "htm", 4) || !strncmp(extension, "php", 4)
+      || !strncmp(extension, "jsp", 4) || !strncmp(extension, "asp", 4))
     return HTTP_CONTENT_HTML;
 
-  if (!strncmp(ext, ".js", 3) || !strncmp(ext, ".JS", 3))
+  if (!strncmp(extension, "js", 3) || !strncmp(extension, "JS", 3))
     return HTTP_CONTENT_JAVASCRIPT;
 
-  if (!strncmp(ext, ".pdf", 4) || !strncmp(ext, ".PDF", 4))
+  if (!strncmp(extension, "pdf", 4) || !strncmp(extension, "PDF", 4))
     return HTTP_CONTENT_PDF;
 
 
-  if (!strncmp(ext, ".swf", 4) || !strncmp(ext, ".SWF", 4))
+  if (!strncmp(extension, "swf", 4) || !strncmp(extension, "SWF", 4))
     return HTTP_CONTENT_SWF;
 
-  if (!strncmp(ext, ".png", 4) || !strncmp(ext, ".PNG", 4))
+  if (!strncmp(extension, "png", 4) || !strncmp(extension, "PNG", 4))
     return HTTP_CONTENT_PNG;
 
-  if (!strncmp(ext, ".jpg", 4) || !strncmp(ext, ".JPG", 4))
+  if (!strncmp(extension, "jpg", 4) || !strncmp(extension, "JPG", 4))
     return HTTP_CONTENT_JPEG;
 
-  if (!strncmp(ext, ".gif", 4) || !strncmp(ext, ".GIF", 4))
+  if (!strncmp(extension, "gif", 4) || !strncmp(extension, "GIF", 4))
     return HTTP_CONTENT_GIF;
 
-  free(buf);
   return -1;
   
 }
 
+
+/**
+   set the set of active type whose corresponding steg mode are permitted to use 
+   this is mostly for testing specific steg types
+
+   @param active_steg_mod_list comma separated string set of active steg mod indicated by extension. currently 
+   only one active steg is supported
+
+   @return true if successful false if there was a problem with the indicated type.
+*/
+bool PayloadServer::set_active_steg_mods(const std::string& active_steg_mod_list)
+{
+  //TODO: only one steg extension is accepted here. multiple steg type
+  //activation should be supported.
+  int requested_steg_type =  extension_to_content_type(active_steg_mod_list.c_str());
+
+  if (requested_steg_type == -1)
+    return false;
+  
+  active_steg_mods.push_back(requested_steg_type);
+
+  return true;
+
+}
 
 /*
  * fixContentLen corrects the Content-Length for an HTTP msg that
@@ -868,6 +905,7 @@ has_eligible_HTTP_content (char* buf, int len, int type) {
     }
   }
   
+  //check if we need to update this for current SWF implementation
   if (type == HTTP_CONTENT_SWF && swfFlag == 1 && 
       ((len + buf - end) > SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8))
     return 1;
@@ -908,4 +946,3 @@ find_content_length (char *hdr, int /*hlen*/) {
   contentLen = atoi(buf);
   return contentLen;
 }
-

@@ -16,8 +16,11 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
     bool is_clientside : 1;
     PayloadServer* payload_server;
 
+    //list of user config for http steg
+    user_config_dict_t http_steg_user_configs;
+      
     //list of available steg type modules
-    map<unsigned int, FileStegMod*> file_steg_mods;
+    map<unsigned int, FileStegMod*> file_steg_mods;    
 
     /** If you are a child of http_steg_t and you want to initiate your own,
         you need to call this constructor in your config_t constructor instead.
@@ -26,12 +29,22 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
         to re-implement everthing. So I thought it's not worth it to have so
         much useless code just to change 2 lines.
     */
-    http_steg_config_t(config_t *cfg, bool init_payload_server);
+    http_steg_config_t(config_t *cfg, const std::vector<std::string>& options, bool init_payload_server);
 
     /* it is unfortunate that c++ isn't flexibale enough to allow calling a
        a constructor inside another and we have to have another init function
        called by both constructors */
-    void init_http_steg_config_t(bool init_payload_server);
+    void init_http_steg_config_t(const std::vector<std::string>& options, bool init_payload_server);
+    
+    /**
+       reads the http_steg related option off the option list and store them in
+       a map.
+
+       @param options a list of strings contating the options
+
+       @return true if the options are valid, otherwise false
+     */
+    bool store_options(const std::vector<string>& options);
     
     /**
        init the each file steg mod

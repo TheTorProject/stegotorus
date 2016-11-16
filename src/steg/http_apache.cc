@@ -64,8 +64,8 @@ namespace  {
 
      /* Client side communication */
      /** 
-         Uses the server side database to init the URI dictionary. This is only for test purpose. return true if it succeeds
-
+         Uses the server side database to init the URI dictionary. 
+         This is only for test purpose. return true if it succeeds
      */
      bool init_uri_dict();
 
@@ -161,14 +161,16 @@ const char http_apache_steg_config_t::c_end_of_dict[] = "\r\n";
 
 STEG_DEFINE_MODULE(http_apache);
 
-http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
-  : http_steg_config_t(cfg, false),
+http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg, const std::vector<std::string>& options)
+  : http_steg_config_t(cfg, options, false),
     _cur_operation(op_STEG_NO_OP),
     uri_dict_up2date(false)
 {
   string payload_filename;
   string cover_server, cover_list;
 
+  store_options(options);
+  
   if (is_clientside)
     payload_filename = "apache_payload/client_list.txt";
   else {
@@ -181,8 +183,8 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg)
       cover_server = cfg->steg_mod_user_configs["protocol"]["cover_server"] != "" ?
         cfg->steg_mod_user_configs["protocol"]["cover_server"] : cover_server;
 
-      cover_list = cfg->steg_mod_user_configs["protocol"]["cover_list"] != "" ?
-        cfg->steg_mod_user_configs["protocol"]["cover_list"] : "";
+      cover_list = http_steg_user_configs["cover_list"] != "" ?
+        http_steg_user_configs["cover_list"] : "";
     }
 
   }
@@ -620,7 +622,13 @@ http_apache_steg_t::~http_apache_steg_t()
 
 }
 
-bool http_apache_steg_config_t::init_uri_dict()
+/** 
+    Uses the server side database to init the URI dictionary. 
+    This is only for test purpose. return true if it succeeds
+
+    Defined inline to disable unused warning
+*/
+inline bool http_apache_steg_config_t::init_uri_dict()
 {
   /* We need to call this explicitly because it is only called by the payload
      server on the server side, but we want to use it on the client side */

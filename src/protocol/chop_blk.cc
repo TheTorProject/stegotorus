@@ -18,11 +18,22 @@
 using std::tr1::unordered_set;
 using std::numeric_limits;
 
+const uint8_t c_genric_opname_buffer_size = 4;
+
 namespace chop_blk
 {
 
+/**
+   returns the human readable form of the packet id code. If it is unrecognized
+   then it copies it in fallbackbuf and return it.
+
+   @param o:   the integer id code of the packet.
+   @param fallbackout: a pointer to an array of size c_genric_opname_buffer_size to store 
+                       the unrecognized custom code
+   SEC TODO: don't rely on the user to allocate c_genric_opname_buffer_size
+ */
 const char *
-opname(unsigned int o, char fallbackbuf[4])
+opname(unsigned int o, char fallbackbuf[c_genric_opname_buffer_size])
 {
   switch (o) {
   case op_XXX: return "XXX";
@@ -37,9 +48,9 @@ opname(unsigned int o, char fallbackbuf[4])
       return "^^^";
 
     if (o < op_STEG0)
-      xsnprintf(fallbackbuf, sizeof fallbackbuf, "R%02x", o);
+      xsnprintf(fallbackbuf, c_genric_opname_buffer_size, "R%02x", o);
     else
-      xsnprintf(fallbackbuf, sizeof fallbackbuf, "S%02x", o - op_STEG0);
+      xsnprintf(fallbackbuf, c_genric_opname_buffer_size, "S%02x", o - op_STEG0);
     return fallbackbuf;
   }
 }

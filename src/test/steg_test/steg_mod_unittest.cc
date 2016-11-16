@@ -43,6 +43,7 @@
 #include "pngSteg.h"
 #include "jpgSteg.h"
 #include "gifSteg.h"
+#include "swfSteg.h"
 
 #include <gtest/gtest.h>
 
@@ -72,7 +73,8 @@ class StegModTest : public testing::Test {
   }
 
   void encode_decode(const char* cover_file_name, const char* test_phrase, FileStegMod* test_steg_mod) {
-
+   
+   //if() test for SWFSteg here?
     read_cover(cover_file_name);
 
     ssize_t data_len = strlen(test_phrase)+1;
@@ -120,6 +122,52 @@ la chaleur lourde qui épaissit l'air.";
   }
 
 };
+
+//SWF
+TEST_F(StegModTest, swf_encode_decode_small) {
+  SWFSteg swf_test_steg(NULL, 0);
+  encode_decode("src/test/steg_test/inrozxa.swf", short_message, &swf_test_steg);
+  //ASSERT_TRUE(false);
+
+}
+
+TEST_F(StegModTest, swf_encode_decode_large) {
+  SWFSteg swf_test_steg(NULL, 0);
+  encode_decode("src/test/steg_test/zone.swf",long_message, &swf_test_steg);
+  //ASSERT_TRUE(false);
+
+}
+
+TEST_F(StegModTest, swf_gracefully_invalid) {
+  SWFSteg swf_test_steg(NULL, 0);
+
+  read_cover("src/test/steg_test/inrozxa.swf");
+  EXPECT_FALSE(swf_test_steg.headless_capacity((char*)cover_payload, cover_len));
+  delete cover_payload;
+}
+
+//PDF - probably needs another capacity test and a chunking test too, depending on whatever SRI will be piping into here
+/*TEST_F(StegModTest, pdf_encode_decode_small) {
+  PDFSteg pdf_test_steg(NULL, 0);
+  encode_decode("src/test/steg_test/(insert pdf here)", short_message, &pdf_test_steg);
+  //ASSERT_TRUE(false);
+
+}
+
+TEST_F(StegModTest, pdf_encode_decode_large) {
+  PDFSteg pdf_test_steg(NULL, 0);
+  encode_decode("src/test/steg_test/(insert pdf here)",long_message, &pdf_test_steg);
+  //ASSERT_TRUE(false);
+
+}
+//whatever version of headless capacity this ends up calling should not be expanding!
+TEST_F(StegModTest, pdf_gracefully_invalid) {
+  PDFSteg pdf_test_steg(NULL, 0);
+
+  read_cover("src/test/steg_test/(insert pdf here)");
+  EXPECT_FALSE(pdf_test_steg.headless_capacity((char*)cover_payload, cover_len));
+  delete cover_payload;
+}*/
 
 //PNG
 TEST_F(StegModTest, png_encode_decode_small) {

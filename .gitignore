@@ -6,6 +6,7 @@
 *.gcov
 *.gcda
 *.gcno
+*.log
 *.orig
 
 .deps/

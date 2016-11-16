@@ -2,7 +2,9 @@
 #define _PAYLOAD_SERVER_H
 #include <map>
 #include <string>
+#include <vector>
 #include <list>
+#include <algorithm>
 
 using namespace std; 
 
@@ -17,7 +19,7 @@ using namespace std;
 #define NO_NEXT_STATE -1
 
 #define MAX_PAYLOADS 10000
-#define MAX_RESP_HDR_SIZE 512
+#define MAX_RESP_HDR_SIZE 8192
 
 // max number of payloads that have enough capacity from which
 // we choose the best fit
@@ -40,19 +42,25 @@ using namespace std;
 #define HTML_MIN_AVAIL_SIZE 1026
 
 #define HTTP_MSG_BUF_SIZE 500000
+static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
+
+#define SWF_HYPO_CAPACITY HTTP_MSG_BUF_SIZE - MAX_RESP_HDR_SIZE - (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512)
 
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
+#define PDF_MAX_AVAIL_SIZE 100000 //added from SRI build...just for testing for now
 // PDF_MIN_AVAIL_SIZE should reflect the min number of data bytes
-// a pdf doc can encode
+// a pdf doc can encode...ignoring this for now.
 
 // specifying the type of contents as an input argument
 // for has_eligible_HTTP_content()
+#define HTTP_CONTENT_UNSUPPORTED       -1
+#define HTTP_CONTENT_RESERVED           0
 #define HTTP_CONTENT_JAVASCRIPT         1
-#define HTTP_CONTENT_PDF                2
-#define HTTP_CONTENT_SWF                3
-#define HTTP_CONTENT_ENCRYPTEDZIP       4
-#define HTTP_CONTENT_HTML               5
+#define HTTP_CONTENT_HTML               2
+#define HTTP_CONTENT_PDF                3
+#define HTTP_CONTENT_SWF                4
+#define HTTP_CONTENT_ENCRYPTEDZIP       5
 #define HTTP_CONTENT_JPEG               6
 #define HTTP_CONTENT_PNG                7
 #define HTTP_CONTENT_GIF                8
@@ -66,6 +74,7 @@ const unsigned int c_no_of_steg_protocol = 8;
 // 1) CONTENT-TYPE in HTTP header specifies that the HTTP body is a JS
 // 2) CONTENT-TYPE corresponds to HTML, and the HTTP body contains JS
 //    denoted by script type for JS
+//for now the second type is handled via the original non subclassed functions as it is a bit more complex
 #define CONTENT_JAVASCRIPT              1
 #define CONTENT_HTML_JAVASCRIPT         2
 
@@ -195,6 +204,32 @@ class PayloadDatabase{
     /*TODO: I need to look at TracePayloadServer::typed_maximum_capacity to figure out the morale behind the strange division in computing the capacity*/
   }
 
+  /**
+   reduce the maximum capacity of a specific type in case the cover with
+   maximum capacity get marked as corrupted 
+
+   @param payload_id_hash id_hash of the payload which got corrupted/became unavailable
+
+  */
+  void adjust_type_max_capacity(const std::string&  payload_id_hash ){
+      //see if adjustment is needed.
+    if (payloads[payload_id_hash].corrupted &&
+        payloads[payload_id_hash].capacity >= typed_maximum_capacity(payloads[payload_id_hash].type)) {
+      //then we need to probably decrease the maximum capacity
+      const unsigned int affected_type = payloads[payload_id_hash].type;
+      //searching for new max capacity among all eligible covers
+      type_detail[affected_type].max_capacity = 0;
+      for(auto cur_payload = payloads.begin(); cur_payload != payloads.end(); cur_payload++)
+        {
+          if ((cur_payload->second.type == affected_type) &&
+              (!cur_payload->second.corrupted) &&
+              (cur_payload->second.capacity > type_detail[affected_type].max_capacity)) {
+            type_detail[affected_type].max_capacity = cur_payload->second.capacity;
+          }
+        }
+    }
+  }
+  
 };
 
 /* The payload server needs to know which side we are at */
@@ -208,6 +243,9 @@ class PayloadServer
 {
  protected:
   MachineSide _side;
+
+  //list of active steg mod, if the list is empty everything is active
+  std::vector<unsigned int> active_steg_mods;
   
  public:
   /** TODO: either change the name (no _) or the access */
@@ -220,6 +258,15 @@ class PayloadServer
     }
   
   virtual ~PayloadServer(){};
+
+  /**
+   get the file extension and return the numerical contstant representing the content type
+
+   @param extension file extension such as html, htm, js, jpg, 
+
+   @return content type constant or -1 if not found, a null extensions is considered as html type
+  */
+  int extension_to_content_type(const char* extension);
 
   virtual unsigned int find_client_payload(char* buf, int len, int type) = 0;
 
@@ -272,9 +319,44 @@ class PayloadServer
      to the new size.
 
      @return the length of new header
+
+     see also 
+  size_t alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, ssize_t new_content_length, uint8_t new_header[]) in file_steg.h
    */
   size_t adjust_header_size(char* original_header, size_t original_length,                            char* newHeader);
+
+  /**
+     set the set of active type whose corresponding steg mode are permitted to use 
+     this is mostly for testing specific steg types
+
+     @param active_steg_mod_list comma separated string set of active steg mod indicated by extension. currently 
+            only one active steg is supported
+
+     @return true if successful false if there was a problem with the indicated type.
+   */
+  bool set_active_steg_mods(const std::string& active_steg_mod_list);
+
+  /**
+     return true if the content type has a steg mod assigned to it and is 
+     activated by user  or if user has not been restrict to any content type
+
+     @param content_type the content type to be check if is allowed to be served
+
+     @return true if the payload server is supposed to serve this type of content 
+     otherwise false
+  */
+  bool  is_activated_valid_content_type(int content_type) {
+    return (
+            ((content_type > 0 && content_type < MAX_CONTENT_TYPE)) && //validity
+            ((active_steg_mods.empty()) || //user hasn't restricted or
+             (std::find(active_steg_mods.begin(), active_steg_mods.end(), content_type) != active_steg_mods.end()))
+            ); //or it is part of the activated
+            //mods
+  }
+    
+      
 };
+
 
   /** Moved from payloads.c without a touch. needs clean up */
   char * strInBinary (const char *pattern, unsigned int patternLen,
@@ -290,6 +372,17 @@ class PayloadServer
   int isalnum_ (char c);
   int offset2Alnum_ (char *p, int range);
   int offset2Hex (char *p, int range, int isLastCharHex);
+  int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
+                   unsigned int jtlen, unsigned int jdlen, int mode);
+
+int isxString(char *str);
+
+int isGzipContent (char *msg);
+
+int findContentType (char *msg);
+
+int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
+                    unsigned int dataBufSize, int *fin, int mode);
 
   int gen_response_header(char* content_type, int gzip, int length,
                           char* buf, int buflen);
