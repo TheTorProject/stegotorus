@@ -10,10 +10,14 @@
 #include <vector>
 
 #include "cpp.h"
+#include "steg/jel_knobs.h"
 
 
 using std::vector;
 using std::string;
+
+enum class StegData { TRACES, IMAGES, PDFS, STREAM };
+
 
 /* for parsing in chop.cc */
 class down_address_t {
@@ -32,7 +36,6 @@ class down_address_t {
 
 
 class modus_operandi_t {
-
 
 
  public:
@@ -55,9 +58,9 @@ class modus_operandi_t {
   /* chop options */
   bool trace_packets(void){ return _trace_packets; }
 
-  //bool persist_mode(void){ return _persist_mode; }
+  bool persist_mode(void){ return _persist_mode; }
 
-  //string shared_secret(void){ return _shared_secret; }
+  string shared_secret(void){ return _shared_secret; }
 
   bool disable_encryption(void){ return _disable_encryption; }
 
@@ -65,12 +68,29 @@ class modus_operandi_t {
   
 
   /* process options */
+  bool managed(void){ return _managed; }
+  void managed(bool val){  _managed = val; }
+
+  string managed_method(void){ return _managed_method; }
+
   bool daemon(void){ return _daemon; }
 
   bool logmethod_set(void){ return _logmethod_set; }
 
   string pid_file(void){ return _pid_file; }
 
+  /* steganographic options */
+  string hostname(void){ return _hostname; }
+
+  bool post_reflection(void){ return _post_reflection; }
+
+  jel_knobs_t* jel_knobs(void){ return  &_jel_knobs; }
+  
+  /* steg data paths */
+
+  string get_steg_datadir(StegData variety);
+  bool set_steg_datadir(StegData variety, string value);
+  
   DISALLOW_COPY_AND_ASSIGN(modus_operandi_t);
  
  private: bool _is_ok;
@@ -83,15 +103,32 @@ class modus_operandi_t {
   
   /* chop options */
  private: bool _trace_packets;
- //private: bool _persist_mode;
- //private: string _shared_secret;
+ private: bool _persist_mode;
+ private: string _shared_secret;
  private: bool _disable_encryption;
  private: bool _disable_retransmit;
  
   /* process options */
+ private: bool _managed;
+ private: string _managed_method;
  private: bool _daemon;
  private: bool _logmethod_set;
  private: string _pid_file;
+
+
+  /* steganographic options */
+ private: bool _post_reflection;
+ private: string _hostname;
+  
+
+ private: jel_knobs_t _jel_knobs;
+
+ private: string _traces_dir;
+ private: string _images_dir;
+ private: string _pdfs_dir;
+ private: string _stream_dir;
+
+  
 
 
   /* helper routines */
@@ -101,9 +138,13 @@ class modus_operandi_t {
 
  private: bool line_is(string&, const char *, string&);
 
- //private: bool set_scheme(const char *, string&, int32_t);
+ private: bool set_scheme(const char *, string&, int32_t);
+
+ private: bool set_string(string&, const char *, string&, int32_t);
   
  private: bool set_bool(bool&, string&, int32_t);
+
+ private: bool set_int(int&, string&, int32_t);
 
 };
 

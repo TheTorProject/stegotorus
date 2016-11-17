@@ -1,0 +1,20 @@
+#!/bin/bash
+
+
+VALGRIND=$1
+
+EVENT_NOKQUEUE=yes
+export EVENT_NOKQUEUE
+
+CONFIG="modus_operandi/client-vm06-config.conf"
+
+CLIENT="./stegotorus --config-file=${CONFIG}"
+
+if [ -n "$VALGRIND" ]
+then
+valgrind --leak-check=yes  --dsymutil=yes --trace-children=no ${CLIENT} 2>&1 | tee 
+else
+${CLIENT} #2>&1 | tee 
+fi
+
+

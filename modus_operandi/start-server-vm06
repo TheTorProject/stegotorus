@@ -14,7 +14,7 @@ if [ -n "$VALGRIND" ]
 then
 valgrind --leak-check=yes  --db-attach=yes --db-command="/usr/bin/gdb %f %p"  --dsymutil=yes --trace-children=no ${SERVER} 2>&1 | tee 
 else
-${SERVER} 2>&1 | tee 
+nohup ${SERVER} & # 2>&1 | tee 
 fi
 
 
