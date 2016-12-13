@@ -40,7 +40,7 @@ using namespace std;
 
 STEG_DEFINE_MODULE(http);
 void
-http_steg_config_t::init_http_steg_config_t(const std::vector<std::string>& options, bool init_payload_server)
+http_steg_config_t::init_http_steg_config_t(bool init_payload_server)
 { 
   if (init_payload_server) {
     string payload_filename;
@@ -50,9 +50,6 @@ http_steg_config_t::init_http_steg_config_t(const std::vector<std::string>& opti
       payload_filename = "traces/server.out";
   
     payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
-
-    /** first get the user option cause they might influence the steg mods */
-    store_options(options);
 
     /** init the steg mods */
     init_file_steg_mods();
@@ -83,10 +80,10 @@ http_steg_config_t::store_options(const std::vector<string>& options)
       
     } else if (*cur_option == "--cover-list") {
       if (cur_option + 1 == options.end()) {
-        log_warn("http_steg: option --cover_list requires the cover list filename");
+        log_warn("http_steg: option --cover-list requires the cover list filename");
         goto usage;
       }
-      http_steg_user_configs["cover_list"] = *(cur_option + 1);
+      http_steg_user_configs["cover-list"] = *(cur_option + 1);
       cur_option++;
       
     } else {
@@ -107,6 +104,41 @@ usage:
            "http 192.168.1.99:11253");
   return false;
 
+}
+
+/**
+   reads the http_steg related option off the option YAML node and store 
+   them in a map.
+
+   @param options a YAML Node which contains http steg conf options
+
+   @return true if the options are valid, otherwise false
+*/
+bool
+http_steg_config_t::store_options(const YAML::Node& options)
+{
+  //to be send to the steg mods during creation
+  try {
+      for(auto cur_conf_field: options) {
+        std::string current_field_name = cur_conf_field.first.as<std::string>();
+        if (!(
+            (current_field_name == "steg-mod") ||
+            (current_field_name == "cover-list")
+              )) {
+          log_warn("http steg: invalid config keyword %s", current_field_name.c_str());
+          return false;
+        }
+          http_steg_user_configs[current_field_name] = cur_conf_field.second.as<std::string>();
+
+      }
+  }  catch( YAML::RepresentationException &e ) {
+    log_warn("bad config format %s", ((std::string)e.what()).c_str());
+    return false;
+
+  }
+
+  return true;
+  
 }
 
 void http_steg_config_t::init_file_steg_mods()
@@ -150,19 +182,37 @@ void http_steg_config_t::init_file_steg_mods()
   }
 }
 
+//unfortunate army of constructors
 http_steg_config_t::http_steg_config_t(config_t *cfg, const std::vector<std::string>& options)
   : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
-  init_http_steg_config_t(options, true);
-
+  store_options(options);
+  init_http_steg_config_t(true);
 }
 
 http_steg_config_t::http_steg_config_t(config_t *cfg, const std::vector<std::string>& options, bool init_payload_server)
   : steg_config_t(cfg),
      is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
 {
-  init_http_steg_config_t(options, init_payload_server);
+  store_options(options);
+  init_http_steg_config_t(init_payload_server);
+}
+
+http_steg_config_t::http_steg_config_t(config_t *cfg, const YAML::Node& options)
+  : steg_config_t(cfg),
+    is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
+{
+  store_options(options);
+  init_http_steg_config_t(true);
+}
+
+http_steg_config_t::http_steg_config_t(config_t *cfg, const YAML::Node& options, bool init_payload_server)
+  : steg_config_t(cfg),
+     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
+{
+  store_options(options);
+  init_http_steg_config_t(init_payload_server);
 }
 
 http_steg_config_t::~http_steg_config_t()

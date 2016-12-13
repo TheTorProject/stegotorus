@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <map>
 
 #include <tr1/unordered_map>
 #include <sstream>
@@ -11,13 +12,13 @@
 #include <stdint.h>
 
 #include <tr1/unordered_set>
-#include <vector>
 #include <algorithm>
 
 #include <event2/event.h>
 #include <event2/buffer.h>
 #include <event2/util.h>
 
+#include <yaml-cpp/yaml.h>
 
 #include "util.h"
 #include "crypt.h"
@@ -28,7 +29,7 @@
 #include "protocol.h"
 #include "rng.h"
 #include "steg.h"
-n
+
 #include "transparent_proxy.h"
 
 /* The chopper is the core StegoTorus protocol implementation.
@@ -167,7 +168,6 @@ struct chop_circuit_t : circuit_t
     // However this should be only applied when we get enough dead cycle that
     // indicates the client is no longer interested in the content
     // 30min - rng(log(size(0), cycles)
-
     const static unsigned int max_idle_min = 30;
     if (!dead_cycles)
       return max_idle_min * 60 * 1000;
@@ -197,6 +197,20 @@ struct chop_circuit_t : circuit_t
 
 struct chop_config_t : config_t
 {
+  //we store protocol config to be able to treat them uniformly independant of
+  //the fact that they came from command line or from yaml config file
+  const std::vector<std::string> arg_option_list = {"mode", "up_address", "server-key",
+                                                    "passphrase", "cover-server",
+                                                    "minimum-noise_to_signal"};
+
+  const std::vector<std::string> binary_option_list = {"trace-packets",
+                                                       "disable-encryption",
+                                                       "disable-retransmit",
+                                                       "enable-retransmit"};
+
+  config_dict_t chop_user_config;
+  std::list<config_dict_t> steg_user_conf_list;
+
   struct evutil_addrinfo *up_address;
   vector<struct evutil_addrinfo *> down_addresses;
   vector<steg_config_t *> steg_targets;
@@ -215,18 +229,69 @@ struct chop_config_t : config_t
   ecb_decryptor* handshake_decryptor;
 
   /**
+   * using the protocol dictionary provides a uniform init which can 
+   * be called by both init functions which has populated the config
+   * dict
+   */
+  bool init_from_protocol_config_dict();
+  
+  /**
      create the approperiate block cipher with 
      approperiate keys for the handshake
    */
   void init_handshake_encryption();
   /* Transparent proxy and cover server */
   std::string cover_server_address; //is the server that is going to serve covers
-  std::string cover_list; //is the name of the file the contain the url of the covers which are going to be used by the steg module
   TransparentProxy* transparent_proxy;
 
   double noise2signal; //to protect against statistical analysis
 
   std::string passphrase = "did you buy one of therapist reawaken chemists continually gamma pacifies?";
+
+  /**
+   * displays the usage line related to configuring chop protocol.
+   *
+   */
+  void display_usage()
+  {
+    log_warn("chop syntax:\n"
+           "\tchop <mode> <up_address> ([<steg> <down_address> --steg-option...])...\n"
+           "\t\tmode ~ server|client|socks\n"
+           "\t\tup_address, down_address ~ host:port\n"
+           "\t\tA steganographer is required for each down_address.\n"
+           "\t\tsteganographer options follow the steganographer name.\n"
+           "\t\tThe down_address list is still required in socks mode.\n"
+           "Examples:\n"
+           "\tstegotorus chop client 127.0.0.1:5000 "
+           "http 192.168.1.99:11253  skype 192.168.1.99:11254 \n"
+           "\tstegotorus chop server 127.0.0.1:9005 "
+           "http 192.168.1.99:11253  skype 192.168.1.99:11254");
+  }
+
+  /**
+   * a helper function to check if a specific config
+   * keyboard exists in the config dictionary
+   *
+   * @param keyword_option the keyword specifying the option
+   *
+   * @return true if the option is exists in the config dictionary otherwise returns
+   *         false.
+   */
+  bool user_specified(std::string keyword_option)
+  {
+    return (chop_user_config.find(keyword_option) != chop_user_config.end());
+  }
+
+  /**
+   * validate the config by checking for unknown keyword at
+   * in chop config*/
+  bool valid_config_keyword(const std::string& option_keyword) {
+      if ((std::find(arg_option_list.begin(), arg_option_list.end(), option_keyword) == arg_option_list.end()) &&
+          (std::find(binary_option_list.begin(), binary_option_list.end(), option_keyword) == binary_option_list.end()))
+        return false;
+
+    return true;
+  }
 
   CONFIG_DECLARE_METHODS(chop);
 
@@ -236,7 +301,7 @@ struct chop_config_t : config_t
 // Configuration methods
 
 chop_config_t::chop_config_t()
-  : total_transmited_data_bytes(0), 
+  : total_transmited_data_bytes(0),
     total_transmited_cover_bytes(1),
     handshake_encryptor(NULL),
     handshake_decryptor(NULL),
@@ -275,212 +340,227 @@ chop_config_t::~chop_config_t()
 }
 
 bool
-chop_config_t::is_good(modus_operandi_t &mo)
-{
-  /* could be improved; but this is a good first sanity check */
-  return mo.protocol() == "chop"     &&
-    !mo.mode().empty()               &&
-    !mo.up_address().empty()         &&
-    mo.down_addresses().size() > 0;
-}
-
-bool
-chop_config_t::init(unsigned int n_options, const char *const *options, modus_operandi_t &mo)
-{
+chop_config_t::init_from_protocol_config_dict() {
   const char* defport;
-   const char* cmode;
-  int listen_up;
-  unsigned int cur_op = 0; //pointer to current option being processed
+  bool listen_up;
 
-  
-   if (!mo.is_ok() && n_options < 3) {
-    log_warn("chop: not enough parameters");
-    goto usage;
-  }
-
-  if(mo.is_ok() && n_options != 0){
-    log_warn("Starting with both a configuration file *and* commandline options is *currently* not supported. Sorry.");
-    return false;
-  }
-
-  if(!this->is_good(mo) && n_options == 0){
-    log_warn("Configuration file not good enough for chop (needs mode, up_address and at least one down_address)! Sorry.");
-    return false;
-  }
-
-  cmode = mo.is_ok() ? mo.mode().c_str() : options[0];
- 
-
-  if (!strcmp(cmode, "client")) {
+  //this also verify that the config dict is already populated
+  if (chop_user_config["mode"] == "client") {
     defport = "48988"; // bf5c
     mode = LSN_SIMPLE_CLIENT;
-    listen_up = 1;
-  } else if (!strcmp(cmode, "socks")) {
+    listen_up = true;
+  } else if (chop_user_config["mode"] == "socks") {
     defport = "23548"; // 5bf5
     mode = LSN_SOCKS_CLIENT;
-    listen_up = 1;
-  } else if (!strcmp(cmode, "server")) {
+    listen_up = true;
+  } else if (chop_user_config["mode"] == "server") {
     defport = "11253"; // 2bf5
     mode = LSN_SIMPLE_SERVER;
-    listen_up = 0;
-  } else
-    goto usage;
-
-if(mo.is_ok()){
-    vector<string> addresses;
-    
-    up_address = resolve_address_port(mo.up_address().c_str(), 1, listen_up, defport);
-    
-    if (!up_address) {
-      log_warn("chop: invalid up address: %s", options[1]);
-      goto usage;
-    }
-
-    addresses = mo.down_addresses();
-
-    // the down address in the modus_operandi_t consists of both the address and the steg targets.
-    for (i = 0; i < (int)addresses.size(); i++) {
-      down_address_t da;
-      da.parse(addresses[i]);
-
-      if(da.ok){
-
-      struct evutil_addrinfo *addr =
-        resolve_address_port(da.ip.c_str(), 1, !listen_up, NULL);
-      if (!addr) {
-        log_warn("chop: invalid down address: %s", da.ip.c_str());
-        goto usage;
-      }
-
-      down_addresses.push_back(addr);
-      
-      
-      if (!steg_is_supported(da.steg.c_str())) {
-        log_warn("chop: steganographer '%s' not supported", da.steg.c_str());
-        goto usage;
-      }
-
-      steg_targets.push_back(steg_new(da.steg.c_str(), this));
-
-      } else {
-        log_warn("chop: invalid down address: %s", addresses[i].c_str());
-        goto usage;
-      }
-    }
-
-    if(mo.trace_packets()){
-      trace_packets = true;
-      log_enable_timestamps();
-    }
-    
-    //persist_mode = mo.persist_mode();    
-    encryption = !mo.disable_encryption();
-    retransmit = !mo.disable_retransmit();
-
-   /* if(!mo.shared_secret().empty()){
-      shared_secret = xstrdup(mo.shared_secret().c_str());
-    }*/
-    
-    return true;
-  } 
-
-  while (options[1][0] == '-') {
-    if (!strncmp(options[1], "--server-key=", 13)) {
-      // accept and ignore (for now) client only
-      if (mode == LSN_SIMPLE_SERVER) {
-        log_warn("chop: --server-key option is not valid in server mode");
-        goto usage;
-      }
-    } else if (!strcmp(options[1], "--passphrase")) {
-      if (n_options <= 2)
-        goto usage;
-      
-      passphrase = options[2];
-      options++;
-      n_options--;
-    } else if (!strcmp(options[1], "--trace-packets")) {
-      trace_packets = true;
-      log_enable_timestamps();
-    } else if (!strcmp(options[1], "--disable-encryption")) {
-      encryption = false;
-    } else if (!strcmp(options[1], "--disable-retransmit")) {
-      retransmit = false;
-    } else if (!strcmp(options[1], "--enable-retransmit")) {
-      retransmit = true;
-    } else if (!strcmp(options[1], "--minimum-noise-to-signal")) {
-      noise2signal = atoi(options[2]);
-      options++;
-      n_options--;
-    } else if (!strcmp(options[1], "--cover-server")) {
-      if (n_options <= 2) {
-        log_warn("chop: option --cover-server requires the cover server address");
-        goto usage;
-      }
-      
-      cover_server_address = options[2];
-      transparent_proxy = new TransparentProxy(base, options[2]);
-      //This is not related to an specific steg module hence, we store it under
-      //"protocol" tag
-      steg_mod_user_configs["protocol"]["cover_server"] = cover_server_address;
-      //we neet to move the option pointer one forward cause
-      //our option has an argument
-      options++;
-      n_options--;
-    } else if (!strcmp(options[1], "--cover-list")) {
-        //TODO: This should move to the steg mod option section
-      if (n_options <= 2)
-        goto usage;
-      
-      cover_list = options[2];
-      //This is not related to an specific steg module hence, we store it under
-      //"protocol" tag
-      steg_mod_user_configs["protocol"]["cover_list"] = cover_list;
-      //we neet to move the option pointer one forward cause
-      //our option has an argument
-      options++;
-      n_options--;
-    } else {
-      log_warn("chop: unrecognized option '%s'", options[1]);
-      goto usage;
-    }
-
-    options++;
-    n_options--;
-      
+    listen_up = false;
+  } else {
+    log_warn("invalid mode %s for protocol chop", chop_user_config["mode"].c_str());
+    return false;
   }
 
-  //immidiately after options user needs to specifcy upstream address
-  up_address = resolve_address_port(options[1], 1, listen_up, defport);
+  vector<string> addresses;
+
+  //Try recover upaddress from where the mode was retrieved. 
+  up_address = resolve_address_port(chop_user_config["up_address"].c_str(), 1, listen_up, defport);
+
   if (!up_address) {
-    log_warn("chop: invalid up address: %s", options[1]);
-    goto usage;
+    log_warn("chop: invalid up address: %s", chop_user_config["up_address"].c_str());
+    return false;
+
+  }
+
+  if (user_specified("server-key")) {
+    // accept and ignore (for now) client only
+    if (mode == LSN_SIMPLE_SERVER) {
+      log_warn("server-key option is not valid in server mode");
+      return false;
+      }
+  } else if (user_specified("passphrase")) {
+    passphrase = chop_user_config["passphrase"];
+  } else if (user_specified("trace-packets")) {
+    trace_packets = true;
+    log_enable_timestamps();
+  } else if (user_specified("disable-encryption")) {
+    encryption = false;
+  } else if (user_specified("disable-retransmit")) {
+    retransmit = false;
+  } else if (user_specified("enable-retransmit")) {
+    retransmit = true;
+  } else if (user_specified("minimum-noise-to-signal")) {
+    noise2signal = atoi(chop_user_config["minimum-noise-to-signal"].c_str());
+  } else if (user_specified("cover-server")) {
+      cover_server_address = chop_user_config["cover-server"];
+      transparent_proxy = new TransparentProxy(base, cover_server_address);
+      //This is not related to an specific steg module hence, we store it under
+      //"protocol" tag
+      steg_mod_user_configs["protocol"]["cover-server"] = cover_server_address;
   }
 
   //init the header encryptor and the decryptor
   init_handshake_encryption();
 
+  return true;
+
+}
+
+/**
+ * read the hierechical struture of the protocol from the YAML configs
+ * and store them in the chop_user_config and the steg mods confs. 
+ * abort if config has problem.
+ *
+ * @param protocols_node the YAML node which points to protocols:
+ *        node in the config file
+ */
+bool chop_config_t::init(const YAML::Node& protocol_node)
+{
+  std::vector<YAML::Node> steg_conf_list; //to store the steg config
+  //to be send to the steg mods during creation
+  try {
+      for(auto cur_protocol_field: protocol_node) {
+        //if it is the protocol stegs config we need to store the config node
+        //to create the steg protocol later, cause the steg protocol might
+        //need access to the protocol options
+        std::string current_field_name = cur_protocol_field.first.as<std::string>();
+        if (current_field_name == "stegs") {
+          for(auto cur_steg: cur_protocol_field)
+            steg_conf_list.push_back(cur_steg);
+        } else {
+          if (!valid_config_keyword(current_field_name))
+            {
+              log_warn("invalid config keyword %s", current_field_name.c_str());
+              return false;
+            }
+
+          chop_user_config[current_field_name] = cur_protocol_field.second.as<std::string>();      }
+      }
+  }  catch( YAML::RepresentationException &e ) {
+    log_warn("bad config format %s", ((string)e.what()).c_str());
+    display_usage();
+
+    return false;
+
+  }
+
+  if (!init_from_protocol_config_dict())
+    return false;
+
+  bool listen_down = (mode == LSN_SIMPLE_SERVER);
+  //now we are ready to process the stegs node
+  try {
+    for(auto cur_steg : steg_conf_list) {
+      struct evutil_addrinfo *addr =
+        resolve_address_port(cur_steg["down-address"].as<std::string>().c_str(), 1, listen_down, NULL);
+      if (!addr) {
+        log_warn("chop: invalid down address: %s", cur_steg["down-address"].as<std::string>().c_str());
+        display_usage();
+        return false;
+      }
+      down_addresses.push_back(addr);
+
+      if (!steg_is_supported(cur_steg["name"].as<std::string>().c_str())) {
+        log_warn("chop: steganographer '%s' not supported", cur_steg["name"].as<std::string>().c_str());
+        display_usage();
+        return false;
+      }
+
+      steg_targets.push_back(steg_new(cur_steg["name"].as<std::string>().c_str(), this, cur_steg));
+    }
+
+  } catch( YAML::RepresentationException &e ) {
+    log_warn("bad config format %s", ((string)e.what()).c_str());
+    display_usage();
+
+    return false;
+  }
+
+  return true;
+
+}
+
+
+bool chop_config_t::init(unsigned int n_options, const char *const *options)
+{
+
+  if (n_options < 2)
+    {
+      log_warn("you need to at least specify mode of operation and upstream ip address");
+      display_usage();
+      return false;
+
+    }
+
+  chop_user_config["mode"] = options[0];
+  chop_user_config["up_address"] = options[1];
+
+  while (options[1][0] == '-') {
+    if (strlen(options[1]) < 2)
+      {
+        log_warn("chop: long option %s should be specifed with -- rather than - :", options[1]);
+        display_usage();
+        return false;
+      }
+
+      if (std::find(arg_option_list.begin(), arg_option_list.end(), options[1] + strlen("--")) != arg_option_list.end())
+      {
+        if (n_options <= 2) {
+          log_warn("chop: option %s requires a value argument", options[1]);
+          display_usage();
+          return false;
+
+        }
+
+        chop_user_config[options[1]+strlen("--")] = options[2];
+
+        options++;
+        n_options--;
+      } else if ((std::find(binary_option_list.begin(), binary_option_list.end(), options[1] + strlen("--")) != binary_option_list.end()))
+      {
+        chop_user_config[options[1]+strlen("--")] = "true";
+      } else {
+        log_warn("chop: unrecognized option '%s'", options[1]);
+        display_usage();
+        return false;
+      }
+
+      options++;
+      n_options--;
+  }
+
+  if (!init_from_protocol_config_dict())
+    return false;
+
+  bool listen_down = (mode == LSN_SIMPLE_SERVER);
+
   // From here on out, arguments are blocks of steg target downsteam
   // addresse and its options
-  
-  cur_op = 2;
+  // we are creating the steg config here cause we are using differnt
+  // constructor for command line options vs YAML node
+  unsigned int cur_op = 2;
   while(cur_op < n_options) {
     if (!steg_is_supported(options[cur_op])) {
       log_warn("chop: steganographer '%s' not supported", options[cur_op]);
-      goto usage;
+      display_usage();
+      return false;
     }
     const char* cur_steg_name = options[cur_op];
 
     cur_op++;
     if (!(cur_op < n_options)) {
       log_warn("chop: missing down stream address for steganographer %s", cur_steg_name);
-      goto usage;
+      display_usage();
+      return false;
     }
 
     struct evutil_addrinfo *addr =
-      resolve_address_port(options[cur_op], 1, !listen_up, NULL);
+      resolve_address_port(options[cur_op], 1, listen_down, NULL);
     if (!addr) {
       log_warn("chop: invalid down address: %s", options[cur_op]);
-      goto usage;
+      display_usage();
+      return false;
     }
     down_addresses.push_back(addr);
     cur_op++;
@@ -498,20 +578,6 @@ if(mo.is_ok()){
 
   return true;
 
- usage:
-  log_warn("chop syntax:\n"
-           "\tchop <mode> <up_address> ([<steg> <down_address> --steg-option...])...\n"
-           "\t\tmode ~ server|client|socks\n"
-           "\t\tup_address, down_address ~ host:port\n"
-           "\t\tA steganographer is required for each down_address.\n"
-           "\t\tsteganographer options follow the steganographer name.\n"
-           "\t\tThe down_address list is still required in socks mode.\n"
-           "Examples:\n"
-           "\tstegotorus chop client 127.0.0.1:5000 "
-           "http 192.168.1.99:11253  skype 192.168.1.99:11254 \n"
-           "\tstegotorus chop server 127.0.0.1:9005 "
-           "http 192.168.1.99:11253  skype 192.168.1.99:11254");
-  return false;
 }
 
 struct evutil_addrinfo *

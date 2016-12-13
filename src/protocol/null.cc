@@ -3,24 +3,33 @@
  * See LICENSE for other credits and copying information
  */
 
-#include "util.h"
-#include "cpp.h"
-#include "connections.h"
-#include "protocol.h"
-#include "modus_operandi.h"
-
 #include <event2/buffer.h>
 #include <event2/event.h>
+
+#include <string>
+
+#include "util.h"
+#include "connections.h"
+#include "protocol.h"
+
 
 namespace {
   struct null_config_t : config_t
   {
+    config_dict_t null_user_config;
+
     struct evutil_addrinfo *listen_addr;
     struct evutil_addrinfo *target_addr;
 
-    CONFIG_DECLARE_METHODS(null);
+    /**
+     * using the protocol dictionary provides a uniform init which can
+     * be called by both init functions which has populated the config
+     * dict
+     */
+    bool init_from_protocol_config_dict();
 
-   DISALLOW_COPY_AND_ASSIGN(null_config_t);
+
+    CONFIG_DECLARE_METHODS(null);
   };
 
   struct null_circuit_t;
@@ -31,8 +40,6 @@ namespace {
     null_circuit_t *upstream;
 
     CONN_DECLARE_METHODS(null);
-
-   DISALLOW_COPY_AND_ASSIGN(null_conn_t);
   };
 
   struct null_circuit_t : circuit_t
@@ -41,8 +48,6 @@ namespace {
     null_conn_t *downstream;
 
     CIRCUIT_DECLARE_METHODS(null);
-
-   DISALLOW_COPY_AND_ASSIGN(null_circuit_t);
   };
 }
 
@@ -61,89 +66,26 @@ null_config_t::~null_config_t()
 }
 
 bool
-null_config_t::is_good(modus_operandi_t &mo)
+null_config_t::init(unsigned int n_options, const char *const *options)
 {
-  /* could be improved; but this is a good first sanity check */
-  return mo.protocol() == "null"     &&
-    !mo.mode().empty()               &&
-    !mo.up_address().empty();
-}
-
-bool
-null_config_t::init(unsigned int n_options, const char *const *options, modus_operandi_t &mo)
-{
-  const char* defport;
-
-  const char* cmode;
-
-  if (!mo.is_ok() && n_options < 1)
+  if (n_options < 2)
     goto usage;
 
+  null_user_config["mode"] = options[0];
+  null_user_config["listen-address"] = options[1];
 
-  if(mo.is_ok() && n_options != 0){
-    log_warn("Starting with both a configuration file *and* commandline options is *currently* not supported. Sorry.");
-    return false;
+  if (null_user_config["mode"] != "socks") {
+    if (n_options != 3)
+      goto usage;
+
+    null_user_config["target-address"] = options[2];
+  } else {//socks
+    if (n_options != 2)
+      goto usage;
   }
-  
-  if(!this->is_good(mo) && n_options == 0){
-    log_warn("Configuration file not good enough for null (needs mode, and up_address)! Sorry.");
-    return false;
-  }
 
-  cmode = mo.is_ok() ? mo.mode().c_str() : options[0];
-
-   if (!strcmp(cmode, "client")) {
-    defport = "48988"; // bf5c
-    mode = LSN_SIMPLE_CLIENT;
-  } else if (!strcmp(cmode, "socks")) {
-    defport = "23548"; // 5bf5
-    mode = LSN_SOCKS_CLIENT;
-  } else if (!strcmp(cmode, "server")) {
-    defport = "11253"; // 2bf5
-    mode = LSN_SIMPLE_SERVER;
-  } else
+  if (!init_from_protocol_config_dict())
     goto usage;
-
-
-
-  if(mo.is_ok()){
-    vector<string> addresses;
-    
-    this->listen_addr  = resolve_address_port(mo.up_address().c_str(), 1, 1, defport);
-    
-    if (!this->listen_addr) {
-      log_warn("chop: invalid up address: %s", options[1]);
-      goto usage;
-    }
-    
-    addresses = mo.down_addresses();
-    
-    if(this->mode != LSN_SOCKS_CLIENT) {
-      if(addresses.size() > 0){
-        this->target_addr = resolve_address_port(addresses[0].c_str(), 1, 0, NULL);
-      }
-      if (!this->target_addr)
-        goto usage;
-    }
-
-
-  } else {
-
-    if (n_options != (this->mode == LSN_SOCKS_CLIENT ? 2 : 3))
-      goto usage;
-    
-    this->listen_addr = resolve_address_port(options[1], 1, 1, defport);
-    if (!this->listen_addr)
-      goto usage;
-    
-    if (this->mode != LSN_SOCKS_CLIENT) {
-      this->target_addr = resolve_address_port(options[2], 1, 0, NULL);
-      if (!this->target_addr)
-        goto usage;
-    }
-    
-  }
-  return true;
 
   return true;
 
@@ -161,6 +103,84 @@ null_config_t::init(unsigned int n_options, const char *const *options, modus_op
   return false;
 }
 
+/**
+ * read the protocol parameters from the YAML configs
+ * and store them in the null_user_config.
+ * abort if config has problem.
+ *
+ * @param protocols_node the YAML node which points to protocols:
+ *        node in the config file
+ */
+bool null_config_t::init(const YAML::Node& protocol_node)
+{
+  //to be send to the steg mods during creation
+  try {
+      for(auto cur_protocol_field: protocol_node) {
+        //if it is the protocol stegs config we need to store the config node
+        //to create the steg protocol later, cause the steg protocol might
+        //need access to the protocol options
+        std::string current_field_name = cur_protocol_field.first.as<std::string>();
+        if (!(
+            (current_field_name == "mode") ||
+            (current_field_name == "listen-address") ||
+            (current_field_name == "target-address")
+              )) {
+          log_warn("invalid config keyword %s", current_field_name.c_str());
+          return false;
+        }
+          null_user_config[current_field_name] = cur_protocol_field.second.as<std::string>();
+
+      }
+  }  catch( YAML::RepresentationException &e ) {
+    log_warn("bad config format %s", ((std::string)e.what()).c_str());
+    return false;
+
+  }
+
+  return init_from_protocol_config_dict();
+
+}
+
+bool null_config_t::init_from_protocol_config_dict()
+{
+  const char* defport;
+
+  //this also verify that the config dict is already populated
+  if (null_user_config["mode"] == "client") {
+    defport = "48988"; // bf5c
+    mode = LSN_SIMPLE_CLIENT;
+  } else if (null_user_config["mode"] == "socks") {
+    defport = "23548"; // 5bf5
+    mode = LSN_SOCKS_CLIENT;
+  } else if (null_user_config["mode"] == "server") {
+    defport = "11253"; // 2bf5
+    mode = LSN_SIMPLE_SERVER;
+  } else {
+    log_warn("invalid mode %s for protocol null", null_user_config["mode"].c_str());
+    return false;
+  }
+
+  this->listen_addr = resolve_address_port(null_user_config["listen-address"].c_str(), 1, 1, defport);
+  if (!this->listen_addr) {
+    log_warn("bad listen address %s", null_user_config["listen-address"].c_str());
+    return false;
+  }
+
+  if (mode != LSN_SOCKS_CLIENT) {
+    this->target_addr = resolve_address_port(null_user_config["target-address"].c_str(), 1, 0, NULL);
+    if (!this->target_addr) {
+      log_warn("bad target address %s", null_user_config["target-address"].c_str());
+      return false;
+    }
+  } else if ((null_user_config.find("target-address") != null_user_config.end())) {
+    //sanity check: make sure user hasn't specified a target address by mistake
+    log_warn("target-address %s is specified but mode %s does not need one.", null_user_config["target-address"].c_str(), null_user_config["mode"].c_str());
+    return false;
+  }
+
+  return true;
+
+}
 /** Retrieve the 'n'th set of listen addresses for this configuration. */
 struct evutil_addrinfo *
 null_config_t::get_listen_addrs(size_t n) const

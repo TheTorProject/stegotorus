@@ -4,6 +4,8 @@
 #include <vector>
 #include <event2/buffer.h>
 
+#include <yaml-cpp/yaml.h>
+
 #include "util.h"
 #include "steg.h"
 
@@ -19,7 +21,10 @@ steg_is_supported(const char *name)
   return 0;
 }
 
-/* Instantiate a steg module by name. */
+/**
+   Instantiate a steg module by name and send its confugration defined
+   as cmd args. 
+*/
 steg_config_t *
 steg_new(const char *name, config_t *cfg, const std::vector<std::string>& options)
 {
@@ -27,6 +32,20 @@ steg_new(const char *name, config_t *cfg, const std::vector<std::string>& option
   for (s = supported_stegs; *s; s++)
     if (!strcmp(name, (**s).name))
       return (**s).new_(cfg, options);
+  return 0;
+}
+
+/**
+   Instantiate a steg module by name and send its confugration defined in 
+   a yaml node. 
+*/
+steg_config_t *
+steg_new(const char *name, config_t *cfg, const YAML::Node& options)
+{
+  const steg_module *const *s;
+  for (s = supported_stegs; *s; s++)
+    if (!strcmp(name, (**s).name))
+      return (**s).new_from_yaml_(cfg, options);
   return 0;
 }
 

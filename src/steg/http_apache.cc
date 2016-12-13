@@ -84,6 +84,14 @@ namespace  {
     */
     size_t send_dict_to_peer();
 
+    /**
+       is called by either constructor to perform the actual act of initialization.
+
+       @param cfg the config object of the protocol creating this steg module
+       which sent by the protocol.
+    */
+
+    void http_apache_steg_config_common_init(config_t *cfg);
     STEG_CONFIG_DECLARE_METHODS(http_apache);
   };
 
@@ -91,7 +99,7 @@ namespace  {
   {
 
     http_apache_steg_config_t* _apache_config;
-
+ 
     const size_t c_min_uri_length;
     const size_t c_max_uri_length; //Unofficial cap
 
@@ -161,16 +169,36 @@ const char http_apache_steg_config_t::c_end_of_dict[] = "\r\n";
 
 STEG_DEFINE_MODULE(http_apache);
 
+http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg, const YAML::Node& options)
+  : http_steg_config_t(cfg, options, false),
+    _cur_operation(op_STEG_NO_OP),
+    uri_dict_up2date(false)
+{
+  //all we do is to store the option and call the common "constructor"
+  store_options(options);
+
+  http_apache_steg_config_common_init(cfg);
+
+}
+
 http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg, const std::vector<std::string>& options)
   : http_steg_config_t(cfg, options, false),
     _cur_operation(op_STEG_NO_OP),
     uri_dict_up2date(false)
 {
+
+  store_options(options);
+
+  http_apache_steg_config_common_init(cfg);
+
+}
+
+void
+http_apache_steg_config_t::http_apache_steg_config_common_init(config_t *cfg)
+{
   string payload_filename;
   string cover_server, cover_list;
 
-  store_options(options);
-  
   if (is_clientside)
     payload_filename = "apache_payload/client_list.txt";
   else {
@@ -180,11 +208,11 @@ http_apache_steg_config_t::http_apache_steg_config_t(config_t *cfg, const std::v
     //try to use local
     cover_server = "127.0.0.1";
     if (!cfg->steg_mod_user_configs["protocol"].empty()) {
-      cover_server = cfg->steg_mod_user_configs["protocol"]["cover_server"] != "" ?
-        cfg->steg_mod_user_configs["protocol"]["cover_server"] : cover_server;
+      cover_server = cfg->steg_mod_user_configs["protocol"]["cover-server"] != "" ?
+        cfg->steg_mod_user_configs["protocol"]["cover-server"] : cover_server;
 
-      cover_list = http_steg_user_configs["cover_list"] != "" ?
-        http_steg_user_configs["cover_list"] : "";
+      cover_list = http_steg_user_configs["cover-list"] != "" ?
+        http_steg_user_configs["cover-list"] : "";
     }
 
   }

@@ -129,9 +129,9 @@ PKG_CHECK_MODULES([libcurl], [libcurl >= 7.22.0])
 # the portable c++ library for manipulating filesystem
 PKG_CHECK_MODULES([libboost], [libboost >= 1.46.0])
 # configuration reader
-PKG_CHECK_MODULES([libconfig], [libconfig++ >= 1.4.8])
+PKG_CHECK_MODULES([libyaml], [yaml-cpp >= 0.5.0])
 
-LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS $libcurl_LIBS $libboost_LIBS $libconfig_LIBS"
+LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS $libcurl_LIBS $libboost_LIBS $libyaml_LIBS"
 
 # libraries needed for tester proxy
 PKG_CHECK_MODULES([libevent_openssl], [libevent_openssl >= 2.0])

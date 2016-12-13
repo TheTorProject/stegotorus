@@ -204,36 +204,6 @@ call_registration_helper(string const& helper)
 }
 
 /**
-   Prints usage instructions then exits.
-*/
-static void ATTR_NORETURN
-usage(void)
-{
-  const proto_module *const *p;
-
-  fputs("usage: stegotorus protocol_name [protocol_args] protocol_options "
-        "protocol_name ...\n"
-        "* Available protocols:\n", stderr);
-  /* this is awful. */
-  for (p = supported_protos; *p; p++)
-    fprintf(stderr,"[%s] ", (*p)->name);
-  fprintf(stderr, "\n* Available arguments:\n"
-	  "--config-file=<file> ~ load the configuration file\n"
-          "--log-file=<file> ~ set logfile\n"
-          "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
-          "--no-log ~ disable logging\n"
-          "--timestamp-logs ~ add timestamps to all log messages\n"
-          "--allow-kqueue ~ allow use of kqueue(2) (may be buggy)\n"
-          "--registration-helper=<helper> ~ use <helper> to register with "
-          "a relay database\n"
-          "--pid-file=<file> ~ write process ID to <file> after startup\n"
-          "--daemon ~ run as a daemon\n"
-          "--version ~ show version details and exit\n");
-
-  exit(1);
-}
-
-/**
    Receives 'argv' and scans for any non-protocol-specific optional
    arguments and tries to set them in effect.
 
@@ -246,87 +216,40 @@ usage(void)
 static int
 handle_generic_args(const char *const *argv,  modus_operandi_t &mo)
 {
-  bool logmethod_set = false;
-  bool logsev_set = false;
-  bool allow_kq_set = false;
-  bool timestamps_set = false;
-  bool registration_helper_set = false;
-  bool pidfile_set = false;
   int i = 1;
 
-  while (argv[i] && !strncmp(argv[i],"--",2)) {
-    if (!strncmp(argv[i], "--config-file=", strlen("--config-file="))) {
-      const char *path = argv[i]+strlen("--config-file=");
-      mo.load_file(path);
-      if (!mo.is_ok()){
-        fprintf(stderr, "The configuration file  \"%s\" did not load smoothly!\n", path);
-        exit(1);
-      }
-    } else if (!strncmp(argv[i], "--log-file=", 11)) {
-      if (logmethod_set) {
-        fprintf(stderr, "you've already set a log file!\n");
-        exit(1);
-      }
+  for(auto cur_option = mo.top_level_confs_dict.begin();
+      cur_option != mo.top_level_confs_dict.end(); cur_option++) {
+    if (cur_option->first == "config-file") {
+      mo.load_file(cur_option->second);
+    } else if (cur_option->first == "log-file") {
       if (log_set_method(LOG_METHOD_FILE,
-                         (char *)argv[i]+11) < 0) {
+                         (char *)cur_option->second.c_str()) < 0) {
         fprintf(stderr, "failed to open logfile '%s': %s\n", argv[i]+11,
                 strerror(errno));
         exit(1);
       }
-      logmethod_set=1;
-    } else if (!strncmp(argv[i], "--log-min-severity=", 19)) {
-      if (logsev_set) {
-        fprintf(stderr, "you've already set a min. log severity!\n");
-        exit(1);
-      }
-      if (log_set_min_severity(argv[i]+19) < 0) {
+    } else if (cur_option->first == "log-min-severity") {
+      if (log_set_min_severity(cur_option->second.c_str()) < 0) {
         fprintf(stderr, "invalid min. log severity '%s'", argv[i]+19);
         exit(1);
       }
-      logsev_set = true;
-    } else if (!strcmp(argv[i], "--no-log")) {
-      if (logsev_set || logmethod_set) {
+    } else if ((cur_option->first == "no-log") && (cur_option->second == true_string)) {
+      if (mo.is_set("log-min-severity") || mo.is_set("log-file")) {
           fprintf(stderr, "can't ask for both some logs and no logs!\n");
           exit(1);
         }
       log_set_method(LOG_METHOD_NULL, NULL);
-      logsev_set = true;
-      logmethod_set = true;
-    } else if (!strcmp(argv[i], "--timestamp-logs")) {
-      if (timestamps_set) {
-        fprintf(stderr, "you've already asked for timestamps!\n");
-        exit(1);
-      }
+    } else if ((cur_option->first == "timestamp-logs") && (cur_option->second == true_string)) {
       log_enable_timestamps();
-      timestamps_set = true;
-    } else if (!strcmp(argv[i], "--allow-kqueue")) {
-      if (allow_kq_set) {
-        fprintf(stderr, "you've already allowed kqueue!\n");
-        exit(1);
-      }
+    } else if ((cur_option->first == "allow-kqueue") && (cur_option->second == true_string)) {
       allow_kq = true;
-      allow_kq_set = true;
-    } else if (!strncmp(argv[i], "--registration-helper=", 22)) {
-      if (registration_helper_set) {
-        fprintf(stderr, "you've already set a registration helper!\n");
-        exit(1);
-      }
-      registration_helper = string(argv[i]+22);
-      registration_helper_set = true;
-    } else if (!strncmp(argv[i], "--pid-file=", 11)) {
-      if (pidfile_set) {
-        fprintf(stderr, "you've already set a pid file!\n");
-        exit(1);
-      }
-      pidfile_name = string(argv[i]+11);
-      pidfile_set = true;
-    } else if (!strcmp(argv[i], "--daemon")) {
-      if (daemon_mode) {
-        fprintf(stderr, "you've already requested daemon mode!\n");
-        exit(1);
-      }
+    } else if (cur_option->first == "registration-helper") {
+      registration_helper = cur_option->second;
+    } else if (cur_option->first == "pid-file") {
+      pidfile_name = cur_option->second;
+    } else if ((cur_option->first == "daemon") && (cur_option->second == true_string)) {
       daemon_mode = true;
-      
     } else {
       fprintf(stderr, "unrecognizable argument '%s'\n", argv[i]);
       exit(1);
@@ -334,26 +257,8 @@ handle_generic_args(const char *const *argv,  modus_operandi_t &mo)
     i++;
   }
 
- /* if we have read in a valid modus_operandi
-     then we need to look at the process options here;
-     that are not acted upon in the reading process:
-     -- daemon
-     -- pid file
-     -- logmethod_set
-
-  */
-
-  if(mo.is_ok()){
-    daemon_mode = mo.daemon();
-    logmethod_set = mo.logmethod_set();
-    if(!mo.pid_file().empty()){
-      pidfile_name = mo.pid_file();
-      pidfile_set = true;
-    }
-  }
-  
   /* Cross-option consistency checks. */
-  if (daemon_mode && !logmethod_set) {
+  if (daemon_mode && !mo.is_set("log-file")) {
     log_warn("cannot log to stderr in daemon mode");
     log_set_method(LOG_METHOD_NULL, NULL);
   }
@@ -362,7 +267,7 @@ handle_generic_args(const char *const *argv,  modus_operandi_t &mo)
 }
 
 int
-main(int argc, const char *const *argv)
+main(int, const char *const *argv)
 {
   struct event_config *evcfg;
   struct event *sig_int;
@@ -394,22 +299,14 @@ main(int argc, const char *const *argv)
      Each configuration's subset consists of the entries in argv from
      its recognized protocol name, up to but not including the next
      recognized protocol name. */
-  if (!mo.is_ok() && (!*begin || !config_is_supported(*begin)))
-    usage();
-  if(cmd_options == argc){
-    /* just using a configuration file */
-    const char *const spec[] = { mo.protocol().c_str(),  NULL};
-    config_t *cfg = config_create(1, spec, mo);
-    if (!cfg)
-      return 2; /* diagnostic already issued */
-    configs.push_back(cfg);
-  } else {
-    /* oh goodie; hodge podge  */
-
+  if ((!*begin || !config_is_supported(*begin)))
+    mo.usage();
+ 
   //crypto should be initialized before protocol so the protocols
   //can use encryption
   init_crypto();
- 
+
+  //create the protocol specified in the command line
   do {
     end = begin+1;
     while (*end && !config_is_supported(*end))
@@ -427,9 +324,9 @@ main(int argc, const char *const *argv)
     if (end == begin+1) {
       log_warn("no arguments for configuration %lu",
                (unsigned long)configs.size()+1);
-      usage();
+      mo.usage();
     } else {
-      config_t *cfg = config_create(end - begin, begin, mo);
+      config_t *cfg = config_create(end - begin, begin);
       if (!cfg)
         return 2; /* diagnostic already issued */
       configs.push_back(cfg);
@@ -437,8 +334,14 @@ main(int argc, const char *const *argv)
     begin = end;
   } while (*begin);
   
+  /* create protocol defined in the configuration file */
+  for(auto cur_protocol_conf : *mo.protocol_configs) {
+    config_t *cfg = config_create(cur_protocol_conf);
+    if (!cfg)
+      return 2; /* diagnostic already issued */
+    configs.push_back(cfg);
   }
-  
+
   log_assert(configs.size() > 0);
 
   /* Configurations have been established; proceed with initialization. */

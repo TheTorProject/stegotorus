@@ -34,6 +34,11 @@ nosteg_steg_config_t::nosteg_steg_config_t(config_t *cfg, const std::vector<std:
 {
 }
 
+nosteg_steg_config_t::nosteg_steg_config_t(config_t *cfg, const YAML::Node&)
+  : steg_config_t(cfg)
+{
+}
+
 nosteg_steg_config_t::~nosteg_steg_config_t()
 {
 }

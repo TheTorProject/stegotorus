@@ -64,6 +64,14 @@ millis_since(struct timeval *last)
   return diff;
 }
 
+//dummy function to ignore YAML node
+embed_steg_config_t::embed_steg_config_t(config_t *cfg, const YAML::Node&)
+  : steg_config_t(cfg),
+    is_clientside(cfg->mode != LSN_SIMPLE_SERVER)
+{
+  embed_steg_config_t(cfg, std::vector<std::string>());
+}
+
 embed_steg_config_t::embed_steg_config_t(config_t *cfg, const std::vector<std::string>&)
   : steg_config_t(cfg),
     is_clientside(cfg->mode != LSN_SIMPLE_SERVER)

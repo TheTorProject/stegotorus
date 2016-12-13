@@ -8,16 +8,21 @@
 #include <string>
 #include <stdint.h>
 #include <vector>
+#include <algorithm>
+
+#include <getopt.h>
+
+#include <yaml-cpp/yaml.h>
 
 #include "cpp.h"
-#include "steg/jel_knobs.h"
-
+//#include "steg/jel_knobs.h"
 
 using std::vector;
 using std::string;
 
 enum class StegData { TRACES, IMAGES, PDFS, STREAM };
 
+#define STEG_TRACES_DIR "./traces"
 
 /* for parsing in chop.cc */
 class down_address_t {
@@ -34,117 +39,128 @@ class down_address_t {
 
 };
 
-
+/**
+ * read, validate and update the config structure.
+ */
 class modus_operandi_t {
+ protected:
+  /* A string listing valid short options letters.*/
+  const char* const short_options = "hc:l:s:ntkr:p:d";
+  const std::vector<std::string> config_valid_extra_key_words = {"protocols"};
+  /* An array describing valid long options. */
+  static const struct option long_options[];
 
+  /**
+   * spots line curresponding to the long option in the getopts 
+   * option list.
+   *
+   * @param the option keyword to search for
+   *
+   * @return the index of the option in the array or -1 
+   *         if not found
+   */
+  int find_long_option(const string& long_option_name) {
+    for(int i = 0; long_options[i].name != nullptr; i++)
+      if (long_option_name == long_options[i].name)
+        return i;
+  
+    return -1;
+ 
+  }
+
+  /**
+   * validate the config by checking for unknown keyword at
+   * stegotorus level (protocol are responsible to check for
+   * validity of the config*/
+  bool validate_top_level_config(const YAML::Node& conf_node);
+
+    /**
+   * read the hierechical struture of the protocol from the YAML configs
+   * and store them in the protocols_config_dict. abort if config has
+   * problem.
+   *
+   * @param protocols_node the YAML node which points to protocols:
+   *        node in the config file
+   */
+  void process_protocols(const YAML::Node& protocols_node);
+
+  /**
+   * read the hierechical struture of the protocol from the commandline
+   * args store them in the protocols_config_dict. abort if config has
+   * problem.
+   */
+  void process_protocol(const char* argv);
 
  public:
-  
+
+  //TODO: these needs access function
+  YAML::const_iterator protocol_configs;
+  config_dict_t top_level_confs_dict;
+
   modus_operandi_t();
 
-  bool load_file(const char* path);
+  /**
+   * reads the file using yaml module, validate it and store the
+   * config values in hierarchical dicts.
+   */ 
+  void load_file(const string& path);
 
-  bool is_ok(void){ return  _is_ok; }
+  /**
+   * processes the command line argument based on the place they 
+   * have been mentioned they might over write config file options
+   * 
+   * @param argv the array containing command line arguments 
+   * @param argc number of elements in argv
+   *
+   * @return the index of where the protocol options start
+   *
+   */
+  int process_command_line_config(char *const *argv,  const int argc);
 
-  /* protocol options */
-  string protocol(void){  return _protocol; }
+  /**
+   * helper functions which uniformizes the value of boolean config to
+   * one string represetation.
+   * 
+   * @param stringized_boolean_value a string which represent a boolean 
+   *        value. 0, False, FALSE, false represents false. 1, True, TRUE
+   *        true represent true.
+   *
+   *
+   * @return "false" or "true" for valid values or "" for invalid value.
+   **/
+  static std::string uniformize_boolean_value(const std::string& stringized_boolean_value)
+  {
+    static const std::vector<std::string> false_representations = {"0", "False", "FALSE", "false"};   
 
-  string mode(void){  return _mode; }
+    static const std::vector<std::string> true_representations = {"1", "True", "TRUE", "true", ""};
+    if (std::find(false_representations.begin(),false_representations.end(),stringized_boolean_value) !=  false_representations.end())
+      return false_string;
+    else if (std::find(true_representations.begin(),true_representations.end(),stringized_boolean_value) !=  true_representations.end())
+      return true_string;
+    else
+      return "";
 
-  string up_address(void){  return _up_address; }
+  }
 
-  vector<string> down_addresses(){ return _down_addresses; }
+   /**
+   * a helper function to check if a specific config
+   * keyboard exists in the config dictionary
+   *
+   * @param keyword_option the keyword specifying the option
+   *
+   * @return true if the option is exists in the config dictionary otherwise returns
+   *         false.
+   */
+  bool is_set(std::string keyword_option)
+  {
+    return (top_level_confs_dict.find(keyword_option) != top_level_confs_dict.end());
+  }
 
-  /* chop options */
-  bool trace_packets(void){ return _trace_packets; }
-
-  bool persist_mode(void){ return _persist_mode; }
-
-  string shared_secret(void){ return _shared_secret; }
-
-  bool disable_encryption(void){ return _disable_encryption; }
-
-  bool disable_retransmit(void){ return _disable_retransmit; }
-  
-
-  /* process options */
-  bool managed(void){ return _managed; }
-  void managed(bool val){  _managed = val; }
-
-  string managed_method(void){ return _managed_method; }
-
-  bool daemon(void){ return _daemon; }
-
-  bool logmethod_set(void){ return _logmethod_set; }
-
-  string pid_file(void){ return _pid_file; }
-
-  /* steganographic options */
-  string hostname(void){ return _hostname; }
-
-  bool post_reflection(void){ return _post_reflection; }
-
-  jel_knobs_t* jel_knobs(void){ return  &_jel_knobs; }
-  
-  /* steg data paths */
-
-  string get_steg_datadir(StegData variety);
-  bool set_steg_datadir(StegData variety, string value);
-  
-  DISALLOW_COPY_AND_ASSIGN(modus_operandi_t);
- 
- private: bool _is_ok;
-  
-  /* protocol options */
- private: string _protocol;
- private: string _mode;
- private: string _up_address;
- private: vector<string> _down_addresses;
-  
-  /* chop options */
- private: bool _trace_packets;
- private: bool _persist_mode;
- private: string _shared_secret;
- private: bool _disable_encryption;
- private: bool _disable_retransmit;
- 
-  /* process options */
- private: bool _managed;
- private: string _managed_method;
- private: bool _daemon;
- private: bool _logmethod_set;
- private: string _pid_file;
-
-
-  /* steganographic options */
- private: bool _post_reflection;
- private: string _hostname;
-  
-
- private: jel_knobs_t _jel_knobs;
-
- private: string _traces_dir;
- private: string _images_dir;
- private: string _pdfs_dir;
- private: string _stream_dir;
-
-  
-
-
-  /* helper routines */
- private: bool process_line(string&, int32_t);
-
- private: string trim_line(string&);
-
- private: bool line_is(string&, const char *, string&);
-
- private: bool set_scheme(const char *, string&, int32_t);
-
- private: bool set_string(string&, const char *, string&, int32_t);
-  
- private: bool set_bool(bool&, string&, int32_t);
-
- private: bool set_int(int&, string&, int32_t);
+  /**
+   Prints usage instructions then exits.
+  */
+  static void ATTR_NORETURN
+    usage(void);
 
 };
 

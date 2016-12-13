@@ -68,3 +68,8 @@ config-aux/*.m4
 #debugging stuff
 tools
 tmp
+
+#global and gtag
+GPATH
+GRTAGS
+GTAGS

@@ -30,11 +30,12 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
         much useless code just to change 2 lines.
     */
     http_steg_config_t(config_t *cfg, const std::vector<std::string>& options, bool init_payload_server);
+    http_steg_config_t(config_t *cfg, const YAML::Node& options, bool init_payload_server);
 
     /* it is unfortunate that c++ isn't flexibale enough to allow calling a
        a constructor inside another and we have to have another init function
        called by both constructors */
-    void init_http_steg_config_t(const std::vector<std::string>& options, bool init_payload_server);
+    void init_http_steg_config_t(bool init_payload_server);
     
     /**
        reads the http_steg related option off the option list and store them in
@@ -45,6 +46,17 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
        @return true if the options are valid, otherwise false
      */
     bool store_options(const std::vector<string>& options);
+
+    /**
+       reads the http_steg related option off the option YAML node and store 
+       them in a map.
+
+       @param options a YAML Node which contains http steg conf options
+
+       @return true if the options are valid, otherwise false
+    */
+    bool store_options(const YAML::Node& options);
+
     
     /**
        init the each file steg mod

@@ -133,35 +133,40 @@ struct steg_module
 
   /** Create an appropriate steg_config_t subclass for this module. */
   steg_config_t *(*new_)(config_t *cfg, const std::vector<std::string>& options);
+  steg_config_t *(*new_from_yaml_)(config_t *cfg, const YAML::Node& options);
 };
 
 extern const steg_module *const supported_stegs[];
 
 int steg_is_supported(const char *name);
 steg_config_t *steg_new(const char *name, config_t *cfg, const std::vector<std::string>& options);
+steg_config_t *steg_new(const char *name, config_t *cfg, const YAML::Node& options);
 
 /* Macros for use in defining steg modules. */
 
 #define STEG_DEFINE_MODULE(mod)                         \
   /* new_ dispatchers */                                \
   static steg_config_t *mod##_new(config_t *cfg, const std::vector<std::string>& options)       \
+  { return new mod##_steg_config_t(cfg, options); }                    \
+  static steg_config_t *mod##_new(config_t *cfg, const YAML::Node& options) \
   { return new mod##_steg_config_t(cfg, options); }                             \
-                                                        \
+                                                \
   /* canned methods */                                  \
   const char *mod##_steg_config_t::name() const         \
   { return #mod; }                                      \
                                                         \
   /* module object */                                   \
   extern const steg_module s_mod_##mod = {              \
-    #mod, mod##_new                                     \
+    #mod, mod##_new, mod##_new                          \
   } /* deliberate absence of semicolon */
 
 #define STEG_CONFIG_DECLARE_METHODS(mod)                \
-  mod##_steg_config_t(config_t *, const std::vector<std::string>&);                     \
+  mod##_steg_config_t(config_t *, const std::vector<std::string>&);     \
+  mod##_steg_config_t(config_t *, const YAML::Node& options);               \
   virtual ~mod##_steg_config_t();                       \
   virtual const char *name() const;                     \
   virtual steg_t *steg_create(conn_t *)                 \
-  /* deliberate absence of semicolon */
+    /* deliberate absence of semicolon */
 
 #define STEG_DECLARE_METHODS(mod)                       \
   virtual ~mod##_steg_t();                              \

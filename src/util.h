@@ -28,6 +28,8 @@
 #include <string.h>
 #include <assert.h>
 #include <inttypes.h>
+
+#include <map>
 #include <string>
 #include <new>
 
@@ -72,6 +74,13 @@ struct event_base;
 #define ATTR_VPRINTF_3 __attribute__((format(printf, 3, 0)))
 #define ATTR_PURE     __attribute__((pure))
 
+
+/**** Common constants *****/
+const std::string false_string = "false";
+const std::string true_string = "true";
+
+//type used by protocols and steg mod to store user configs
+typedef std::map<std::string, std::string> config_dict_t;
 
 /* Obtain a backtrace and print it to stdout. */
 void print_trace (void);

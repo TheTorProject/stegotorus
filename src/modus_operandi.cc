@@ -9,13 +9,18 @@
 #include <errno.h>
 #include <string.h>
 
+#include <yaml-cpp/yaml.h>
+
+#include <getopt.h>
+#include <cstdint>
+
 #include "util.h"
 #include "protocol.h"
 #include "modus_operandi.h"
-#include "steg/schemes.h"
-#include "steg/jel_knobs.h"
-#include "steg/http.h"
-#include "steg/jpegSteg.h"
+//#include "steg/schemes.h"
+//#include "steg/jel_knobs.h"
+//#include "steg/http.h"
+//#include "steg/jpegSteg.h"
 
 using std::ifstream;
 
@@ -24,16 +29,26 @@ using std::ifstream;
  *
  */
 
-//a secret for those that don't set their secret
-static const char* stegotorus_default_secret = "yadayadablahblah";
+const struct option modus_operandi_t::long_options[] = {
+    { "help", no_argument, NULL, 'h' },
+    { "config-file", required_argument, NULL, 'c' },
+    { "log-file", required_argument, NULL, 'l' },
+    { "log-min-severity", required_argument, NULL, 's' },
+    { "no-log", no_argument,NULL, 'n' },
+    { "timestamp-logs", no_argument, NULL, 't' },
+    { "allow-kqueue", no_argument, NULL, 'k' },
+    { "registration-helper", required_argument, NULL, 'r' },
+    { "pid-file", required_argument, NULL, 'p' },
+    { "daemon", no_argument, NULL, 'd' },
+    { NULL, 0, NULL, 0 }
+  };
 
 down_address_t::down_address_t()
   : ok(false), ip(), steg()
 {
-
 }
 
-void down_address_t::parse(string line) 
+void down_address_t::parse(string line)
 {
   size_t space = line.find_first_of(" \t");
   if(space == string::npos){
@@ -51,383 +66,173 @@ void down_address_t::parse(string line)
   }
 }
 
+/**
+ * validate the config by checking for unknown keyword at
+ * stegotorus level (protocol are responsible to check for
+ * validity of the config*/
+bool modus_operandi_t::validate_top_level_config(const YAML::Node& conf_node) {
+  for(auto cur_conf_option : conf_node)
+    if (!(std::find(config_valid_extra_key_words.begin(), config_valid_extra_key_words.end(), cur_conf_option.first.as<std::string>()) != config_valid_extra_key_words.end()) &&
+        find_long_option(cur_conf_option.first.as<std::string>()) == -1)
+      return false;
+
+  return true;
+}
+
+
 modus_operandi_t::modus_operandi_t()
-  :  _is_ok(false),
-     _protocol(), _mode(), _up_address(), _down_addresses(),
-     _trace_packets(false), _persist_mode(false), _shared_secret(stegotorus_default_secret),
-     _disable_encryption(false), _disable_retransmit(false),
-     _managed(false), _managed_method("stegotorus"),
-     _daemon(false), _logmethod_set(false), _pid_file(),
-     _post_reflection(false),
-     _hostname("localhost"),
-     _jel_knobs(),
-     _traces_dir(STEG_TRACES_DIR),  //server or client tacks on the filename
-     _images_dir(STEG_TRACES_DIR "images" "/usenix-corpus/1953x1301/q30"),
-     _pdfs_dir(STEG_TRACES_DIR "pdfs"),
-     _stream_dir(STEG_TRACES_DIR "images" "/stream") {
-  init_jel_knobs(_jel_knobs);
+{
 }
 
+/**
+ * processes the command line argument based on the place they 
+ * have been mentioned they might over write config file options
+ * 
+ * @param argv the array containing command line arguments 
+ * @param argc number of elements in argv
+ *
+ * @return the index of where the protocol options start
+ *
+ */
+int
+modus_operandi_t::process_command_line_config(char* const*argv,  const int argc)
+{
+    //Dealing with command line option
+    int next_option;
 
-bool modus_operandi_t::process_line(string &line, int32_t lineno){
-  string rest;
-  if(line_is(line, "protocol", rest)){
-    rest = trim(rest);
-    if(rest.empty()){
-      fprintf(stderr, "Missing protocol value on line %" PRId32"\n", lineno);
-      return false;
-    }
-    else if(!config_is_supported(rest.c_str())){
-      fprintf(stderr, "Protocol %s on line %" PRId32" is not supported!\n", rest.c_str(), lineno);
-      return false;
-    } else {
-      this->_protocol = rest;
-      return true;
-    }
-  }
-  else if(line_is(line, "mode", rest)){
-    rest = trim(rest);
-    if(rest.empty()){
-      fprintf(stderr, "Missing mode value on line %" PRId32"\n", lineno);
-      return false;
-    }
-    else if((rest == "server") || (rest == "socks") || (rest == "client")){
-      this->_mode = rest;
-      return true;
-    } else {
-      fprintf(stderr, "Mode %s on line %" PRId32" is not supported!\n", rest.c_str(), lineno);
-      return false;
-    }
-  }
-  else if(line_is(line, "up-address", rest)){
-    rest = trim(rest);
-    //ok need to ...
-    if(rest.empty()){
-      fprintf(stderr, "Missing up-address value on line %" PRId32"\n", lineno);
-      return false;
-    } else {
-      this->_up_address = rest;
-      return true;
-    }
-  }
-  else if(line_is(line, "down-address", rest)){
-    rest = trim(rest);
-    if(rest.empty()){
-      fprintf(stderr, "Missing down-address value on line %" PRId32"\n", lineno);
-      return false;
-    } else {
-      this->_down_addresses.push_back(rest);
-      return true;
-    }
-  }
-  else if(line_is(line, "log-min-severity", rest)){
-    rest = trim(rest);
-    if(rest.empty()){
-      fprintf(stderr, "Missing log-min-severity value on line %" PRId32"\n", lineno);
-      return false;
-    }
-    else if((rest == "warn") || (rest == "info") || (rest == "debug")){
-      if (log_set_min_severity(rest.c_str()) < 0) {
-        fprintf(stderr, "invalid min. log severity '%s'", rest.c_str());
-        return false;
-      }
-      return true;
-    } else {
-      fprintf(stderr, "Log-min-severity %s on line %" PRId32" is not supported!\n", rest.c_str(), lineno);
-      return false;
-    }
-  }
-  else if(line_is(line, "log-file", rest)){
-    rest = trim(rest);
-    if(rest.empty()){
-      fprintf(stderr, "Missing log-file value on line %" PRId32"\n", lineno);
-      return false;
-    }
-    else if( log_set_method(LOG_METHOD_FILE, rest.c_str()) < 0) {
-      fprintf(stderr, "failed to open logfile '%s': %s\n", rest.c_str(), strerror(errno));
-      return false;
-    } else {
-      _logmethod_set = true;
-    }
-    return true;
-  }
-  else if(line_is(line, "shared-secret", rest)){
-    rest = trim(rest);
-    if(rest.empty()){
-      fprintf(stderr, "Missing shared-secret value on line %" PRId32"\n", lineno);
-      return false;
-    } else {
-      this->_shared_secret = rest;
-      return true;
-    }
-  }
-  else if(line_is(line, "pid-file", rest)){
-    rest = trim(rest);
-    if(rest.empty()){
-      fprintf(stderr, "Missing pid-file value on line %" PRId32"\n", lineno);
-      return false;
-    } else {
-      this->_pid_file = rest;
-      return true;
-    }
-  }
-  else if(line_is(line, "managed-method", rest)){
-    rest = trim(rest);
-    if(rest.empty()){
-      fprintf(stderr, "Missing managed-method value on line %" PRId32"\n", lineno);
-      return false;
-    } else {
-      this->_managed_method = rest;
-      return true;
-    }
-  }
-  else if(line_is(line, "jel-embed-length", rest)){
-    return set_bool(this->_jel_knobs.embed_length, rest, lineno);
-  }
-  else if(line_is(line, "jel-use-ecc", rest)){
-    return set_bool(this->_jel_knobs.use_ecc, rest, lineno);
-  }
-  else if(line_is(line, "jel-ecc-blocklen", rest)){
-    return set_int(this->_jel_knobs.ecc_blocklen, rest, lineno);
-  }
-  else if(line_is(line, "jel-freq-pool", rest)){
-    return set_int(this->_jel_knobs.freq_pool, rest, lineno);
-  }
-  else if(line_is(line, "jel-quality-out", rest)){
-    return set_int(this->_jel_knobs.quality_out, rest, lineno);
-  }
-  else if(line_is(line, "jel-random-seed", rest)){
-    return set_int(this->_jel_knobs.random_seed, rest, lineno);
-  }
-  else if(line_is(line, "cookie-transmit", rest)){
-    return set_scheme("cookie-transmit", rest, lineno);
-  }
-  else if(line_is(line, "uri-transmit", rest)){
-    return set_scheme("uri-transmit", rest, lineno);
-  }
-  else if(line_is(line, "json-post", rest)){
-    return set_scheme("json-post", rest, lineno);
-  }
-  else if(line_is(line, "pdf-post", rest)){
-    return set_scheme("pdf-post", rest, lineno);
-  }
-  else if(line_is(line, "jpeg-post", rest)){
-    return set_scheme("jpeg-post", rest, lineno);
-  }
-  else if(line_is(line, "raw-post", rest)){
-    return set_scheme("raw-post", rest, lineno);
-  }
-  else if(line_is(line, "swf-get", rest)){
-    return set_scheme("swf-get", rest, lineno);
-  }
-  else if(line_is(line, "pdf-get", rest)){
-    return set_scheme("pdf-get", rest, lineno);
-  }
-  else if(line_is(line, "js-get", rest)){
-    return set_scheme("js-get", rest, lineno);
-  }
-  else if(line_is(line, "html-get", rest)){
-    return set_scheme("html-get", rest, lineno);
-  }
-  else if(line_is(line, "json-get", rest)){
-     return set_scheme("json-get", rest, lineno);
-  }
-  else if(line_is(line, "jpeg-get", rest)){
-    return set_scheme("jpeg-get", rest, lineno);
-  }
-  else if(line_is(line, "raw-get", rest)){
-    return set_scheme("raw-get", rest, lineno);
-  }
-  else if(line_is(line, "trace-packets", rest)){
-    return set_bool(this->_trace_packets, rest, lineno);
-  }
-  else if(line_is(line, "traces-dir", rest)){
-    return set_steg_datadir(StegData::TRACES, rest);
-  }
-  else if(line_is(line, "images-dir", rest)){
-    return set_steg_datadir(StegData::IMAGES, rest);
-  }
-  else if(line_is(line, "pdfs-dir", rest)){
-    return set_steg_datadir(StegData::PDFS, rest);
-  }
-  else if(line_is(line, "stream-dir", rest)){
-    return set_steg_datadir(StegData::STREAM, rest);
-  }
-  else if(line_is(line, "persist-mode", rest)){
-    return set_bool(this->_persist_mode, rest, lineno);
-  }
-  else if(line_is(line, "managed", rest)){
-    return set_bool(this->_managed, rest, lineno);
-  }
-  else if(line_is(line, "daemon", rest)){
-    return set_bool(this->_daemon, rest, lineno);
-  }
-  else if(line_is(line, "disable-encryption", rest)){
-    return set_bool(this->_disable_encryption, rest, lineno);
-  }
-  else if(line_is(line, "disable-retransmit", rest)){
-    return set_bool(this->_disable_retransmit, rest, lineno);
-  }
-  else if(line_is(line, "post-reflection", rest)){
-    bool val = set_bool(this->_post_reflection, rest, lineno);
-    return val;
-  }
-  else if(line_is(line, "hostname", rest)){
-    return set_string(this->_hostname, "hostname", rest, lineno);
-  }
+    //first we detect where the protocol section start to feed
+    //what comes before to getopts
+    int protocol_spec_index = 1;
+    for(; argv[protocol_spec_index] && !strncmp(argv[protocol_spec_index],"--",2); protocol_spec_index++);
 
-  fprintf(stderr, "Did not understand line[%" PRId32"] = %s\n", lineno, line.c_str());
+    do {
+      next_option = getopt_long (argc, argv, short_options, long_options, NULL);
+      bool unknown_option = true;
+        
+      switch (next_option)
+        {
+        case 'h':
+          /* -h or --help */
+          /* User has requested usage information. Print it to standard
+             output, and exit with exit code zero (normal termination). */
+          usage();
+        case '?':
+          /* The user specified an invalid option. */
+          /* Print usage information to standard error, and exit with exit
+             code one (indicating abnormal termination). */
+          usage();
+        case -1:
+          break;
+          /* Done with options.
+           */
+        default:
+          for(auto cur_option = long_options; cur_option->name != nullptr; cur_option++)
+            if (next_option == cur_option->val) {
+              //prevent double options
+              if (top_level_confs_dict.find(cur_option->name) != top_level_confs_dict.end())
+                  log_abort("option %s has already been specified", cur_option->name);
+                  
+              if (cur_option->has_arg == required_argument) {
+                top_level_confs_dict[cur_option->name] = optarg;
+              } else if (cur_option->has_arg == no_argument) {
+                top_level_confs_dict[cur_option->name]  = true_string;
+              }
+              unknown_option = false;
+              break;
+                
+            }
 
-  return false;
-}
-
-
-bool modus_operandi_t::line_is(string& line, const char *prefix, string& rest){
-  size_t len =  strlen(prefix);
-  if(!line.compare(0, len, prefix)){
-    rest = line.substr(len);
-    return true;    
-  } else {
-    return false;
-  }
-}
-
-string modus_operandi_t::trim_line(string &line){
-  string retval;
-  size_t hash = line.find_first_of("#"); 
-  if(hash == string::npos){
-    retval = trim(line);
-  } else if(hash == 0) {
-    retval  = "";
-  } else {
-    retval = line.substr(0, hash);
-    retval = trim(retval);
-  }
-  return retval;
-}
-
-bool modus_operandi_t::load_file(const char* path){
-  string line;
-  ifstream infile(path);
-  int32_t lineno = 0;
-  int32_t errors = 0;
-  bool open_ok = infile.is_open();
-  
-  if(open_ok){
-  
-    while (getline(infile, line))
-    {
-      line = trim_line(line);
-      if(!line.empty()  && (line[0] != '#')){
-        bool line_ok = process_line(line, lineno);
-        if(!line_ok){
-          fprintf(stderr, "line[%" PRId32"]: had errors\n", lineno);
-          errors++;
+          if (unknown_option) {
+            /* Something else: unexpected.*/
+            log_abort("error in processing command line arguments");
+             abort ();
+            
+          }
         }
+    }
+    while (next_option != -1);
+
+    return protocol_spec_index;
+}
+
+/**
+ * loads the config file in YAML format and store the 
+ * values in the *this* object in heirercal format. It does not
+ * validate the values.
+ */
+
+void
+modus_operandi_t::load_file(const string& path){
+    // Read the file. If there is an error, report it and exit.
+  log_debug("Reading configuration from [%s]", path.c_str());
+
+  try
+  {
+     const YAML::Node& cfg = YAML::LoadFile(path);
+
+    //we make sure there is no unknow keyboard 
+    if (!validate_top_level_config(cfg)) {
+      usage();
+      log_abort("unknown option");
+    }
+
+    //otherwise all we do is to delegate reading the protocol
+    //config to process_protocol and store other config in
+    //a string->string dict
+    for (YAML::const_iterator it=cfg.begin();it!=cfg.end();++it) {
+      std::string node_name = (*it).first.as<std::string>();
+      string rest;
+      if(node_name == "protocols") {
+        protocol_configs = it;
+      } else {
+        int option_index = find_long_option(node_name);
+        if (option_index == -1) //this shouldn't happen as we have checked validity before
+          log_abort("something went wrong. A wrong option sneaked in");
+        
+        if (long_options[option_index].has_arg == no_argument) //uniformized the boolean config
+          top_level_confs_dict[node_name] = uniformize_boolean_value((*it).second.as<std::string>());
+        else //otherwise just store the original
+          top_level_confs_dict[node_name] = (*it).second.as<std::string>();
       }
-      lineno++;
     }
+  }  catch(YAML::BadFile& e) {
+    log_abort( "I/O error while reading config file [%s]: [%s]. Make sure that file exists.", path.c_str(), e.what());
+  }
+  catch(YAML::ParserException& e) {
+    log_abort("parsing error while reading config file [%s]: [%s].", path.c_str(), e.what());
+  } catch( YAML::RepresentationException &e ) {
+    log_abort("bad config format %s", e.what());
+  }
+      
+  log_info("finished loading conf");
+}
 
-    //schemes_dump(stderr);
+/**
+   Prints usage instructions then exits.
+*/
+void ATTR_NORETURN
+modus_operandi_t::usage(void)
+{
+    const proto_module *const *p;
     
-    if (errors == 0){
-      /* the bare minimum for both chop and null */
-      _is_ok = true;
-    }
-    infile.close();
-  }
+    fputs("usage: stegotorus protocol_name [protocol_args] protocol_options "
+          "protocol_name ...\n"
+          "* Available protocols:\n", stderr);
+    /* this is awful. */
+    for (p = supported_protos; *p; p++)
+      fprintf(stderr,"[%s] ", (*p)->name);
+    fprintf(stderr, "\n* Available arguments:\n"
+	  "--config-file=<file> ~ load the configuration file\n"
+          "--log-file=<file> ~ set logfile\n"
+          "--log-min-severity=warn|info|debug ~ set minimum logging severity\n"
+          "--no-log ~ disable logging\n"
+          "--timestamp-logs ~ add timestamps to all log messages\n"
+          "--allow-kqueue ~ allow use of kqueue(2) (may be buggy)\n"
+          "--registration-helper=<helper> ~ use <helper> to register with "
+          "a relay database\n"
+          "--pid-file=<file> ~ write process ID to <file> after startup\n"
+          "--daemon ~ run as a daemon\n"
+          "--version ~ show version details and exit\n");
 
-  if(!open_ok){
-    log_abort("Couldn't open file \"%s\"\n", path);
-  } else if(!_is_ok){
-    log_abort("Loading file \"%s\" ... FAILED\n", path);
-  } else {
-    log_warn("Loading file \"%s\" ... OK!\n", path);
-  }
-  return _is_ok;
-}
-
-bool modus_operandi_t::set_scheme(const char *scheme_name, string& rest, int32_t lineno){
-  int scheme = schemes_string_to_scheme(scheme_name);
-
-  assert(scheme != -1);
-
-  rest = trim(rest);
-  if(!rest.empty()){
-    int val = atoi(rest.c_str());
-    return schemes_set_scheme(scheme , val);
-  } else {
-    fprintf(stderr, "Missing value %s on line %" PRId32"\n", scheme_name, lineno);
-  }
-
-  return false;
-}
-
-bool modus_operandi_t::set_string(string& stringref, const char *name, string& rest, int32_t lineno){
-  rest = trim(rest);
-  if(!rest.empty()){
-    stringref = rest;
-    return true;
-  } else {
-    fprintf(stderr, "Missing value %s on line %" PRId32"\n", name, lineno);
-  }
-  return false;
-}
-
-bool modus_operandi_t::set_bool(bool& boolref, string& rest, int32_t lineno){
-  rest = trim(rest);
-  if(!rest.empty()){
-    int val = atoi(rest.c_str());
-    if((val == 0) || (val == 1)){
-      boolref = val;
-      return true;
-    }
-  } else {
-    fprintf(stderr, "Missing value on line %" PRId32"\n", lineno);
-  }
-
-  return false;
-}
-
-bool modus_operandi_t::set_int(int& intref, string& rest, int32_t lineno){
-  rest = trim(rest);
-  if(!rest.empty()){
-    int val = atoi(rest.c_str());
-    intref = val;
-    return true;
-  } else {
-    fprintf(stderr, "Missing value on line %" PRId32"\n", lineno);
-  }
-  
-  return false;
-}
-
-string modus_operandi_t::get_steg_datadir(StegData variety){  
-  switch(variety){
-  case StegData::TRACES: return _traces_dir;
-  case StegData::IMAGES: return _images_dir;
-  case StegData::PDFS:   return _pdfs_dir;
-  case StegData::STREAM: return _stream_dir;
-  default: return "";
-  }
-}
-
-bool modus_operandi_t::set_steg_datadir(StegData variety, string value){ 
-  //we could check that they exist if we wanted too.
-  value = trim(value);
-
-  //we remove any trailing, for ease, and consistency.
-  size_t length = value.length(); 
-  if(length > 0 && ('/' == value[length - 1])){
-    value = value.substr(0, length - 1);
-  }
-  
-  
-  switch(variety){
-  case StegData::TRACES: _traces_dir = value; return true;
-  case StegData::IMAGES: _images_dir = value; return true;
-  case StegData::PDFS:   _pdfs_dir = value;  return true;
-  case StegData::STREAM: _stream_dir = value; return true;
-  default: return false;
-  }
+    exit(1);
 }
