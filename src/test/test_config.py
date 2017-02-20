@@ -1,7 +1,7 @@
 # Copyright 2011, 2012 SRI International
 # See LICENSE for other credits and copying information
 
-# Integration tests for stegotorus - "timeline" tests.
+# Integration tests for steogtorus - "timeline" tests.
 #
 # These tests use the 'tltester' utility to script a sequence of
 # messages sent in both directions across the obfuscated channel.
@@ -31,16 +31,21 @@ class TimelineTest(TestCase):
         cls.testdir = (cls.testdir == '') and '.' or cls.testdir
 
         cls.reftl = Stegotorus("null", "client", "127.0.0.1:4999", "127.0.0.1:5000").check_completion(cls.__name__)
-        print cls.reftl
+        
+        cls.http_reftl = Stegotorus(
+            "chop", "server", "127.0.0.1:5001",
+            "http", "127.0.0.1:5000",
+            "chop", "client", "127.0.0.1:4999",
+            "http", "127.0.0.1:5000").check_completion(cls.__name__)
 
-    def doTest(self, label, st_args):
+    def doTest(self, label, st_args, reftl = None):
         errors = ""
         st = Stegotorus(st_args)
         import pdb
         #pdb.set_trace()
         try:
             testtl = st.check_completion(label + " tester")
-            if testtl != self.reftl:
+            if ((reftl == None) and (testtl != self.reftl)) or ((reftl != None) and (testtl != reftl)):
                 errors += diff("errors in transfer:", self.reftl, testtl)
 
         except AssertionError, e:
@@ -56,16 +61,32 @@ class TimelineTest(TestCase):
     def no_test_empty_config_null(self):
         #pdb.set_trace()
         print self.reftl
-        self.doTest("null",
+        self.doTest("null-cl",
            ("--config-file="+ self.testdir + "/test_conf.d/empty.yaml", "null", "server", "127.0.0.1:5000",
             "127.0.0.1:5001", "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
     def no_test_null_config(self):
-        self.doTest("null", "--config-file="+ self.testdir + "/test_conf.d/null-client-server.yaml")
+        self.doTest("null", ("--config-file="+ self.testdir + "/test_conf.d/null-client-server.yaml"))
 
-    def test_null_config(self):
+    def no_test_chop_nosteg_config(self):
+        self.doTest("chop-nosteg", ("--config-file="+ self.testdir + "/test_conf.d/chop-nosteg-client-server.yaml"))
+
+    def test_chop_http_config(self):
+        #http generate out put so we can't compare with same output
         pdb.set_trace()
-        self.doTest("chop-nosteg", "--config-file="+ self.testdir + "/test_conf.d/chop-nosteg-client-server.yaml")
+
+        print "<<<<<<START>>>>>>"
+        print self.http_reftl
+        print "<<<<<<END>>>>>>"
+        
+        self.doTest("chop-http", ("chop", "server", "127.0.0.1:5001",
+            "http", "127.0.0.1:5000",
+            "chop", "client", "127.0.0.1:4999",
+            "http", "127.0.0.1:5000")
+                        , self.reftl)
+
+        #self.doTest("chop-http", "--config-file="+ self.testdir + "/test_conf.d/chop-http-client-server.yaml", self.http_reftl)
+
 
          
 #     def test_chop_nosteg2(self):

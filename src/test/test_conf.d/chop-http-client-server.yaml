@@ -1,0 +1,29 @@
+####################################
+# process options
+####################################
+log-min-severity:  debug
+timestamp-logs: true
+
+####################################
+# protocol specification for server 
+####################################
+
+protocols:
+  - name: "chop"
+    mode: server
+    up-address: 127.0.0.1:5001
+    disable-retransmit: true 
+    stegs:
+      - name: http
+        down-address: 127.0.0.1:5000
+        
+####################################
+# protocol specification for client
+####################################
+  - name: "chop"
+    mode: client
+    up-address: 127.0.0.1:4999
+    disable-retransmit: true 
+    stegs:
+      - name: http
+        down-address: 127.0.0.1:5000

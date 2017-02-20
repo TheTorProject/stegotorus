@@ -122,6 +122,8 @@ http_steg_config_t::store_options(const YAML::Node& options)
       for(auto cur_conf_field: options) {
         std::string current_field_name = cur_conf_field.first.as<std::string>();
         if (!(
+            (current_field_name == "name") ||
+            (current_field_name == "down-address") ||
             (current_field_name == "steg-mod") ||
             (current_field_name == "cover-list")
               )) {

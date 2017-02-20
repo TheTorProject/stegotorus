@@ -379,20 +379,34 @@ chop_config_t::init_from_protocol_config_dict() {
       log_warn("server-key option is not valid in server mode");
       return false;
       }
-  } else if (user_specified("passphrase")) {
+  }
+
+  if (user_specified("passphrase")) {
     passphrase = chop_user_config["passphrase"];
-  } else if (user_specified("trace-packets")) {
+  }
+
+  if (user_specified("trace-packets")) {
     trace_packets = true;
     log_enable_timestamps();
-  } else if (user_specified("disable-encryption")) {
+  }
+
+  if (user_specified("disable-encryption")) {
     encryption = false;
-  } else if (user_specified("disable-retransmit")) {
+  }
+
+  if (user_specified("disable-retransmit")) {
     retransmit = false;
-  } else if (user_specified("enable-retransmit")) {
+  }
+
+  if (user_specified("enable-retransmit")) {
     retransmit = true;
-  } else if (user_specified("minimum-noise-to-signal")) {
+  }
+
+  if (user_specified("minimum-noise-to-signal")) {
     noise2signal = atoi(chop_user_config["minimum-noise-to-signal"].c_str());
-  } else if (user_specified("cover-server")) {
+  }
+
+  if (user_specified("cover-server")) {
       cover_server_address = chop_user_config["cover-server"];
       transparent_proxy = new TransparentProxy(base, cover_server_address);
       //This is not related to an specific steg module hence, we store it under
@@ -498,7 +512,6 @@ bool chop_config_t::init(unsigned int n_options, const char *const *options)
     }
 
   chop_user_config["mode"] = options[0];
-  chop_user_config["up-address"] = options[1];
 
   while (options[1][0] == '-') {
     if (strlen(options[1]) < 2)
@@ -534,6 +547,9 @@ bool chop_config_t::init(unsigned int n_options, const char *const *options)
       n_options--;
   }
 
+  //immidiately after options user needs to specifcy upstream address
+  chop_user_config["up-address"] = options[1];
+   
   if (!init_from_protocol_config_dict())
     return false;
 

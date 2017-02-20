@@ -1,0 +1,35 @@
+####################################
+# process options
+####################################
+log-min-severity:  debug
+timestamp-logs: true
+
+####################################
+# protocol specification for server 
+####################################
+
+protocols:
+  - name: "chop"
+    mode: server
+    passphrase: "correct passphrase"
+    trace-packets: false
+    disable-retransmit: true
+    cover-server: 66.135.46.119:80 #funny cat 
+    up-address: 127.0.0.1:5001
+    stegs:
+      - name: "http_apache"
+        down-address: 127.0.0.1:5000
+        cover-list: "apache_payload/funnycatpix.csv"
+        
+####################################
+# protocol specification for client
+####################################
+  - name: "chop"
+    mode: client
+    passphrase: "correct passphrase"
+    up-address: 127.0.0.1:4999
+    disable-retransmit: true
+    trace-packets: false
+    stegs:
+      - name: "http_apache"
+        down-address: 127.0.0.1:5000
