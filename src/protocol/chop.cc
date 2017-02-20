@@ -199,9 +199,9 @@ struct chop_config_t : config_t
 {
   //we store protocol config to be able to treat them uniformly independant of
   //the fact that they came from command line or from yaml config file
-  const std::vector<std::string> arg_option_list = {"mode", "up_address", "server-key",
+  const std::vector<std::string> arg_option_list = {"name", "mode", "up-address", "server-key",
                                                     "passphrase", "cover-server",
-                                                    "minimum-noise_to_signal"};
+                                                    "minimum-noise-to-signal"};
 
   const std::vector<std::string> binary_option_list = {"trace-packets",
                                                        "disable-encryption",
@@ -255,7 +255,7 @@ struct chop_config_t : config_t
   void display_usage()
   {
     log_warn("chop syntax:\n"
-           "\tchop <mode> <up_address> ([<steg> <down_address> --steg-option...])...\n"
+           "\tchop <mode> <up-address> ([<steg> <down-address> --steg-option...])...\n"
            "\t\tmode ~ server|client|socks\n"
            "\t\tup_address, down_address ~ host:port\n"
            "\t\tA steganographer is required for each down_address.\n"
@@ -365,10 +365,10 @@ chop_config_t::init_from_protocol_config_dict() {
   vector<string> addresses;
 
   //Try recover upaddress from where the mode was retrieved. 
-  up_address = resolve_address_port(chop_user_config["up_address"].c_str(), 1, listen_up, defport);
+  up_address = resolve_address_port(chop_user_config["up-address"].c_str(), 1, listen_up, defport);
 
   if (!up_address) {
-    log_warn("chop: invalid up address: %s", chop_user_config["up_address"].c_str());
+    log_warn("chop: invalid up address: %s", chop_user_config["up-address"].c_str());
     return false;
 
   }
@@ -426,7 +426,7 @@ bool chop_config_t::init(const YAML::Node& protocol_node)
         //need access to the protocol options
         std::string current_field_name = cur_protocol_field.first.as<std::string>();
         if (current_field_name == "stegs") {
-          for(auto cur_steg: cur_protocol_field)
+          for(auto cur_steg: cur_protocol_field.second)
             steg_conf_list.push_back(cur_steg);
         } else {
           if (!valid_config_keyword(current_field_name))
@@ -450,6 +450,10 @@ bool chop_config_t::init(const YAML::Node& protocol_node)
 
   bool listen_down = (mode == LSN_SIMPLE_SERVER);
   //now we are ready to process the stegs node
+  if (!(steg_conf_list.size() > 0)) {
+    log_warn("chop: no steganographer is specied. at least one steganographer is needed.");
+  }
+
   try {
     for(auto cur_steg : steg_conf_list) {
       struct evutil_addrinfo *addr =
@@ -494,7 +498,7 @@ bool chop_config_t::init(unsigned int n_options, const char *const *options)
     }
 
   chop_user_config["mode"] = options[0];
-  chop_user_config["up_address"] = options[1];
+  chop_user_config["up-address"] = options[1];
 
   while (options[1][0] == '-') {
     if (strlen(options[1]) < 2)

@@ -9,15 +9,21 @@ timestamp-logs: true
 ####################################
 
 protocols:
-  - name: "null"
+  - name: "chop"
     mode: server
-    listen-address: 127.0.0.1:5000
-    target-address: 127.0.0.1:5001
-
+    up-address: 127.0.0.1:5001
+    disable-retransmit: true 
+    stegs:
+      - name: nosteg
+        down-address: 127.0.0.1:5000
+        
 ####################################
 # protocol specification for client
 ####################################
-  - name: "null"
+  - name: "chop"
     mode: client
-    listen-address: 127.0.0.1:4999
-    target-address: 127.0.0.1:5000
+    up-address: 127.0.0.1:4999
+    disable-retransmit: true 
+    stegs:
+      - name: nosteg
+        down-address: 127.0.0.1:5000

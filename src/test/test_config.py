@@ -60,9 +60,12 @@ class TimelineTest(TestCase):
            ("--config-file="+ self.testdir + "/test_conf.d/empty.yaml", "null", "server", "127.0.0.1:5000",
             "127.0.0.1:5001", "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
-    def no_test_chop_nosteg_config(self):
-         pdb.set_trace()
-         self.doTest("null", "--config-file="+ self.testdir + "/test_conf.d/null-client-server.yaml")
+    def no_test_null_config(self):
+        self.doTest("null", "--config-file="+ self.testdir + "/test_conf.d/null-client-server.yaml")
+
+    def test_null_config(self):
+        pdb.set_trace()
+        self.doTest("chop-nosteg", "--config-file="+ self.testdir + "/test_conf.d/chop-nosteg-client-server.yaml")
 
          
 #     def test_chop_nosteg2(self):
