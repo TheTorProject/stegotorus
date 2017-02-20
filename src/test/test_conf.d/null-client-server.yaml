@@ -1,0 +1,23 @@
+####################################
+# process options
+####################################
+log-min-severity:  debug
+timestamp-logs: true
+
+####################################
+# protocol specification for server 
+####################################
+
+protocols:
+  - name: "null"
+    mode: server
+    listen-address: 127.0.0.1:5000
+    target-address: 127.0.0.1:5001
+
+####################################
+# protocol specification for client
+####################################
+  - name: "null"
+    mode: client
+    listen-address: 127.0.0.1:4999
+    target-address: 127.0.0.1:5000

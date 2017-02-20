@@ -61,6 +61,8 @@ class Stegotorus(subprocess.Popen):
         argv.extend(("./stegotorus", "--log-min-severity=debug",
                      "--timestamp-logs"))
 
+        import pdb
+        #pdb.set_trace()
         if len(args) == 1 and (isinstance(args[0], list) or
                                isinstance(args[0], tuple)):
             argv.extend(args[0])

@@ -92,9 +92,10 @@ class modus_operandi_t {
   void process_protocol(const char* argv);
 
  public:
-
   //TODO: these needs access function
-  YAML::const_iterator protocol_configs;
+  YAML::Node protocol_configs;
+  //This is basically to track if user has specified any protocol
+  size_t number_of_protocols = 0;
   config_dict_t top_level_confs_dict;
 
   modus_operandi_t();
@@ -115,7 +116,7 @@ class modus_operandi_t {
    * @return the index of where the protocol options start
    *
    */
-  int process_command_line_config(char *const *argv,  const int argc);
+  int process_command_line_config(const char *const *argv,  const int argc);
 
   /**
    * helper functions which uniformizes the value of boolean config to

@@ -121,9 +121,10 @@ bool null_config_t::init(const YAML::Node& protocol_node)
         //need access to the protocol options
         std::string current_field_name = cur_protocol_field.first.as<std::string>();
         if (!(
-            (current_field_name == "mode") ||
-            (current_field_name == "listen-address") ||
-            (current_field_name == "target-address")
+              (current_field_name == "name") ||
+              (current_field_name == "mode") ||
+              (current_field_name == "listen-address") ||
+              (current_field_name == "target-address")
               )) {
           log_warn("invalid config keyword %s", current_field_name.c_str());
           return false;

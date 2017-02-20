@@ -245,6 +245,10 @@ else
 	@echo !!! Integration tests skipped !!!
 endif
 
+# testing config - temperory, should be merged with other tests
+check-config:
+	$(AM_V_at) $(PYTHON) -m unittest discover -s $(srcdir)/src/test -p 'test_config.py' -v
+
 if INTEGRATION_TESTS
 clean-local:
 	[ ! -f traces/.faked ] || rm -r traces

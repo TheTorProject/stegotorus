@@ -1,1 +1,5 @@
 The config file is in format of YAML.
+
+
+For example of config file see /test_conf.d/ folder.
+

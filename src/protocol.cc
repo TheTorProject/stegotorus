@@ -50,11 +50,22 @@ config_t *
 config_create(const YAML::Node& protocol_node)
 {
   const proto_module *const *p;
-  for (p = supported_protos; *p; p++)
-    if (protocol_node["name"] &&  (protocol_node["name"].as<std::string>() == (*p)->name))
-      /* Remove the first element of 'options' (which is always the
-         protocol name) from the list passed to the init method. */
-      return (*p)->config_create_from_yaml(protocol_node);
+  try {
+    if (protocol_node["name"]) {
+      for (p = supported_protos; *p; p++) {
+        log_debug("searching for protocol class %s", (protocol_node["name"].as<std::string>().c_str()));
+        if ((protocol_node["name"].as<std::string>() == (*p)->name))
+          /* Remove the first element of 'options' (which is always the
+             protocol name) from the list passed to the init method. */
+          return (*p)->config_create_from_yaml(protocol_node);
+        
+      }
+    } else {
+      log_abort("bad protocol config format, protocol name is not specified");
+    }
+  } catch( YAML::RepresentationException &e ) {
+      log_abort("bad protocol config format %s", e.what());
+    }
 
   return NULL;
 }

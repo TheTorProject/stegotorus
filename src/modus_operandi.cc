@@ -95,18 +95,23 @@ modus_operandi_t::modus_operandi_t()
  *
  */
 int
-modus_operandi_t::process_command_line_config(char* const*argv,  const int argc)
+modus_operandi_t::process_command_line_config(const char* const* original_argv,  const int argc)
 {
     //Dealing with command line option
     int next_option;
+    char* argv[argc]; //compatibility steps between c++11 and c
+    for(int i = 0; i < argc; i++) {
+      argv[i] = new char[strlen(original_argv[i])+1];
+      strcpy(argv[i], original_argv[i]);
+    }
 
+    argv[argc] = nullptr;
     //first we detect where the protocol section start to feed
     //what comes before to getopts
     int protocol_spec_index = 1;
     for(; argv[protocol_spec_index] && !strncmp(argv[protocol_spec_index],"--",2); protocol_spec_index++);
-
     do {
-      next_option = getopt_long (argc, argv, short_options, long_options, NULL);
+      next_option = getopt_long (protocol_spec_index, argv, short_options, long_options, NULL);
       bool unknown_option = true;
         
       switch (next_option)
@@ -152,6 +157,10 @@ modus_operandi_t::process_command_line_config(char* const*argv,  const int argc)
     }
     while (next_option != -1);
 
+    //releasing copied argv
+    for(int i = 0; i < argc; i++)
+      delete [] argv[i];
+
     return protocol_spec_index;
 }
 
@@ -183,7 +192,12 @@ modus_operandi_t::load_file(const string& path){
       std::string node_name = (*it).first.as<std::string>();
       string rest;
       if(node_name == "protocols") {
-        protocol_configs = it;
+        if (number_of_protocols > 0) {
+          log_abort("error in config file: only one protocols section is supported");
+        }
+        protocol_configs = it->second;
+        number_of_protocols = it->second.size();
+        
       } else {
         int option_index = find_long_option(node_name);
         if (option_index == -1) //this shouldn't happen as we have checked validity before

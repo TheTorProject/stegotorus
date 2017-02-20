@@ -212,11 +212,16 @@ call_registration_helper(string const& helper)
    If it fails, it exits the program.
 
    Note: this function should NOT use log_* to print diagnostics.
+
+   @params argc number of arguement is necessary for running getops
+   @params argv the list of command line arguments
+   @params mo the modus_operandi object which is going to process
+           both command line and config options
 */
 static int
-handle_generic_args(const char *const *argv,  modus_operandi_t &mo)
+handle_generic_args(int argc, const char *const *argv,  modus_operandi_t &mo)
 {
-  int i = 1;
+  int protocol_arg_index = mo.process_command_line_config(argv, argc);;
 
   for(auto cur_option = mo.top_level_confs_dict.begin();
       cur_option != mo.top_level_confs_dict.end(); cur_option++) {
@@ -225,13 +230,13 @@ handle_generic_args(const char *const *argv,  modus_operandi_t &mo)
     } else if (cur_option->first == "log-file") {
       if (log_set_method(LOG_METHOD_FILE,
                          (char *)cur_option->second.c_str()) < 0) {
-        fprintf(stderr, "failed to open logfile '%s': %s\n", argv[i]+11,
+        fprintf(stderr, "failed to open logfile '%s': %s\n", cur_option->second.c_str(),
                 strerror(errno));
         exit(1);
       }
     } else if (cur_option->first == "log-min-severity") {
       if (log_set_min_severity(cur_option->second.c_str()) < 0) {
-        fprintf(stderr, "invalid min. log severity '%s'", argv[i]+19);
+        fprintf(stderr, "invalid min. log severity '%s'", cur_option->second.c_str());
         exit(1);
       }
     } else if ((cur_option->first == "no-log") && (cur_option->second == true_string)) {
@@ -251,10 +256,10 @@ handle_generic_args(const char *const *argv,  modus_operandi_t &mo)
     } else if ((cur_option->first == "daemon") && (cur_option->second == true_string)) {
       daemon_mode = true;
     } else {
-      fprintf(stderr, "unrecognizable argument '%s'\n", argv[i]);
+      //this should never happen cause modus_operandi should have already aborted
+      fprintf(stderr, "unrecognizable argument '%s'\n", cur_option->first.c_str());
       exit(1);
     }
-    i++;
   }
 
   /* Cross-option consistency checks. */
@@ -263,11 +268,11 @@ handle_generic_args(const char *const *argv,  modus_operandi_t &mo)
     log_set_method(LOG_METHOD_NULL, NULL);
   }
 
-  return i;
+  return protocol_arg_index;
 }
 
 int
-main(int, const char *const *argv)
+main(int argc, const char *const *argv)
 {
   struct event_config *evcfg;
   struct event *sig_int;
@@ -290,59 +295,65 @@ main(int, const char *const *argv)
      then it will be loaded into the modus_operandi_t object. Many of the config file options
      are set at the time of loading, in particular the schemes enabled/disabled.      
   */
-
-  cmd_options = handle_generic_args(argv, mo);
+  cmd_options = handle_generic_args(argc, argv, mo);
   
+  //crypto should be initialized before protocol so the protocols
+  //can use encryption
+  init_crypto();
+
+  //first we create protocols specified in the command line
   begin = argv + cmd_options;
 
   /* Find the subsets of argv that define each configuration.
      Each configuration's subset consists of the entries in argv from
      its recognized protocol name, up to but not including the next
      recognized protocol name. */
-  if ((!*begin || !config_is_supported(*begin)))
-    mo.usage();
- 
-  //crypto should be initialized before protocol so the protocols
-  //can use encryption
-  init_crypto();
-
-  //create the protocol specified in the command line
-  do {
-    end = begin+1;
-    while (*end && !config_is_supported(*end))
-      end++;
-    if (log_do_debug()) {
-      string joined = *begin;
-      const char *const *p;
-      for (p = begin+1; p < end; p++) {
-        joined += " ";
-        joined += *p;
-      }
-      log_debug("configuration %lu: %s",
-                (unsigned long)configs.size()+1, joined.c_str());
-    }
-    if (end == begin+1) {
-      log_warn("no arguments for configuration %lu",
-               (unsigned long)configs.size()+1);
+  if (*begin) {//it is ok to not define any protocol in the command line
+    //and only define the protocol in config file
+    if(!config_is_supported(*begin))
       mo.usage();
-    } else {
-      config_t *cfg = config_create(end - begin, begin);
-      if (!cfg)
-        return 2; /* diagnostic already issued */
-      configs.push_back(cfg);
-    }
-    begin = end;
-  } while (*begin);
+
+    //create the protocol specified in the command line
+    do {
+      end = begin+1;
+      while (*end && !config_is_supported(*end))
+        end++;
+      if (log_do_debug()) {
+        string joined = *begin;
+        const char *const *p;
+        for (p = begin+1; p < end; p++) {
+          joined += " ";
+          joined += *p;
+        }
+        log_debug("configuration %lu: %s",
+                  (unsigned long)configs.size()+1, joined.c_str());
+      }
+      if (end == begin+1) {
+        log_warn("no arguments for configuration %lu",
+                 (unsigned long)configs.size()+1);
+        mo.usage();
+      } else {
+        config_t *cfg = config_create(end - begin, begin);
+        if (!cfg)
+          return 2; /* diagnostic already issued */
+        configs.push_back(cfg);
+      }
+      begin = end;
+    } while (*begin);
+  }
   
-  /* create protocol defined in the configuration file */
-  for(auto cur_protocol_conf : *mo.protocol_configs) {
+  /* then we create protocol defined in the configuration file */
+  for(auto cur_protocol_conf : mo.protocol_configs) {
     config_t *cfg = config_create(cur_protocol_conf);
     if (!cfg)
       return 2; /* diagnostic already issued */
     configs.push_back(cfg);
   }
 
-  log_assert(configs.size() > 0);
+  if (!(configs.size() > 0)) {
+    log_warn("no protocol is specied. at least one protocol is needed.");
+    mo.usage();
+  }
 
   /* Configurations have been established; proceed with initialization. */
   if (daemon_mode)
