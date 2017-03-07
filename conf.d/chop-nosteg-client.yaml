@@ -1,0 +1,17 @@
+####################################
+# process options
+####################################
+log-min-severity:  info
+timestamp-logs: true
+
+####################################
+# protocol specification for client
+####################################
+protocols:
+  - name: "chop"
+    mode: client
+    up-address: 127.0.0.1:4999
+    disable-retransmit: true 
+    stegs:
+      - name: nosteg
+        down-address: 127.0.0.1:5000

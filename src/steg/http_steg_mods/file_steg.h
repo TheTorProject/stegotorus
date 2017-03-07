@@ -5,6 +5,7 @@
 #define SWF_SAVE_FOOTER_LEN 1500
 
 #include <list>
+#include <math.h>
 
 using namespace std;
 
@@ -76,8 +77,17 @@ protected:
   size_t alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, ssize_t new_content_length, uint8_t new_header[]);
 
  public:
-  static const size_t c_HTTP_MSG_BUF_SIZE = HTTP_MSG_BUF_SIZE; //TODO: one constant
-  static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
+  static const size_t c_HTTP_PAYLOAD_BUF_SIZE = HTTP_PAYLOAD_BUF_SIZE; //TODO: one constant //maximum
+  //size of buffer which stores the whole http response
+  static const  size_t c_MAX_MSG_BUF_SIZE = 131103; //max size of the message to be embeded
+  //static const  size_t c_NO_BYTES_TO_STORE_MSG_SIZE = (static_cast<int>((log2(c_MAX_MSG_BUF_SIZE) + 31) / 32)) * 4; //no of bytes needed to store the message size rounded up to 4 bytes chunks
+                                                       // no of bits in multiple of 32: n = [log2(c_MAX_MSG_BUF_SIZE) + 31) / 32]*32 =>
+                                                       // no of bytes = n / 8
+  //or it is just simpler to limit ourselves to 4G per message
+  typedef uint32_t message_size_t;
+  static const  size_t c_NO_BYTES_TO_STORE_MSG_SIZE = sizeof(message_size_t);
+  static const size_t c_HIGH_BYTES_DISCARDER = pow(2, c_NO_BYTES_TO_STORE_MSG_SIZE * 8);
+  
   /**
      embed the data in the cover buffer, the assumption is that
      the function doesn't expand the buffer size

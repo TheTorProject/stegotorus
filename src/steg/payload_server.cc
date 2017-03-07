@@ -15,74 +15,74 @@
 /*
  * capacityJS3 is the next iteration for capacityJS
  */
-unsigned int
-PayloadServer::capacityJS3 (char* buf, int len, int mode) {
-  char *hEnd, *bp, *jsStart, *jsEnd;
-  int cnt=0;
-  int j;	
+// unsigned int
+// PayloadServer::capacityJS3 (char* buf, int len, int mode) {
+//   char *hEnd, *bp, *jsStart, *jsEnd;
+//   int cnt=0;
+//   int j;	
 
-  // jump to the beginning of the body of the HTTP message
-  hEnd = strstr(buf, "\r\n\r\n");
-  if (hEnd == NULL) {
-    // cannot find the separator between HTTP header and HTTP body
-    return 0;
-  }
-  bp = hEnd + 4;
+//   // jump to the beginning of the body of the HTTP message
+//   hEnd = strstr(buf, "\r\n\r\n");
+//   if (hEnd == NULL) {
+//     // cannot find the separator between HTTP header and HTTP body
+//     return 0;
+//   }
+//   bp = hEnd + 4;
 
-  if (mode == CONTENT_JAVASCRIPT) {
-    j = offset2Hex(bp, (buf+len)-bp, 0);
-    while (j != -1) {
-      cnt++;
-      if (j == 0) {
-        bp = bp+1;
-      } else {
-        bp = bp+j+1;
-      }
+//   if (mode == CONTENT_JAVASCRIPT) {
+//     j = offset2Hex(bp, (buf+len)-bp, 0);
+//     while (j != -1) {
+//       cnt++;
+//       if (j == 0) {
+//         bp = bp+1;
+//       } else {
+//         bp = bp+j+1;
+//       }
 
-      if (len < buf + len - bp) {
-	fprintf(stderr, "HERE\n");
-      }
-      j = offset2Hex(bp, (buf+len)-bp, 1);
-    } // while
-    return cnt;
-  } else if (mode == CONTENT_HTML_JAVASCRIPT) {
-     while (bp < (buf+len)) {
-       jsStart = strstr(bp, "<script type=\"text/javascript\">");
-       if (jsStart == NULL) break;
-       bp = jsStart+31;
-       jsEnd = strstr(bp, "</script>");
-       if (jsEnd == NULL) break;
-       // count the number of usable hex char between jsStart+31 and jsEnd
+//       if (len < buf + len - bp) {
+// 	fprintf(stderr, "HERE\n");
+//       }
+//       j = offset2Hex(bp, (buf+len)-bp, 1);
+//     } // while
+//     return cnt;
+//   } else if (mode == CONTENT_HTML_JAVASCRIPT) {
+//      while (bp < (buf+len)) {
+//        jsStart = strstr(bp, "<script type=\"text/javascript\">");
+//        if (jsStart == NULL) break;
+//        bp = jsStart+31;
+//        jsEnd = strstr(bp, "</script>");
+//        if (jsEnd == NULL) break;
+//        // count the number of usable hex char between jsStart+31 and jsEnd
 
-       j = offset2Hex(bp, jsEnd-bp, 0);
-       while (j != -1) {
-         cnt++;
-         if (j == 0) {
-           bp = bp+1;
-         } else {
-           bp = bp+j+1;
-         }
+//        j = offset2Hex(bp, jsEnd-bp, 0);
+//        while (j != -1) {
+//          cnt++;
+//          if (j == 0) {
+//            bp = bp+1;
+//          } else {
+//            bp = bp+j+1;
+//          }
 
-         if (len < jsEnd - buf || len < jsEnd - bp) {
-           fprintf(stderr, "HERE2\n");
-         }
-         j = offset2Hex(bp, jsEnd-bp, 1);
+//          if (len < jsEnd - buf || len < jsEnd - bp) {
+//            fprintf(stderr, "HERE2\n");
+//          }
+//          j = offset2Hex(bp, jsEnd-bp, 1);
 
-       } // while (j != -1)
+//        } // while (j != -1)
 
-       if (buf + len < bp + 9) {
-         fprintf(stderr, "HERE3\n");
-       }
+//        if (buf + len < bp + 9) {
+//          fprintf(stderr, "HERE3\n");
+//        }
 
 
-       bp += 9;
-     } // while (bp < (buf+len))
-     return cnt;
-  } else {
-    fprintf(stderr, "Unknown mode (%d) for capacityJS() ... \n", mode);
-    return 0;
-  }
-}
+//        bp += 9;
+//      } // while (bp < (buf+len))
+//      return cnt;
+//   } else {
+//     fprintf(stderr, "Unknown mode (%d) for capacityJS() ... \n", mode);
+//     return 0;
+//   }
+// }
 
 unsigned int
 PayloadServer::capacityPDF (char* buf, int len) {
@@ -132,24 +132,23 @@ PayloadServer::capacitySWF(char* buf, int len)
 /*
  * capacityJS is designed to call capacityJS3 
  */
-unsigned int 
-PayloadServer::capacityJS (char* buf, int len) {
+// unsigned int 
+// PayloadServer::capacityJS (char* buf, int len) {
 
-  int mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_JAVASCRIPT);
-  if (mode != CONTENT_JAVASCRIPT)
-    mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_HTML);
+//   int mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_JAVASCRIPT);
+//   if (mode != CONTENT_JAVASCRIPT)
+//     mode = has_eligible_HTTP_content(buf, len, HTTP_CONTENT_HTML);
   
-  if (mode != CONTENT_HTML_JAVASCRIPT && mode != CONTENT_JAVASCRIPT)
-    return 0;
+//   if (mode != CONTENT_HTML_JAVASCRIPT && mode != CONTENT_JAVASCRIPT)
+//     return 0;
 
-  size_t cap = capacityJS3(buf, len, mode);
+//   size_t cap = capacityJS3(buf, len, mode);
 
-  if (cap <  JS_DELIMITER_SIZE)
-    return 0;
+//   if (cap <  JS_DELIMITER_SIZE)
+//     return 0;
     
-  return (cap - JS_DELIMITER_SIZE)/2;
-}
-
+//   return (cap - JS_DELIMITER_SIZE)/2;
+// }
 
 
 /* first line is of the form....

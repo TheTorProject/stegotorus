@@ -1,4 +1,4 @@
-To check for memory leak we use debug_new utility residing at src/test/nvwa_leak_detector/.
+To check for memory leak we use debug_new utility residing at src/test/nvwa_leak_detectorn/.
 
 1. Edit Makefile.am add
 
@@ -31,11 +31,32 @@ to
 /* inline void operator delete[](void *p, const std::nothrow_t &) */
 /* { free(p); } */
 
-3. Not that:
-Leaked object at 0x19e7c70 (size 40, 0x7f9029a7d7ac)
-Leaked object at 0x19e7cf0 (size 66, 0x7f9029a7d7ac)
-*** 2 leaks found
+3. Note that if you should get messages like the followings:
+Leaked object at 0x7ffff7f57060 (size 400000, src/main.cc:289)
+
+If you are getting messages like:
+Leaked object at 0x6c2c70 (size 17, 0x7ffff6c2464d)
+Leaked object at 0x6c2ce0 (size 17, 0x7ffff6c2b57d)
+it is probably due to leak in a library not st code (or it is a global object
+for which the library didn't bother to free at the end of the process).
+
+for example we traced these two leaks
+
 delete: freed 0x19e7cf0 (size 66, 50 bytes still allocated)
 delete: freed 0x19e7c70 (size 40, 10 bytes still allocated)
 
-Relates to libbost and will be cleared once we get rid of libbost.
+Relates to libboost and will be cleared once we get rid of libbost.
+
+4. To find which variable caused the leak check for the symbol in gdb
+
+info symbol 0x400225
+
+but this only work for global and static variables cause local variable don't
+have entry in symbol table.
+
+5. If an object is not deleted then it will be reported at the end but if
+delete has been used instead of delete [] it reports immediately:
+
+delete after new[]: pointer 0x7ffff7f57060 (size 400000)
+	at 0x40cafb
+	originally allocated at src/main.cc:225

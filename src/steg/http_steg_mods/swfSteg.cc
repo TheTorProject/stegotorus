@@ -79,7 +79,7 @@ ssize_t SWFSteg::decode(const uint8_t *cover_payload, size_t cover_len, uint8_t*
   }
 
   if (inf_len < 0 /*|| //no need for this check it always comes this big
-      sizeof(data) < c_HTTP_MSG_BUF_SIZE */) {
+      sizeof(data) < c_HTTP_PAYLOAD_BUF_SIZE */) {
     fprintf(stderr, "inf_len = %d\n", inf_len);
     free(tmp_buf);
     return -1;
@@ -117,7 +117,7 @@ unsigned int SWFSteg::static_headless_capacity(char *cover_body, int body_length
   (void)body_length;
 
   //the http response header also need to be fit in the outbuf
-  ssize_t hypothetical_capacity = c_HTTP_MSG_BUF_SIZE - MAX_RESP_HDR_SIZE -  (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512);
+  ssize_t hypothetical_capacity = c_HTTP_PAYLOAD_BUF_SIZE - MAX_RESP_HDR_SIZE -  (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512);
 
   return max(hypothetical_capacity, (ssize_t)0);
 

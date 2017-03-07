@@ -286,7 +286,7 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   size_t data2len, size;
   int np;
 
-  assert(HTTP_MSG_BUF_SIZE < SIZE_T_CEILING); //zlib offsetting limit
+  assert(c_MAX_MSG_BUF_SIZE < SIZE_T_CEILING); //zlib offsetting limit
   if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING) 
     return -1;
 
@@ -302,7 +302,7 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     return -1;
   }
 
-  char* temp_out_buf = new char[c_HTTP_MSG_BUF_SIZE];  // current pointer for output buffer
+  char* temp_out_buf = new char[c_HTTP_PAYLOAD_BUF_SIZE];  // current pointer for output buffer
   op = (char*) temp_out_buf;
   tp = (const char*) cover_payload;  // current pointer for http msg template, replace with payloadbuf?
   plimit = (const char *) (cover_payload+cover_len);
@@ -336,7 +336,7 @@ int PDFSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
 
       //but first check if we are overflowing our limit
       size = filterStart - tp + 4;
-      if (size + strlen(stream_meta_data) + sizeof(int)*(8.0/3.0) + data2len  + (plimit - streamEnd) > c_HTTP_MSG_BUF_SIZE) {
+      if (size + strlen(stream_meta_data) + sizeof(int)*(8.0/3.0) + data2len  + (plimit - streamEnd) > c_HTTP_PAYLOAD_BUF_SIZE) {
         log_warn("pdf encoding would results in buffer overflow, tell SRI to fix their encoding to use all available chunks instead of dumping evenything in the first chunk.");
         delete[] temp_out_buf;
         return -1;
@@ -398,7 +398,7 @@ PDFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data) /
   uint8_t *op;
   char *streamStart, *streamEnd;
   size_t cnt, size, size2;
-  size_t outbufsize = HTTP_MSG_BUF_SIZE;
+  size_t outbufsize = HTTP_PAYLOAD_BUF_SIZE;
 
   int streamObjStartSkip=0;
   int streamObjEndSkip=0;

@@ -66,7 +66,7 @@ PayloadScraper::scrape_url(const string& cur_url, steg_type* cur_steg, bool abso
   log_debug("capacity %lu:", capacity);
   
   //if the file is too big then we don't will not be able to fit in HTTP_MSG_BUF
-  if (cur_filelength > HTTP_MSG_BUF_SIZE)
+  if (cur_filelength > HTTP_PAYLOAD_BUF_SIZE)
     return "";
         
   if (capacity < chop_blk::MIN_BLOCK_SIZE) return ""; //This is not the 
@@ -229,7 +229,7 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
 
   //in new model, extensions are stored in list so one type can have more ext.
   
-  _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  _available_stegs[4].capacity_function = PayloadServer::capacityJS;
+  _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  _available_stegs[4].capacity_function = JSSteg::static_capacity;
 
   _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(NULL); //We are only using the capacity function so we don't need a payload server
   _available_stegs[5].type = HTTP_CONTENT_JPEG; _available_stegs[5].extension = ".jpg"; _available_stegs[5].capacity_function = JPGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat

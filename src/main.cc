@@ -4,7 +4,6 @@
  */
 
 #include "util.h"
-//#include "debug_new.h"
 
 #include "connections.h"
 #include "crypt.h"
@@ -32,6 +31,8 @@
 
 #include <event2/event.h>
 #include <event2/dns.h>
+
+//#include "debug_new.h"
 
 using std::vector;
 using std::string;

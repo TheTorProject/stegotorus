@@ -38,6 +38,10 @@ class ApachePayloadServer: public PayloadServer
   string _apache_host_name;
   
   const unsigned long c_max_buffer_size;
+  const static unsigned int c_MAX_FETCH_TRIES = 3; //no of attemps in fetching a cover in case of curl error
+  const static unsigned int c_MAX_SEARCH_TRIES = 3; //no of attemps in searching a suitable cover in case
+  //the cover is corrupted.
+
   CURL* _curl_obj; //this is used to communicate with http server
 
   //This is too keep the dict in sync between client and server

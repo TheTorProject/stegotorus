@@ -57,13 +57,14 @@ HTMLSteg::static_headless_capacity (char* buf, size_t len) {
     // count the number of usable hex char between jsStart+31 and jsEnd
 
     size_t chunk_len = jsEnd-bp;
-    cnt += JSSteg::static_headless_capacity(bp, chunk_len);
+    cnt += js_code_block_preliminary_capacity(bp, chunk_len);
 
-       bp += 9;
+    bp += 9;
   } // while (bp < (buf+len))
 
-  log_debug("payload has capacity %d", cnt);
-  return cnt;
+  int actual_capacity = max(0, (cnt -JS_DELIMITER_SIZE)/2);  
+  log_debug("payload has capacity %d", actual_capacity);
+  return actual_capacity;
 
 }
 

@@ -40,6 +40,8 @@
   virtual int decode_http_body(const char *jData, const char *dataBuf, unsigned int jdlen,
                        unsigned int dataBufSize, int *fin );
   
+  static unsigned int js_code_block_preliminary_capacity(char* buf, size_t len);
+
 public:
   int isxString(char *str);
 
@@ -69,6 +71,7 @@ beginig of the body in the response
 
     virtual ssize_t capacity(const uint8_t *cover_payload, size_t len);
     static unsigned int static_capacity(char *cover_payload, int body_length);
+
 
 /*int decode (char *jData, char *dataBuf, unsigned int jdlen,
             unsigned int dlen, unsigned int dataBufSize );*/

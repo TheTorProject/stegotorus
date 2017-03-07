@@ -1,0 +1,19 @@
+####################################
+# process options
+####################################
+log-min-severity:  debug
+timestamp-logs: true
+
+####################################
+# protocol specification for client
+####################################
+protocols:
+  - name: "chop"
+    mode: client
+    passphrase: "correct passphrase"
+    up-address: 127.0.0.1:4999
+    disable-retransmit: true
+    trace-packets: true
+    stegs:
+      - name: "http_apache"
+        down-address: 127.0.0.1:5000

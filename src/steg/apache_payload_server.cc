@@ -27,7 +27,7 @@ typedef string (*RetrievingFunc)(const string&);
 ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& database_filename, const string& cover_server, const string& cover_list)
   :PayloadServer(init_side),_database_filename(database_filename),
    _apache_host_name((cover_server.empty()) ? "127.0.0.1" : cover_server),
-   c_max_buffer_size(HTTP_MSG_BUF_SIZE),
+   c_max_buffer_size(HTTP_PAYLOAD_BUF_SIZE),
    _payload_cache(this, &ApachePayloadServer::fetch_hashed_url, 
    c_PAYLOAD_CACHE_ELEMENT_CAPACITY),   
    chosen_payload_choice_strategy(/*c_random_payload_choice*/c_most_efficient_payload_choice)
@@ -139,39 +139,41 @@ ApachePayloadServer::find_client_payload(char* buf, int len, int type)
 int
 ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* size, double noise2signal, std::string* payload_id_hash)
 {
-  int found = 0, numCandidate = 0;
 
-  //log_debug("contentType = %d, initTypePayload = %d, typePayloadCount = %d",
-  //            contentType, pl.initTypePayload[contentType],
-  //          pl.typePayloadCount[contentType]);
+  for(unsigned int search_tries = 0; search_tries < c_MAX_SEARCH_TRIES; search_tries++) /* each payload which is found but is corrupted */ {
+    int found = 0, numCandidate = 0;
 
-  //get payload is not supposed to act like this but for the sake 
-  //of testing and compatibility we are simulating the original 
-  //get_payload
-  assert(cap != 0); //why do you ask for zero capacity?
-  PayloadInfo* itr_first, *cur_payload_candidate, *itr_best = NULL;
-  if (chosen_payload_choice_strategy == c_most_efficient_payload_choice) {
-    list<EfficiencyIndicator>::iterator  itr_payloads = _payload_database.sorted_payloads.begin();
+    //log_debug("contentType = %d, initTypePayload = %d, typePayloadCount = %d",
+    //            contentType, pl.initTypePayload[contentType],
+    //          pl.typePayloadCount[contentType]);
+
+    //get payload is not supposed to act like this but for the sake 
+    //of testing and compatibility we are simulating the original 
+    //get_payload
+    assert(cap != 0); //why do you ask for zero capacity?
+    PayloadInfo* itr_first, *cur_payload_candidate, *itr_best = NULL;
+    if (chosen_payload_choice_strategy == c_most_efficient_payload_choice) {
+      list<EfficiencyIndicator>::iterator itr_payloads = _payload_database.sorted_payloads.begin();
     
-    cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
-    while(itr_payloads != _payload_database.sorted_payloads.end() && 
-          (cur_payload_candidate->corrupted ||
-           cur_payload_candidate->capacity < (unsigned int)cap || 
-           cur_payload_candidate->type != (unsigned int)contentType || 
-           cur_payload_candidate->length/(double)cap < noise2signal)) {
-    itr_payloads++; numCandidate++;
-    cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
+      cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
+      while(itr_payloads != _payload_database.sorted_payloads.end() && 
+            (cur_payload_candidate->corrupted ||
+             cur_payload_candidate->capacity < (unsigned int)cap || 
+             cur_payload_candidate->type != (unsigned int)contentType || 
+             cur_payload_candidate->length/(double)cap < noise2signal)) {
+        itr_payloads++; numCandidate++;
+        cur_payload_candidate = &_payload_database.payloads[itr_payloads->url_hash];
     
-    }
-
-    if (itr_payloads != _payload_database.sorted_payloads.end() && cur_payload_candidate->length < c_max_buffer_size)
-      {
-        found = true;
-        itr_first = itr_best = cur_payload_candidate;
       }
-  }
-  else { //    c_random_payload_choice
-    PayloadDict::iterator itr_payloads;
+
+      if (itr_payloads != _payload_database.sorted_payloads.end() && cur_payload_candidate->length < c_max_buffer_size)
+        {
+          found = true;
+          itr_first = itr_best = cur_payload_candidate;
+        }
+    }
+    else { //    c_random_payload_choice
+      PayloadDict::iterator itr_payloads;
       while(numCandidate < MAX_CANDIDATE_PAYLOADS) {
         itr_payloads = _payload_database.payloads.begin();
         advance(itr_payloads, rng_int(_payload_database.payloads.size()));  
@@ -180,7 +182,7 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
             (*itr_payloads).second.type != (unsigned int)contentType || 
             (*itr_payloads).second.length > c_max_buffer_size || 
             (*itr_payloads).second.length/(double)cap < noise2signal)
-            continue;
+          continue;
 
         found = true;
         itr_first = &((*itr_payloads).second);
@@ -192,29 +194,51 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
           itr_best = itr_first;
 
       }
+    }
+
+    if (found)
+      {
+        log_debug("cur payload size=%d, best payload size=%d, num candidate=%d for transmiting %d bytes\n",
+                  itr_first->length,
+                  itr_best->length,
+                  numCandidate,
+                  cap);
+
+        std::string url_to_resource = (itr_best->absolute_url_is_absolute ? "" : "http://" + _apache_host_name + "/") + (itr_best->absolute_url);
+        for(unsigned int fetch_tries = 0; fetch_tries < c_MAX_FETCH_TRIES; fetch_tries++) {
+          log_debug("attempt %i to fetch %s", fetch_tries + 1, url_to_resource.c_str());
+          string& best_payload = _payload_cache(url_to_resource); //this is a permanent object in cache so it is ok to get a reference to it.
+          //if curl fails the size will be zero. we disqualify the resource because it might be
+          //removed from the cover server and try again
+          if (!best_payload.empty() != 0) {
+            *buf = (char*)best_payload.c_str();
+            *size = best_payload.length();
+            if (payload_id_hash)
+              *payload_id_hash = itr_best->url_hash;
+
+            return 1;
+          } else {
+            //drop the empty string from the cache, force
+            //retriving
+            log_warn("error in retrieving cover %s", url_to_resource.c_str());
+            _payload_cache.drop(url_to_resource);
+            
+          }
+        } // tries < MAX_FETCH_TRIES
+        //if we arrive here it means the best payload was empty and hence 
+        //corrupted/not found etc
+        itr_best->corrupted = true;
+        continue; //search for a new one
+      
+      }
+  
+    /*not found, no use to try again*/
+    return 0;
   }
 
-  if (found)
-    {
-      log_debug("cur payload size=%d, best payload size=%d, num candidate=%d for transmiting %d bytes\n",
-                itr_first->length,
-                itr_best->length,
-                numCandidate,
-                cap);
-
-      string& best_payload = _payload_cache((itr_best->absolute_url_is_absolute ? "" : "http://" + _apache_host_name + "/") + (itr_best->absolute_url)); //this is a permanent object in cache so it is ok to get a reference to it.
-      //if curl fails the size will be zero.
-      *buf = (char*)best_payload.c_str();
-      *size = best_payload.length();
-      if (payload_id_hash)
-        *payload_id_hash = itr_best->url_hash;
-
-      return 1;
-      
-    } 
-  
-  /*not found*/
+  /* found but failed to fetch */
   return 0;
+
 }
 
 

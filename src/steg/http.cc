@@ -597,8 +597,6 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 
 }
 
-
-
 int
 http_steg_t::http_client_uri_transmit (evbuffer *source, conn_t *conn)
 {

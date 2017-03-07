@@ -386,7 +386,7 @@ chop_config_t::init_from_protocol_config_dict() {
   }
 
   if (user_specified("trace-packets")) {
-    trace_packets = true;
+    trace_packets = (modus_operandi_t::uniformize_boolean_value(chop_user_config["trace-packets"]) == true_string);
     log_enable_timestamps();
   }
 
@@ -2173,7 +2173,7 @@ chop_conn_t::recv()
     if (upstream->recv_crypt->decrypt(decodebuf,
                                       decodebuf, hdr.total_len() - HEADER_LEN,
                                       ciphr_hdr, HEADER_LEN)) {
-      log_info("MAC verification failure");
+      log_warn("MAC verification failure");
       return -1;
     }
 
@@ -2197,7 +2197,7 @@ chop_conn_t::recv()
          // vmon: I need the content of the packet as well.
         if (config->trace_packet_data && hdr.dlen())
           {
-            char* data_4_log =  new char[hdr.dlen() + 1];
+            char data_4_log[hdr.dlen() + 1];
             memcpy(data_4_log, decodebuf, hdr.dlen());
             data_4_log[hdr.dlen()] = '\0';
             log_debug("Data received: %s",  data_4_log);
@@ -2212,8 +2212,10 @@ chop_conn_t::recv()
       return -1;
     }
 
-    if (upstream->recv_block(hdr.seqno(), hdr.opcode(), data, this->steg->cfg()))
+    if (upstream->recv_block(hdr.seqno(), hdr.opcode(), data, this->steg->cfg())) {
+      log_warn(this, "failed to insert the data in recv queue");
       return -1; // insert() logs an error
+    }
   }
 
   return upstream->process_queue();

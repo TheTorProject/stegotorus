@@ -103,7 +103,7 @@ ssize_t GIFSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
     
     size_t s = *((size_t*)(cover_payload+from));
 
-    assert(s < c_HTTP_MSG_BUF_SIZE);
+    assert(s < c_MAX_MSG_BUF_SIZE);
     //We assume that enough data is allocated data here cause it is when we know the data size
 	memcpy(data, cover_payload+from+sizeof(size_t), s);
 	return s;

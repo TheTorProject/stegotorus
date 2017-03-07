@@ -51,8 +51,10 @@ namespace  {
                                //connections used to communicate with http server
     int _curl_running_handle; //number of concurrent transfer
 
-    unsigned long uri_byte_cut; /* The number of byte of the message that
-                                    can be stored in url */
+    unsigned long uri_byte_cut = 0; /* The number of byte of the message that
+                                    can be stored in url. It is zero by default
+                                    as before we initialize the dict it contains 
+                                    no uri*/
 
     op_apache_steg_code _cur_operation;
 
@@ -366,6 +368,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
   assert(type != 0 || type != -1);
 
   string uri_to_send("http://");
+  uri_to_send += conn->peername;
   if (sbuflen > _apache_config->uri_byte_cut)
     {
       sbuflen -= _apache_config->uri_byte_cut;
@@ -378,7 +381,6 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
       len  = E.encode(data, sbuflen, data2);
       len += E.encode_end(data2+len);
 
-      uri_to_send += conn->peername;
       uri_to_send += "/"+ chosen_url + "?q=" + data2;
 
       if (uri_to_send.size() > c_max_uri_length)
@@ -392,8 +394,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
       //the buffer is too short we need to indicate the number
       //bytes. But this probably never happens
       sprintf(data2,"%lu", sbuflen);
-      uri_to_send = chosen_url + "?p=";
-      uri_to_send += sbuflen;
+      uri_to_send += "/" + chosen_url + "?p=" + data2;
 
     }
   
@@ -1019,9 +1020,6 @@ size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, si
     return 0;
   }
 
-  log_debug(down, "sur2");
-
-  log_debug(down, "sur3");
   return no_bytes_2_read;
 
 }

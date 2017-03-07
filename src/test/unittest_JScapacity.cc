@@ -67,7 +67,7 @@ void testCapacityJS () {
 
 /*****
 int main() {
-  char buf[HTTP_MSG_BUF_SIZE];
+  char buf[HTTP_PAYLOAD_BUF_SIZE];
   memset(buf, 0, sizeof(buf));
   // test for TYPE_HTTP_REQUEST
   // load_payloads("../../traces/client.out");

@@ -48,6 +48,11 @@ unsigned int JSSteg::static_capacity(char *cover_payload, int body_length)
 unsigned int
 JSSteg::static_headless_capacity (char* buf, size_t len) {
 
+  return max(0, (static_cast<int>(js_code_block_preliminary_capacity(buf,len)) - JS_DELIMITER_SIZE)/2);
+}
+
+unsigned int
+JSSteg::js_code_block_preliminary_capacity(char* buf, size_t len) {
   char *bp;
   int cnt=0;
   int j;  
@@ -73,7 +78,8 @@ JSSteg::static_headless_capacity (char* buf, size_t len) {
     j = offset2Hex(bp, (buf+len)-bp, 1);
   } // while
 
-  return max(0, (cnt -JS_DELIMITER_SIZE)/2);
+  log_debug("code block has capacity %d", cnt);
+  return cnt;
 }
 /*
  * jsSteg: A Javascript-based steganography module
@@ -369,11 +375,11 @@ ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* 
   int k, fin;
 
   if (gzipMode) {
-    char buf2[HTTP_MSG_BUF_SIZE];
+    char buf2[HTTP_PAYLOAD_BUF_SIZE];
     log_debug("gzip content encoding detected");
 
     ssize_t buf2len = decompress((const uint8_t *)cover_payload, cover_len,
-                         (uint8_t *)buf2, HTTP_MSG_BUF_SIZE);
+                         (uint8_t *)buf2, HTTP_PAYLOAD_BUF_SIZE);
     if (buf2len <= 0) {
       log_warn("gzInflate for httpBody fails");
       return RECV_BAD;
@@ -385,7 +391,7 @@ ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* 
 
   }
 
-  decCnt = decode_http_body((const char*)cover_payload, (char*)data, cover_len, HTTP_MSG_BUF_SIZE,
+  decCnt = decode_http_body((const char*)cover_payload, (char*)data, cover_len, HTTP_PAYLOAD_BUF_SIZE,
                                   &fin);
 
   data[decCnt] = 0;
@@ -451,7 +457,7 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
    */
   //if (jdlen < jtlen) { return INVALID_BUF_SIZE; }
   if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING ||
-      HTTP_MSG_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
+      HTTP_PAYLOAD_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
     return -1;
 
   cLen = headless_capacity((char*)cover_payload, cover_len);
@@ -534,9 +540,9 @@ int
 JSSteg::decode_http_body(const char *jData, const char *dataBuf, unsigned int jdlen,
                        unsigned int dataBufSize, int *fin )
 {
-  log_assert(dataBufSize >= HTTP_MSG_BUF_SIZE);
+  log_assert(dataBufSize >= c_MAX_MSG_BUF_SIZE);
   
-  return decode_single_js_block((const char*)jData, (char*)dataBuf, jdlen, HTTP_MSG_BUF_SIZE,
+  return decode_single_js_block((const char*)jData, (char*)dataBuf, jdlen, HTTP_PAYLOAD_BUF_SIZE,
                                   fin);
 }
 
@@ -1198,9 +1204,9 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   unsigned int content_len = 0;
   unsigned int hdrLen;
   char buf[10];
-  char respMsg[HTTP_MSG_BUF_SIZE];
-  char data[HTTP_MSG_BUF_SIZE];
-  char buf2[HTTP_MSG_BUF_SIZE];
+  char respMsg[HTTP_PAYLOAD_BUF_SIZE];
+  char data[c_MAX_MSG_BUF_SIZE];
+  char buf2[HTTP_PAYLOAD_BUF_SIZE];
 
   unsigned char *field, *fieldStart, *fieldEnd, *fieldValStart;
   char *httpBody;
@@ -1264,7 +1270,7 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
     return RECV_INCOMPLETE;
 
   // read the entire HTTP resp
-  if (response_len < HTTP_MSG_BUF_SIZE) {
+  if (response_len < HTTP_PAYLOAD_BUF_SIZE) {
     r = evbuffer_copyout(source, respMsg, response_len);
     log_debug("CLIENT %d char copied from source to respMsg (expected %d)", (int)r, response_len);
     if (r < 0) {
@@ -1299,7 +1305,7 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   if (gzipMode) {
     log_debug("gzip content encoding detected");
     buf2len = decompress((const uint8_t *)httpBody, httpBodyLen,
-                         (uint8_t *)buf2, HTTP_MSG_BUF_SIZE);
+                         (uint8_t *)buf2, HTTP_PAYLOAD_BUF_SIZE);
     if (buf2len <= 0) {
       log_warn("gzInflate for httpBody fails");
       return RECV_BAD;
@@ -1310,10 +1316,10 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   }
 
   /*if (contentType == HTTP_CONTENT_JAVASCRIPT) {
-    decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_MSG_BUF_SIZE,
+    decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_PAYLOAD_BUF_SIZE,
                             &fin, CONTENT_JAVASCRIPT);
   } else {*/
-    decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_MSG_BUF_SIZE,
+    decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, c_MAX_MSG_BUF_SIZE,
                             &fin, CONTENT_HTML_JAVASCRIPT);
   //}
   data[decCnt] = 0;

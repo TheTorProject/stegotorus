@@ -41,10 +41,10 @@ using namespace std;
 
 #define HTML_MIN_AVAIL_SIZE 1026
 
-#define HTTP_MSG_BUF_SIZE 500000
-static const  size_t c_MAX_MSG_BUF_SIZE = 131101;
+#define HTTP_PAYLOAD_BUF_SIZE 500000
+static const  size_t c_MAX_MSG_BUF_SIZE = 131103; //(65536*2 -1 +16+16) see chop_blk.h for rational
 
-#define SWF_HYPO_CAPACITY HTTP_MSG_BUF_SIZE - MAX_RESP_HDR_SIZE - (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512)
+#define SWF_HYPO_CAPACITY HTTP_PAYLOAD_BUF_SIZE - MAX_RESP_HDR_SIZE - (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512)
 
 #define PDF_DELIMITER_SIZE 2
 #define PDF_MIN_AVAIL_SIZE 10240
@@ -298,7 +298,7 @@ class PayloadServer
 
   }
 
-  static unsigned int capacityJS3 (char* buf, int len, int mode);
+  //static unsigned int capacityJS3 (char* buf, int len, int mode);
   static unsigned int get_max_JS_capacity(void);
   static unsigned int get_max_HTML_capacity(void);
 
@@ -308,7 +308,7 @@ class PayloadServer
   /* These are added to make payload_scraper works for now.
      The plan is to make each type of steg payload a class
   */
-  static unsigned int capacityJS(char* buf, int len);
+  //static unsigned int capacityJS(char* buf, int len);
   static unsigned int capacitySWF(char* buf, int len);
 
   /* Payload manipulation tools */

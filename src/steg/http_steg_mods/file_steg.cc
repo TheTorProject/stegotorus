@@ -10,6 +10,8 @@
 
 #include <fstream> //for decode failure test
 
+#include <math.h>
+
 using namespace std;
 
 #include "util.h"
@@ -34,9 +36,14 @@ using namespace std;
          to this module.
 */
 FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_from_cfg, int child_type = -1)
-  :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type), outbuf(new uint8_t[c_HTTP_MSG_BUF_SIZE])
+  :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type), outbuf(new uint8_t[c_HTTP_PAYLOAD_BUF_SIZE])
 {
   assert(outbuf);
+  log_debug("max storage size: %lu >= maxs preceived storage: %lu >= max no of bits needed for storge %f", sizeof(message_size_t),
+            c_NO_BYTES_TO_STORE_MSG_SIZE, log2(c_MAX_MSG_BUF_SIZE)/8.0);
+            
+  log_assert(sizeof(message_size_t) >= c_NO_BYTES_TO_STORE_MSG_SIZE);
+  log_assert(c_NO_BYTES_TO_STORE_MSG_SIZE >= log2(c_MAX_MSG_BUF_SIZE)/8.0);
 
 }
 
@@ -72,8 +79,8 @@ FileStegMod::extract_appropriate_respones_body(char* payload_buf, size_t payload
   //TODO: this need to be investigated, we might need two functions
   const char* hend = strstr(payload_buf, "\r\n\r\n");
   if (hend == NULL) {
-    log_debug("%s", payload_buf);
-    log_warn("unable to find end of header in the HTTP template");
+    //log_debug("%s", payload_buf);
+    log_debug("unable to find end of header in the HTTP template");
     return -1;
   }
 
@@ -92,8 +99,8 @@ FileStegMod::extract_appropriate_respones_body(evbuffer* payload_buf)
   //TODO: this need to be investigated, we might need two functions
   evbuffer_ptr hend = evbuffer_search(payload_buf, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
   if (hend.pos == -1) {
-    log_warn("unable to find end of header in the HTTP template");
-    return -1;
+    log_debug("unable to find end of header in the HTTP respose");
+    return RESPONSE_INCOMPLETE;
   }
 
   return hend.pos + strlen("\r\n\r\n");
@@ -169,6 +176,8 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   evbuffer *dest;
 
   //call this from util to extract the buffer into memory block
+  //data1 is allocated in evbuffer_to_memory_block we need to free
+  //it at the end.
   sbuflen = evbuffer_to_memory_block(source, &data1);
 
   if (sbuflen < 0 /*&& c_content_type != HTTP_CONTENT_JAVASCRIPT || CONTENT_HTML_JAVASCRIPT*/) {
@@ -200,8 +209,8 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     body_len = cnt-body_offset;
     hLen = body_offset;
     log_debug("coping body of %lu size", (body_len));
-    if ((body_len) > c_HTTP_MSG_BUF_SIZE) {
-      log_warn("HTTP response doesn't fit in the buffer %lu > %lu", (body_len)*sizeof(char), c_HTTP_MSG_BUF_SIZE);
+    if ((body_len) > c_HTTP_PAYLOAD_BUF_SIZE) {
+      log_warn("HTTP response doesn't fit in the buffer %lu > %lu", (body_len)*sizeof(char), c_HTTP_PAYLOAD_BUF_SIZE);
       _payload_server->disqualify_payload(payload_id_hash);
       return -1;
     }
@@ -227,7 +236,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
   //If everything seemed to be fine, New steg module test:
   if (!(LOG_SEV_DEBUG < log_get_min_severity())) { //only perform this during debug
-    std::vector<uint8_t> recovered_data_for_test(HTTP_MSG_BUF_SIZE); //this is the size we have promised to decode func
+    std::vector<uint8_t> recovered_data_for_test(c_MAX_MSG_BUF_SIZE); //this is the size we have promised to decode func
     decode(outbuf, outbuflen, recovered_data_for_test.data());
 
     if (memcmp(data1, recovered_data_for_test.data(), sbuflen)) { //barf!!
@@ -319,7 +328,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 
   ssize_t body_offset = extract_appropriate_respones_body(source);
   if (body_offset == RESPONSE_INCOMPLETE) {
-    log_warn("CLIENT Did not find end of HTTP header %d, Incomplete Response",
+    log_debug("CLIENT Did not find end of HTTP header %d, Incomplete Response",
              (int) evbuffer_get_length(source));
     return RECV_INCOMPLETE;
   }
@@ -346,7 +355,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   response_len += content_len;
 
   if (response_len > evbuffer_get_length(source)) {
-    log_info("Incomplete response, waiting for more data.");
+    log_debug("Incomplete response, waiting for more data.");
     return RECV_INCOMPLETE;
   }
 

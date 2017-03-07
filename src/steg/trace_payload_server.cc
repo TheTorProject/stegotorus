@@ -2,8 +2,10 @@
 
 #include "trace_payload_server.h"
 #include "file_steg.h"
-//#include "http_steg_mods/swfSteg.h"
+#include "http_steg_mods/swfSteg.h"
 #include "http_steg_mods/pdfSteg.h"
+#include "http_steg_mods/jsSteg.h"
+#include "http_steg_mods/htmlSteg.h"
 
 
 TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
@@ -12,22 +14,21 @@ TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
 
   load_payloads(fname.c_str());
 
-  init_JS_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
+  init_JS_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
   _payload_database.type_detail[HTTP_CONTENT_JAVASCRIPT] =  TypeDetail(pl.max_JS_capacity, pl.typePayloadCount[HTTP_CONTENT_JAVASCRIPT]);
 
-  init_HTML_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
+  init_HTML_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
   _payload_database.type_detail[HTTP_CONTENT_HTML] =  TypeDetail(pl.max_HTML_capacity, pl.typePayloadCount[HTTP_CONTENT_HTML]);
 
-  init_PDF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE); //should we continue to use PDF_MIN_AVAIL_SIZE?
+  init_PDF_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE); //should we continue to use PDF_MIN_AVAIL_SIZE?
 
   _payload_database.type_detail[HTTP_CONTENT_PDF] =  TypeDetail(pl.max_PDF_capacity, pl.typePayloadCount[HTTP_CONTENT_PDF]); //deprecating use of pl.max_PDF_capacity ASAP
 
-  init_SWF_payload_pool(HTTP_MSG_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
+  init_SWF_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
 
   _payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(c_MAX_MSG_BUF_SIZE, pl.typePayloadCount[HTTP_CONTENT_SWF]);
 
   //DONE (for SWF?): Add FileTypeSteg Capability to trace server
-
 }
 
 
@@ -78,35 +79,32 @@ int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity)
 
     mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_JAVASCRIPT);
     if (mode == CONTENT_JAVASCRIPT) {
-
-      cap = capacityJS3(msgbuf, p->length, mode);
-      if (cap <  JS_DELIMITER_SIZE)
-	continue;
-
-      cap = (cap - JS_DELIMITER_SIZE)/2;
+      cap = JSSteg::static_capacity(msgbuf, p->length);
+      if (cap == 0)
+        continue;
 
       if (cap > minCapacity) {
-	pl.typePayloadCap[contentType][cnt] = cap; // (cap-JS_DELIMITER_SIZE)/2;
-	// because we use 2 hex char to encode every data byte, the available
-	// capacity for encoding data is divided by 2
-	pl.typePayload[contentType][cnt] = r;
-	cnt++;
+        pl.typePayloadCap[contentType][cnt] = cap; // (cap-JS_DELIMITER_SIZE)/2;
+        // because we use 2 hex char to encode every data byte, the available
+        // capacity for encoding data is divided by 2
+        pl.typePayload[contentType][cnt] = r;
+        cnt++;
 
-	// update stat
-	if (cnt == 1) {
-	  minPayloadSize = p->length; maxPayloadSize = p->length;
-	  minPayloadCap = cap; maxPayloadCap = cap;
-	} 
-	else {
-	  if (minPayloadSize > p->length) minPayloadSize = p->length; 
-	  if (maxPayloadSize < p->length) maxPayloadSize = p->length; 
-	  if (minPayloadCap > cap) minPayloadCap = cap;
-	  if (maxPayloadCap < cap) {
-	    maxPayloadCap = cap;
-	  }
-	  
-	}
-	sumPayloadSize += p->length; sumPayloadCap += cap;
+        // update stat
+        if (cnt == 1) {
+          minPayloadSize = p->length; maxPayloadSize = p->length;
+          minPayloadCap = cap; maxPayloadCap = cap;
+        } 
+        else {
+          if (minPayloadSize > p->length) minPayloadSize = p->length; 
+          if (maxPayloadSize < p->length) maxPayloadSize = p->length; 
+          if (minPayloadCap > cap) minPayloadCap = cap;
+          if (maxPayloadCap < cap) {
+            maxPayloadCap = cap;
+          }
+          
+        }
+        sumPayloadSize += p->length; sumPayloadCap += cap;
       }
     }
   }
@@ -143,8 +141,6 @@ int  TracePayloadServer::init_HTML_payload_pool(int len, int type, int minCapaci
   int cap;
   int mode;
 
-
-
   if (pl.payload_count == 0) {
     log_debug("payload_count == 0; forgot to run load_payloads()?\n");
     return 0;
@@ -160,35 +156,33 @@ int  TracePayloadServer::init_HTML_payload_pool(int len, int type, int minCapaci
 
     mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_HTML);
     if (mode == CONTENT_HTML_JAVASCRIPT) {
-      
-      cap = capacityJS3(msgbuf, p->length, mode);
-      if (cap <  JS_DELIMITER_SIZE) 
-	continue;
+      cap = HTMLSteg::static_capacity(msgbuf, p->length);
 
-      cap = (cap - JS_DELIMITER_SIZE)/2;
+      if (cap == 0)
+        continue;
 
       if (cap > minCapacity) {
-	pl.typePayloadCap[contentType][cnt] = cap; // (cap-JS_DELIMITER_SIZE)/2;
-	// because we use 2 hex char to encode every data byte, the available
-	// capacity for encoding data is divided by 2
-	pl.typePayload[contentType][cnt] = r;
-	cnt++;
+        pl.typePayloadCap[contentType][cnt] = cap; // (cap-JS_DELIMITER_SIZE)/2;
+        // because we use 2 hex char to encode every data byte, the available
+        // capacity for encoding data is divided by 2
+        pl.typePayload[contentType][cnt] = r;
+        cnt++;
 	
-	// update stat
-	if (cnt == 1) {
-	  minPayloadSize = p->length; maxPayloadSize = p->length;
-	  minPayloadCap = cap; maxPayloadCap = cap;
-	} 
-	else {
-	  if (minPayloadSize > p->length) minPayloadSize = p->length; 
-	  if (maxPayloadSize < p->length) maxPayloadSize = p->length; 
-	  if (minPayloadCap > cap) minPayloadCap = cap;
-	  if (maxPayloadCap < cap) {
-	    maxPayloadCap = cap;
-	  }
+        // update stat
+        if (cnt == 1) {
+          minPayloadSize = p->length; maxPayloadSize = p->length;
+          minPayloadCap = cap; maxPayloadCap = cap;
+        } 
+        else {
+          if (minPayloadSize > p->length) minPayloadSize = p->length; 
+          if (maxPayloadSize < p->length) maxPayloadSize = p->length; 
+          if (minPayloadCap > cap) minPayloadCap = cap;
+          if (maxPayloadCap < cap) {
+            maxPayloadCap = cap;
+          }
 	  
-	}
-	sumPayloadSize += p->length; sumPayloadCap += cap;
+        }
+        sumPayloadSize += p->length; sumPayloadCap += cap;
       }
     }
   }
@@ -382,7 +376,7 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
         //log_debug("payload %d only offer %d bytes \n", current, pl.typePayloadCap[contentType][current]);
         continue;
       }
-
+    log_debug("payload capacity %d vs requested %d", pl.typePayloadCap[contentType][current], cap);
     if (found) {
       if (pl.payload_hdrs[pl.typePayload[contentType][best]].length >
           pl.payload_hdrs[pl.typePayload[contentType][current]].length)
@@ -413,8 +407,8 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
 void TracePayloadServer::load_payloads(const char* fname)
 {
   FILE* f;
-  char buf[HTTP_MSG_BUF_SIZE];
-  char buf2[HTTP_MSG_BUF_SIZE];
+  char buf[HTTP_PAYLOAD_BUF_SIZE];
+  char buf2[HTTP_PAYLOAD_BUF_SIZE];
   pentry_header pentry;
   int pentryLen;
   int r;
@@ -463,7 +457,7 @@ void TracePayloadServer::load_payloads(const char* fname)
 
     r = -1;
     if (pentry.ptype == TYPE_HTTP_RESPONSE) {
-      r = fixContentLen (buf, pentry.length, buf2, HTTP_MSG_BUF_SIZE);
+      r = fixContentLen (buf, pentry.length, buf2, HTTP_PAYLOAD_BUF_SIZE);
       // log_debug("for payload_count %d, fixContentLen returns %d", payload_count, r);
     }
     // else {

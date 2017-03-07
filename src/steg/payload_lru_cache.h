@@ -64,7 +64,7 @@ public:
       // We don't have it: 
  
       // Evaluate function and create new record 
-      const value_type v = (retriever->*_fn)(k); 
+      const value_type v = (retriever->*_fn)(k);
       insert(k,v); 
  
       // now we should be able to find this key
@@ -100,7 +100,33 @@ public:
     while (src!=_key_tracker.rend()) { 
       *dst++ = *src++; 
     } 
-  } 
+  }
+
+  /**
+     drops the entry in the cache associtaed to the given key
+
+     @param key the key pointing to the entry to erase
+
+     @return true in case of success, false in case of failure (key not fount)
+  */
+  bool drop(const key_type& k) {
+    typename key_to_value_type::iterator it 
+      =_key_to_value.find(k);
+
+    //if not found nothing to do
+    if (it==_key_to_value.end())
+      return false;
+
+    //if found we need to drop the key from the tracker also
+    auto dropped_key = std::find(_key_tracker.begin(),_key_tracker.end(), k);
+    assert(dropped_key != _key_tracker.end()); //otherwise internal error
+
+    _key_tracker.erase(dropped_key);
+    _key_to_value.erase(it);
+
+    return true;
+
+  }
  
 private: 
  
@@ -110,7 +136,7 @@ private:
     // Method is only called on cache misses 
     assert(_key_to_value.find(k)==_key_to_value.end()); 
  
-log_debug("payload cache is holding %lu elements of %lu capacity", _key_to_value.size(),_capacity);
+    log_debug("payload cache is holding %lu elements of %lu capacity", _key_to_value.size(),_capacity);
     // Make space if necessary 
     if (_key_to_value.size()==_capacity) 
       evict(); 
@@ -147,8 +173,8 @@ log_debug("payload cache is holding %lu elements of %lu capacity", _key_to_value
     _key_tracker.pop_front(); 
   } 
 
-    //pointer to the object that owns the _fn functions
-    RETRIEVER* retriever;
+  //pointer to the object that owns the _fn functions
+  RETRIEVER* retriever;
   // The function to be cached 
   value_type (RETRIEVER::*_fn)(const key_type&); 
  
