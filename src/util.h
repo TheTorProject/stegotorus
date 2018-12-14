@@ -30,6 +30,7 @@
 #include <inttypes.h>
 
 #include <map>
+#include <vector>
 #include <string>
 #include <new>
 
@@ -360,7 +361,7 @@ int timeval_subtract(struct timeval *x, struct timeval *y,
 
    @return the length of the memory block or < 0 in case of error
 */
-int evbuffer_to_memory_block(evbuffer* scattered_buffer, uint8_t** memory_block);
+ssize_t evbuffer_to_memory_block(evbuffer* scattered_buffer, std::vector<uint8_t>& memory_block);
 
 /**
    strips off the scheme and the domain part from the url
@@ -381,6 +382,43 @@ std::string relativize_url(const std::string& absolute_url);
          and will contained the hex representation of the data.
 */
 void encode_data_to_hex(uint8_t* data, size_t data_len, uint8_t* hexed_data);
+
+
+/*
+ * int isxString(char *str)
+ *
+ * description:
+ *   return 1 if all char in str are hexadecimal
+ *   return 0 otherwise
+ *
+ */
+int isxString(char *str);
+
+/*
+ * offset2Hex returns the offset to the next usable hex char.
+ * usable here refer to char that our steg module can use to encode
+ * data. in particular, words that correspond to common JavaScript keywords
+ * are not used for data encoding (see skipJSPattern). Also, because
+ * JS var name must start with an underscore or a letter (but not a digit)
+ * we don't use the first char of a word for encoding data
+ *
+ * e.g., the JS statement "var a;" won't be used for encoding data
+ * because "var" is a common JS keyword and "a" is the first char of a word
+ *
+ * Input:
+ * p - ptr to the starting pos 
+ * range - max number of char to look
+ * isLastCharHex - is the char pointed to by (p-1) a hex char 
+ *
+ * Output:
+ * offset2Hex returns the offset to the next usable hex char
+ * between p and (p+range), if it exists;
+ * otherwise, it returns -1
+ *
+ */
+int
+offset2Hex (char *p, int range, int isLastCharHex);
+
 
 
 #endif

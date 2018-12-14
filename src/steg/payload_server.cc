@@ -629,11 +629,6 @@ skipJSPattern(char *cp, int len) {
 }
 
 
-
-
-
-
-
 int
 isalnum_ (char c) {
   if (isalnum(c) || c == '_') return 1;
@@ -653,117 +648,6 @@ offset2Alnum_ (char *p, int range) {
   } else {
     return -1;
   }
-}
-
-
-
-/*
- * offset2Hex returns the offset to the next usable hex char.
- * usable here refer to char that our steg module can use to encode
- * data. in particular, words that correspond to common JavaScript keywords
- * are not used for data encoding (see skipJSPattern). Also, because
- * JS var name must start with an underscore or a letter (but not a digit)
- * we don't use the first char of a word for encoding data
- *
- * e.g., the JS statement "var a;" won't be used for encoding data
- * because "var" is a common JS keyword and "a" is the first char of a word
- *
- * Input:
- * p - ptr to the starting pos 
- * range - max number of char to look
- * isLastCharHex - is the char pointed to by (p-1) a hex char 
- *
- * Output:
- * offset2Hex returns the offset to the next usable hex char
- * between p and (p+range), if it exists;
- * otherwise, it returns -1
- *
- */
-int
-offset2Hex (char *p, int range, int isLastCharHex) {
-  char *cp = p;
-  int i,j;
-  int isFirstWordChar = 1;
-
-  if (range < 1) return -1;
-
-  // case 1: last char is hexadecimal
-  if (isLastCharHex) {
-    if (isxdigit(*cp)) return 0; // base case
-    else {
-      while (cp < (p+range) && isalnum_(*cp)) {
-        cp++;
-        if (isxdigit(*cp)) return (cp-p);
-      }
-      if (cp >= (p+range)) return -1;
-      // non-alnum_ found
-      // fallthru and handle case 2
-    }
-  }
- 
-  // case 2:
-  // find the next word that starts with alnum or underscore,
-  // which could be a variable, keyword, or literal inside a string
-
-  i = offset2Alnum_(cp, p+range-cp);
-  if (i == -1) return -1;
-
-  while (cp < (p+range) && i != -1) {
-
-    if (i == 0) { 
-      if (isFirstWordChar) {
-        j = skipJSPattern(cp, p+range-cp); 
-        if (j > 0) {
-          cp = cp+j;
-        } else {
-          cp++; isFirstWordChar = 0; // skip the 1st char of a word
-        }
-      } else { // we are in the middle of a word; no need to invoke skipJSPattern
-        if (isxdigit(*cp)) return (cp-p);
-        if (! isalnum_(*cp)) {
-          isFirstWordChar = 1;
-        }
-        cp++;
-     }
-   } else {
-     cp += i; isFirstWordChar = 1;
-   }
-   i = offset2Alnum_(cp, p+range-cp);
-
-  } // while
-
-  // cannot find next usable hex char 
-  return -1;
- 
-}
-
-
-/*
- * strInBinary looks for char array pattern of length patternLen in a char array
- * blob of length blobLen
- *
- * return a pointer for the first occurrence of pattern in blob, if found
- * otherwise, return NULL
- * 
- */
-char *
-strInBinary (const char *pattern, unsigned int patternLen, 
-             const char *blob, unsigned int blobLen) {
-  int found = 0;
-  char *cp = (char *)blob;
-
-  while (1) {
-    if (blob+blobLen-cp < (int) patternLen) break;
-    if (*cp == pattern[0]) {
-      if (memcmp(cp, pattern, patternLen) == 0) {
-        found = 1;
-        break;
-      }
-    }
-    cp++; 
-  }
-  if (found) return cp;
-  else return NULL;
 }
 
 

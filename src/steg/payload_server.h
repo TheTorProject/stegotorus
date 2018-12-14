@@ -274,6 +274,8 @@ class PayloadServer
      @param payload_id_hash if payload_id_has is not NULL, then the function
             copy the payload identifier hash into for further reference like
             disqualifiying the payload
+
+     @return 1 if succeed to find an suitable payload otherwise 0
    */
   virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal=0, std::string* payload_id_hash = NULL) = 0;
 
