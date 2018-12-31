@@ -53,9 +53,9 @@ libstegotorus_a_SOURCES = \
 	src/socks.cc \
 	src/steg.cc \
 	src/util.cc \
-	src/strncasestr.cc \
-	src/util-net.cc \
 	src/evbuf_util.cc \
+	src/util-net.cc \
+	src/strncasestr.cc \
 	src/curl_util.cc \
 	src/transparent_proxy.cc \
 	$(PROTOCOLS) $(STEGANOGRAPHERS)
@@ -71,7 +71,9 @@ nodist_libstegotorus_a_SOURCES = protolist.cc steglist.cc
 stegotorus_SOURCES = \
 	src/main.cc
 
-stegotorus_LDADD = libstegotorus.a $(lib_LIBS)
+stegotorus_LDADD = libstegotorus.a $(lib_LIBS) \
+	$(BOOST_FILESYSTEM_LIB) \
+	$(BOOST_SYSTEM_LIB)
 
 # prevent stegotorus from being linked if s-a-g fails
 # it is known that $(lib_LIBS) contains nothing that needs to be depended upon
@@ -115,7 +117,9 @@ unittests_SOURCES = \
 
 nodist_unittests_SOURCES = unitgrplist.cc
 
-unittests_LDADD = libstegotorus.a $(lib_LIBS)
+unittests_LDADD = libstegotorus.a $(lib_LIBS) \
+	$(BOOST_FILESYSTEM_LIB) \
+	$(BOOST_SYSTEM_LIB)
 
 GTEST_SOURCES = \
 	src/test/gtest/gtest_main.cc \
@@ -127,7 +131,10 @@ g_unittests_SOURCES = \
 	src/test/steg_test/payload_scraper_unittest.cc
 
 
-g_unittests_LDADD = libstegotorus.a $(lib_LIBS) -lpthread
+g_unittests_LDADD = libstegotorus.a $(lib_LIBS) -lpthread \
+	$(BOOST_FILESYSTEM_LIB) \
+	$(BOOST_SYSTEM_LIB)
+
 
 #g_unittests_LDFLAGS = \
 #	-lgtest_main \
@@ -182,7 +189,7 @@ EXTRA_DIST = doc \
 	src/test/test_tl.py
 
 #tester_proxy_CPPFLAGS = $(libevent_openssl_CPPFLAGS) $(libssl_CPPFLAGS)
-tester_proxy_LDADD = $(libevent_openssl_LIBS) $(libssl_LIBS)
+tester_proxy_LDADD = $(libevent_openssl_LIBS) $(libssl_LIBS) $(lib_LIBS)
 
 tester_proxy_SOURCES = src/test/tester_proxy/tester_proxy.cc
 

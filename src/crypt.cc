@@ -12,6 +12,7 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/objects.h>
+#include <openssl/ossl_typ.h>
 
 static bool crypto_initialized = false;
 static bool crypto_errs_initialized = false;
@@ -26,7 +27,7 @@ init_crypto()
   log_assert(!crypto_initialized);
 
   crypto_initialized = true;
-  CRYPTO_set_mem_functions(xmalloc, xrealloc, free);
+  //OPENSSL_set_mem_functions(xmalloc, xrealloc, free);
   ENGINE_load_builtin_engines();
   ENGINE_register_all_complete();
   bctx = BN_CTX_new();
@@ -150,8 +151,8 @@ namespace {
 
   struct ecb_encryptor_impl : ecb_encryptor
   {
-    EVP_CIPHER_CTX ctx;
-    ecb_encryptor_impl() { EVP_CIPHER_CTX_init(&ctx); }
+    EVP_CIPHER_CTX* ctx;
+    ecb_encryptor_impl() { ctx = EVP_CIPHER_CTX_new(); }
     virtual ~ecb_encryptor_impl();
     virtual void encrypt(uint8_t *out, const uint8_t *in);
   };
@@ -165,8 +166,8 @@ namespace {
 
   struct ecb_decryptor_impl : ecb_decryptor
   {
-    EVP_CIPHER_CTX ctx;
-    ecb_decryptor_impl() { EVP_CIPHER_CTX_init(&ctx); }
+    EVP_CIPHER_CTX* ctx;
+    ecb_decryptor_impl() { ctx = EVP_CIPHER_CTX_new(); }
     virtual ~ecb_decryptor_impl();
     virtual void decrypt(uint8_t *out, const uint8_t *in);
   };
@@ -185,9 +186,9 @@ ecb_encryptor::create(const uint8_t *key, size_t keylen)
   REQUIRE_INIT_CRYPTO();
 
   ecb_encryptor_impl *enc = new ecb_encryptor_impl;
-  if (!EVP_EncryptInit_ex(&enc->ctx, aes_ecb_by_size(keylen), 0, key, 0))
+  if (!EVP_EncryptInit_ex(enc->ctx, aes_ecb_by_size(keylen), 0, key, 0))
     log_crypto_abort("ecb_encryptor::create");
-  if (!EVP_CIPHER_CTX_set_padding(&enc->ctx, 0))
+  if (!EVP_CIPHER_CTX_set_padding(enc->ctx, 0))
     log_crypto_abort("ecb_encryptor::disable padding");
 
   return enc;
@@ -203,9 +204,9 @@ ecb_encryptor::create(key_generator *gen, size_t keylen)
   log_assert(got == keylen);
 
   ecb_encryptor_impl *enc = new ecb_encryptor_impl;
-  if (!EVP_EncryptInit_ex(&enc->ctx, aes_ecb_by_size(keylen), 0, key, 0))
+  if (!EVP_EncryptInit_ex(enc->ctx, aes_ecb_by_size(keylen), 0, key, 0))
     log_crypto_abort("ecb_encryptor::create");
-  if (!EVP_CIPHER_CTX_set_padding(&enc->ctx, 0))
+  if (!EVP_CIPHER_CTX_set_padding(enc->ctx, 0))
     log_crypto_abort("ecb_encryptor::disable padding");
 
   return enc;
@@ -223,9 +224,9 @@ ecb_decryptor::create(const uint8_t *key, size_t keylen)
   REQUIRE_INIT_CRYPTO();
 
   ecb_decryptor_impl *dec = new ecb_decryptor_impl;
-  if (!EVP_DecryptInit_ex(&dec->ctx, aes_ecb_by_size(keylen), 0, key, 0))
+  if (!EVP_DecryptInit_ex(dec->ctx, aes_ecb_by_size(keylen), 0, key, 0))
     log_crypto_abort("ecb_decryptor::create");
-  if (!EVP_CIPHER_CTX_set_padding(&dec->ctx, 0))
+  if (!EVP_CIPHER_CTX_set_padding(dec->ctx, 0))
     log_crypto_abort("ecb_decryptor::disable padding");
 
   return dec;
@@ -241,9 +242,9 @@ ecb_decryptor::create(key_generator *gen, size_t keylen)
   log_assert(got == keylen);
 
   ecb_decryptor_impl *dec = new ecb_decryptor_impl;
-  if (!EVP_DecryptInit_ex(&dec->ctx, aes_ecb_by_size(keylen), 0, key, 0))
+  if (!EVP_DecryptInit_ex(dec->ctx, aes_ecb_by_size(keylen), 0, key, 0))
     log_crypto_abort("ecb_decryptor::create");
-  if (!EVP_CIPHER_CTX_set_padding(&dec->ctx, 0))
+  if (!EVP_CIPHER_CTX_set_padding(dec->ctx, 0))
     log_crypto_abort("ecb_decryptor::disable padding");
 
   return dec;
@@ -257,13 +258,13 @@ ecb_decryptor::create_noop()
 
 ecb_encryptor::~ecb_encryptor() {}
 ecb_encryptor_impl::~ecb_encryptor_impl()
-{ EVP_CIPHER_CTX_cleanup(&ctx); }
+{ EVP_CIPHER_CTX_cleanup(ctx); }
 ecb_encryptor_noop_impl::~ecb_encryptor_noop_impl()
 {}
 
 ecb_decryptor::~ecb_decryptor() {}
 ecb_decryptor_impl::~ecb_decryptor_impl()
-{ EVP_CIPHER_CTX_cleanup(&ctx); }
+{ EVP_CIPHER_CTX_cleanup(ctx); }
 ecb_decryptor_noop_impl::~ecb_decryptor_noop_impl()
 {}
 
@@ -271,7 +272,7 @@ void
 ecb_encryptor_impl::encrypt(uint8_t *out, const uint8_t *in)
 {
   int olen;
-  if (!EVP_EncryptUpdate(&ctx, out, &olen, in, AES_BLOCK_LEN) ||
+  if (!EVP_EncryptUpdate(ctx, out, &olen, in, AES_BLOCK_LEN) ||
       size_t(olen) != AES_BLOCK_LEN)
     log_crypto_abort("ecb_encryptor::encrypt");
 }
@@ -286,7 +287,7 @@ void
 ecb_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in)
 {
   int olen;
-  if (!EVP_DecryptUpdate(&ctx, out, &olen, in, AES_BLOCK_LEN) ||
+  if (!EVP_DecryptUpdate(ctx, out, &olen, in, AES_BLOCK_LEN) ||
       size_t(olen) != AES_BLOCK_LEN)
     log_crypto_abort("ecb_decryptor::decrypt");
 }
@@ -300,8 +301,8 @@ ecb_decryptor_noop_impl::decrypt(uint8_t *out, const uint8_t *in)
 namespace {
   struct gcm_encryptor_impl : gcm_encryptor
   {
-    EVP_CIPHER_CTX ctx;
-    gcm_encryptor_impl() { EVP_CIPHER_CTX_init(&ctx); }
+    EVP_CIPHER_CTX* ctx;
+    gcm_encryptor_impl() { ctx = EVP_CIPHER_CTX_new(); }
     virtual ~gcm_encryptor_impl();
     virtual void encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                          const uint8_t *nonce, size_t nlen);
@@ -310,15 +311,15 @@ namespace {
   struct gcm_encryptor_noop_impl : gcm_encryptor
   {
     gcm_encryptor_noop_impl() {}
-    virtual ~gcm_encryptor_noop_impl();
+      virtual ~gcm_encryptor_noop_impl();
     virtual void encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                          const uint8_t *nonce, size_t nlen);
   };
 
   struct gcm_decryptor_impl : gcm_decryptor
   {
-    EVP_CIPHER_CTX ctx;
-    gcm_decryptor_impl() { EVP_CIPHER_CTX_init(&ctx); }
+      EVP_CIPHER_CTX* ctx;
+    gcm_decryptor_impl() { ctx = EVP_CIPHER_CTX_new(); }
     virtual ~gcm_decryptor_impl();
     virtual int decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
                         const uint8_t *nonce, size_t nlen);
@@ -356,7 +357,7 @@ gcm_encryptor::create(const uint8_t *key, size_t keylen)
   REQUIRE_INIT_CRYPTO();
 
   gcm_encryptor_impl *enc = new gcm_encryptor_impl;
-  if (!EVP_EncryptInit_ex(&enc->ctx, aes_gcm_by_size(keylen), 0, key, 0))
+  if (!EVP_EncryptInit_ex(enc->ctx, aes_gcm_by_size(keylen), 0, key, 0))
     log_crypto_abort("gcm_encryptor::create");
 
   return enc;
@@ -372,7 +373,7 @@ gcm_encryptor::create(key_generator *gen, size_t keylen)
   log_assert(got == keylen);
 
   gcm_encryptor_impl *enc = new gcm_encryptor_impl;
-  if (!EVP_EncryptInit_ex(&enc->ctx, aes_gcm_by_size(keylen), 0, key, 0))
+  if (!EVP_EncryptInit_ex(enc->ctx, aes_gcm_by_size(keylen), 0, key, 0))
     log_crypto_abort("gcm_encryptor::create");
 
   return enc;
@@ -390,7 +391,7 @@ gcm_decryptor::create(const uint8_t *key, size_t keylen)
   REQUIRE_INIT_CRYPTO();
 
   gcm_decryptor_impl *dec = new gcm_decryptor_impl;
-  if (!EVP_DecryptInit_ex(&dec->ctx, aes_gcm_by_size(keylen), 0, key, 0))
+  if (!EVP_DecryptInit_ex(dec->ctx, aes_gcm_by_size(keylen), 0, key, 0))
     log_crypto_abort("gcm_decryptor::create");
 
   return dec;
@@ -406,7 +407,7 @@ gcm_decryptor::create(key_generator *gen, size_t keylen)
   log_assert(got == keylen);
 
   gcm_decryptor_impl *dec = new gcm_decryptor_impl;
-  if (!EVP_DecryptInit_ex(&dec->ctx, aes_gcm_by_size(keylen), 0, key, 0))
+  if (!EVP_DecryptInit_ex(dec->ctx, aes_gcm_by_size(keylen), 0, key, 0))
     log_crypto_abort("gcm_decryptor::create");
 
   return dec;
@@ -420,13 +421,13 @@ gcm_decryptor::create_noop()
 
 gcm_encryptor::~gcm_encryptor() {}
 gcm_encryptor_impl::~gcm_encryptor_impl()
-{ EVP_CIPHER_CTX_cleanup(&ctx); }
+{ EVP_CIPHER_CTX_cleanup(ctx); }
 gcm_encryptor_noop_impl::~gcm_encryptor_noop_impl()
 {}
 
 gcm_decryptor::~gcm_decryptor() {}
 gcm_decryptor_impl::~gcm_decryptor_impl()
-{ EVP_CIPHER_CTX_cleanup(&ctx); }
+{ EVP_CIPHER_CTX_cleanup(ctx); }
 gcm_decryptor_noop_impl::~gcm_decryptor_noop_impl()
 {}
 
@@ -436,24 +437,24 @@ gcm_encryptor_impl::encrypt(uint8_t *out, const uint8_t *in, size_t inlen,
 {
   log_assert(inlen <= size_t(INT_MAX));
 
-  if (nlen != size_t(EVP_CIPHER_CTX_iv_length(&ctx)))
-    if (!EVP_CIPHER_CTX_ctrl(&ctx, EVP_CTRL_GCM_SET_IVLEN, nlen, 0))
+  if (nlen != size_t(EVP_CIPHER_CTX_iv_length(ctx)))
+    if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, nlen, 0))
       log_crypto_abort("gcm_encryptor::reset nonce length");
 
-  if (!EVP_EncryptInit_ex(&ctx, 0, 0, 0, nonce))
+  if (!EVP_EncryptInit_ex(ctx, 0, 0, 0, nonce))
     log_crypto_abort("gcm_encryptor::set nonce");
 
   int olen;
-  if (!EVP_EncryptUpdate(&ctx, 0, &olen, (const uint8_t *)"", 0) || olen != 0)
+  if (!EVP_EncryptUpdate(ctx, 0, &olen, (const uint8_t *)"", 0) || olen != 0)
     log_crypto_abort("gcm_encryptor::set null AAD");
 
-  if (!EVP_EncryptUpdate(&ctx, out, &olen, in, inlen) || size_t(olen) != inlen)
+  if (!EVP_EncryptUpdate(ctx, out, &olen, in, inlen) || size_t(olen) != inlen)
     log_crypto_abort("gcm_encryptor::encrypt");
 
-  if (!EVP_EncryptFinal_ex(&ctx, out + inlen, &olen) || olen != 0)
+  if (!EVP_EncryptFinal_ex(ctx, out + inlen, &olen) || olen != 0)
     log_crypto_abort("gcm_encryptor::finalize");
 
-  if (!EVP_CIPHER_CTX_ctrl(&ctx, EVP_CTRL_GCM_GET_TAG, 16, out + inlen))
+  if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, out + inlen))
     log_crypto_abort("gcm_encryptor::write tag");
 }
 
@@ -471,26 +472,26 @@ gcm_decryptor_impl::decrypt(uint8_t *out, const uint8_t *in, size_t inlen,
 {
   log_assert(inlen <= size_t(INT_MAX));
 
-  if (nlen != size_t(EVP_CIPHER_CTX_iv_length(&ctx)))
-    if (!EVP_CIPHER_CTX_ctrl(&ctx, EVP_CTRL_GCM_SET_IVLEN, nlen, 0))
+  if (nlen != size_t(EVP_CIPHER_CTX_iv_length(ctx)))
+    if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, nlen, 0))
       log_crypto_abort("gcm_decryptor::reset nonce length");
 
-  if (!EVP_DecryptInit_ex(&ctx, 0, 0, 0, nonce))
+  if (!EVP_DecryptInit_ex(ctx, 0, 0, 0, nonce))
     return log_crypto_warn("gcm_decryptor::set nonce");
 
-  if (!EVP_CIPHER_CTX_ctrl(&ctx, EVP_CTRL_GCM_SET_TAG, 16,
+  if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16,
                            (void *)(in + inlen - 16)))
     return log_crypto_warn("gcm_decryptor::set tag");
 
   int olen;
-  if (!EVP_DecryptUpdate(&ctx, 0, &olen, (const uint8_t *)"", 0) || olen != 0)
+  if (!EVP_DecryptUpdate(ctx, 0, &olen, (const uint8_t *)"", 0) || olen != 0)
     return log_crypto_warn("gcm_decryptor::set null AAD");
 
   inlen -= 16;
-  if (!EVP_DecryptUpdate(&ctx, out, &olen, in, inlen) || size_t(olen) != inlen)
+  if (!EVP_DecryptUpdate(ctx, out, &olen, in, inlen) || size_t(olen) != inlen)
     return log_crypto_warn("gcm_encryptor::decrypt");
 
-  if (!EVP_DecryptFinal_ex(&ctx, out + inlen, &olen) || olen != 0) {
+  if (!EVP_DecryptFinal_ex(ctx, out + inlen, &olen) || olen != 0) {
     /* don't warn for simple MAC failures */
     if (!ERR_peek_error())
       return -1;
@@ -671,7 +672,7 @@ ecdh_message_impl::combine(const uint8_t *xcoord_other,
 namespace {
   struct key_generator_impl : key_generator
   {
-    HMAC_CTX expander;
+    HMAC_CTX* expander;
     MemBlock prevT;
     MemBlock info;
 
@@ -689,8 +690,8 @@ namespace {
         leftover(0),
         dead(false)
     {
-      HMAC_CTX_init(&expander);
-      if (!HMAC_Init_ex(&expander, prk, SHA256_LEN, EVP_sha256(), 0))
+      expander = HMAC_CTX_new();
+      if (!HMAC_Init_ex(expander, prk, SHA256_LEN, EVP_sha256(), 0))
         log_crypto_abort("key_generator_impl::construction");
     }
   };
@@ -781,11 +782,11 @@ key_generator_impl::generate(uint8_t *buf, size_t len)
   }
   while (n < len) {
     // compute the next block
-    if (!HMAC_Update(&expander, info, info.size()))
+    if (!HMAC_Update(expander, info, info.size()))
       log_crypto_abort("generate::apply info");
-    if (!HMAC_Update(&expander, &counter, 1))
+    if (!HMAC_Update(expander, &counter, 1))
       log_crypto_abort("generate::apply counter");
-    if (!HMAC_Final(&expander, prevT, 0))
+    if (!HMAC_Final(expander, prevT, 0))
       log_crypto_abort("generate::extract");
 
     if (n + SHA256_LEN < len) {
@@ -806,9 +807,9 @@ key_generator_impl::generate(uint8_t *buf, size_t len)
       break;
     }
 
-    if (!HMAC_Init_ex(&expander, 0, 0, 0, 0))
+    if (!HMAC_Init_ex(expander, 0, 0, 0, 0))
       log_crypto_abort("generate::reset hmac");
-    if (!HMAC_Update(&expander, prevT, prevT.size()))
+    if (!HMAC_Update(expander, prevT, prevT.size()))
       log_crypto_abort("generate::feedback");
   }
 
@@ -817,7 +818,7 @@ key_generator_impl::generate(uint8_t *buf, size_t len)
 
 key_generator::~key_generator() {}
 key_generator_impl::~key_generator_impl()
-{ HMAC_CTX_cleanup(&expander); }
+{ HMAC_CTX_free(expander); }
 
 uint8_t* 
 sha256(const uint8_t* buffer, size_t n, uint8_t* md)

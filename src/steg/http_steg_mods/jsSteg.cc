@@ -4,7 +4,7 @@
 
 #include "util.h"
 #include "../payload_server.h"
- #include "file_steg.h"
+#include "file_steg.h"
 #include "jsSteg.h"
 //#include "cookies.h"
 #include "compression.h"
@@ -41,7 +41,7 @@ unsigned int JSSteg::static_capacity(char *cover_payload, int body_length)
     return 0; //useless payload
 }
 
-  log_debug("at js static headless capacity");
+  //log_debug("at js static headless capacity");
    return static_headless_capacity(cover_payload + body_offset, (size_t) (body_length - body_offset));
 }
 
@@ -78,45 +78,9 @@ JSSteg::js_code_block_preliminary_capacity(char* buf, size_t len) {
     j = offset2Hex(bp, (buf+len)-bp, 1);
   } // while
 
-  log_debug("code block has capacity %d", cnt);
+  // log_debug("code block has capacity %d", cnt);
   return cnt;
 }
-/*
- * jsSteg: A Javascript-based steganography module
- *
- */
-
-
-/*
- * int isxString(char *str)
- *
- * description:
- *   return 1 if all char in str are hexadecimal
- *   return 0 otherwise
- *
- */
-int isxString(char *str) {
-  unsigned int i;
-  char *dp = str;
-  for (i=0; i<strlen(str); i++) {
-    if (! isxdigit(*dp) ) {
-      return 0;
-    }
-  }
-  return 1;
-}
-
-int JSSteg::isxString(char *str) {
-  unsigned int i;
-  char *dp = str;
-  for (i=0; i<strlen(str); i++) {
-    if (! isxdigit(*dp) ) {
-      return 0;
-    }
-  }
-  return 1;
-}
-
 
 /*
  * isGzipContent(char *msg)
@@ -183,6 +147,86 @@ int JSSteg::isGzipContent (char *msg) {
   return gzipFlag;
 }
 
+
+/*
+ * offset2Hex returns the offset to the next usable hex char.
+ * usable here refer to char that our steg module can use to encode
+ * data. in particular, words that correspond to common JavaScript keywords
+ * are not used for data encoding (see skipJSPattern). Also, because
+ * JS var name must start with an underscore or a letter (but not a digit)
+ * we don't use the first char of a word for encoding data
+ *
+ * e.g., the JS statement "var a;" won't be used for encoding data
+ * because "var" is a common JS keyword and "a" is the first char of a word
+ *
+ * Input:
+ * p - ptr to the starting pos 
+ * range - max number of char to look
+ * isLastCharHex - is the char pointed to by (p-1) a hex char 
+ *
+ * Output:
+ * offset2Hex returns the offset to the next usable hex char
+ * between p and (p+range), if it exists;
+ * otherwise, it returns -1
+ *
+ */
+int
+JSSteg::offset2Hex (char *p, int range, int isLastCharHex) {
+  char *cp = p;
+  int i,j;
+  int isFirstWordChar = 1;
+
+  if (range < 1) return -1;
+
+  // case 1: last char is hexadecimal
+  if (isLastCharHex) {
+    if (isxdigit(*cp)) return 0; // base case
+    else {
+      while (cp < (p+range) && isalnum_(*cp)) {
+        cp++;
+        if (isxdigit(*cp)) return (cp-p);
+      }
+      if (cp >= (p+range)) return -1;
+      // non-alnum_ found
+      // fallthru and handle case 2
+    }
+  }
+ 
+  // case 2:
+  // find the next word that starts with alnum or underscore,
+  // which could be a variable, keyword, or literal inside a string
+
+  i = offset2Alnum_(cp, p+range-cp);
+  if (i == -1) return -1;
+
+  while (cp < (p+range) && i != -1) {
+
+    if (i == 0) { 
+      if (isFirstWordChar) {
+        j = skipJSPattern(cp, p+range-cp); 
+        if (j > 0) {
+          cp = cp+j;
+        } else {
+          cp++; isFirstWordChar = 0; // skip the 1st char of a word
+        }
+      } else { // we are in the middle of a word; no need to invoke skipJSPattern
+        if (isxdigit(*cp)) return (cp-p);
+        if (! isalnum_(*cp)) {
+          isFirstWordChar = 1;
+        }
+        cp++;
+     }
+   } else {
+     cp += i; isFirstWordChar = 1;
+   }
+   i = offset2Alnum_(cp, p+range-cp);
+
+  } // while
+
+  // cannot find next usable hex char 
+  return -1;
+ 
+}
 
 /*
  * findContentType(char *msg)
@@ -404,7 +448,7 @@ ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* 
     return -1;
   }
 
-  if (! isxString((char*)data)) {
+  if (!isxString((char*)data)) {
     log_debug("CLIENT ERROR: Data received not hex");
     return -1;
   }
@@ -469,7 +513,9 @@ int  JSSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
   size_t hexed_datalen = 2*data_len;
   std::vector<uint8_t> hexed_data(hexed_datalen);
 
-  encode_data_to_hex(data, data_len, hexed_data.data());
+  std::vector<uint8_t> data_as_vec(data, data+data_len); //TODO: this should escaltes and change in higher level
+
+  encode_data_to_hex(data_as_vec, hexed_data);
 
   // log_debug("MJS %d %d", datalen, mjs);
   //this should not happen
@@ -546,7 +592,7 @@ JSSteg::decode_http_body(const char *jData, const char *dataBuf, unsigned int jd
                                   fin);
 }
 
-int  encode_in_single_js_block(char *data, char *jTemplate, char *jData,
+int encode_in_single_js_block(char *data, char *jTemplate, char *jData,
              unsigned int dlen, unsigned int jtlen,
              unsigned int jdlen, int *fin)
 {
@@ -566,7 +612,7 @@ int  encode_in_single_js_block(char *data, char *jTemplate, char *jData,
   /* handling boundary case: dlen == 0 */
   if (dlen < 1) { return 0; }
 
-  i = offset2Hex(jtp, (jTemplate+jtlen)-jtp, 0);
+  i = JSSteg::offset2Hex(jtp, (jTemplate+jtlen)-jtp, 0);
   while (encCnt < dlen && i != -1) {
     // copy next i char from jtp to jdp,
     // except that if *jtp==JS_DELIMITER, copy
@@ -585,7 +631,7 @@ int  encode_in_single_js_block(char *data, char *jTemplate, char *jData,
     encCnt++;
     dp = dp + 1; jtp = jtp + 1; jdp = jdp + 1;
 
-    i = offset2Hex(jtp, (jTemplate+jtlen)-jtp, 1);
+    i = JSSteg::offset2Hex(jtp, (jTemplate+jtlen)-jtp, 1);
   }
 
   // copy the rest of jTemplate to jdata
@@ -684,7 +730,7 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData,
         return encCnt;
       }
       skip = strlen(startScriptTypeJS)+jsStart-jtp;
-#ifdef DEBUG2h
+#ifdef DEBUG
       printf("copying %d (skip) char from jtp to jdp\n", skip);
 #endif
       memcpy(jdp, jtp, skip);
@@ -813,7 +859,7 @@ int decode_single_js_block(const char *jData, const char *dataBuf, unsigned int 
   *fin = 0;
   dp = (char*)dataBuf; jdp = (char*)jData;
 
-  i = offset2Hex(jdp, cjdlen, 0);
+  i = JSSteg::offset2Hex(jdp, cjdlen, 0);
   while (i != -1) {
     // return if JS_DELIMITER exists between jdp and jdp+i
     for (j=0; j<i; j++) {
@@ -833,7 +879,7 @@ int decode_single_js_block(const char *jData, const char *dataBuf, unsigned int 
     decCnt++;
 
     // find the next hex char
-    i = offset2Hex(jdp, cjdlen, 1);
+    i = JSSteg::offset2Hex(jdp, cjdlen, 1);
   }
 
   // look for JS_DELIMITER between jdp to jData+jdlen

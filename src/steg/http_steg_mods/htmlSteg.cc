@@ -41,7 +41,7 @@ unsigned int HTMLSteg::static_capacity(char *cover_payload, int body_length)
 unsigned int
 HTMLSteg::static_headless_capacity (char* buf, size_t len) {
 
-  log_debug("at html static headless capacity");
+  // log_debug("at html static headless capacity");
   char *bp, *jsStart, *jsEnd;
   int cnt=0;
 
@@ -63,7 +63,7 @@ HTMLSteg::static_headless_capacity (char* buf, size_t len) {
   } // while (bp < (buf+len))
 
   int actual_capacity = max(0, (cnt -JS_DELIMITER_SIZE)/2);  
-  log_debug("payload has capacity %d", actual_capacity);
+  //log_debug("payload has capacity %d", actual_capacity);
   return actual_capacity;
 
 }
@@ -108,7 +108,9 @@ int HTMLSteg::encode_http_body(const char *data, char *jTemplate, char *jData,
     }
 
     skip = strlen(startScriptTypeJS)+jsStart-jtp;
+#ifdef DEBUG
     log_debug("copying %d (skip) char from jtp to jdp\n", skip);
+#endif
 
     memcpy(jdp, jtp, skip);
     jtp = jtp+skip; jdp = jdp+skip;
@@ -126,7 +128,9 @@ int HTMLSteg::encode_http_body(const char *data, char *jTemplate, char *jData,
     // update encCnt, dp, and dlen based on n
     if (n > 0) {
       encCnt = encCnt+n; dp = dp+n; dlen = dlen-n;
+#ifdef DEBUG
       log_debug("%d bytes encoded", encCnt);
+#endif      
 
     }
     // update jtp, jdp, jdlen

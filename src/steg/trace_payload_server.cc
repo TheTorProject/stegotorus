@@ -240,7 +240,7 @@ TracePayloadServer::init_PDF_payload_pool(int len, int type, int minCapacity)
       // cap = minCapacity+1;
       cap = PDFSteg::static_capacity(msgbuf, p->length);
       if (cap > minCapacity) { //why checking this
-        log_debug("pdf (index %d) has capacity %d greater than mincapacity %d", cnt, cap, minCapacity);
+        //log_debug("pdf (index %d) has capacity %d greater than mincapacity %d", cnt, cap, minCapacity);
         cap = (cap-PDF_DELIMITER_SIZE)/2;
         pl.typePayloadCap[contentType][cnt] = cap;
         pl.typePayload[contentType][cnt] = r;
@@ -376,7 +376,7 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
         //log_debug("payload %d only offer %d bytes \n", current, pl.typePayloadCap[contentType][current]);
         continue;
       }
-    log_debug("payload capacity %d vs requested %d", pl.typePayloadCap[contentType][current], cap);
+    //log_debug("payload capacity %d vs requested %d", pl.typePayloadCap[contentType][current], cap);
     if (found) {
       if (pl.payload_hdrs[pl.typePayload[contentType][best]].length >
           pl.payload_hdrs[pl.typePayload[contentType][current]].length)

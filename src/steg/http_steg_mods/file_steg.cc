@@ -162,7 +162,7 @@ int
 FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 {
 
-  uint8_t* data1;
+  std::vector<uint8_t> data1;
   int sbuflen = 0;
 
   ssize_t outbuflen = 0;
@@ -178,7 +178,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   //call this from util to extract the buffer into memory block
   //data1 is allocated in evbuffer_to_memory_block we need to free
   //it at the end.
-  sbuflen = evbuffer_to_memory_block(source, &data1);
+  sbuflen = evbuffer_to_memory_block(source, data1);
 
   if (sbuflen < 0 /*&& c_content_type != HTTP_CONTENT_JAVASCRIPT || CONTENT_HTML_JAVASCRIPT*/) {
     log_warn("unable to extract the data from evbuffer");
@@ -219,7 +219,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     //int hLen = body_offset - (size_t)cover_payload - 4 + 1;
     //extrancting the body part of the payload
     log_debug("SERVER embeding data1 with length %d into type %d", sbuflen, c_content_type);
-    outbuflen = encode(data1, sbuflen, outbuf, body_len);
+    outbuflen = encode(data1.data(), sbuflen, outbuf, body_len);
 
     ///End of steg test!!
     if (outbuflen < 0) {
@@ -239,7 +239,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     std::vector<uint8_t> recovered_data_for_test(c_MAX_MSG_BUF_SIZE); //this is the size we have promised to decode func
     decode(outbuf, outbuflen, recovered_data_for_test.data());
 
-    if (memcmp(data1, recovered_data_for_test.data(), sbuflen)) { //barf!!
+    if (memcmp(data1.data(), recovered_data_for_test.data(), sbuflen)) { //barf!!
       //keep the evidence for testing
      // if(pgenflag == FILE_PAYLOAD)
      //{
@@ -306,12 +306,10 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   }
 
   evbuffer_drain(source, sbuflen);
-  delete [] data1;
   
   return outbuflen;
 
  error:
-  delete [] data1;
   return -1;
 
 }

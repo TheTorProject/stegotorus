@@ -44,41 +44,43 @@ class TimelineTest(object):
         if errors != "":
             self.fail("\n" + errors)
 
-    def test_null(self):
+    def no_test_null(self):
         self.doTest("null",
            ("null", "server", "127.0.0.1:5000", "127.0.0.1:5001",
             "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
-    def test_chop_nosteg(self):
+    def no_test_chop_nosteg(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","nosteg",
+            "nosteg", "127.0.0.1:5010",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","nosteg",
+            "nosteg", "127.0.0.1:5010",
             ))
 
-    def test_chop_nosteg2(self):
+    def no_test_chop_nosteg_2_channels(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
+            "nosteg","127.0.0.1:5010", "nosteg", "127.0.0.1:5011",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
+            "nosteg","127.0.0.1:5010","nosteg", "127.0.0.1:5011"
             ))
 
     def test_chop_nosteg_rr(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","nosteg_rr",
+            "nosteg_rr", "127.0.0.1:5010",
             "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","nosteg_rr",
+            "nosteg_rr", "127.0.0.1:5010",
             ))
 
-    def test_chop_nosteg_rr2(self):
+    def test_chop_nosteg_rr_2_channels(self):
+        ### TODO: take off disable-retransmit
         self.doTest("chop",
-           ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
-            "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
+           ("chop", "server", "--disable-retransmit", "127.0.0.1:5001",
+            "nosteg_rr", "127.0.0.1:5010","nosteg_rr", "127.0.0.1:5011",
+            "chop", "client", "--disable-retransmit", "127.0.0.1:4999",
+            "nosteg_rr", "127.0.0.1:5010", "nosteg_rr", "127.0.0.1:5011",
+            
             ))
 
     def doProxyTest(self, label, proxy_args, st_args):
@@ -96,7 +98,7 @@ class TimelineTest(object):
         
 
     # buggy, disabled
-    #def test_embed(self):
+    #def no_test_embed(self):
     #    self.doTest("chop",
     #       ("chop", "server", "127.0.0.1:5001",
     #        "127.0.0.1:5010","embed",
@@ -106,13 +108,29 @@ class TimelineTest(object):
 
     def test_http(self):
         self.doTest("chop",
-           ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","http","127.0.0.1:5011","http",
-            "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","http","127.0.0.1:5011","http",
+           ("chop", "server", "--disable-retransmit", "127.0.0.1:5001",
+            "http", "127.0.0.1:5010",
+            "chop", "client", "--disable-retransmit", "127.0.0.1:4999",
+            "http", "127.0.0.1:5010",
+            ))
+
+    def test_http_mul_channel(self):
+        self.doTest("chop",
+           ("chop", "server", "--disable-retransmit", "127.0.0.1:5001",
+            "http", "127.0.0.1:5010", "http","127.0.0.1:5011",
+            "chop", "client", "--disable-retransmit", "127.0.0.1:4999",
+            "http", "127.0.0.1:5010","http","127.0.0.1:5011",
             ))
 
     def test_http_apache(self):
+        self.doTest("chop",
+           ("chop", "server", "--disable-retransmit", "127.0.0.1:5001",
+            "http_apache", "127.0.0.1:5010",
+            "chop", "client", "--disable-retransmit", "127.0.0.1:4999",
+            "http_apache", "127.0.0.1:5010",
+            ))
+
+    def no_test_http_apache(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
             "127.0.0.1:5010","http","127.0.0.1:5011","http_apache",
@@ -120,15 +138,7 @@ class TimelineTest(object):
             "127.0.0.1:5010","http","127.0.0.1:5011","http_apache",
             ))
 
-    def test_http_apache(self):
-        self.doTest("chop",
-           ("chop", "server", "127.0.0.1:5001",
-            "127.0.0.1:5010","http","127.0.0.1:5011","http_apache",
-            "chop", "client", "127.0.0.1:4999",
-            "127.0.0.1:5010","http","127.0.0.1:5011","http_apache",
-            ))
-
-    def test_http_simple_proxy(self):
+    def no_test_http_simple_proxy(self):
         self.doProxyTest("chop", 
            ("127.0.0.1:8080", "127.0.0.1:5010"),
            ("chop", "server", "127.0.0.1:5001",
@@ -137,7 +147,7 @@ class TimelineTest(object):
             "127.0.0.1:8080","http","127.0.0.1:5011","http",
             ))
 
-    def test_http_apache_fail_auth_trans_proxy(self):
+    def no_test_http_apache_fail_auth_trans_proxy(self):
         pass
         # self.doTest("chop", 
         #    ("chop", "server",

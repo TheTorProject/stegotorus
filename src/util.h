@@ -373,15 +373,15 @@ ssize_t evbuffer_to_memory_block(evbuffer* scattered_buffer, std::vector<uint8_t
 std::string relativize_url(const std::string& absolute_url);
 
 /**
-  convert char* buffer to hex string to be encoded in a text only
-  covers like js.
-
-  @param data the buffer which contains the raw data
-  @param data_len the length of data in data buffer in number of bytes
-  @param hexed_data should be initialized of double length of data_len 
-         and will contained the hex representation of the data.
+ * convert char* buffer to hex string to be encoded in a text only
+ *  covers like js.
+ *
+ *  @param data the buffer which contains the raw data
+ *  @param data_len the length of data in data buffer in number of bytes
+ *  @param hexed_data should be initialized of double length of data_len 
+ *         and will contained the hex representation of the data.
 */
-void encode_data_to_hex(uint8_t* data, size_t data_len, uint8_t* hexed_data);
+void encode_data_to_hex(std::vector<uint8_t>& data, std::vector<uint8_t>& hexed_data);
 
 
 /*
@@ -420,5 +420,27 @@ int
 offset2Hex (char *p, int range, int isLastCharHex);
 
 
+/**
+ * checks if a character c is a number letter or _ 
+ *
+ * @param c The character to be checked
+ *
+ * @return 1 if character c is a number letter or _ otherwise 0
+ */
+int
+isalnum_ (char c);
+
+/**
+ * finds the next word in string p up to length range that starts with alnum or underscore
+ *
+ * @param p the string to search in
+ * @param range the offset in p till which search is continued
+ *
+ *  @return a pointer to the first alnum_ character or -1 if not find anything till it reaches 
+ *          p+range.
+ *
+*/
+int
+offset2Alnum_(char *p, int range);
 
 #endif

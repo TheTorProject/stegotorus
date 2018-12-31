@@ -57,44 +57,44 @@ public:
     : base_stopped(false)
   {
   };
-  bufferevent *near;
-  bufferevent *far;
-  bufferevent *outbound_far;
+  bufferevent *near = nullptr;
+  bufferevent *far = nullptr;
+  bufferevent *outbound_far = nullptr;
 
-  evutil_socket_t nearfd;
-  evutil_socket_t farfd;
+  evutil_socket_t nearfd = 0;
+  evutil_socket_t farfd = 0;
   
   curl_socket_t outbound_farfd;
   
-  event* fetch_through_st_event;
-  event* outbound_far_event;
+  event* fetch_through_st_event = nullptr;
+  event* outbound_far_event = nullptr;
 
-  struct evbuffer *neartext;
-  struct evbuffer *fartext;
+  struct evbuffer *neartext = nullptr;
+  struct evbuffer *fartext = nullptr;
 
-  CURLM* _curl_multi_handle; //we need the multi so we have none
+  CURLM* _curl_multi_handle = nullptr; //we need the multi so we have none
   //blocking curl
-  int _curl_running_handle;
+  int _curl_running_handle = 0;
 
-  CURL* curl_near;
-  CURL* curl_far; //far doesn't need to be non-blocking
-  CURL* curl_outbound_far;
+  CURL* curl_near = nullptr;
+  CURL* curl_far = nullptr; //far doesn't need to be non-blocking
+  CURL* curl_outbound_far = nullptr;
 
-  struct evbuffer *neartrans;
-  struct evbuffer *fartrans;
+  struct evbuffer *neartrans = nullptr;
+  struct evbuffer *fartrans = nullptr;
 
-  evbuffer* http_request;
+  evbuffer* http_request = nullptr;
   
-  char *lbuf;
-  size_t lbufsize;
+  char *lbuf = nullptr;
+  size_t lbufsize = 0;
 
-  struct evconnlistener *listener;
-  struct event *pause_timer;
-  struct event *timeout_timer; 
+  struct evconnlistener *listener = nullptr;
+  struct event *pause_timer = nullptr;
+  struct event *timeout_timer = nullptr;
   //stop the program in case of communication
   //error
-  struct event_base *base;
-  bool base_stopped;
+  struct event_base *base = nullptr;
+  bool base_stopped = false;
 
   bool rcvd_eof_near : 1;
   bool rcvd_eof_far  : 1;
@@ -801,7 +801,7 @@ int
 main(int argc, char **argv)
 {
   WebpageFetcher st;
-  memset(&st, 0, sizeof(WebpageFetcher));
+  //memset(&st, 0, sizeof(WebpageFetcher)); //why even? there is a constructor
 
   if (argc != 4) {
     char *name = strrchr(argv[0], '/');

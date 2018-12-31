@@ -213,28 +213,28 @@ MKEM::~MKEM()
 static BIGNUM *
 random_s(const BIGNUM *n, const BIGNUM *p, BN_CTX *c)
 {
-  BIGNUM h, m, *r;
+  BIGNUM *h, *m, *r;
 
-  BN_init(&h);
-  BN_init(&m);
+  h = BN_new();
+  m = BN_new();
   FAILZ(r = BN_new());
-  FAILZ(BN_copy(&h, n));
-  FAILZ(BN_rshift1(&h, &h));
+  FAILZ(BN_copy(h, n));
+  FAILZ(BN_rshift1(h, h));
 
   do {
-    FAILZ(BN_rand_range(r, &h));
+    FAILZ(BN_rand_range(r, h));
     FAILZ(BN_lshift1(r, r));
     FAILZ(BN_add(r, r, BN_value_one()));
-    FAILZ(BN_nnmod(&m, r, p, c));
-  } while (BN_is_zero(&m));
+    FAILZ(BN_nnmod(m, r, p, c));
+  } while (BN_is_zero(m));
 
-  BN_clear(&h);
-  BN_clear(&m);
+  BN_clear(h);
+  BN_clear(m);
   return r;
 
  fail:
-  BN_clear(&h);
-  BN_clear(&m);
+  BN_clear(h);
+  BN_clear(m);
   if (r) BN_clear_free(r);
   return 0;
 }
@@ -340,17 +340,17 @@ MKEM::export_secret_key(uint8_t *s0o, uint8_t *s1o) const
 int
 MKEM::generate(uint8_t *secret, uint8_t *message) const
 {
-  BIGNUM u;
+  BIGNUM* u;
   uint8_t pad;
   int rv = -1;
-  BN_init(&u);
-  if (BN_rand_range(&u, params->maxu) &&
-      BN_add(&u, &u, BN_value_one()) &&
+  u = BN_new();
+  if (BN_rand_range(u, params->maxu) &&
+      BN_add(u, u, BN_value_one()) &&
       RAND_bytes(&pad, 1) &&
-      !generate(&u, pad, secret, message))
+      !generate(u, pad, secret, message))
     rv = 0;
 
-  BN_clear(&u);
+  BN_clear(u);
   return rv;
 }
 
@@ -358,7 +358,7 @@ int
 MKEM::generate(const BIGNUM *uraw, uint8_t pad,
                uint8_t *secret, uint8_t *message) const
 {
-  BIGNUM u, x, y;
+  BIGNUM *u, *x, *y;
   int use_curve0 = (BN_cmp(uraw, params->n0) < 0);
   const EC_GROUP *ca;
   const EC_POINT *ga;
@@ -367,37 +367,37 @@ MKEM::generate(const BIGNUM *uraw, uint8_t pad,
   size_t mlen = params->msgsize;
   int rv;
 
-  BN_init(&u);
-  BN_init(&x);
-  BN_init(&y);
+  u = BN_new();
+  x = BN_new();
+  y = BN_new();
 
   if (use_curve0) {
     ca = params->c0;
     ga = params->g0;
     pa = p0;
-    FAILZ(BN_copy(&u, uraw));
+    FAILZ(BN_copy(u, uraw));
   } else {
     ca = params->c1;
     ga = params->g1;
     pa = p1;
-    FAILZ(BN_sub(&u, uraw, params->n0));
-    FAILZ(BN_add(&u, &u, BN_value_one()));
+    FAILZ(BN_sub(u, uraw, params->n0));
+    FAILZ(BN_add(u, u, BN_value_one()));
   }
 
   FAILZ(q = EC_POINT_new(ca));
   FAILZ(r = EC_POINT_new(ca));
-  FAILZ(EC_POINT_mul(ca, q, 0, ga, &u, params->ctx));
-  FAILZ(EC_POINT_mul(ca, r, 0, pa, &u, params->ctx));
+  FAILZ(EC_POINT_mul(ca, q, 0, ga, u, params->ctx));
+  FAILZ(EC_POINT_mul(ca, r, 0, pa, u, params->ctx));
 
-  FAILZ(EC_POINT_get_affine_coordinates_GF2m(ca, q, &x, &y, params->ctx));
-  if (bn2bin_padhi(&x, message, mlen) != mlen)
+  FAILZ(EC_POINT_get_affine_coordinates_GF2m(ca, q, x, y, params->ctx));
+  if (bn2bin_padhi(x, message, mlen) != mlen)
     goto fail;
   if (message[0] & (params->pad_mask|params->curve_bit)) /* see below */
     goto fail;
   memcpy(secret, message, mlen);
 
-  FAILZ(EC_POINT_get_affine_coordinates_GF2m(ca, r, &x, &y, params->ctx));
-  if (bn2bin_padhi(&x, secret + mlen, mlen) != mlen)
+  FAILZ(EC_POINT_get_affine_coordinates_GF2m(ca, r, x, y, params->ctx));
+  if (bn2bin_padhi(x, secret + mlen, mlen) != mlen)
     goto fail;
 
   /* K high bits of the message will be zero.  Fill in the high K-1
@@ -417,9 +417,9 @@ MKEM::generate(const BIGNUM *uraw, uint8_t pad,
 
   rv = 0;
  done:
-  BN_clear(&u);
-  BN_clear(&x);
-  BN_clear(&y);
+  BN_clear(u);
+  BN_clear(x);
+  BN_clear(y);
   if (q) EC_POINT_clear_free(q);
   if (r) EC_POINT_clear_free(r);
   return rv;
@@ -440,15 +440,15 @@ MKEM::decode(uint8_t *secret, const uint8_t *message) const
   const BIGNUM *sa = use_curve0 ? s0 : s1;
   EC_POINT *q = 0, *r = 0;
   uint8_t *unpadded = 0;
-  BIGNUM x, y;
+  BIGNUM *x, *y;
   size_t mlen = params->msgsize;
   int rv;
 
   if (!s0 || !s1) /* secret key not available */
     return -1;
 
-  BN_init(&x);
-  BN_init(&y);
+  x = BN_new();
+  y = BN_new();
   FAILZ(q = EC_POINT_new(ca));
   FAILZ(r = EC_POINT_new(ca));
   FAILZ(unpadded = (uint8_t *)xmalloc(mlen + 1));
@@ -464,12 +464,12 @@ MKEM::decode(uint8_t *secret, const uint8_t *message) const
                            params->ctx));
   FAILZ(EC_POINT_mul(ca, r, 0, q, sa, params->ctx));
 
-  FAILZ(EC_POINT_get_affine_coordinates_GF2m(ca, q, &x, &y, params->ctx));
-  if (bn2bin_padhi(&x, secret, mlen) != mlen)
+  FAILZ(EC_POINT_get_affine_coordinates_GF2m(ca, q, x, y, params->ctx));
+  if (bn2bin_padhi(x, secret, mlen) != mlen)
     goto fail;
 
-  FAILZ(EC_POINT_get_affine_coordinates_GF2m(ca, r, &x, &y, params->ctx));
-  if (bn2bin_padhi(&x, secret + mlen, mlen) != mlen)
+  FAILZ(EC_POINT_get_affine_coordinates_GF2m(ca, r, x, y, params->ctx));
+  if (bn2bin_padhi(x, secret + mlen, mlen) != mlen)
     goto fail;
 
   rv = 0;
@@ -480,8 +480,8 @@ MKEM::decode(uint8_t *secret, const uint8_t *message) const
   }
   if (q) EC_POINT_clear_free(q);
   if (r) EC_POINT_clear_free(r);
-  BN_clear(&x);
-  BN_clear(&y);
+  BN_clear(x);
+  BN_clear(y);
   return rv;
 
  fail:

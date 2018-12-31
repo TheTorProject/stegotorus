@@ -1,7 +1,7 @@
 ####################################
 # process options
 ####################################
-log-min-severity:  info
+log-min-severity:  debug
 timestamp-logs: true
 
 ####################################

@@ -373,7 +373,6 @@ class PayloadServer
   int skipJSPattern (char *cp, int len);
   int isalnum_ (char c);
   int offset2Alnum_ (char *p, int range);
-  int offset2Hex (char *p, int range, int isLastCharHex);
   int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
                    unsigned int jtlen, unsigned int jdlen, int mode);
 

@@ -446,7 +446,8 @@ downstream_flush_cb(struct bufferevent *bev, void *arg)
 
   if (remain == 0 && ((conn->pending_write_eof && conn->connected)
                       || (!conn->circuit() && conn->ever_received))) {
-    conn->write_eof = true;
+    //conn->write_eof = true;
+    conn->send_eof();
     if (conn->read_eof && conn->write_eof)
       conn->close();
   }

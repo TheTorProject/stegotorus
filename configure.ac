@@ -11,6 +11,7 @@ AM_INIT_AUTOMAKE([foreign nostdinc silent-rules subdir-objects])
 AM_MAINTAINER_MODE([enable])
 AC_PROG_RANLIB
 
+AC_CONFIG_MACRO_DIR([config-aux])
 dnl This script deliberately does not check for a bunch of things
 dnl that 'autoscan' thinks we ought to check for.  Here is the list,
 dnl with a rationale for each:
@@ -126,18 +127,24 @@ PKG_CHECK_MODULES([libevent], [libevent >= 2.0])
 PKG_CHECK_MODULES([libz], [zlib >= 1.2.3.4])
 # libcurl for htt_apache steg module
 PKG_CHECK_MODULES([libcurl], [libcurl >= 7.22.0])
-# the portable c++ library for manipulating filesystem
-PKG_CHECK_MODULES([libboost], [libboost >= 1.46.0])
 # configuration reader
 PKG_CHECK_MODULES([libyaml], [yaml-cpp >= 0.5.0])
+# configuration libssl
+#PKG_CHECK_MODULES([libssl], [libssl >= 1.0.1])
 
-LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS $libcurl_LIBS $libboost_LIBS $libyaml_LIBS"
+# the portable c++ library for manipulating filesystem (only server needs boost)
+AX_BOOST_BASE([1.46.0],, [AC_MSG_ERROR([we needs Boost, but it was not found in your system])])
+AX_BOOST_SYSTEM
+AX_BOOST_FILESYSTEM
+# PKG_CHECK_MODULES([libboost], [libboost >= 1.46.0])
 
 # libraries needed for tester proxy
-PKG_CHECK_MODULES([libevent_openssl], [libevent_openssl >= 2.0])
-PKG_CHECK_MODULES([libssl], [libssl >= 1.0])
+#PKG_CHECK_MODULES([libevent_openssl], [libevent_openssl >= 2.0])
 
-lib_CPPFLAGS="$libevent_CFLAGS $libcrypto_CFLAGS $libz_CFLAGS $libevent_openssl_CPPFLAGS $libssl_CPPFLAGS"
+LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS $libcurl_LIBS $libyaml_LIBS "
+# $libssl_LIBS"
+
+lib_CPPFLAGS="$libevent_CFLAGS $libcrypto_CFLAGS $libz_CFLAGS"
 AC_SUBST(lib_CPPFLAGS)
 
 # ntohl and a bunch of related functions require a special library on Windows.

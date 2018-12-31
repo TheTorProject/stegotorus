@@ -11,10 +11,9 @@ timestamp-logs: true
 protocols:
   - name: "chop"
     mode: server
-    passphrase: "correct passphrase"
-    trace-packets: true
-    enable-retransmit: true
     up-address: 127.0.0.1:5001
+    trace-packets: true
+    disable-retransmit: true
     stegs:
       - name: "http"
         down-address: 127.0.0.1:5000

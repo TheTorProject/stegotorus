@@ -14,6 +14,13 @@ class SWFSteg : public FileStegMod
 {
 
 public:
+  /** 
+   * overriding the parent function to return false because SWFSteg changes 
+   * the cover length after injecting data in them
+   * 
+   * @return false indicating that swfSteg can change the length of the cover
+   */
+  virtual bool cover_lenght_preserving() { return false; };
 
 
  /**

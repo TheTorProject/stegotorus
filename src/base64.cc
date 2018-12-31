@@ -82,6 +82,7 @@ encoder::encode(const char* plaintext_in, size_t length_in, char* code_out)
       result = (fragment & 0x0fc) >> 2;
       *codechar++ = encode1(result, plus, slash, equals);
       result = (fragment & 0x003) << 4;
+      //fallthrough
     case step_B:
       if (plainchar == plaintextend) {
         this->result = result;
@@ -92,6 +93,7 @@ encoder::encode(const char* plaintext_in, size_t length_in, char* code_out)
       result |= (fragment & 0x0f0) >> 4;
       *codechar++ = encode1(result, plus, slash, equals);
       result = (fragment & 0x00f) << 2;
+      //fallthrough
     case step_C:
       if (plainchar == plaintextend) {
         this->result = result;
@@ -167,6 +169,7 @@ decoder::decode(const char* code_in, size_t length_in, char* plaintext_out)
         fragment = decode1(*codechar++, plus, slash);
       } while (fragment < 0);
       *plainchar = (fragment & 0x03f) << 2;
+      //fallthrough
     case step_B:
       do {
         if (codechar == code_in+length_in) {
@@ -178,6 +181,7 @@ decoder::decode(const char* code_in, size_t length_in, char* plaintext_out)
       } while (fragment < 0);
       *plainchar++ |= (fragment & 0x030) >> 4;
       *plainchar    = (fragment & 0x00f) << 4;
+      //fallthrough
     case step_C:
       do {
         if (codechar == code_in+length_in) {
@@ -189,6 +193,7 @@ decoder::decode(const char* code_in, size_t length_in, char* plaintext_out)
       } while (fragment < 0);
       *plainchar++ |= (fragment & 0x03c) >> 2;
       *plainchar    = (fragment & 0x003) << 6;
+      //fallthrough
     case step_D:
       do {
         if (codechar == code_in+length_in) {

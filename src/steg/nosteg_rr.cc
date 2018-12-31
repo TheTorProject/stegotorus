@@ -11,6 +11,15 @@
 #include "steg.h"
 #include <event2/buffer.h>
 
+/**
+ * @file   nosteg_rr.cc
+ * 
+ * @brief  It is nosteg steg module with the exception that:
+ *         - Every connection can transmit only once.
+ *         - The server only transmit after it receive some data on the connection
+ *           from the client side.
+ */
+
 namespace {
   struct nosteg_rr_steg_config_t : steg_config_t
   {
@@ -118,6 +127,10 @@ nosteg_rr_steg_t::receive(struct evbuffer *dest)
   if (config->cfg->mode == LSN_SIMPLE_SERVER && !did_transmit) {
     can_transmit = true;
     conn->transmit_soon(100);
+  } else {
+    //we have received data on this connection we probably won't receive more
+    //conn->cease_transmission();
+    //conn->expect_close();
   }
 
   return 0;

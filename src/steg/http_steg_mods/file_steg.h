@@ -87,7 +87,16 @@ protected:
   typedef uint32_t message_size_t;
   static const  size_t c_NO_BYTES_TO_STORE_MSG_SIZE = sizeof(message_size_t);
   static const size_t c_HIGH_BYTES_DISCARDER = pow(2, c_NO_BYTES_TO_STORE_MSG_SIZE * 8);
-  
+
+  /** 
+   * indicates if the steg mod is cover length preserving which is true 
+   * by default. needs to be overrriden for unit testing of the steg modules
+   *
+   * @return true if the steg module doesn't change the length of cover
+   *         after inserting the data, false otherwise
+   */
+  virtual bool cover_lenght_preserving() { return true; };
+
   /**
      embed the data in the cover buffer, the assumption is that
      the function doesn't expand the buffer size

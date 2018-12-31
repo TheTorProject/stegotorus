@@ -1,7 +1,10 @@
 #include <assert.h>
 #include "evbuf_util.h"
 
+#include <memory>
 #include "util.h"
+
+using namespace std;
 /*********************** Data Manipulation **********************/
 /**
    Convert the evbuffer into a consecutive memory block
@@ -12,7 +15,7 @@
    @return the length of the memory block or < 0 in case of error
 */
 ssize_t 
-evbuffer_to_memory_block(evbuffer* scattered_buffer, vector<uint8_t>& memory_block)
+evbuffer_to_memory_block(evbuffer* scattered_buffer, std::vector<uint8_t>& memory_block)
 {
   size_t sbuflen = evbuffer_get_length(scattered_buffer);
 
@@ -20,7 +23,6 @@ evbuffer_to_memory_block(evbuffer* scattered_buffer, vector<uint8_t>& memory_blo
   unique_ptr<evbuffer_iovec[]> iv((evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv));
 
   if (evbuffer_peek(scattered_buffer, sbuflen, NULL, iv.get(), nv) != nv) {
-    free(iv);
     return -1;
   }
 
@@ -34,7 +36,7 @@ evbuffer_to_memory_block(evbuffer* scattered_buffer, vector<uint8_t>& memory_blo
     const unsigned char *p = (const unsigned char *)iv[i].iov_base;
     const unsigned char *limit = p + iv[i].iov_len;
     while (p < limit && cnt < sbuflen) {
-      (*memory_block)[cnt++] = *p++;
+      memory_block[cnt++] = *p++;
     }
   }
 

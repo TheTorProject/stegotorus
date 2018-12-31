@@ -12,7 +12,7 @@
 struct listener_t
 {
   config_t *cfg;
-  struct evconnlistener *lsn;
+  struct evconnlistener *listener;
   char *address;
   size_t index;
 };

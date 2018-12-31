@@ -39,10 +39,10 @@ class TimelineTest(TestCase):
             "http", "127.0.0.1:5000").check_completion(cls.__name__)
 
     def doTest(self, label, st_args, reftl = None):
-        errors = ""
-        st = Stegotorus(st_args)
         import pdb
         #pdb.set_trace()
+        errors = ""
+        st = Stegotorus(st_args)
         try:
             testtl = st.check_completion(label + " tester")
             if ((reftl == None) and (testtl != self.reftl)) or ((reftl != None) and (testtl != reftl)):
@@ -58,26 +58,28 @@ class TimelineTest(TestCase):
         if errors != "":
             self.fail("\n" + errors)
 
-    def no_test_empty_config_null(self):
+    def test_empty_config_null(self):
         #pdb.set_trace()
         print self.reftl
         self.doTest("null-cl",
            ("--config-file="+ self.testdir + "/test_conf.d/empty.yaml", "null", "server", "127.0.0.1:5000",
             "127.0.0.1:5001", "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
-    def no_test_null_config(self):
+    def test_null_config(self):
         self.doTest("null", ("--config-file="+ self.testdir + "/test_conf.d/null-client-server.yaml"))
 
-    def no_test_chop_nosteg_config(self):
+    def test_chop_nosteg_config(self):
         self.doTest("chop-nosteg", ("--config-file="+ self.testdir + "/test_conf.d/chop-nosteg-client-server.yaml"))
 
-    def test_chop_http_config(self):
-        #http generate out put so we can't compare with same output
-        pdb.set_trace()
+    def no_ntest_chop_http_config(self):
+        #pdb.set_trace()
+        #print "<<<<<<START>>>>>>"
+        #print self.http_reftl
+        #print "<<<<<<END>>>>>>"
 
-        print "<<<<<<START>>>>>>"
-        print self.http_reftl
-        print "<<<<<<END>>>>>>"
+        #http generate out put so we can't compare with same output
+        #so we need to run with cmdline the config and get the output
+        #then run with file config and compare the result.
         
         self.doTest("chop-http", ("chop", "server", "127.0.0.1:5001",
             "http", "127.0.0.1:5000",
@@ -85,120 +87,9 @@ class TimelineTest(TestCase):
             "http", "127.0.0.1:5000")
                         , self.reftl)
 
-        #self.doTest("chop-http", "--config-file="+ self.testdir + "/test_conf.d/chop-http-client-server.yaml", self.http_reftl)
-
+        raise NotImplementedError
 
          
-#     def test_chop_nosteg2(self):
-#         self.doTest("chop",
-#            ("chop", "server", "127.0.0.1:5001",
-#             "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
-#             "chop", "client", "127.0.0.1:4999",
-#             "127.0.0.1:5010","nosteg","127.0.0.1:5011","nosteg",
-#             ))
-
-#     def test_chop_nosteg_rr(self):
-#         self.doTest("chop",
-#            ("chop", "server", "127.0.0.1:5001",
-#             "127.0.0.1:5010","nosteg_rr",
-#             "chop", "client", "127.0.0.1:4999",
-#             "127.0.0.1:5010","nosteg_rr",
-#             ))
-
-#     def test_chop_nosteg_rr2(self):
-#         self.doTest("chop",
-#            ("chop", "server", "127.0.0.1:5001",
-#             "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
-#             "chop", "client", "127.0.0.1:4999",
-#             "127.0.0.1:5010","nosteg_rr","127.0.0.1:5011","nosteg_rr",
-#             ))
-
-#     def doProxyTest(self, label, proxy_args, st_args):
-#         """
-#         It runs a proxy with proxy_args and then call doTest
-
-#         INPUT:
-#            - ``label``: The test title
-#            - ``proxy_args``: arguments to be passed to the test proxy
-#            - ``st_args``: arguments to be passed to Stegotorus
-#         """
-#         test_proxy = TesterProxy(proxy_args)
-
-#         self.doTest(label, st_args)
-        
-
-#     # buggy, disabled
-#     #def test_embed(self):
-#     #    self.doTest("chop",
-#     #       ("chop", "server", "127.0.0.1:5001",
-#     #        "127.0.0.1:5010","embed",
-#     #        "chop", "client", "127.0.0.1:4999",
-#     #        "127.0.0.1:5010","embed",
-#     #        ))
-
-#     def test_http(self):
-#         self.doTest("chop",
-#            ("chop", "server", "127.0.0.1:5001",
-#             "127.0.0.1:5010","http","127.0.0.1:5011","http",
-#             "chop", "client", "127.0.0.1:4999",
-#             "127.0.0.1:5010","http","127.0.0.1:5011","http",
-#             ))
-
-#     def test_http_apache(self):
-#         self.doTest("chop",
-#            ("chop", "server", "127.0.0.1:5001",
-#             "127.0.0.1:5010","http","127.0.0.1:5011","http_apache",
-#             "chop", "client", "127.0.0.1:4999",
-#             "127.0.0.1:5010","http","127.0.0.1:5011","http_apache",
-#             ))
-
-#     def test_http_apache(self):
-#         self.doTest("chop",
-#            ("chop", "server", "127.0.0.1:5001",
-#             "127.0.0.1:5010","http","127.0.0.1:5011","http_apache",
-#             "chop", "client", "127.0.0.1:4999",
-#             "127.0.0.1:5010","http","127.0.0.1:5011","http_apache",
-#             ))
-
-#     def test_http_simple_proxy(self):
-#         self.doProxyTest("chop", 
-#            ("127.0.0.1:8080", "127.0.0.1:5010"),
-#            ("chop", "server", "127.0.0.1:5001",
-#             "127.0.0.1:5010","http","127.0.0.1:5011","http",
-#             "chop", "client", "127.0.0.1:4999",
-#             "127.0.0.1:8080","http","127.0.0.1:5011","http",
-#             ))
-
-#     def test_http_apache_fail_auth_trans_proxy(self):
-#         pass
-#         # self.doTest("chop", 
-#         #    ("chop", "server",
-#         #     "--passphrase", "\"correct passphrase\"",
-#         #     "127.0.0.1:5001",
-#         #     "http_apache", "127.0.0.1:5011",
-#         #     "chop", "client",
-#         #     "--passphrase", "\"wrong passphrase\"",
-#         #     "127.0.0.1:4999",
-#         #     "http_apache", "127.0.0.1:5011"
-#         #    ))
-
-# # Synthesize TimelineTest+TestCase subclasses for every 'tl_*' file in
-# # the test directory.
-# def load_tests(loader, standard_tests, pattern):
-#     suite = TestSuite()
-#     testdir = os.path.dirname(__file__)
-
-#     testdir = (testdir == '') and '.' or testdir
-
-#     for f in sorted(os.listdir(testdir)):
-#         if f.startswith('tl_'):
-#             script = os.path.join(testdir, f)
-#             cls = type(f[3:],
-#                        (TimelineTest, TestCase),
-#                        { 'scriptFile': script })
-#             suite.addTests(loader.loadTestsFromTestCase(cls))
-#     return suite
-
 if __name__ == '__main__':
     from unittest import main
     main()

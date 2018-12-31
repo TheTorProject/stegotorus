@@ -1,20 +1,17 @@
 ####################################
-# processg options
+# process options
 ####################################
-log-min-severity:  debug
+log-min-severity:  info
 timestamp-logs: true
 
 ####################################
-# protocol specification for server 
+# protocol specification for client
 ####################################
-
 protocols:
   - name: "chop"
     mode: server
-    passphrase: "correct passphrase"
-    trace-packets: true
-    enable-retransmit: true
     up-address: 127.0.0.1:5001
+    disable-retransmit: true
     stegs:
-      - name: "http"
+      - name: nosteg
         down-address: 127.0.0.1:5000

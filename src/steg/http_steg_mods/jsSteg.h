@@ -43,8 +43,6 @@
   static unsigned int js_code_block_preliminary_capacity(char* buf, size_t len);
 
 public:
-  int isxString(char *str);
-
   int isGzipContent (char *msg);
 
   int findContentType (char *msg);
@@ -59,28 +57,44 @@ public:
   
   virtual ssize_t decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
 
- /**
-compute the capcaity of the cover by getting a pointer to the
-beginig of the body in the response
+  /**
+     compute the capcaity of the cover by getting a pointer to the
+     beginig of the body in the response
 
-@param cover_body pointer to the begiing of the body
-@param body_length the total length of message body
-*/
-    virtual ssize_t headless_capacity(char *cover_body, int body_length);
-    static unsigned int static_headless_capacity(char *buf, size_t len);
+     @param cover_body pointer to the begiing of the body
+     @param body_length the total length of message body
+  */
+  virtual ssize_t headless_capacity(char *cover_body, int body_length);
+  static unsigned int static_headless_capacity(char *buf, size_t len);
 
-    virtual ssize_t capacity(const uint8_t *cover_payload, size_t len);
-    static unsigned int static_capacity(char *cover_payload, int body_length);
+  virtual ssize_t capacity(const uint8_t *cover_payload, size_t len);
+  static unsigned int static_capacity(char *cover_payload, int body_length);
 
 
-/*int decode (char *jData, char *dataBuf, unsigned int jdlen,
+  /*int decode (char *jData, char *dataBuf, unsigned int jdlen,
             unsigned int dlen, unsigned int dataBufSize );*/
+   void printerr(int err_no);
 
-
-
-
-
-void printerr(int err_no);
+  /**
+   * offset2Hex returns the offset to the next usable hex char.
+   * usable here refer to char that our steg module can use to encode
+   * data. in particular, words that correspond to common JavaScript keywords
+   * are not used for data encoding (see skipJSPattern). Also, because
+   * JS var name must start with an underscore or a letter (but not a digit)
+   * we don't use the first char of a word for encoding data
+   *
+   * e.g., the JS statement "var a;" won't be used for encoding data
+   * because "var" is a common JS keyword and "a" is the first char of a word
+   *
+   * @param p ptr to the starting pos 
+   * @param range max number of char to look
+   * @param isLastCharHex is the char pointed to by (p-1) a hex char 
+   *
+   * @return  offset2Hex returns the offset to the next usable hex char
+   *           between p and (p+range), if it exists; otherwise, it 
+   *           returns -1
+   */
+  static int offset2Hex (char *p, int range, int isLastCharHex);
 
 };
 
@@ -91,8 +105,6 @@ int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
 
 int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
                     unsigned int dataBufSize, int *fin, int mode);
-
-int isxString(char *str);
 
 int isGzipContent (char *msg);
 

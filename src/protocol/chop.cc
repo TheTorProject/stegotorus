@@ -182,12 +182,13 @@ struct chop_circuit_t : circuit_t
     return std::max((unsigned int)(max_idle_min - penalty_mins) * 60 * 1000, 100u);
 
   }
+  
   uint32_t flush_interval() {
     // 10*60*1000 lies between 2^19 and 2^20.
     uint32_t shift = std::max(1u, std::min(19u, dead_cycles));
     uint32_t xv = std::max(1u, std::min(10u * 60 * 1000, 1u << shift));
     //TODO: this needs to be formalised but the original formula sometimes gives 1min
-    //that is totally unacceptable
+    //that is t otally unacceptable
     if (dead_cycles == 0)
       return 100;
 
@@ -933,13 +934,18 @@ chop_circuit_t::send()
       } while (avail > 0);
   }
 
-  if (avail0 == avail) { // no forward progress
-    dead_cycles++;
-    log_debug(this, "%u dead cycles", dead_cycles);
-
+  if ((avail0 == avail)) { //no forward progress
+    if (avail > 0) {//we have something new to send but we made no forward progress 
+      dead_cycles++;
+      log_debug(this, "%u dead cycles", dead_cycles);
+    }
     // If we're the client and we had no target connection, try
     // reopening new connections.  If we're the server, we have to
     // just twiddle our thumbs and hope the client does that.
+
+    // Vmon: the steg mod on the server should close the  connections which provide zero room,
+    // this way, if the client has made too many connections will get the opportunity
+    // to open a new one. If not then it is a deficiency/bug in the design of the steg mod.
     if (no_target_connection) {
       log_debug(this, "number of open connections on this circuit %u, golobally %u", (unsigned int)downstreams.size(), (unsigned int) conn_count());
       if (config->mode != LSN_SIMPLE_SERVER &&
@@ -1159,10 +1165,15 @@ chop_circuit_t::send_special(opcode_t f, struct evbuffer *payload)
     sent_fin = true;
     read_eof = true;
   }
-  if ((f == op_DAT && d > 0) || f == op_FIN)
+  if ((f == op_DAT && d > 0) || f == op_FIN) {
     // We are making forward progress if we are _either_ sending or
     // receiving data.
     dead_cycles = 0;
+    //vmon: We are making progress, there is no reason to keep the supposedly scheduled
+    //death hour for this circuit. It might connected and working for hours.
+    circuit_disarm_axe_timer(this);
+  }
+  
   return 0;
 }
 
@@ -1390,10 +1401,14 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
   if ((f == op_DAT && d > 0) || 
       (f == op_STEG0 && d > 0) ||
       f == op_FIN ||
-      f == op_STEG_FIN)
+      f == op_STEG_FIN) {
     // We are making forward progress if we are _either_ sending or
     // receiving data.
     dead_cycles = 0;
+    //vmon: We are making progress, there is no reason to keep the supposedly scheduled
+    //death hour for this circuit. It might connected and working for hours.
+    circuit_disarm_axe_timer(this);
+  }
   return 0;
 }
 
@@ -1671,8 +1686,13 @@ chop_circuit_t::process_queue()
         } else {
           // We are making forward progress if we are _either_ sending or
           // receiving data.
-          if (evbuffer_get_length(blk.data) > 0)
+          if (evbuffer_get_length(blk.data) > 0) {
             dead_cycles = 0;
+            //vmon: We are making progress, there is no reason to keep the supposedly scheduled
+            //death hour for this circuit. It might connected and working for hours.
+            circuit_disarm_axe_timer(this);
+          }
+
           log_debug(this, "writing into upstream buffer");
           if (this->write_eof)
             log_abort(this, "writing into upstream buffer after eof?");

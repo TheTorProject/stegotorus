@@ -15,6 +15,8 @@
                                   //I am not sure if it is the best place to 
                                   //to define this
 
+void conn_send_eof(conn_t *conn);
+void conn_do_flush(conn_t *conn);
 
 /** This struct defines the state of one downstream socket-level
     connection.  Each protocol must define a subclass of this
@@ -54,6 +56,12 @@ struct conn_t {
       connection is part of a circuit, disconnect it from the circuit;
       this may cause the circuit to close as well. */
   virtual void close();
+
+  /** Auxilary functions which sends a write eof to the tcp 
+      socket */
+  virtual void send_eof() {
+    conn_send_eof(this);
+  }
 
   /** Return the upstream circuit for this connection, if there is one.
       NOTE: this is *not* a pure virtual method because it can be called
@@ -136,9 +144,6 @@ conn_t *conn_create(config_t *cfg, size_t index, struct bufferevent *buf,
 
 /** Report the number of currently-open connections. */
 size_t conn_count(void);
-
-void conn_send_eof(conn_t *conn);
-void conn_do_flush(conn_t *conn);
 
 /**
    This struct holds all the state for an "upstream" connection to the

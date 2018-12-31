@@ -80,7 +80,7 @@
    reason, it is skipped but copied to the transcript, with a ! at the
    beginning of the line.  (These will all be at the very beginning.) */
 
-#define TL_TIMEOUT 30
+#define TL_TIMEOUT 300
 #define LOGGING false
 
 struct tstate

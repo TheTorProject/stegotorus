@@ -628,29 +628,6 @@ skipJSPattern(char *cp, int len) {
   return 0;
 }
 
-
-int
-isalnum_ (char c) {
-  if (isalnum(c) || c == '_') return 1;
-  else return 0;
-}
-
-int
-offset2Alnum_ (char *p, int range) {
-  char *cp = p;
-
-  while ((cp < (p+range)) && !isalnum_(*cp)) {
-    cp++;
-  }
-
-  if (cp < (p+range)) {
-    return (cp-p);
-  } else {
-    return -1;
-  }
-}
-
-
 /*
  * has_eligible_HTTP_content() identifies if the input HTTP message 
  * contains a specified type of content, used by a steg module to
