@@ -212,7 +212,7 @@ http_apache_steg_config_t::http_apache_steg_config_common_init(config_t *cfg)
     if (!cfg->steg_mod_user_configs["protocol"].empty()) {
       cover_server = cfg->steg_mod_user_configs["protocol"]["cover-server"] != "" ?
         cfg->steg_mod_user_configs["protocol"]["cover-server"] : cover_server;
-
+      
       cover_list = http_steg_user_configs["cover-list"] != "" ?
         http_steg_user_configs["cover-list"] : "";
     }

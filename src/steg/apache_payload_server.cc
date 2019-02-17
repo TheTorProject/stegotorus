@@ -1,11 +1,7 @@
 ﻿#include <fstream>
 #include <sstream>
 #include <vector>
-#include <boost/filesystem.hpp>
 #include <assert.h>
-
-using namespace std;
-using namespace boost::filesystem;
 
 #include "util.h"
 #include "curl_util.h"
@@ -16,6 +12,8 @@ using namespace boost::filesystem;
 #include "http_steg_mods/file_steg.h"
 #include "http_steg_mods/jpgSteg.h"
 #include "payload_scraper.h"
+
+using namespace std;
 
 /**
   The constructor reads the payload database prepared by scraper
@@ -50,7 +48,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
     //we are in trouble need to change the type to pointer
     //_payload_database.type_detail = new TypeDetail[c_no_of_steg_protocol];
 
-    if (!boost::filesystem::exists(_database_filename)) {
+    if (!file_exists_with_name(_database_filename)) {
         log_debug("payload database does not exists.");
         log_debug("scarping payloads to create the database...");
 

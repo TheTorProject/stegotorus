@@ -9,7 +9,7 @@
 struct steg_type
 {
    int type;
-  std::string  extension;
+   std::string  extension;
    unsigned int (*capacity_function)(char* payload, int len);
 
 };
@@ -68,13 +68,13 @@ protected:
     int scrape_url_list(const std::string list_filename);
 
     /**
-       Scrapes current directory, recursively calls itself for
+       Scrapes a directory, recursively calls itself for
        for subdirs, return number of payload if successful -1 
        if it fails.
 
        @param cur_dir the name of the dir to be scraped
      */
-    int scrape_dir(const boost::filesystem::path cur_dir);
+    int scrape_dir(const std::string cur_dir);
 
    /**
        open the apache configuration file, search for DocumentRoot

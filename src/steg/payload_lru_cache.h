@@ -3,6 +3,7 @@
  
 #include <cassert> 
 #include <list> 
+#include <algorithm>
 
 #include <util.h> 
 // Class providing fixed-size (by number of records) 

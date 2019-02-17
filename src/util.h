@@ -443,4 +443,22 @@ isalnum_ (char c);
 int
 offset2Alnum_(char *p, int range);
 
+/**
+ * checks if a file exists
+ *
+ * @param filename the full path of the file to be checked its existance
+ * 
+ * @return true if the file exists otherwise false
+ */
+bool file_exists_with_name(const std::string& filename);
+
+/**
+ * return the files if it succeed to open the file
+ *
+ * @param filename the full path of the file 
+ * 
+ * @return return the file size in byte or -1 if failed
+ */
+ssize_t file_size(const std::string& filename);
+
 #endif

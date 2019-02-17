@@ -7,10 +7,8 @@
 #include <string>
 #include <sstream> 
 #include <stdio.h>
-#include <boost/filesystem.hpp>
 
 using namespace std;
-using namespace boost::filesystem;
 
 #include "util.h"
 #include "crypt.h"
@@ -28,7 +26,11 @@ using namespace boost::filesystem;
 #include "base64.h"
 
 #include "protocol/chop_blk.h" //We need this to no what's the minimum 
-                               //acceptable capacity
+
+#if HAVE_BOOST == 1
+#include <boost/filesystem.hpp>
+#endif
+//acceptable capacity
 
 #define TEMP_MOUNT_DIR "/tmp/remote_www"
 /** We read the /etc/httpd/conf/httpd.conf (this need to be more dynamic)
@@ -94,9 +96,14 @@ PayloadScraper::scrape_url(const string& cur_url, steg_type* cur_steg, bool abso
    @param cur_dir the name of the dir to be scraped
 */
 int 
-PayloadScraper::scrape_dir(const path dir_path)
+PayloadScraper::scrape_dir(const string dir_string_path)
 {
   long int total_file_count = 0;
+
+#if HAVE_BOOST == 1
+  using namespace boost::filesystem;
+
+  path dir_path(dir_string_path);
 
   if ( !exists( dir_path ) ) 
       return -1;
@@ -119,6 +126,10 @@ PayloadScraper::scrape_dir(const path dir_path)
           }
     }
 
+#else
+   (void) dir_string_path;
+   log_abort("unable to scrape dir when made without boost");
+#endif
   return total_file_count; 
 
 }
@@ -136,7 +147,7 @@ PayloadScraper::scrape_url_list(const string list_filename)
   long int total_file_count = 0;
   std::map<std::string, bool> scraped_tracker; //keeping track of url repetition
 
-  if ( !exists( list_filename ) ) {
+  if ( !file_exists_with_name( list_filename ) ) {
     log_warn("cover list file does not exsits.");
     return -1;
   }
@@ -273,13 +284,14 @@ int PayloadScraper::scrape()
     
   }
 
-  if (!scrape_succeed) { //no url list is given, try to scrape file system
+#if HAVE_BOOST == 1
+  if (!scrape_succeed) { //no url list is given, try to scrape file system only if we have
+      //boost
     // looking for doc root dir...
     // If the http server is localhost, then try read localy...
     bool remote_mount = false; //true if the doc_root is mounted from remote host
     string ftp_unmount_command_string = "fusermount -u ";
     ftp_unmount_command_string += TEMP_MOUNT_DIR;
-    
     
     if (_cover_server == "127.0.0.1")
       if (apache_conf_parser())
@@ -321,8 +333,7 @@ int PayloadScraper::scrape()
     }
     
     /* now all we need to do is to call scrape */
-    path dir_path(_apache_doc_root);
-    if (scrape_dir(dir_path) < 0)
+    if (scrape_dir(_apache_doc_root) < 0)
       {
         log_warn("error in retrieving payload dir: %s",strerror(errno));
         _payload_db.close();
@@ -337,6 +348,9 @@ int PayloadScraper::scrape()
         log_warn("error while trying to unmount ftp folder");
     }
   }
+#else
+  (void) scrape_succeed;
+#endif
 
   _payload_db.close();
   return 0;
@@ -391,20 +405,6 @@ int PayloadScraper::apache_conf_parser()
 
 pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string payload_url, steg_type* cur_steg, bool absolute_url)
 {
-  /*cur_file.open(payload_filename.c_str()); //, ios::binary | ios::in);
-            
-  if (!cur_file.is_open())
-    {
-      fprintf(stderr, "Error opening payload for capacity analyze.");
-      continue;
-    }
-            
-    cur_file.seekg (0, ios::end);
-    unsigned long cur_filelength = cur_file.tellg();*/
-
-  //Maybe we need it in future, when we are able
-  //to compute the capacity without using apache
-  //cur_file.seekg (0, ios::beg);*/
   unsigned long test_cur_filelength;
   stringstream  payload_buf;
 

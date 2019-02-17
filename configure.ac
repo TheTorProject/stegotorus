@@ -133,10 +133,22 @@ PKG_CHECK_MODULES([libyaml], [yaml-cpp >= 0.5.0])
 #PKG_CHECK_MODULES([libssl], [libssl >= 1.0.1])
 
 # the portable c++ library for manipulating filesystem (only server needs boost)
-AX_BOOST_BASE([1.46.0],, [AC_MSG_ERROR([we needs Boost, but it was not found in your system])])
-AX_BOOST_SYSTEM
-AX_BOOST_FILESYSTEM
-# PKG_CHECK_MODULES([libboost], [libboost >= 1.46.0])
+AC_ARG_WITH(boost,
+
+[  --without-boost         do not use libboost (disables integrating with local http server)])
+if test "x${with_boost}" != "xno"; then
+       AX_BOOST_BASE([1.46.0],
+       [
+       AC_DEFINE(HAVE_BOOST, 1)
+       ],
+       [AC_MSG_ERROR([we needs Boost, but it was not found in your system])
+        AC_DEFINE(HAVE_BOOST, 0)])
+       AX_BOOST_SYSTEM
+       AX_BOOST_FILESYSTEM
+       # PKG_CHECK_MODULES([libboost], [libboost >= 1.46.0])
+else
+       AC_DEFINE(HAVE_BOOST, 0)
+fi
 
 # libraries needed for tester proxy
 #PKG_CHECK_MODULES([libevent_openssl], [libevent_openssl >= 2.0])

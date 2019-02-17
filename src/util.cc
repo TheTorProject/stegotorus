@@ -5,6 +5,7 @@
  */
 #include <string>
 #include <sstream>
+#include <fstream>
 
 #include "util.h"
 #include "connections.h"
@@ -783,4 +784,33 @@ offset2Alnum_ (char *p, int range) {
   } else {
     return -1;
   }
+}
+
+/**
+ * checks if a file exists
+ *
+ * @param filename the full path of the file to be checked its existance
+ * 
+ * @return true if the file exists otherwise false
+ */
+bool file_exists_with_name(const std::string& filename) {
+    ifstream f(filename.c_str());
+    return f.good();
+}
+
+/**
+ * return the files if it succeed to open the file
+ *
+ * @param filename the full path of the file 
+ * 
+ * @return return the file size in byte or -1 if failed
+ */
+ssize_t file_size(const std::string& filename) {
+  ifstream cur_file(filename.c_str(), ios::binary | ios::ate);
+  if (!cur_file.good()) {
+      fprintf(stderr, "Error opening payload for capacity analyze.");
+      return -1;
+  }
+            
+  return cur_file.tellg();
 }

@@ -3,6 +3,7 @@
 
 #include <openssl/sha.h> 
 #include <unordered_map>
+#include <string>
 
 #include "payload_lru_cache.h"
 #include "payload_server.h"
@@ -17,9 +18,9 @@ class URIEntry
     bool accept_param; /*This is to discriminate between types like html
                                 vs cgi, js, etc, but for now I'm not using it
                               */
-    string URL;
+    std::string URL;
 
-    URIEntry(string init_URL)
+    URIEntry(std::string init_URL)
       : accept_param(true),
        URL(init_URL)
       {
@@ -34,8 +35,8 @@ class ApachePayloadServer: public PayloadServer
   friend class PayloadScraper; /* We need the url retrieving capabilities in
                             PayloadScraper*/
  protected:
-  string _database_filename;
-  string _apache_host_name;
+  std::string _database_filename;
+  std::string _apache_host_name;
   
   const unsigned long c_max_buffer_size;
   const static unsigned int c_MAX_FETCH_TRIES = 3; //no of attemps in fetching a cover in case of curl error
@@ -69,7 +70,7 @@ class ApachePayloadServer: public PayloadServer
 
      @param url_hash the sha-1 hash of the url
   */
-  string fetch_hashed_url(const string& url_hash);
+  std::string fetch_hashed_url(const std::string& url_hash);
 
  public:
   enum PayloadChoiceStrategy {
@@ -80,7 +81,7 @@ class ApachePayloadServer: public PayloadServer
    public because http_apache_steg_t uses them frequently.
    FIX ME: They need to be protected though*/
   URIDict uri_dict;
-  map<string, unsigned long> uri_decode_book;
+  map<std::string, unsigned long> uri_decode_book;
 
   const uint8_t* uri_dict_mac()
   {
@@ -122,7 +123,7 @@ class ApachePayloadServer: public PayloadServer
      The constructor reads the payload database prepared by scraper
      and initialize the payload table.
     */
-  ApachePayloadServer(MachineSide init_side, const string& database_filename, const string& cover_server, const string& cover_list); 
+  ApachePayloadServer(MachineSide init_side, const std::string& database_filename, const std::string& cover_server, const std::string& cover_list); 
 
   /** virtual functions */
   virtual unsigned int find_client_payload(char* buf, int len, int type);
