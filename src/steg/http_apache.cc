@@ -385,7 +385,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
 
       if (uri_to_send.size() > c_max_uri_length)
         {
-          log_debug("%lu too big to be send in uri", uri_to_send.size());
+          log_debug("%zu too big to be send in uri", uri_to_send.size());
             return -1;       
         }
     }
@@ -393,7 +393,7 @@ http_apache_steg_t::http_client_uri_transmit (struct evbuffer *source, conn_t *c
     {
       //the buffer is too short we need to indicate the number
       //bytes. But this probably never happens
-      sprintf(data2,"%lu", sbuflen);
+      sprintf(data2,"%zu", sbuflen);
       uri_to_send += "/" + chosen_url + "?p=" + data2;
 
     }
@@ -768,7 +768,7 @@ http_apache_steg_config_t::process_protocol_data()
 {
   char status_to_send;
   size_t avail = evbuffer_get_length(protocol_data_in);
-  log_debug("There are %lu bytes of protocol data is available to process", avail);
+  log_debug("There are %zu bytes of protocol data is available to process", avail);
   evbuffer_ptr fin_location;
   log_assert(avail); //do not call process protocol if there's no data
 
@@ -818,7 +818,7 @@ http_apache_steg_config_t::process_protocol_data()
 
       if (fin_location.pos != -1)
         { size_t dict_buf_size = evbuffer_get_length(protocol_data_in);
-          log_debug("uri dict of size %lu completely received", dict_buf_size+sizeof(_cur_operation)); 
+          log_debug("uri dict of size %zu completely received", dict_buf_size+sizeof(_cur_operation)); 
           char* dict_buf = new char[dict_buf_size];
           evbuffer_remove(protocol_data_in, dict_buf, dict_buf_size);
           
@@ -869,7 +869,7 @@ http_apache_steg_config_t::send_dict_to_peer()
   _cur_operation = op_STEG_NO_OP;
   size_t dict_buf_size =  evbuffer_get_length(protocol_data_out);
 
-  log_debug("updating peer's uri dict. need to transmit %lu bytes", dict_buf_size);
+  log_debug("updating peer's uri dict. need to transmit %zu bytes", dict_buf_size);
 
   return dict_buf_size;
 
@@ -990,7 +990,7 @@ size_t http_apache_steg_t::curl_downstream_read_cb(void *buffer, size_t size, si
   down->ever_received = 1;
 
   size_t no_bytes_2_read = size * nmemb;
-  log_debug(down, "%lu bytes available (received by curl)", no_bytes_2_read);
+  log_debug(down, "%zu bytes available (received by curl)", no_bytes_2_read);
 
   //move everything to the steg evbuffer
   if (evbuffer_add(steg_mod->curl_inbound, buffer, size * no_bytes_2_read)) {

@@ -29,6 +29,7 @@ using namespace std;
 // controlling content gzipping for jsSteg
 #define JS_GZIP_RESP             1
 
+const size_t FileStegMod::c_HIGH_BYTES_DISCARDER = static_cast<size_t>(pow(2, c_NO_BYTES_TO_STORE_MSG_SIZE * 8));
 /**
   constructor, sets the playoad server
 
@@ -39,7 +40,7 @@ FileStegMod::FileStegMod(PayloadServer* payload_provider, double noise2signal_fr
   :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type), outbuf(new uint8_t[c_HTTP_PAYLOAD_BUF_SIZE])
 {
   assert(outbuf);
-  log_debug("max storage size: %lu >= maxs preceived storage: %lu >= max no of bits needed for storge %f", sizeof(message_size_t),
+  log_debug("max storage size: %zu >= maxs preceived storage: %zu >= max no of bits needed for storge %f", sizeof(message_size_t),
             c_NO_BYTES_TO_STORE_MSG_SIZE, log2(c_MAX_MSG_BUF_SIZE)/8.0);
             
   log_assert(sizeof(message_size_t) >= c_NO_BYTES_TO_STORE_MSG_SIZE);
@@ -208,9 +209,9 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
 
     body_len = cnt-body_offset;
     hLen = body_offset;
-    log_debug("coping body of %lu size", (body_len));
+    log_debug("coping body of %zu size", (body_len));
     if ((body_len) > c_HTTP_PAYLOAD_BUF_SIZE) {
-      log_warn("HTTP response doesn't fit in the buffer %lu > %lu", (body_len)*sizeof(char), c_HTTP_PAYLOAD_BUF_SIZE);
+      log_warn("HTTP response doesn't fit in the buffer %zu > %zu", (body_len)*sizeof(char), c_HTTP_PAYLOAD_BUF_SIZE);
       _payload_server->disqualify_payload(payload_id_hash);
       return -1;
     }
@@ -256,7 +257,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     }
   }
 
-  log_debug("SERVER FileSteg sends resp with hdr len %lu body len %lu",
+  log_debug("SERVER FileSteg sends resp with hdr len %zu body len %zd",
             body_offset, outbuflen);
  
   //Update: we can't assert this anymore, SWFSteg changes the size
@@ -404,7 +405,7 @@ size_t FileStegMod::alter_length_in_response_header(uint8_t* original_header, si
 
   memcpy(new_header, original_header, ((uint8_t*)length_field_start - original_header));
   new_header+= ((uint8_t*)length_field_start - original_header);
-  sprintf(reinterpret_cast<char *>(new_header), " %ld", new_content_length);
+  sprintf(reinterpret_cast<char *>(new_header), " %zd", new_content_length);
   size_t length_of_content_length = strlen(reinterpret_cast<const char *>(new_header));
   new_header += length_of_content_length;
   memcpy(new_header, length_field_end,  (original_header_length - ((uint8_t*)length_field_end - original_header)));

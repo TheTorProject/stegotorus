@@ -95,7 +95,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
         
     _payload_database.sorted_payloads.sort();
     
-    log_debug("loaded %ld payloads from %s\n", _payload_database.payloads.size(), _database_filename.c_str());
+    log_debug("loaded %zu payloads from %s\n", _payload_database.payloads.size(), _database_filename.c_str());
     
     //This is how server side initiates the uri dict
     init_uri_dict();
@@ -303,7 +303,7 @@ ApachePayloadServer::init_uri_dict(istream& dict_stream)
 
   }
 
-  log_debug("Stored uri dictionary loaded with %lu entries", uri_dict.size());
+  log_debug("Stored uri dictionary loaded with %zu entries", uri_dict.size());
 
   compute_uri_dict_mac();
   if (!dict_stream.bad()) 
@@ -323,7 +323,7 @@ ApachePayloadServer::export_dict(iostream& dict_stream)
       dict_stream << itr_uri->URL.c_str() << endl;
     }
 
-  log_debug("uri dictionary of size %ld has been exported.", uri_dict.size());
+  log_debug("uri dictionary of size %zu has been exported.", uri_dict.size());
   
 }
 

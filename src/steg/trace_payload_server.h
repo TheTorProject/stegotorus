@@ -12,13 +12,13 @@
 struct pentry_header {
   PacketType ptype;
   int length; 
-  ushort port; /* network format */
+  uint16_t port; /* network format */
 };
 
 struct service_state {
-  SID id;
+  StateID id;
   PacketType data_type;
-  SID next_state;
+  StateID next_state;
   //  double* probabilities;
   StateFlag flg;
   int dir;

@@ -79,6 +79,19 @@ AC_CACHE_CHECK([for Windows], ac_cv_system_windows,
   [ac_cv_system_windows=no])])
 AM_CONDITIONAL(WINDOWS, test $ac_cv_system_windows = yes)
 
+# Similary conditional for android so we link to correct
+# libraries
+AC_CACHE_CHECK([for Android], ac_cv_system_android,
+  [AC_PREPROC_IFELSE([AC_LANG_SOURCE([[
+    /* __ANDROID__ is defined for android */
+    #ifndef __ANDROID__
+    #error "this is not android"
+    #endif
+  ]])],
+  [ac_cv_system_android=yes],
+  [ac_cv_system_android=no])])
+AM_CONDITIONAL(ANDROID, test $ac_cv_system_android = yes)
+
 AX_SYS_EXTENSIONS
 AC_SYS_LARGEFILE
 
@@ -116,7 +129,6 @@ fi
 AM_CONDITIONAL([INTEGRATION_TESTS], [test "$PYOS" = "posix"])
 
 ### Libraries ###
-
 # Presently no need for libssl, only libcrypto.
 # We require version 1.0.1 for GCM support.
 PKG_CHECK_MODULES([libcrypto], [libcrypto >= 1.0.1])
@@ -130,11 +142,10 @@ PKG_CHECK_MODULES([libcurl], [libcurl >= 7.22.0])
 # configuration reader
 PKG_CHECK_MODULES([libyaml], [yaml-cpp >= 0.5.0])
 # configuration libssl
-#PKG_CHECK_MODULES([libssl], [libssl >= 1.0.1])
+# PKG_CHECK_MODULES([libssl], [libssl >= 1.1.1])
 
 # the portable c++ library for manipulating filesystem (only server needs boost)
 AC_ARG_WITH(boost,
-
 [  --without-boost         do not use libboost (disables integrating with local http server)])
 if test "x${with_boost}" != "xno"; then
        AX_BOOST_BASE([1.46.0],
@@ -162,13 +173,14 @@ AC_SUBST(lib_CPPFLAGS)
 # ntohl and a bunch of related functions require a special library on Windows.
 # It is possible that libevent or libcrypto has hooked us up already.
 # This can't be done with AC_SEARCH_LIBS -- see m4/winsock.m4 for gory details.
+# disable this for android compiling for now.
 AX_LIB_WINSOCK2
 LIBS="$LIBS $ws32_LIBS"
 
 # We might need to explicitly link -lm for floor().
-AC_SEARCH_LIBS([floor], [m], [], [
-  AC_MSG_ERROR([unable to find 'floor'])
-])
+dnl AC_SEARCH_LIBS([floor], [m], [], [
+dnl   AC_MSG_ERROR([unable to find 'floor'])
+dnl ])
 
 lib_LIBS="$LIBS"
 lib_CPPFLAGS="$libevent_CFLAGS $libcrypto_CFLAGS $libz_CFLAGS"

@@ -8,8 +8,12 @@
 #include <event2/dns.h>
 
 #include <errno.h>
+
+#ifndef _WIN32
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#endif
+
 #ifdef AF_LOCAL
 #include <sys/un.h>
 #endif
@@ -88,7 +92,7 @@ printable_address(struct sockaddr *addr, socklen_t addrlen)
   case AF_INET: {
     char abuf[INET6_ADDRSTRLEN];
     struct sockaddr_in *sin = (struct sockaddr_in*)addr;
-    log_assert(addrlen >= sizeof(struct sockaddr_in));
+    log_assert((unsigned int)addrlen >= sizeof(struct sockaddr_in));
     if (!inet_ntop(AF_INET, &sin->sin_addr, abuf, INET6_ADDRSTRLEN))
       break;
     xsnprintf(apbuf, sizeof apbuf, "%s:%d", abuf, ntohs(sin->sin_port));
@@ -98,12 +102,14 @@ printable_address(struct sockaddr *addr, socklen_t addrlen)
   case AF_INET6: {
     char abuf[INET6_ADDRSTRLEN];
     struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)addr;
-    log_assert(addrlen >= sizeof(struct sockaddr_in6));
+    log_assert((unsigned int)addrlen >= sizeof(struct sockaddr_in6));
     if (!inet_ntop(AF_INET, &sin6->sin6_addr, abuf, INET6_ADDRSTRLEN))
       break;
     xsnprintf(apbuf, sizeof apbuf, "[%s]:%d", abuf, ntohs(sin6->sin6_port));
     return xstrdup(apbuf);
   }
+#else
+      (void) addrlen;
 #endif
 
 #ifdef AF_LOCAL

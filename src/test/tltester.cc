@@ -14,7 +14,7 @@
 #ifdef _WIN32
 # undef near
 # undef far
-# define ENOTCONN WSAENOTCONN
+//# define ENOTCONN WSAENOTCONN
 #endif
 
 /* This program is used by the integration test harness.  It opens one

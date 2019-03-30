@@ -210,7 +210,7 @@ rng_range_geom(unsigned int hi, unsigned int xv)
          xe = 1/log(1 + 1/xv)
      can be converted to the desired geometric distribution by
      floor(). See http://math.stackexchange.com/questions/97733 */
-  double xe = 1./log(1. + 1./xv);
+  double xe = 1./log(1. + 1./xv);  //xe > 0
 
   /* To truncate in constant time, adjust U to be in the range
      ( e^{-hi/xe}, 1 ]. Doing this with arithmetic introduces
@@ -221,9 +221,11 @@ rng_range_geom(unsigned int hi, unsigned int xv)
 
   /* Inverse transform sampling gives us a value for the exponential
      distribution with expected value 'xe'. */
-  double T = -log(U) * xe;
+  log_assert(0<U && U <=1.0); //so -@@ <log(U) <= 0 and so T >=0
+  double T = -log(U) * xe; 
 
   /* Round down for the geometric distribution, and clamp to [0, hi)
      for great defensiveness. */
-  return min(hi-1, max(0U, (unsigned int)floor(T)));
+  log_assert(T >= 0); //and so floor(T)>= 0
+  return min(hi-1, (unsigned int)floor(T));
 }

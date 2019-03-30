@@ -43,6 +43,11 @@
 
 #define SHUT_RD SD_RECEIVE
 #define SHUT_WR SD_SEND
+
+#endif
+
+#ifdef __ANDROID__
+#include <sys/endian.h>
 #endif
 
 /* event2/util.h finds ssize_t but refuses to actually call it ssize_t.

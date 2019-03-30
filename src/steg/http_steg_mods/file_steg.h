@@ -86,7 +86,7 @@ protected:
   //or it is just simpler to limit ourselves to 4G per message
   typedef uint32_t message_size_t;
   static const  size_t c_NO_BYTES_TO_STORE_MSG_SIZE = sizeof(message_size_t);
-  static const size_t c_HIGH_BYTES_DISCARDER = pow(2, c_NO_BYTES_TO_STORE_MSG_SIZE * 8);
+  static const size_t c_HIGH_BYTES_DISCARDER; //pow(2, c_NO_BYTES_TO_STORE_MSG_SIZE * 8);
 
   /** 
    * indicates if the steg mod is cover length preserving which is true 

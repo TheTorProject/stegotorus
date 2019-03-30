@@ -48,7 +48,7 @@ public:
   decoder(char pl = '+', char sl = '/', char eq = '=')
     : step(step_A), plainchar(0),
       plus(pl), slash(sl), equals(eq)
-  {}
+  {(void)equals; (void)wrap;}
 
   ptrdiff_t decode(const char* code_in, size_t length_in, char* plaintext_out);
   void reset() { step = step_A; plainchar = 0; }

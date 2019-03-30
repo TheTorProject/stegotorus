@@ -440,7 +440,7 @@ ssize_t JSSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* 
 
   data[decCnt] = 0;
 
-  log_debug("After decodeHTTPBody; decCnt: %ld\n", decCnt);
+  log_debug("After decodeHTTPBody; decCnt: %zd\n", decCnt);
 
   // decCnt is an odd number or data is not a hex string
   if (decCnt % 2) {

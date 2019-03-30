@@ -6,12 +6,12 @@
 #include <vector>
 #include <map>
 
-#include <tr1/unordered_map>
+#include <unordered_map>
 #include <sstream>
 #include <string>
 #include <stdint.h>
 
-#include <tr1/unordered_set>
+#include <unordered_set>
 #include <algorithm>
 
 #include <event2/event.h>
@@ -38,8 +38,8 @@
 
 #define MAX_CONN_PER_CIRCUIT 8
 
-using std::tr1::unordered_map;
-using std::tr1::unordered_set;
+using std::unordered_map;
+using std::unordered_set;
 using std::vector;
 using std::make_pair;
 using std::min;
@@ -721,13 +721,13 @@ chop_config_t::circuit_create(size_t)
 /** This has to be here for the unfortunate macro game 
     inline is added so gcc ignore the Wunused-function warning */
 inline chop_circuit_t::chop_circuit_t()
-  :tx_queue(true)
+  :chop_circuit_t::chop_circuit_t(true)
 {
   //MEANT_TO_BE_UNUSED
   
 }
 
-chop_circuit_t::chop_circuit_t(bool retransmit = true)
+chop_circuit_t::chop_circuit_t(bool retransmit)
   : tx_queue(retransmit), avg_desirable_size(0), avg_available_size(0),
     number_of_room_requests(0)
 {
@@ -934,7 +934,7 @@ chop_circuit_t::send()
       } while (avail > 0);
   }
 
-  if ((avail0 == avail)) { //no forward progress
+  if (avail0 == avail) { //no forward progress
     if (avail > 0) {//we have something new to send but we made no forward progress 
       dead_cycles++;
       log_debug(this, "%u dead cycles", dead_cycles);

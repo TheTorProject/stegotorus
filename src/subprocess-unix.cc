@@ -12,6 +12,7 @@
 #include "util.h"
 #include "subprocess.h"
 
+#include <sys/wait.h>
 #include <map>
 #include <sstream>
 

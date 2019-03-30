@@ -11,11 +11,14 @@
 #include <iomanip>
 #include <limits>
 
+#include <unordered_set>
+
+
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
    being implemented, and may change incompatibly.  */
 
-using std::tr1::unordered_set;
+using std::unordered_set;
 using std::numeric_limits;
 
 const uint8_t c_genric_opname_buffer_size = 4;
@@ -239,7 +242,7 @@ ack_payload::serialize() const
   return wire;
 }
 
-transmit_queue::transmit_queue(bool intend_to_retransmit = true)
+transmit_queue::transmit_queue(bool intend_to_retransmit)
   : next_to_ack(0), next_to_send(0), overwrite_allowed(not intend_to_retransmit)
 {
 }

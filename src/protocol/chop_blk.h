@@ -5,7 +5,6 @@
 #ifndef CHOP_BLK_H
 #define CHOP_BLK_H
 
-#include <tr1/unordered_set>
 #include <ostream>
 
 struct steg_config_t;
@@ -297,7 +296,7 @@ public:
    transmit_queue& operator=(const transmit_queue&) DELETE_METHOD;
 
  public:
-   transmit_queue(bool intend_to_retransmit);
+   transmit_queue(bool intend_to_retransmit = true);
    ~transmit_queue();
 
    /**

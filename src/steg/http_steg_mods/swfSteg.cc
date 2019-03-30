@@ -12,13 +12,13 @@
 #include <event2/buffer.h>
 #include <assert.h>
 
-static const char http_response_1[] =
-  "HTTP/1.1 200 OK\r\n"
-  "Expires: Thu, 01 Jan 1970 00:00:00 GMT\r\n"
-  "Cache-Control: no-store\r\n"
-  "Connection: close\r\n"
-  "Content-Type: application/x-shockwave-flash\r\n"
-  "Content-Length: ";
+// static const char http_response_1[] =
+//   "HTTP/1.1 200 OK\r\n"
+//   "Expires: Thu, 01 Jan 1970 00:00:00 GMT\r\n"
+//   "Cache-Control: no-store\r\n"
+//   "Connection: close\r\n"
+//   "Content-Type: application/x-shockwave-flash\r\n"
+//   "Content-Length: ";
 
 //unsigned int
 //swf_wrap(PayloadServer* pl, char* inbuf, int in_len, char* outbuf, int out_sz) {

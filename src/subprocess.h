@@ -9,7 +9,6 @@
 #include <vector>
 
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <signal.h>
 
 // This API is inspired by the Python subprocess module.  While it

@@ -27,12 +27,13 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+//#if HAVE_BOOST == 1
+
 #include <iostream>
 #include <fstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
-#include <boost/filesystem.hpp>
 
 #include <event2/buffer.h>
 
@@ -54,7 +55,6 @@
 #include <gtest/gtest.h>
 
 using namespace std;
-using namespace boost::filesystem;
 
 class PayloadScraperTest : public testing::Test {
  protected:

@@ -194,10 +194,19 @@ call_registration_helper(string const& helper)
   vector<string> args;
   args.push_back(helper);
   subprocess h = subprocess::call(args, env);
+
+  string signal_description;
+
+  #ifndef _WIN32
+  signal_description = strsignal(h.returncode);
+  #else
+  signal_description = "To be supported in Windows";
+  #endif
+  
   if (h.state == CLD_DUMPED) {
-    log_warn("%s: %s (core dumped)", helper.c_str(), strsignal(h.returncode));
+    log_warn("%s: %s (core dumped)", helper.c_str(), signal_description.c_str());
   } else if (h.state == CLD_KILLED) {
-    log_warn("%s: %s", helper.c_str(), strsignal(h.returncode));
+      log_warn("%s: %s", helper.c_str(), signal_description.c_str());
   } else if (h.state == CLD_EXITED && h.returncode != 0) {
     log_warn("%s: exited unsuccessfully, status %d",
              helper.c_str(), h.returncode);
@@ -360,10 +369,12 @@ main(int argc, const char *const *argv)
   if (daemon_mode)
     daemonize();
 
+#ifndef _WIN32
   pidfile pf(pidfile_name);
   if (!pf)
     log_warn("failed to create pid-file '%s': %s", pf.pathname().c_str(),
              pf.errmsg());
+#endif
 
   /* Ugly method to fix a Windows problem:
      http://archives.seul.org/libevent/users/Oct-2010/msg00049.html */

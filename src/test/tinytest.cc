@@ -109,7 +109,7 @@ _testcase_run_forked(const struct testgroup_t *group,
 			   0, NULL, NULL, &si, &info);
 	if (!ok) {
 		printf("CreateProcess failed!\n");
-		return 0;
+		return FAIL;
 	}
 	WaitForSingleObject(info.hProcess, INFINITE);
 	GetExitCodeProcess(info.hProcess, &exitcode);

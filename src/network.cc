@@ -18,6 +18,9 @@
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
 
+#include <inttypes.h>
+#include <stdio.h>
+
 using std::vector;
 
 /** All our listeners. */
@@ -697,7 +700,7 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
   //multiply that number
   if (conn_count() >= MAX_GLOBAL_CONN_COUNT)
     {
-      log_warn(ckt, "global maximum number of connection is reached. global number of conn: %lu. unable to create more connection", conn_count());
+      log_warn(ckt, "global maximum number of connection is reached. global number of conn: %zu. unable to create more connection", conn_count());
       return false;
     }
 
@@ -760,7 +763,7 @@ circuit_reopen_downstreams(circuit_t *ckt)
 {
   if (conn_count() >= MAX_GLOBAL_CONN_COUNT) {
     //maybe we just need to wait a bit
-      log_warn(ckt, "global maximum number of connection is reached. global number of conn: %lu. unable to create more connection", conn_count());
+      log_warn(ckt, "global maximum number of connection is reached. global number of conn: %zu. unable to create more connection", conn_count());
       
   }
   else

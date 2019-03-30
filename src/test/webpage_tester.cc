@@ -14,15 +14,13 @@
 #include <sstream>
 #include <string>
 
-using namespace std;
-
 #include "curl_util.h"
 #include "http_parser/http_parser.h"
 
 #ifdef _WIN32
 # undef near
 # undef far
-# define ENOTCONN WSAENOTCONN
+//# define ENOTCONN WSAENOTCONN
 #endif
 
 /** 
@@ -111,7 +109,7 @@ public:
   bool fetch_page();
   bool fetch_direct_socket();
 
-  bool fetch_through_st(string page_uri);
+  bool fetch_through_st(std::string page_uri);
 
   int compare_far_near();
   
@@ -120,8 +118,8 @@ public:
 class ParsedHeader {
 
 protected:
-  string _url;
-  string _host;
+  std::string _url;
+  std::string _host;
   bool _host_found;
   
 public:
@@ -189,7 +187,7 @@ public:
   }
 
   bool
-  extract_url(evbuffer* get_request, string& extracted_url, string& host) 
+  extract_url(evbuffer* get_request, std::string& extracted_url, std::string& host) 
   {
     //first assume that message is incomplete unless we found
     //out otherwise
@@ -256,7 +254,7 @@ size_t
 curl_read_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
   if (LOGGING) 
-    fprintf(stderr, "received %lu bytes\n", size * nmemb);
+    fprintf(stderr, "received %zu bytes\n", size * nmemb);
 
   return evbuffer_add((evbuffer*)userdata, ptr, size * nmemb) ?  0 : size * nmemb;
 }
@@ -340,7 +338,7 @@ void curl_socket_event_cb(int fd, short kind, void *userp)
 
 }
 
-bool fetch_page(CURL* curl_easy_handle, evbuffer* webpage, string url)
+bool fetch_page(CURL* curl_easy_handle, evbuffer* webpage, std::string url)
 {
 
   curl_easy_setopt(curl_easy_handle, CURLOPT_WRITEDATA, &webpage);
@@ -363,7 +361,7 @@ bool fetch_page(CURL* curl_easy_handle, evbuffer* webpage, string url)
   }*/
 
 
-bool WebpageFetcher::fetch_through_st(string webpage_uri)
+bool WebpageFetcher::fetch_through_st(std::string webpage_uri)
 {
   curl_easy_setopt(curl_near, CURLOPT_URL, webpage_uri.c_str());
 
@@ -423,7 +421,7 @@ socket_read_cb(struct bufferevent *bev, void *arg)
     }
   
   if (LOGGING >= 1) {
-    fprintf(stderr, "Received %li bytes on %s\n", evbuffer_get_length(bufferevent_get_input(bev)), bev == st->outbound_far ? "outbound_far" : "far");
+    fprintf(stderr, "Received %zu bytes on %s\n", evbuffer_get_length(bufferevent_get_input(bev)), bev == st->outbound_far ? "outbound_far" : "far");
   }
   if (bev == st->far) {
     evbuffer_add_buffer(st->http_request, bufferevent_get_input(bev));
@@ -449,7 +447,7 @@ socket_drain_cb(struct bufferevent *bev, void *arg)
 
   size_t bt =evbuffer_get_length(bufferevent_get_output(bev));
   if (LOGGING >= 1)
-    cout << "still has " << bt << " bytes to drain" << endl;
+      std::cout << "still has " << bt << " bytes to drain" << std::endl;
 
   if (evbuffer_get_length(bufferevent_get_output(bev)) > 0)
     return;
@@ -591,7 +589,7 @@ bool WebpageFetcher::fetch_direct_socket()
 {
   ParsedHeader get_parser;
 
-  string page_url, host;
+  std::string page_url, host;
   if (!get_parser.extract_url(http_request, page_url, host)) {
      fprintf(stderr, "Error in parsing http get request (maybe incomplet)\n");
     return false;
@@ -853,7 +851,7 @@ main(int argc, char **argv)
 
   init_curl_handles(&st);
 
-  string test_uri = argv[3];
+  std::string test_uri = argv[3];
   //string test_uri = "http://localhost/HITB-Ezine-Issue-008.pdf";  //"http://127.0.0.1/";
   //string test_uri = //"http://download.cdn.mozilla.net/pub/mozilla.org/firefox/releases/16.0.1/linux-i686/en-US/firefox-16.0.1.tar.bz2"; //"http://speedtest.wdc01.softlayer.com/downloads/test500.zip";
       //"http://www.1112.net/lastpage.html";//"http://gfaster.com";

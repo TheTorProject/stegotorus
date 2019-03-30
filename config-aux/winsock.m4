@@ -22,6 +22,8 @@ AC_DEFUN([AX_LIB_WINSOCK2],
     [AC_LANG_CONFTEST([AC_LANG_PROGRAM([
       #ifdef _WIN32
       #include <winsock2.h>
+      #elif __ANDROID__
+      #include <sys/endian.h>
       #else
       #include <arpa/inet.h>
       #endif

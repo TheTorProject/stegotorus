@@ -88,7 +88,7 @@ pgen_fake_SOURCES = \
 	src/rng.cc \
 	src/base64.cc
 
-pgen_fake_LDADD = $(libcrypto_LIBS)
+pgen_fake_LDADD = $(lib_LIBS)
 
 # pgen_pcap is only built if we have libpcap
 if HAVE_PCAP
@@ -131,17 +131,22 @@ g_unittests_SOURCES = \
 	src/test/steg_test/payload_scraper_unittest.cc
 
 
+if ANDROID
+g_unittests_LDADD = libstegotorus.a $(lib_LIBS) \
+	$(BOOST_FILESYSTEM_LIB) \
+	$(BOOST_SYSTEM_LIB)
+else
 g_unittests_LDADD = libstegotorus.a $(lib_LIBS) -lpthread \
 	$(BOOST_FILESYSTEM_LIB) \
 	$(BOOST_SYSTEM_LIB)
-
+endif
 
 #g_unittests_LDFLAGS = \
 #	-lgtest_main \
 #	-lgtest
 
 tltester_SOURCES = src/test/tltester.cc src/util.cc src/util-net.cc
-tltester_LDADD   = $(libevent_LIBS)
+tltester_LDADD   = $(lib_LIBS)
 
 webpage_tester_SOURCES = src/test/webpage_tester.cc src/util.cc src/util-net.cc src/curl_util.cc src/http_parser/http_parser.cc
 webpage_tester_LDADD   = $(lib_LIBS)

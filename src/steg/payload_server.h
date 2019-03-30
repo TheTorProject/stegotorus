@@ -97,7 +97,7 @@ const unsigned int c_no_of_steg_protocol = 8;
 #define MAX_CONTENT_TYPE		11
 #define NO_CONTENT_TYPES                 5
 
-typedef int SID;
+typedef int StateID;
 typedef short PacketType;
 typedef short StateFlag;
 
@@ -135,6 +135,7 @@ class PayloadInfo{
 
 typedef map<string, PayloadInfo> PayloadDict;
 
+//TODO: this needs to be documented
 class EfficiencyIndicator
 {
  public:
@@ -145,11 +146,15 @@ class EfficiencyIndicator
    : url_hash(new_hash), length(new_length)
   {  }
 
-  bool operator<(EfficiencyIndicator rhs) {
-    return (length < rhs.length);
-  }
-};
+  friend bool operator< (const EfficiencyIndicator &lhs, const EfficiencyIndicator& rhs);
 
+  //clang doesn't like this way of overloading comp operators
+  // bool operator<(const EfficiencyIndicator& rhs) {
+  //   return (length < rhs.length);
+  // }
+
+};
+    
 /** 
     The initiation process needs to fill up the
     fields of this class

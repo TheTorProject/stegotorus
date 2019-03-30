@@ -10,7 +10,10 @@
 #include "socks.h"
 
 #include <event2/buffer.h>
+
+#ifndef _WIN32
 #include <netinet/in.h>
+#endif
 
 /* All the tests below use this test environment.  Some of them
    do not need both evbuffers, but we give them two anyway.  */

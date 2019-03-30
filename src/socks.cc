@@ -9,7 +9,10 @@
 #include "socks.h"
 
 #include <errno.h>
+
+#ifndef _WIN32
 #include <netinet/in.h>
+#endif
 
 #include <event2/buffer.h>
 

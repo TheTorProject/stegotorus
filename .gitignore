@@ -56,18 +56,28 @@ config-aux/lt~obsolete.m4
 
 /libstegotorus.a
 /stegotorus
+/stegotorus.exe
 /tltester
+/tltester.exe
 /unittests
+/unittests.exe
 /g_unittests
+/g_unittests.exe
 /pgen_fake
+/pgen_fake.exe
 /pgen_pcap
 /tester_proxy
+/tester_proxy.exe
 /webpage_tester
+/webpage_tester.exe
 
 /build/
 /build-*/
 /bench/
 /bench-*/
+/scripts/build/
+/scripts/build-windows/
+/scripts/build-android/
 
 /src/test/testbuf/
 /gdb_emacs/

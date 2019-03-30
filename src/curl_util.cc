@@ -54,7 +54,7 @@ discard_data(char *ptr, size_t size, size_t nmemb, void *userdata)
 
   (void) ptr;
 
-  log_debug((conn_t*) userdata, "discarder received %lu bytes", size * nmemb);
+  log_debug((conn_t*) userdata, "discarder received %zu bytes", size * nmemb);
   conn_t *down = (conn_t *)userdata;
 
   down->ever_received = 1;
@@ -93,7 +93,7 @@ unsigned long fetch_url_raw(CURL* curl_obj, string& url,  stringstream& buf)
     return 0;
   }
 
-  log_debug("read total bytes of : %lu:", buf.str().size());
+  log_debug("read total bytes of : %zu:", buf.str().size());
   log_assert(buf.str()[0]=='H');
   return buf.tellp();
 
@@ -103,7 +103,7 @@ size_t curl_read_data_cb(void *buffer, size_t size, size_t nmemb, void *userp)
 {
   //accumulate everything in a streamstring buffer
   size_t no_bytes_2_read = size * nmemb;
-  log_debug("curl received %lu bytes", no_bytes_2_read);
+  log_debug("curl received %zu bytes", no_bytes_2_read);
   ((stringstream*)userp)->write((char*) buffer, size * no_bytes_2_read);
   if( ((stringstream*)userp)->bad()){
     log_debug("Error reading data from curl");

@@ -8,12 +8,12 @@
 #include "protocol.h"
 #include "socks.h"
 
-#include <tr1/unordered_set>
+#include <unordered_set>
 
 #include <event2/event.h>
 #include <event2/buffer.h>
 
-using std::tr1::unordered_set;
+using std::unordered_set;
 
 static void close_cleanup_cb(evutil_socket_t, short, void *);
 

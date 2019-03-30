@@ -24,6 +24,12 @@ print_trace (void)
 {
 
 }
+#elif __ANDROID__
+void
+print_trace (void)
+{
+
+}
 #else
 #include <execinfo.h>
 
@@ -653,7 +659,7 @@ void  buf2hex(uint8_t* buf, size_t len, std::string& res)
 std::string 
 relativize_url(const std::string& absolute_url)
 {
-  log_debug("%s, %lu", absolute_url.c_str(), absolute_url.length());
+  log_debug("%s, %zu", absolute_url.c_str(), absolute_url.length());
   
   if (absolute_url[0] == '/') //already relative
     return absolute_url;

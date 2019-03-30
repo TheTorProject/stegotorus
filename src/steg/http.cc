@@ -49,7 +49,7 @@ http_steg_config_t::init_http_steg_config_t(bool init_payload_server)
     else
       payload_filename = "traces/server.out";
   
-    payload_server = new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
+    payload_server = (PayloadServer*) new TracePayloadServer(is_clientside ? client_side : server_side, payload_filename);
 
     /** init the steg mods */
     init_file_steg_mods();

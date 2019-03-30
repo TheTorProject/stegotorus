@@ -72,7 +72,7 @@ int JPGSteg::starting_point(const uint8_t *raw_data, int len)
  
 	const unsigned short *flen = (const unsigned short *)(raw_data+lm+2); // Frame length
 	unsigned short swapped = SWAP(*flen);
-	log_debug("Size of the last DA frame: %hhu at %06X\n", swapped, lm);
+	log_debug("Size of the last DA frame: %hu at %06X\n", swapped, lm);
 
 	// TODO: Ignore RSTn bytes (Restart Interval)	
 	/*
@@ -150,7 +150,7 @@ int JPGSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size
     return -1;
   }
   
-  log_debug("embeding %lu at %i of cover size %lu", data_len,from, cover_len);
+  log_debug("embeding %zu at %i of cover size %zu", data_len,from, cover_len);
   memcpy(cover_payload+from, reinterpret_cast<uint8_t*>(&data_len), c_NO_BYTES_TO_STORE_MSG_SIZE); //only works for little-endian
   memcpy(cover_payload+from+c_NO_BYTES_TO_STORE_MSG_SIZE, data, data_len);
   return cover_len;
@@ -174,7 +174,7 @@ ssize_t JPGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
     }
 
     //We assume the enough mem is allocated for the data
-    log_debug("recovering %lu from %lu of cover size %lu", s, from, cover_len);
+    log_debug("recovering %zu from %zd of cover size %zu", s, from, cover_len);
     
 	memcpy(data, cover_payload+from+c_NO_BYTES_TO_STORE_MSG_SIZE, s);
 	return s;

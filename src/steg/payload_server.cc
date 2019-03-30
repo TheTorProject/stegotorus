@@ -84,6 +84,10 @@
 //   }
 // }
 
+bool operator< (const EfficiencyIndicator &lhs, const EfficiencyIndicator& rhs) {
+    return (lhs.length < rhs.length);
+}
+    
 unsigned int
 PayloadServer::capacityPDF (char* buf, int len) {
   char *hEnd, *bp, *streamStart, *streamEnd;

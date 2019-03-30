@@ -137,7 +137,7 @@ private:
     // Method is only called on cache misses 
     assert(_key_to_value.find(k)==_key_to_value.end()); 
  
-    log_debug("payload cache is holding %lu elements of %lu capacity", _key_to_value.size(),_capacity);
+    log_debug("payload cache is holding %zu elements of %zu capacity", _key_to_value.size(),_capacity);
     // Make space if necessary 
     if (_key_to_value.size()==_capacity) 
       evict(); 
