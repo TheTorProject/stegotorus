@@ -40,6 +40,7 @@ const struct option modus_operandi_t::long_options[] = {
     { "registration-helper", required_argument, NULL, 'r' },
     { "pid-file", required_argument, NULL, 'p' },
     { "daemon", no_argument, NULL, 'd' },
+    { "version", no_argument, NULL, 'v' },
     { NULL, 0, NULL, 0 }
   };
 

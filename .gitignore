@@ -78,6 +78,9 @@ config-aux/lt~obsolete.m4
 /scripts/build/
 /scripts/build-windows/
 /scripts/build-android/
+/scripts/build-linux/
+/scripts/releases/
+
 
 /src/test/testbuf/
 /gdb_emacs/

@@ -143,7 +143,8 @@ http_steg_config_t::store_options(const YAML::Node& options)
   
 }
 
-void http_steg_config_t::init_file_steg_mods()
+void
+http_steg_config_t::init_file_steg_mods()
 {
   // we can't call this in constructor cause 
   //it should be called after the payload server is initialized

@@ -125,8 +125,17 @@ protected:
   virtual ssize_t decode(const uint8_t *cover_payload, size_t cover_len, uint8_t* data) = 0;
   
   const list<string> extensions;
+
+  /**
+     Returns the capacity which can be encoded in the buffer
+     assuming that the buffer starts with the  HTTP response header
+  */
   virtual ssize_t capacity(const uint8_t* buffer, size_t len) = 0;
-  virtual ssize_t headless_capacity(char *cover_body, int body_length) = 0;
+
+  /**
+     Returns the capacity which can be encoded in the cover_body
+     when cover_body does not include the HTTP response header */
+   virtual ssize_t headless_capacity(char *cover_body, int body_length) = 0;
 
   /**
      Find appropriate payload calls virtual embed to embed it appropriate

@@ -7,7 +7,6 @@ timestamp-logs: true
 ####################################
 # protocol specification for server 
 ####################################
-
 protocols:
   - name: "chop"
     mode: server
@@ -15,7 +14,7 @@ protocols:
     trace-packets: true
     disable-retransmit: true
     cover-server: 66.135.46.119:80 #funny cat 
-    up-address: st-bridge.asl19.org:5001
+    up-address: st-bridge.somedomain.org:5001
     stegs:
       - name: "http_apache"
         down-address: 127.0.0.1:5000

@@ -1,6 +1,0 @@
-sudo apt-get install build-essential git libboost-all-dev libssl-dev pkg-config libcurl4-openssl-dev
-
-However openssl (libssl-dev) needs to be version >= 1.0.1. Otherwise download
-wget http://www.openssl.org/source/openssl-1.0.1e.tar.gz
-
-PKG_CONFIG_PATH="."; CXX_FLAGS="-g2 -O0"; ./configure 

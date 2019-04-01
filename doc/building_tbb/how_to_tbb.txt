@@ -1,6 +1,0 @@
-tor-browser-bundle.git and specifically gitian/README.build                            
-
-For how we build PT bundles now and plan to in the future, see             
-https://lists.torproject.org/pipermail/tor-dev/2013-October/005543.html         
-
-kpdyer has an alternate technique that he used to make bundles including FTE, you might take a https://github.com/kpdyer/PTTBB-builder.

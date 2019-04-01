@@ -228,7 +228,6 @@ PayloadServer::extension_to_content_type(const char* extension) {
   if (!strncmp(extension, "pdf", 4) || !strncmp(extension, "PDF", 4))
     return HTTP_CONTENT_PDF;
 
-
   if (!strncmp(extension, "swf", 4) || !strncmp(extension, "SWF", 4))
     return HTTP_CONTENT_SWF;
 

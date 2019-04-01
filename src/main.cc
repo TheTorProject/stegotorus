@@ -3,6 +3,7 @@
  * See LICENSE for other credits and copying information
  */
 
+#include "stegotorus.h"
 #include "util.h"
 
 #include "connections.h"
@@ -213,6 +214,13 @@ call_registration_helper(string const& helper)
   }
 }
 
+void
+print_version()
+{
+  fprintf(stderr,"Stegotorus %s\n", STEGOTORUS_VERSION);
+  fprintf(stderr,"%s\n", STEGOTORUS_COPYRIGHTNOTICE);
+}
+
 /**
    Receives 'argv' and scans for any non-protocol-specific optional
    arguments and tries to set them in effect.
@@ -265,6 +273,9 @@ handle_generic_args(int argc, const char *const *argv,  modus_operandi_t &mo)
       pidfile_name = cur_option->second;
     } else if ((cur_option->first == "daemon") && (cur_option->second == true_string)) {
       daemon_mode = true;
+    } else if (cur_option->first == "version") {
+      print_version();
+      exit(0);
     } else {
       //this should never happen cause modus_operandi should have already aborted
       fprintf(stderr, "unrecognizable argument '%s'\n", cur_option->first.c_str());

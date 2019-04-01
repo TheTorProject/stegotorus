@@ -40,7 +40,7 @@ struct steg_config_t
   evbuffer* protocol_data_in;
   evbuffer* protocol_data_out;
 
-  /* To protecet against statistical analysis stegonographer 
+  /* To protect against statistical analysis stegonographer 
      should make sure that the cover size should at least be
      noise2signal times of the data
      
