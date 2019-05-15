@@ -36,7 +36,7 @@ To build Stegotorus you need:
 * libevent
 * libcurl
 * yaml-cpp
-* libz
+* zlib
 
 If you intend to run a Stegotorus server on the same machine which runs an HTTP server and use the HTTP server files as the cover for the Stegotorus traffic you also need:
 
@@ -50,7 +50,7 @@ To compile for GNU/LINUX you need:
 
 In a Debian-based GNU/Linux OS you would get these packages by running:
 
-    $ sudo apt-get install build-essential git automake autoconf pkg-config libssl-dev libevent-dev libcurl4-openssl-dev libboost-dev libboost-system-dev libboost-filesystem-dev
+    $ sudo apt-get install build-essential git automake autoconf pkg-config libssl-dev libevent-dev libcurl4-openssl-dev libyaml-cpp-dev zlib1g-dev libboost-dev libboost-system-dev libboost-filesystem-dev
 
 If the OpenSSL library in the official distribution repository is older than 1.1.1, you might need to obtain the latest version by 
 downloading it from the [OpenSSL website]([https://www.openssl.org/source/openssl-1.1.1b.tar.gz]).

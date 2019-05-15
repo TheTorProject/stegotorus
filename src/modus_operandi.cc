@@ -17,10 +17,6 @@
 #include "util.h"
 #include "protocol.h"
 #include "modus_operandi.h"
-//#include "steg/schemes.h"
-//#include "steg/jel_knobs.h"
-//#include "steg/http.h"
-//#include "steg/jpegSteg.h"
 
 using std::ifstream;
 
