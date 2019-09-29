@@ -131,14 +131,22 @@ struct conn_t {
 void conn_global_init(struct event_base *);
 
 /** When all currently-open connections and circuits are closed, stop
-    the main event loop and exit the program.  If 'barbaric' is true,
-    forcibly close them all now, then stop the event loop.
-    It is a bug to call any function that creates connections or
-    circuits after conn_start_shutdown has been called. */
+    the main event loop and exit the program. It is a bug to call any 
+    function that creates connections or circuits after conn_start_shutdown 
+    has been called. 
+    
+    @param barbaric if true, forcibly close them all now, then stop the 
+    event loop.
+*/
 void conn_start_shutdown(int barbaric);
 
 /** Create a new inbound connection from a configuration and a
-    bufferevent wrapping a socket. */
+    bufferevent wrapping a socket. 
+
+    //TODO document cfg, index, bufferevent and peername
+    //TODO Many argument for one functions break it down 
+
+*/
 conn_t *conn_create(config_t *cfg, size_t index, struct bufferevent *buf,
                     const char *peername);
 
@@ -158,6 +166,7 @@ size_t conn_count(void);
  */
 
 struct circuit_t {
+  //TODO: consider smart pointering anything that doesn't need to be allocated by libevent.
   struct event       *flush_timer;
   struct event       *axe_timer;
   struct bufferevent *up_buffer;
@@ -203,7 +212,21 @@ struct circuit_t {
   virtual void drop_downstream(conn_t *conn) = 0;
 
   /** Transmit data from the upstream to the downstream peer.
-      Returns 0 on success, -1 on failure. */
+      Returns 0 on success, -1 on failure. 
+
+      TODO:: We got rid of global circuit_send which was only calling
+      this function and in case of failure closes the circuit. 
+
+      if (ckt->send()) {
+        log_info(this, "error during transmit");
+        this->close();
+      }
+      
+      if this is the desired behavoir it should either be implemented 
+      by the circuit (which can decide by itself to close itself or
+      other the caller of the send in the network stack.
+     
+*/
   virtual int send() = 0;
 
   /** Transmit any buffered data and an EOF indication to the downstream
@@ -212,29 +235,36 @@ struct circuit_t {
       periodic "can we flush more data now?" callbacks, and |conn_t::recv|
       events won't do it, you have to set them up yourself. */
   virtual int send_eof() = 0;
+  void recv_eof();
+
+  //TODO doxygen documentation for all these.
+  void add_upstream(struct bufferevent *buf, const char *peer);
+  int open_upstream();
+
+  void arm_flush_timer(unsigned int milliseconds);
+  void disarm_flush_timer();
+  
+  void arm_axe_timer(unsigned int milliseconds);
+  void disarm_axe_timer();
+  
+  void do_flush();
+  
 };
 
+//TODO doxygen documentation for all these.
+//TODO we probably benefit from a globabl circuit manager object.
 circuit_t *circuit_create(config_t *cfg, size_t index);
 
-void circuit_add_upstream(circuit_t *ckt,
-                          struct bufferevent *buf, const char *peer);
-int circuit_open_upstream(circuit_t *ckt);
+/* This is defined in network.cc because it 
+   need access to the bufferevent callback functions. 
+   might be able to be moved to connections.h (or even 
+   circuit_h
+*/
+void circuit_reopen_downstreams(circuit_t* ckt);
 
-void circuit_reopen_downstreams(circuit_t *ckt);
-
-void circuit_recv_eof(circuit_t *ckt);
-
-void circuit_send(circuit_t *ckt);
-void circuit_send_eof(circuit_t *ckt);
-
-void circuit_arm_flush_timer(circuit_t *ckt, unsigned int milliseconds);
-void circuit_disarm_flush_timer(circuit_t *ckt);
-
-void circuit_arm_axe_timer(circuit_t *ckt, unsigned int milliseconds);
-void circuit_disarm_axe_timer(circuit_t *ckt);
-
-void circuit_do_flush(circuit_t *ckt);
-
+/**
+ * returns the global count of all open circuits 
+ */ 
 size_t circuit_count(void);
 
 #endif

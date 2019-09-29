@@ -796,7 +796,7 @@ chop_circuit_t::add_downstream(chop_conn_t *conn)
             serial, conn->serial, conn->peername,
             (unsigned long)downstreams.size());
 
-  circuit_disarm_axe_timer(this);
+  this->disarm_axe_timer();
 }
 
 void
@@ -1078,8 +1078,23 @@ chop_circuit_t::send_all_steg_data()
 int
 chop_circuit_t::send_eof()
 {
-  upstream_eof = true;
-  return send();
+  /* N.B. "read_eof" and "write_eof" are relative to _upstream_, and
+   therefore may appear to be backward relative to the function names
+   here.  I find this less confusing than having them appear to be
+   backward relative to the shutdown() calls and buffer drain checks,
+   here and in network.cc. */
+
+  this->pending_read_eof = true;
+  if (this->socks_state) {
+    log_debug(this, "EOF during SOCKS phase");
+    this->close();
+  } else {
+    upstream_eof = true;
+    if (send()) {
+      log_info(this, "error during transmit");
+      this->close();
+    }
+  }
 }
 
 //TODO check if send_special can be used steg data communication

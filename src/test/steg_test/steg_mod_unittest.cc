@@ -57,7 +57,9 @@ class StegModTest : public testing::Test {
   char* short_message;
   char* long_message;
 
-  void read_cover(const char* cover_file_name) {
+  string repo_root_path = testing::repo_root_path + "/";
+
+  void read_cover(const string cover_file_name) {
     ifstream test_cover(cover_file_name, ios::binary | ios::ate);
     ASSERT_TRUE(test_cover.is_open());
   
@@ -72,7 +74,7 @@ class StegModTest : public testing::Test {
    test_cover.close();
   }
 
-  void encode_decode(const char* cover_file_name, const char* test_phrase, FileStegMod* test_steg_mod) {
+  void encode_decode(const string cover_file_name, const char* test_phrase, FileStegMod* test_steg_mod) {
    
     //if() test for SWFSteg here?
     read_cover(cover_file_name);
@@ -130,14 +132,14 @@ la chaleur lourde qui épaissit l'air.";
 //SWF
 TEST_F(StegModTest, swf_encode_decode_small) {
   SWFSteg swf_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/inrozxa.swf", short_message, &swf_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/inrozxa.swf", short_message, &swf_test_steg);
   //ASSERT_TRUE(false);
 
 }
 
 TEST_F(StegModTest, swf_encode_decode_large) {
   SWFSteg swf_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/zone.swf",long_message, &swf_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/zone.swf",long_message, &swf_test_steg);
   //ASSERT_TRUE(false);
 
 }
@@ -147,7 +149,7 @@ TEST_F(StegModTest, swf_encode_decode_large) {
 // TEST_F(StegModTest, swf_gracefully_invalid) {
 //   SWFSteg swf_test_steg(NULL, 0);
 
-//   read_cover("src/test/steg_test/inrozxa.swf");
+//   read_cover(repo_root_path + "src/test/steg_test/inrozxa.swf");
 //   EXPECT_FALSE(swf_test_steg.headless_capacity((char*)cover_payload, cover_len));
 //   delete cover_payload;
 // }
@@ -155,14 +157,14 @@ TEST_F(StegModTest, swf_encode_decode_large) {
 //PDF - probably needs another capacity test and a chunking test too, depending on whatever SRI will be piping into here
 /*TEST_F(StegModTest, pdf_encode_decode_small) {
   PDFSteg pdf_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/(insert pdf here)", short_message, &pdf_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/(insert pdf here)", short_message, &pdf_test_steg);
   //ASSERT_TRUE(false);
 
 }
 
 TEST_F(StegModTest, pdf_encode_decode_large) {
   PDFSteg pdf_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/(insert pdf here)",long_message, &pdf_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/(insert pdf here)",long_message, &pdf_test_steg);
   //ASSERT_TRUE(false);
 
 }
@@ -170,7 +172,7 @@ TEST_F(StegModTest, pdf_encode_decode_large) {
 TEST_F(StegModTest, pdf_gracefully_invalid) {
   PDFSteg pdf_test_steg(NULL, 0);
 
-  read_cover("src/test/steg_test/(insert pdf here)");
+  read_cover(repo_root_path + "src/test/steg_test/(insert pdf here)");
   EXPECT_FALSE(pdf_test_steg.headless_capacity((char*)cover_payload, cover_len));
   delete cover_payload;
 }*/
@@ -178,33 +180,33 @@ TEST_F(StegModTest, pdf_gracefully_invalid) {
 //PNG
 TEST_F(StegModTest, png_encode_decode_small) {
   PNGSteg png_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/test1.png", short_message, &png_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/test1.png", short_message, &png_test_steg);
   //ASSERT_TRUE(false);
 
 }
 
 TEST_F(StegModTest, png_encode_decode_large) {
   PNGSteg png_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/test2.png", long_message, &png_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/test2.png", long_message, &png_test_steg);
 
 }
 
 TEST_F(StegModTest, png_gracefully_invalid) {
   PNGSteg png_test_steg(NULL, 0);
 
-  read_cover("src/test/steg_test/test3.png");
+  read_cover(repo_root_path + "src/test/steg_test/test3.png");
   EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
   delete cover_payload;
 
-  read_cover("src/test/steg_test/thegif.png");
+  read_cover(repo_root_path + "src/test/steg_test/thegif.png");
   EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
   delete cover_payload;
 
-  read_cover("src/test/steg_test/trickycorrupt.png");
+  read_cover(repo_root_path + "src/test/steg_test/trickycorrupt.png");
   EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
   delete cover_payload;
 
-  read_cover("src/test/steg_test/corner_case4.png");
+  read_cover(repo_root_path + "src/test/steg_test/corner_case4.png");
   EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
 
 }
@@ -212,37 +214,37 @@ TEST_F(StegModTest, png_gracefully_invalid) {
 //JPG
 TEST_F(StegModTest, jpg_encode_decode_small) {
   JPGSteg jpg_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/test1.jpg", short_message, &jpg_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/test1.jpg", short_message, &jpg_test_steg);
 
 }
 
 TEST_F(StegModTest, jpg_encode_decode_large) {
   JPGSteg jpg_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/test2.jpg", long_message, &jpg_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/test2.jpg", long_message, &jpg_test_steg);
 
 }
 
 TEST_F(StegModTest, jpg_gracefully_invalid) {
   JPGSteg jpg_test_steg(NULL, 0);
 
-  read_cover("src/test/steg_test/test3.jpg"); //html page actually
+  read_cover(repo_root_path + "src/test/steg_test/test3.jpg"); //html page actually
   EXPECT_FALSE(jpg_test_steg.headless_capacity((char*)cover_payload, cover_len));
   delete cover_payload;
 
-  encode_decode("src/test/steg_test/test4.jpg", long_message, &jpg_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/test4.jpg", long_message, &jpg_test_steg);
 
 }
 
 //GIF
 TEST_F(StegModTest, gif_encode_decode_small) {
   GIFSteg gif_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/test1.gif", short_message, &gif_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/test1.gif", short_message, &gif_test_steg);
 
 }
 
 TEST_F(StegModTest, gif_encode_decode_large) {
   GIFSteg gif_test_steg(NULL, 0);
-  encode_decode("src/test/steg_test/test2.gif", long_message, &gif_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/test2.gif", long_message, &gif_test_steg);
 
 }
 
@@ -253,15 +255,15 @@ TEST_F(StegModTest, gif_gracefully_invalid) {
     As long as there is , in the file the embedder embed after that no matter
     what so it is not like that if you don't adhere to gif struture you gonna
     fail.
-  read_cover("src/test/steg_test/test3.gif"); //png file actually
+  read_cover(repo_root_path + "src/test/steg_test/test3.gif"); //png file actually
   EXPECT_FALSE(gif_test_steg.headless_capacity((char*)cover_payload, cover_len));
   delete cover_payload;*/
 
-  read_cover("src/test/steg_test/test4.gif"); //html page actually
+  read_cover(repo_root_path + "src/test/steg_test/test4.gif"); //html page actually
   EXPECT_FALSE(gif_test_steg.headless_capacity((char*)cover_payload, cover_len));
   delete cover_payload;
 
-  encode_decode("src/test/steg_test/test5.gif", long_message, &gif_test_steg);
+  encode_decode(repo_root_path + "src/test/steg_test/test5.gif", long_message, &gif_test_steg);
 
 }
 

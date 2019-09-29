@@ -170,7 +170,7 @@ client_listener_cb(struct evconnlistener *, evutil_socket_t fd,
   }
 
   ckt->connected = 1;
-  circuit_add_upstream(ckt, buf, peername);
+  ckt->add_upstream(buf, peername);
   if (is_socks) {
     /* We can't do anything more till we know where to connect to. */
     bufferevent_setcb(buf, socks_read_cb, upstream_flush_cb,
@@ -279,7 +279,7 @@ socks_read_cb(struct bufferevent *bev, void *arg)
     bufferevent_disable(bev, EV_READ);
     socks5_send_reply(bufferevent_get_output(bev), socks,
                       SOCKS5_FAILED_UNSUPPORTED);
-    circuit_do_flush(ckt);
+    ckt->do_flush();
     return;
   }
 }
@@ -297,7 +297,7 @@ upstream_read_cb(struct bufferevent *bev, void *arg)
             (unsigned long)evbuffer_get_length(bufferevent_get_input(bev)));
 
   log_assert(ckt->up_buffer == bev);
-  circuit_send(ckt);
+  ckt->send();
 }
 
 /**
@@ -346,7 +346,7 @@ upstream_event_cb(struct bufferevent *, short what, void *arg)
 
     if (what == (BEV_EVENT_EOF|BEV_EVENT_READING)) {
       /* Upstream is done sending us data. */
-      circuit_send_eof(ckt);
+      ckt->send_eof();
       if (ckt->read_eof && ckt->write_eof)
         ckt->close();
     } else {
@@ -477,7 +477,7 @@ upstream_connect_cb(struct bufferevent *bev, short what, void *arg)
     ckt->connected = 1;
     if (ckt->pending_write_eof) {
       /* Try again to process the EOF. */
-      circuit_recv_eof(ckt);
+      ckt->recv_eof();
     }
     return;
   }
@@ -535,7 +535,7 @@ downstream_connect_cb(struct bufferevent *bev, short what, void *arg)
 
     if (ckt->pending_write_eof) {
       /* Try again to process the EOF. */
-      circuit_recv_eof(ckt);
+      ckt->recv_eof();
     }
     return;
   }
@@ -579,7 +579,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
     if (socks_state_get_status(socks) == ST_HAVE_ADDR) {
       bufferevent_enable(ckt->up_buffer, EV_WRITE);
       socks_send_reply(socks, bufferevent_get_output(ckt->up_buffer), err);
-      circuit_do_flush(ckt);
+      ckt->do_flush();
     } else {
       ckt->close();
     }
@@ -629,7 +629,7 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
 
     if (ckt->pending_write_eof) {
       /* Try again to process the EOF. */
-      circuit_recv_eof(ckt);
+      ckt->recv_eof();
     }
 
     return;
@@ -681,7 +681,7 @@ circuit_open_upstream(circuit_t *ckt)
   return -1;
 
  success:
-  circuit_add_upstream(ckt, buf, peername);
+  ckt->add_upstream(buf, peername);
   return 0;
 }
 

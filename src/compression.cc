@@ -1,11 +1,12 @@
-/* Copyright 2011, 2012 SRI International
+/* Copyright 2012-2019 The Tor Project Inc.
+ * Copyright 2011, 2012 SRI International
  * See LICENSE for other credits and copying information
  */
-#include "util.h"
-#include "compression.h"
-
 #include <zlib.h>
 #include <limits>
+
+#include "util.h"
+#include "compression.h"
 
 // zlib doesn't believe in size_t. When size_t is bigger than uInt, we
 // theoretically could break operations up into uInt-sized chunks to
@@ -20,13 +21,13 @@ const size_t ZLIB_CEILING = (SIZE_T_CEILING > ZLIB_UINT_MAX
                              ? ZLIB_UINT_MAX : SIZE_T_CEILING);
 
 ssize_t
-compress(const uint8_t *source, size_t slen,
-         uint8_t *dest, size_t dlen,
+compress(const uint8_t *source, size_t source_len,
+         uint8_t *dest, size_t dest_len,
          compression_format fmt)
 {
   log_assert(fmt == c_format_zlib || fmt == c_format_gzip);
 
-  if (slen > ZLIB_CEILING || dlen > ZLIB_CEILING)
+  if (source_len > ZLIB_CEILING || dest_len > ZLIB_CEILING)
     return -1;
 
   z_stream strm;
@@ -55,9 +56,9 @@ compress(const uint8_t *source, size_t slen,
   }
 
   strm.next_in = const_cast<Bytef*>(source);
-  strm.avail_in = slen;
+  strm.avail_in = source_len;
   strm.next_out = dest;
-  strm.avail_out = dlen;
+  strm.avail_out = dest_len;
 
   ret = deflate(&strm, Z_FINISH);
   if (ret != Z_STREAM_END) {
@@ -71,9 +72,9 @@ compress(const uint8_t *source, size_t slen,
 }
 
 ssize_t
-decompress(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen)
+decompress(const uint8_t *source, size_t source_len, uint8_t *dest, size_t dest_len)
 {
-  if (slen > ZLIB_CEILING || dlen > ZLIB_CEILING)
+  if (source_len > ZLIB_CEILING || dest_len > ZLIB_CEILING)
     return -1;
 
   /* allocate inflate state */
@@ -86,9 +87,9 @@ decompress(const uint8_t *source, size_t slen, uint8_t *dest, size_t dlen)
   }
 
   strm.next_in = const_cast<Bytef*>(source);
-  strm.avail_in = slen;
+  strm.avail_in = source_len;
   strm.next_out = dest;
-  strm.avail_out = dlen;
+  strm.avail_out = dest_len;
 
   ret = inflate(&strm, Z_FINISH);
   if (ret == Z_BUF_ERROR) {

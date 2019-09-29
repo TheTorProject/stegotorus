@@ -30,9 +30,12 @@
 #include <stdio.h>
 
 #include "gtest/gtest.h"
+std::string testing::repo_root_path;
 
 GTEST_API_ int main(int argc, char **argv) {
-  printf("Running main() from gtest_main.cc\n");
   testing::InitGoogleTest(&argc, argv);
+  if (argc == 2) // gtest leaved unparsed arguments for you
+      testing::repo_root_path = argv[1]; //otherwise we assume that we have been called at the root of the repo
+  
   return RUN_ALL_TESTS();
 }

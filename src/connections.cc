@@ -1,17 +1,19 @@
-/* Copyright 2011 Nick Mathewson, George Kadianakis
+/* Copyright 2012-2019 Tor Project Inc.
+ * Copyright 2011 Nick Mathewson, George Kadianakis
  * Copyright 2011, 2012 SRI International
  * See LICENSE for other credits and copying information
  */
 
-#include "util.h"
-#include "connections.h"
-#include "protocol.h"
-#include "socks.h"
 
 #include <unordered_set>
 
 #include <event2/event.h>
 #include <event2/buffer.h>
+
+#include "util.h"
+#include "connections.h"
+#include "protocol.h"
+#include "socks.h"
 
 using std::unordered_set;
 
@@ -256,7 +258,7 @@ flush_timer_cb(evutil_socket_t, short, void *arg)
   log_debug(ckt, "flush timer expired, %lu bytes available",
             (unsigned long)
             evbuffer_get_length(bufferevent_get_input(ckt->up_buffer)));
-  circuit_send(ckt);
+  ckt->send();
 }
 
 /* The axe timer is used to clean up dead circuits for protocols where
@@ -269,7 +271,7 @@ axe_timer_cb(evutil_socket_t, short, void *arg)
   circuit_t *ckt = (circuit_t *)arg;
   log_warn(ckt, "timeout waiting for new connections");
 
-  circuit_do_flush(ckt);
+  ckt->do_flush();
 }
 
 circuit_t *
@@ -334,112 +336,85 @@ circuit_t::cfg() const
 }
 
 void
-circuit_add_upstream(circuit_t *ckt, struct bufferevent *buf, const char *peer)
+circuit_t::add_upstream(struct bufferevent *buf, const char *peer)
 {
-  log_assert(!ckt->up_buffer);
-  log_assert(!ckt->up_peer);
+  log_assert(!this->up_buffer);
+  log_assert(!this->up_peer);
 
-  ckt->up_buffer = buf;
-  ckt->up_peer = peer;
+  this->up_buffer = buf;
+  this->up_peer = peer;
 }
 
-/* circuit_open_upstream is in network.c */
+/* TODO: circuit_open_upstream is in network.c should come here then */
 
 void
-circuit_send(circuit_t *ckt)
+circuit_t::recv_eof()
 {
-  if (ckt->send()) {
-    log_info(ckt, "error during transmit");
-    ckt->close();
-  }
-}
-
-/* N.B. "read_eof" and "write_eof" are relative to _upstream_, and
-   therefore may appear to be backward relative to the function names
-   here.  I find this less confusing than having them appear to be
-   backward relative to the shutdown() calls and buffer drain checks,
-   here and in network.cc. */
-void
-circuit_send_eof(circuit_t *ckt)
-{
-  ckt->pending_read_eof = true;
-  if (ckt->socks_state) {
-    log_debug(ckt, "EOF during SOCKS phase");
-    ckt->close();
-  } else if (ckt->send_eof()) {
-    log_info(ckt, "error during transmit");
-    ckt->close();
-  }
-}
-
-void
-circuit_recv_eof(circuit_t *ckt)
-{
-  ckt->pending_write_eof = true;
-  if (!ckt->up_buffer || !ckt->connected) {
-    log_debug(ckt, "holding EOF till connection");
+  this->pending_write_eof = true;
+  if (!this->up_buffer || !this->connected) {
+    log_debug(this, "holding EOF till connection");
     return;
   }
 
-  struct evbuffer *outbuf = bufferevent_get_output(ckt->up_buffer);
+  struct evbuffer *outbuf = bufferevent_get_output(this->up_buffer);
   size_t outlen = evbuffer_get_length(outbuf);
   if (outlen) {
-    log_debug(ckt, "flushing %lu bytes to upstream", (unsigned long)outlen);
-    circuit_do_flush(ckt);
+    log_debug(this, "flushing %lu bytes to upstream", (unsigned long)outlen);
+    this->do_flush();
     return;
   }
 
   //check if we haven't sent eof already
-  if (!ckt->write_eof) {
-    log_debug(ckt, "sending EOF to upstream");
-    ckt->write_eof = true;
-    shutdown(bufferevent_getfd(ckt->up_buffer), SHUT_WR);
+  if (!this->write_eof) {
+    log_debug(this, "sending EOF to upstream");
+    this->write_eof = true;
+    shutdown(bufferevent_getfd(this->up_buffer), SHUT_WR);
   } else {
-    log_debug(ckt, "upstream has already EOFed");
+    log_debug(this, "upstream has already EOFed");
   }
   
 }
 
 void
-circuit_arm_flush_timer(circuit_t *ckt, unsigned int milliseconds)
+circuit_t::arm_flush_timer(unsigned int milliseconds)
 {
-  log_debug(ckt, "flush within %u milliseconds", milliseconds);
+  log_debug(this, "flush within %u milliseconds", milliseconds);
 
   struct timeval tv;
   tv.tv_sec = milliseconds / 1000;
   tv.tv_usec = (milliseconds % 1000) * 1000;
 
-  if (!ckt->flush_timer)
-    ckt->flush_timer = evtimer_new(ckt->cfg()->base, flush_timer_cb, ckt);
+  if (!this->flush_timer)
+    this->flush_timer = evtimer_new(this->cfg()->base, flush_timer_cb, this);
 
-  evtimer_add(ckt->flush_timer, &tv);
+  evtimer_add(this->flush_timer, &tv);
 }
 
 void
-circuit_disarm_flush_timer(circuit_t *ckt)
+circuit_t::disarm_flush_timer()
 {
-  if (ckt->flush_timer)
-    evtimer_del(ckt->flush_timer);
+  if (this->flush_timer)
+    evtimer_del(this->flush_timer);
 }
 
 void
-circuit_arm_axe_timer(circuit_t *ckt, unsigned int milliseconds)
+circuit_t::arm_axe_timer(unsigned int milliseconds)
 {
-  log_debug(ckt, "axe after %u milliseconds", milliseconds);
+  log_debug(this, "axe after %u milliseconds", milliseconds);
 
   struct timeval tv;
   tv.tv_sec = milliseconds / 1000;
   tv.tv_usec = (milliseconds % 1000) * 1000;
 
-  if (!ckt->axe_timer)
-    ckt->axe_timer = evtimer_new(ckt->cfg()->base, axe_timer_cb, ckt);
+  if (!this->axe_timer)
+    this->axe_timer = evtimer_new(this->cfg()->base, axe_timer_cb, this);
 
-  evtimer_add(ckt->axe_timer, &tv);
+  evtimer_add(this->axe_timer, &tv);
 }
 
 void
-circuit_disarm_axe_timer(circuit_t *ckt)
+circuit_t::disarm_axe_timer()
 {
-  if (ckt->axe_timer)
-    evtimer_del(ckt->axe_timer);
+  if (this->axe_timer)
+    evtimer_del(this->axe_timer);
 }

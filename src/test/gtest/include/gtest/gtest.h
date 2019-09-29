@@ -146,6 +146,9 @@ GTEST_DECLARE_string_(stream_result_to);
 // The upper limit for valid stack trace depths.
 const int kMaxStackTraceDepth = 100;
 
+// Stores the path to the folder which contains the test resources
+extern std::string repo_root_path;
+
 namespace internal {
 
 class AssertHelper;

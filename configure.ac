@@ -107,6 +107,8 @@ PKG_PROG_PKG_CONFIG
 # We need python 2.7 for TestLoader.discover().
 # The unit tests presently only work on POSIX systems,
 # and are flaky enough that we let them be configured off.
+m4_define_default([_AM_PYTHON_INTERPRETER_LIST],[python2 python2.7])
+
 AC_ARG_ENABLE(integration-tests,
   [AS_HELP_STRING([--disable-integration-tests],
     [Disable tests of the complete program])],

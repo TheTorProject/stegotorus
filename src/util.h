@@ -124,7 +124,11 @@ inline void *operator new[](size_t n)
 { return xzalloc(n); }
 inline void operator delete(void *p)
 { free(p); }
+inline void operator delete(void* p, std::size_t)
+{ free(p); }
 inline void operator delete[](void *p)
+{ free(p); }
+inline void operator delete [](void* p, std::size_t)
 { free(p); }
 inline void* operator new(size_t n, const std::nothrow_t &)
 { return xzalloc(n); }

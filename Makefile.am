@@ -3,7 +3,7 @@
 # See LICENSE for other credits and copying information
 ACLOCAL_AMFLAGS = -I config-aux --install
 
-AM_CXXFLAGS = -Werror -Wall -Wextra -Wno-missing-field-initializers -Wformat=2 -std=c++0x
+AM_CXXFLAGS = -Werror -Wall -Wextra -Wno-missing-field-initializers -Wformat=2 -std=c++17
 # Took off _FROTYFY_SOURCE because stdlib doesn't allow it with -O0 -g2
 # So it is only for releaes time
 #AM_CPPFLAGS = -I. -I$(srcdir)/src -D_FORTIFY_SOURCE=2 $(lib_CPPFLAGS)
@@ -239,7 +239,7 @@ stamp-audit-globals: src/audit-globals.sh Makefile \
 check-local:
 	@echo --- Unit tests ---
 	$(AM_V_at) ./unittests
-	$(AM_V_at) ./g_unittests
+	$(AM_V_at) ./g_unittests $(srcdir)
 if INTEGRATION_TESTS
 	@echo --- Integration tests ---
 	@set -ex; if [ ! -e traces ]; then \

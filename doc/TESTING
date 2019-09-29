@@ -6,7 +6,7 @@ cd stegotorus
 git checkout tor-improve
 
 autoreconf
-./configure PKG_CONFIG_PATH=`pwd`
+./configure
 make
 
 
