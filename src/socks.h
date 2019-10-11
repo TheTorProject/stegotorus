@@ -4,6 +4,8 @@
 #ifndef SOCKS_H
 #define SOCKS_H
 
+struct socks_state_t;
+
 enum socks_status_t {
   /* Waiting for initial socks4 or socks5 message */
   ST_WAITING,

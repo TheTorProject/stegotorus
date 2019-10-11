@@ -231,18 +231,18 @@ conn_t::circuit() const
 
 /* Drain the transmit queue and send a TCP-level EOF indication to DEST. */
 void
-conn_send_eof(conn_t *dest)
+conn_t::send_eof()
 {
-  dest->pending_write_eof = true;
-  struct evbuffer *outbuf = dest->outbound();
+  this->pending_write_eof = true;
+  struct evbuffer *outbuf = this->outbound();
   if (evbuffer_get_length(outbuf)) {
-    log_debug(dest, "flushing out %lu bytes",
+    log_debug(this, "flushing out %lu bytes",
               (unsigned long) evbuffer_get_length(outbuf));
-    conn_do_flush(dest);
-  } else if (!dest->write_eof) {
-    log_debug(dest, "sending EOF downstream");
-    shutdown(bufferevent_getfd(dest->buffer), SHUT_WR);
-    dest->write_eof = true;
+    this->do_flush();
+  } else if (!this->write_eof) {
+    log_debug(this, "sending EOF downstream");
+    shutdown(bufferevent_getfd(this->buffer), SHUT_WR);
+    this->write_eof = true;
   }
 }
 

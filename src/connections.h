@@ -10,13 +10,15 @@
 
 #include <time.h> //Keeping track of life length of a connection for debug reason
 
+#include "socks.h"
+
 #define MAX_GLOBAL_CONN_COUNT 256 //To prevent the total number of connections
                                   //created by this instance exceed this number. 
                                   //I am not sure if it is the best place to 
                                   //to define this
 
-void conn_send_eof(conn_t *conn);
-void conn_do_flush(conn_t *conn);
+struct circuit_t;
+struct config_t;
 
 /** This struct defines the state of one downstream socket-level
     connection.  Each protocol must define a subclass of this
@@ -59,10 +61,11 @@ struct conn_t {
 
   /** Auxilary functions which sends a write eof to the tcp 
       socket */
-  virtual void send_eof() {
-    conn_send_eof(this);
-  }
+  virtual void send_eof();
 
+  //TODO document this
+  void do_flush();
+  
   /** Return the upstream circuit for this connection, if there is one.
       NOTE: this is *not* a pure virtual method because it can be called
       legitimately after the subclass destructor has run. */
@@ -233,7 +236,10 @@ struct circuit_t {
       peer.  This will only be called once per circuit, and |send|
       will not be called again after this has been called; if you need
       periodic "can we flush more data now?" callbacks, and |conn_t::recv|
-      events won't do it, you have to set them up yourself. */
+      events won't do it, you have to set them up yourself. 
+
+      return 0 on success and -1 on error
+  */
   virtual int send_eof() = 0;
   void recv_eof();
 

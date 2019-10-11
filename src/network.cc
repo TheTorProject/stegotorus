@@ -642,35 +642,35 @@ downstream_socks_connect_cb(struct bufferevent *bev, short what, void *arg)
    need access to the bufferevent callback functions. */
 
 int
-circuit_open_upstream(circuit_t *ckt)
+circuit_t::open_upstream()
 {
   struct evutil_addrinfo *addr;
   struct bufferevent *buf;
   char *peername;
 
-  addr = ckt->cfg()->get_target_addrs(0);
+  addr = this->cfg()->get_target_addrs(0);
 
   if (!addr) {
-    log_warn(ckt, "no target addresses available");
+    log_warn(this, "no target addresses available");
     return -1;
   }
 
-  buf = bufferevent_socket_new(ckt->cfg()->base, -1, BEV_OPT_CLOSE_ON_FREE);
+  buf = bufferevent_socket_new(this->cfg()->base, -1, BEV_OPT_CLOSE_ON_FREE);
   if (!buf) {
-    log_warn(ckt, "unable to create outbound socket buffer");
+    log_warn(this, "unable to create outbound socket buffer");
     return -1;
   }
 
   bufferevent_setcb(buf, upstream_read_cb, upstream_flush_cb,
-                    upstream_connect_cb, ckt);
+                    upstream_connect_cb, this);
 
   do {
     peername = printable_address(addr->ai_addr, addr->ai_addrlen);
-    log_info(ckt, "trying to connect to %s", peername);
+    log_info(this, "trying to connect to %s", peername);
     if (bufferevent_socket_connect(buf, addr->ai_addr, addr->ai_addrlen) >= 0)
       goto success;
 
-    log_info(ckt, "connection to %s failed: %s", peername,
+    log_info(this, "connection to %s failed: %s", peername,
              evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
     free(peername);
     addr = addr->ai_next;
@@ -681,7 +681,7 @@ circuit_open_upstream(circuit_t *ckt)
   return -1;
 
  success:
-  ckt->add_upstream(buf, peername);
+  this->add_upstream(buf, peername);
   return 0;
 }
 
@@ -821,33 +821,33 @@ create_outbound_connections_socks(circuit_t *ckt)
 }
 
 void
-circuit_do_flush(circuit_t *ckt)
+circuit_t::do_flush()
 {
-  log_debug(ckt, "flushing");
-  size_t remain = evbuffer_get_length(bufferevent_get_output(ckt->up_buffer));
-  ckt->pending_write_eof = true;
+  log_debug(this, "flushing");
+  size_t remain = evbuffer_get_length(bufferevent_get_output(this->up_buffer));
+  this->pending_write_eof = true;
 
   /* If 'remain' is already zero, we have to call the flush callback
      manually; libevent won't do it for us. */
   if (remain == 0)
-    upstream_flush_cb(ckt->up_buffer, ckt);
+    upstream_flush_cb(this->up_buffer, this);
   else
-    log_debug(ckt, "flushing %lu bytes to upstream", (unsigned long)remain);
+    log_debug(this, "flushing %lu bytes to upstream", (unsigned long)remain);
 }
 
 void
-conn_do_flush(conn_t *conn)
+conn_t::do_flush()
 {
-  log_debug(conn, "flushing");
-  size_t remain = evbuffer_get_length(conn->outbound());
-  conn->pending_write_eof = true;
+  log_debug(this, "flushing");
+  size_t remain = evbuffer_get_length(this->outbound());
+  this->pending_write_eof = true;
 
   /* If 'remain' is already zero, we have to call the flush callback
      manually; libevent won't do it for us. */
   if (remain == 0)
-    downstream_flush_cb(conn->buffer, conn);
+    downstream_flush_cb(this->buffer, this);
   else
-    log_debug(conn, "flushing %lu bytes to peer [enabled=%x]",
+    log_debug(this, "flushing %lu bytes to peer [enabled=%x]",
               (unsigned long)remain,
-              bufferevent_get_enabled(conn->buffer));
+              bufferevent_get_enabled(this->buffer));
 }

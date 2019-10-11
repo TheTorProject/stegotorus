@@ -225,7 +225,7 @@ null_circuit_t::close()
     /* break the circular reference before deallocating the
        downstream connection */
     downstream->upstream = NULL;
-    conn_do_flush(downstream);
+    downstream->do_flush();
     downstream = NULL;
   }
 
@@ -269,7 +269,7 @@ null_circuit_t::drop_downstream(conn_t *cn)
             this->serial, conn->serial, conn->peername);
   this->downstream = NULL;
   conn->upstream = NULL;
-  circuit_do_flush(this);
+  this->do_flush();
 }
 
 /* Send data from the upstream buffer. */
@@ -289,7 +289,7 @@ int
 null_circuit_t::send_eof()
 {
   if (this->downstream)
-    conn_send_eof(this->downstream);
+    this->downstream->send_eof();
   this->read_eof = true;
   return 0;
 }
@@ -342,7 +342,7 @@ null_conn_t::maybe_open_upstream()
     return -1;
 
   ckt->add_downstream(this);
-  circuit_open_upstream(ckt);
+  ckt->open_upstream();
   return 0;
 }
 
@@ -373,7 +373,7 @@ null_conn_t::recv_eof()
       if (this->recv())
         return -1;
 
-    circuit_recv_eof(this->upstream);
+    this->upstream->recv_eof();
   }
   return 0;
 }

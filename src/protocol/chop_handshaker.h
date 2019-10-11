@@ -10,6 +10,7 @@
 
 #include <openssl/sha.h>
 
+#include "crypt.h"
 #include "rng.h"
 
 /* The handshake generator and reciever class for chop protocol, 

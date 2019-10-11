@@ -15,6 +15,8 @@ bin_PROGRAMS     = stegotorus
 
 PROTOCOLS = \
 	src/protocol/chop.cc \
+	src/protocol/chop_conn.cc \
+	src/protocol/chop_config.cc \
 	src/protocol/chop_blk.cc \
 	src/protocol/null.cc
 

@@ -5,6 +5,8 @@
 #ifndef CRYPT_H
 #define CRYPT_H
 
+#include "util.h"
+
 const size_t AES_BLOCK_LEN = 16;
 const size_t GCM_TAG_LEN   = 16;
 const size_t SHA256_LEN    = 32;

@@ -7,6 +7,7 @@
 
 #include <ostream>
 
+#include "crypt.h"
 struct steg_config_t;
 
 namespace chop_blk

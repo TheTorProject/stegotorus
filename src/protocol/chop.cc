@@ -3,15 +3,12 @@
  */
 
 #include <algorithm>
-#include <vector>
 #include <map>
 
-#include <unordered_map>
 #include <sstream>
 #include <string>
 #include <stdint.h>
 
-#include <unordered_set>
 #include <algorithm>
 
 #include <event2/event.h>
@@ -22,15 +19,16 @@
 
 #include "util.h"
 #include "crypt.h"
-#include "modus_operandi.h"
-#include "chop_blk.h"
 #include "chop_handshaker.h"
 #include "connections.h"
 #include "protocol.h"
-#include "rng.h"
 #include "steg.h"
 
 #include "transparent_proxy.h"
+
+#include "chop_conn.h"
+#include "chop_config.h"
+#include "chop_circuit.h"
 
 /* The chopper is the core StegoTorus protocol implementation.
    For its design, see doc/chopper.txt.  Note that it is still
@@ -38,694 +36,13 @@
 
 #define MAX_CONN_PER_CIRCUIT 8
 
-using std::unordered_map;
 using std::unordered_set;
 using std::vector;
-using std::make_pair;
 using std::min;
 
 using namespace chop_blk;
 
-namespace {
-
-struct chop_conn_t;
-struct chop_circuit_t;
-struct chop_config_t;
-
-typedef unordered_map<uint32_t, chop_circuit_t *> chop_circuit_table;
-
-struct chop_conn_t : conn_t
-{
-  chop_config_t *config;
-  chop_circuit_t *upstream;
-  steg_t *steg;
-  struct evbuffer *recv_pending;
-  uint8_t *originally_received; //Keep a copy of pending in case we need 
-  size_t received_length;
-  //to become a transparent proxy
-  struct event *must_send_timer;
-  bool sent_handshake : 1;
-  bool no_more_transmissions : 1;
-
-  CONN_DECLARE_METHODS(chop);
-
-  int recv_handshake();
-  int send(struct evbuffer *block);
-
-  void send();
-  bool must_send_p() const;
-  static void must_send_timeout(evutil_socket_t, short, void *arg);
-
-  /**
-   In case the connection is transparentized or needed to be closed
-   then chop circuit/protocol should no longer influence the
-   status of the connection
- */
-  void emancipate_from_upstream();
-
-};
-
-
-struct chop_circuit_t : circuit_t
-{
-  transmit_queue tx_queue;
-  reassembly_queue recv_queue;
-  unordered_set<chop_conn_t *> downstreams;
-  gcm_encryptor *send_crypt;
-  ecb_encryptor *send_hdr_crypt;
-  gcm_decryptor *recv_crypt;
-  ecb_decryptor *recv_hdr_crypt;
-  chop_config_t *config;
-
-  uint32_t circuit_id;
-  uint32_t last_acked;
-  uint32_t dead_cycles;
-  bool received_fin : 1;
-  bool sent_fin : 1;
-  bool upstream_eof : 1;
-
-  //For debug and tracking performance we keep track of average room
-  //desirable and offered size
-  double avg_desirable_size;
-  double avg_available_size;
-  unsigned long number_of_room_requests;
-  CIRCUIT_DECLARE_METHODS(chop);
-
-  //override the constructor so we can initialize the transmit queue
-  chop_circuit_t(bool retransmit);
-  // Shortcut some unnecessary conversions for callers within this file.
-  void add_downstream(chop_conn_t *conn);
-  void drop_downstream(chop_conn_t *conn);
-
-  int send_special(opcode_t f, struct evbuffer *payload);
-  int send_targeted(chop_conn_t *conn);
-  int send_targeted(chop_conn_t *conn, size_t blocksize);
-  int send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
-                    struct evbuffer *payload);
-  int maybe_send_ack();
-  int retransmit();
-
-  /** 
-      check all conn for steg protocol data and send them
-      if there's any
-  */
-  int send_all_steg_data();
-  /** the same as send targeted but it reads the data from
-      conn->steg->cfg()->protocol_data and set opcode = op_STEG0
-  */
-  int send_targeted_steg_data(chop_conn_t *conn, size_t blocksize);
-
-  /**
-     checks the steg module of all connections to see if they have
-     protocol data to send
-     
-     @return the first connection whose steg has data to send
-  */
-  chop_conn_t* check_for_steg_protocol_data();
-  chop_conn_t* pick_connection(size_t desired, size_t minimum,
-                               size_t *blocksize);
-
-  int recv_block(uint32_t seqno, opcode_t op, evbuffer *payload, steg_config_t *steg_cfg);
-  int process_queue();
-  int check_for_eof();
-
-  uint32_t axe_interval() {
-    // This function must always return a number which is larger than
-    // the maximum possible number that *our peer's* flush_interval()
-    // could have returned; otherwise, we might axe the connection when
-    // it was just that there was nothing to say for a while.
-    // For simplicity's sake, right now we hardwire this to be 30 minutes.
-
-    //However, this approach expose server to a simple and powerful
-    //DoS attack: do 10^10 times: asks for 1GB file drop the upstream connection,
-    //soon the server is out of memory cause it keeps the content in the evbuff
-    //This should depends on global state of memory but as a simple rule of thumb, 
-    //for now under 
-    // 0        30 min
-    // 100K     29 min
-    // 1MB      5  min
-    // 10MB     1  min
-    // However this should be only applied when we get enough dead cycle that
-    // indicates the client is no longer interested in the content
-    // 30min - rng(log(size(0), cycles)
-    const static unsigned int max_idle_min = 30;
-    if (!dead_cycles)
-      return max_idle_min * 60 * 1000;
-
-    //Anti dos measures
-    size_t memory_consumed = evbuffer_get_length(bufferevent_get_input(up_buffer));
-
-    unsigned int max_penalty_mins = std::min(max_idle_min-1, ui64_log2(memory_consumed)) + 2;
-    unsigned int penalty_mins = rng_range_geom(max_penalty_mins, std::min((unsigned int)(max_penalty_mins - 1), dead_cycles));
-    //dead_cycles > 0 and this never become equal to max_penalty 
-
-    return std::max((unsigned int)(max_idle_min - penalty_mins) * 60 * 1000, 100u);
-
-  }
-  
-  uint32_t flush_interval() {
-    // 10*60*1000 lies between 2^19 and 2^20.
-    uint32_t shift = std::max(1u, std::min(19u, dead_cycles));
-    uint32_t xv = std::max(1u, std::min(10u * 60 * 1000, 1u << shift));
-    //TODO: this needs to be formalised but the original formula sometimes gives 1min
-    //that is t otally unacceptable
-    if (dead_cycles == 0)
-      return 100;
-
-    return rng_range_geom(20 * 60 * 1000, xv) + 100;
-  }
-};
-
-struct chop_config_t : config_t
-{
-  //we store protocol config to be able to treat them uniformly independant of
-  //the fact that they came from command line or from yaml config file
-  const std::vector<std::string> arg_option_list = {"name", "mode", "up-address", "server-key",
-                                                    "passphrase", "cover-server",
-                                                    "minimum-noise-to-signal"};
-
-  const std::vector<std::string> binary_option_list = {"trace-packets",
-                                                       "disable-encryption",
-                                                       "disable-retransmit",
-                                                       "enable-retransmit"};
-
-  config_dict_t chop_user_config;
-  std::list<config_dict_t> steg_user_conf_list;
-
-  struct evutil_addrinfo *up_address;
-  vector<struct evutil_addrinfo *> down_addresses;
-  vector<steg_config_t *> steg_targets;
-  chop_circuit_table circuits;
-  bool trace_packets;
-  bool trace_packet_data;
-  bool encryption;
-  bool retransmit;
-
-    /* Performance calculators */
-  unsigned long total_transmited_data_bytes;
-  unsigned long total_transmited_cover_bytes;
-
-  /*ecb encryptor and decryptor for the handshake*/
-  ecb_encryptor* handshake_encryptor;
-  ecb_decryptor* handshake_decryptor;
-
-  /**
-   * using the protocol dictionary provides a uniform init which can 
-   * be called by both init functions which has populated the config
-   * dict
-   */
-  bool init_from_protocol_config_dict();
-  
-  /**
-     create the approperiate block cipher with 
-     approperiate keys for the handshake
-   */
-  void init_handshake_encryption();
-  /* Transparent proxy and cover server */
-  std::string cover_server_address; //is the server that is going to serve covers
-  TransparentProxy* transparent_proxy;
-
-  double noise2signal; //to protect against statistical analysis
-
-  std::string passphrase = "did you buy one of therapist reawaken chemists continually gamma pacifies?";
-
-  /**
-   * displays the usage line related to configuring chop protocol.
-   *
-   */
-  void display_usage()
-  {
-    log_warn("chop syntax:\n"
-           "\tchop <mode> <up-address> ([<steg> <down-address> --steg-option...])...\n"
-           "\t\tmode ~ server|client|socks\n"
-           "\t\tup_address, down_address ~ host:port\n"
-           "\t\tA steganographer is required for each down_address.\n"
-           "\t\tsteganographer options follow the steganographer name.\n"
-           "\t\tThe down_address list is still required in socks mode.\n"
-           "Examples:\n"
-           "\tstegotorus chop client 127.0.0.1:5000 "
-           "http 192.168.1.99:11253  skype 192.168.1.99:11254 \n"
-           "\tstegotorus chop server 127.0.0.1:9005 "
-           "http 192.168.1.99:11253  skype 192.168.1.99:11254");
-  }
-
-  /**
-   * a helper function to check if a specific config
-   * keyboard exists in the config dictionary
-   *
-   * @param keyword_option the keyword specifying the option
-   *
-   * @return true if the option is exists in the config dictionary otherwise returns
-   *         false.
-   */
-  bool user_specified(std::string keyword_option)
-  {
-    return (chop_user_config.find(keyword_option) != chop_user_config.end());
-  }
-
-  /**
-   * validate the config by checking for unknown keyword at
-   * in chop config*/
-  bool valid_config_keyword(const std::string& option_keyword) {
-      if ((std::find(arg_option_list.begin(), arg_option_list.end(), option_keyword) == arg_option_list.end()) &&
-          (std::find(binary_option_list.begin(), binary_option_list.end(), option_keyword) == binary_option_list.end()))
-        return false;
-
-    return true;
-  }
-
-  CONFIG_DECLARE_METHODS(chop);
-
-  DISALLOW_COPY_AND_ASSIGN(chop_config_t);
-};
-
-// Configuration methods
-
-chop_config_t::chop_config_t()
-  : total_transmited_data_bytes(0),
-    total_transmited_cover_bytes(1),
-    handshake_encryptor(NULL),
-    handshake_decryptor(NULL),
-    transparent_proxy(NULL)
-                                    //just to evade div by 0
-{
-  ignore_socks_destination = true;
-  trace_packets = false;
-  trace_packet_data = true;
-  encryption = true;
-  retransmit = true;
-  noise2signal = 0;
-}
-
-chop_config_t::~chop_config_t()
-{
-  if (up_address)
-    evutil_freeaddrinfo(up_address);
-  for (vector<struct evutil_addrinfo *>::iterator i = down_addresses.begin();
-       i != down_addresses.end(); i++)
-    evutil_freeaddrinfo(*i);
-
-  for (vector<steg_config_t *>::iterator i = steg_targets.begin();
-       i != steg_targets.end(); i++)
-    delete *i;
-
-  for (chop_circuit_table::iterator i = circuits.begin();
-       i != circuits.end(); i++)
-    if (i->second)
-      delete i->second;
-
-  delete transparent_proxy;
-  delete handshake_encryptor;
-  delete handshake_decryptor;
-  
-}
-
-bool
-chop_config_t::init_from_protocol_config_dict() {
-  const char* defport;
-  bool listen_up;
-
-  //this also verify that the config dict is already populated
-  if (chop_user_config["mode"] == "client") {
-    defport = "48988"; // bf5c
-    mode = LSN_SIMPLE_CLIENT;
-    listen_up = true;
-  } else if (chop_user_config["mode"] == "socks") {
-    defport = "23548"; // 5bf5
-    mode = LSN_SOCKS_CLIENT;
-    listen_up = true;
-  } else if (chop_user_config["mode"] == "server") {
-    defport = "11253"; // 2bf5
-    mode = LSN_SIMPLE_SERVER;
-    listen_up = false;
-  } else {
-    log_warn("invalid mode %s for protocol chop", chop_user_config["mode"].c_str());
-    return false;
-  }
-
-  vector<string> addresses;
-
-  //Try recover upaddress from where the mode was retrieved. 
-  up_address = resolve_address_port(chop_user_config["up-address"].c_str(), 1, listen_up, defport);
-
-  if (!up_address) {
-    log_warn("chop: invalid up address: %s", chop_user_config["up-address"].c_str());
-    return false;
-
-  }
-
-  if (user_specified("server-key")) {
-    // accept and ignore (for now) client only
-    if (mode == LSN_SIMPLE_SERVER) {
-      log_warn("server-key option is not valid in server mode");
-      return false;
-      }
-  }
-
-  if (user_specified("passphrase")) {
-    passphrase = chop_user_config["passphrase"];
-  }
-
-  if (user_specified("trace-packets")) {
-    trace_packets = (modus_operandi_t::uniformize_boolean_value(chop_user_config["trace-packets"]) == true_string);
-    log_enable_timestamps();
-  }
-
-  if (user_specified("disable-encryption")) {
-    encryption = false;
-  }
-
-  if (user_specified("disable-retransmit")) {
-    retransmit = false;
-  }
-
-  if (user_specified("enable-retransmit")) {
-    retransmit = true;
-  }
-
-  if (user_specified("minimum-noise-to-signal")) {
-    noise2signal = atoi(chop_user_config["minimum-noise-to-signal"].c_str());
-  }
-
-  if (user_specified("cover-server")) {
-      cover_server_address = chop_user_config["cover-server"];
-      transparent_proxy = new TransparentProxy(base, cover_server_address);
-      //This is not related to an specific steg module hence, we store it under
-      //"protocol" tag
-      steg_mod_user_configs["protocol"]["cover-server"] = cover_server_address;
-  }
-
-  //init the header encryptor and the decryptor
-  init_handshake_encryption();
-
-  return true;
-
-}
-
-/**
- * read the hierechical struture of the protocol from the YAML configs
- * and store them in the chop_user_config and the steg mods confs. 
- * abort if config has problem.
- *
- * @param protocols_node the YAML node which points to protocols:
- *        node in the config file
- */
-bool chop_config_t::init(const YAML::Node& protocol_node)
-{
-  std::vector<YAML::Node> steg_conf_list; //to store the steg config
-  //to be send to the steg mods during creation
-  try {
-      for(auto cur_protocol_field: protocol_node) {
-        //if it is the protocol stegs config we need to store the config node
-        //to create the steg protocol later, cause the steg protocol might
-        //need access to the protocol options
-        std::string current_field_name = cur_protocol_field.first.as<std::string>();
-        if (current_field_name == "stegs") {
-          for(auto cur_steg: cur_protocol_field.second)
-            steg_conf_list.push_back(cur_steg);
-        } else {
-          if (!valid_config_keyword(current_field_name))
-            {
-              log_warn("invalid config keyword %s", current_field_name.c_str());
-              return false;
-            }
-
-          chop_user_config[current_field_name] = cur_protocol_field.second.as<std::string>();      }
-      }
-  }  catch( YAML::RepresentationException &e ) {
-    log_warn("bad config format %s", ((string)e.what()).c_str());
-    display_usage();
-
-    return false;
-
-  }
-
-  if (!init_from_protocol_config_dict())
-    return false;
-
-  bool listen_down = (mode == LSN_SIMPLE_SERVER);
-  //now we are ready to process the stegs node
-  if (!(steg_conf_list.size() > 0)) {
-    log_warn("chop: no steganographer is specied. at least one steganographer is needed.");
-  }
-
-  try {
-    for(auto cur_steg : steg_conf_list) {
-      struct evutil_addrinfo *addr =
-        resolve_address_port(cur_steg["down-address"].as<std::string>().c_str(), 1, listen_down, NULL);
-      if (!addr) {
-        log_warn("chop: invalid down address: %s", cur_steg["down-address"].as<std::string>().c_str());
-        display_usage();
-        return false;
-      }
-      down_addresses.push_back(addr);
-
-      if (!steg_is_supported(cur_steg["name"].as<std::string>().c_str())) {
-        log_warn("chop: steganographer '%s' not supported", cur_steg["name"].as<std::string>().c_str());
-        display_usage();
-        return false;
-      }
-
-      steg_targets.push_back(steg_new(cur_steg["name"].as<std::string>().c_str(), this, cur_steg));
-    }
-
-  } catch( YAML::RepresentationException &e ) {
-    log_warn("bad config format %s", ((string)e.what()).c_str());
-    display_usage();
-
-    return false;
-  }
-
-  return true;
-
-}
-
-
-bool chop_config_t::init(unsigned int n_options, const char *const *options)
-{
-
-  if (n_options < 2)
-    {
-      log_warn("you need to at least specify mode of operation and upstream ip address");
-      display_usage();
-      return false;
-
-    }
-
-  chop_user_config["mode"] = options[0];
-
-  while (options[1][0] == '-') {
-    if (strlen(options[1]) < 2)
-      {
-        log_warn("chop: long option %s should be specifed with -- rather than - :", options[1]);
-        display_usage();
-        return false;
-      }
-
-      if (std::find(arg_option_list.begin(), arg_option_list.end(), options[1] + strlen("--")) != arg_option_list.end())
-      {
-        if (n_options <= 2) {
-          log_warn("chop: option %s requires a value argument", options[1]);
-          display_usage();
-          return false;
-
-        }
-
-        chop_user_config[options[1]+strlen("--")] = options[2];
-
-        options++;
-        n_options--;
-      } else if ((std::find(binary_option_list.begin(), binary_option_list.end(), options[1] + strlen("--")) != binary_option_list.end()))
-      {
-        chop_user_config[options[1]+strlen("--")] = "true";
-      } else {
-        log_warn("chop: unrecognized option '%s'", options[1]);
-        display_usage();
-        return false;
-      }
-
-      options++;
-      n_options--;
-  }
-
-  //immidiately after options user needs to specifcy upstream address
-  chop_user_config["up-address"] = options[1];
-   
-  if (!init_from_protocol_config_dict())
-    return false;
-
-  bool listen_down = (mode == LSN_SIMPLE_SERVER);
-
-  // From here on out, arguments are blocks of steg target downsteam
-  // addresse and its options
-  // we are creating the steg config here cause we are using differnt
-  // constructor for command line options vs YAML node
-  unsigned int cur_op = 2;
-  while(cur_op < n_options) {
-    if (!steg_is_supported(options[cur_op])) {
-      log_warn("chop: steganographer '%s' not supported", options[cur_op]);
-      display_usage();
-      return false;
-    }
-    const char* cur_steg_name = options[cur_op];
-
-    cur_op++;
-    if (!(cur_op < n_options)) {
-      log_warn("chop: missing down stream address for steganographer %s", cur_steg_name);
-      display_usage();
-      return false;
-    }
-
-    struct evutil_addrinfo *addr =
-      resolve_address_port(options[cur_op], 1, listen_down, NULL);
-    if (!addr) {
-      log_warn("chop: invalid down address: %s", options[cur_op]);
-      display_usage();
-      return false;
-    }
-    down_addresses.push_back(addr);
-    cur_op++;
-    //from now on till we reach another steg, all
-    //all the options of the curren steg
-    std::vector<std::string> steg_option_list;
-    while(cur_op < n_options && (!steg_is_supported(options[cur_op]))) {
-      steg_option_list.push_back(options[cur_op]);
-      cur_op++;
-    }
-
-    steg_targets.push_back(steg_new(cur_steg_name, this, steg_option_list));
-
-  }
-
-  return true;
-
-}
-
-struct evutil_addrinfo *
-chop_config_t::get_listen_addrs(size_t n) const
-{
-  if (mode == LSN_SIMPLE_SERVER) {
-    if (n < down_addresses.size())
-      return down_addresses[n];
-  } else {
-    if (n == 0)
-      return up_address;
-  }
-  return 0;
-}
-
-struct evutil_addrinfo *
-chop_config_t::get_target_addrs(size_t n) const
-{
-  if (mode == LSN_SIMPLE_SERVER) {
-    if (n == 0)
-      return up_address;
-  } else {
-    if (n < down_addresses.size())
-      return down_addresses[n];
-  }
-  return NULL;
-}
-
-const steg_config_t *
-chop_config_t::get_steg(size_t n) const
-{
-  if (n < steg_targets.size())
-    return steg_targets[n];
-  return NULL;
-}
-
-// Circuit methods
-
-void
-chop_config_t::init_handshake_encryption()
-{
-  key_generator *kgen = 0;
-
-  if (encryption)
-    kgen = key_generator::from_passphrase((const uint8_t *)passphrase.data(),
-                                          passphrase.length(),
-                                          0, 0, 0, 0);
-  if (mode == LSN_SIMPLE_SERVER) {
-    if (encryption) {
-      handshake_decryptor = ecb_decryptor::create(kgen, 16);
-    } else {
-      handshake_decryptor = ecb_decryptor::create_noop();
-    }
-  } else {
-    if (encryption) {
-      handshake_encryptor = ecb_encryptor::create(kgen, 16);
-    } else {
-      handshake_encryptor = ecb_encryptor::create_noop();
-    }
-  }
-
-  delete kgen;
-
-}
-
-circuit_t *
-chop_config_t::circuit_create(size_t)
-{
-  chop_circuit_t *ckt = new chop_circuit_t(retransmit);
-  ckt->config = this;
-
-  key_generator *kgen = 0;
-
-  if (encryption)
-    kgen = key_generator::from_passphrase((const uint8_t *)passphrase.data(),
-                                          passphrase.length(),
-                                          0, 0, 0, 0);
-
-  if (mode == LSN_SIMPLE_SERVER) {
-    if (encryption) {
-      ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
-      ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 16);
-      ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
-      ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 16);
-    } else {
-      ckt->send_crypt     = gcm_encryptor::create_noop();
-      ckt->send_hdr_crypt = ecb_encryptor::create_noop();
-      ckt->recv_crypt     = gcm_decryptor::create_noop();
-      ckt->recv_hdr_crypt = ecb_decryptor::create_noop();
-    }
-  } else {
-    if (encryption) {
-      ckt->recv_crypt     = gcm_decryptor::create(kgen, 16);
-      ckt->recv_hdr_crypt = ecb_decryptor::create(kgen, 16);
-      ckt->send_crypt     = gcm_encryptor::create(kgen, 16);
-      ckt->send_hdr_crypt = ecb_encryptor::create(kgen, 16);
-    } else {
-      ckt->recv_crypt     = gcm_decryptor::create_noop();
-      ckt->recv_hdr_crypt = ecb_decryptor::create_noop();
-      ckt->send_crypt     = gcm_encryptor::create_noop();
-      ckt->send_hdr_crypt = ecb_encryptor::create_noop();
-    }
-
-    std::pair<chop_circuit_table::iterator, bool> out;
-    do {
-      do {
-        rng_bytes((uint8_t *)&ckt->circuit_id, sizeof(ckt->circuit_id));
-      } while (!ckt->circuit_id);
-
-      out = circuits.insert(make_pair(ckt->circuit_id, (chop_circuit_t *)0));
-    } while (!out.second);
-
-    out.first->second = ckt;
-  }
-
-  delete kgen;
-  return ckt;
-}
-
-/** This has to be here for the unfortunate macro game 
-    inline is added so gcc ignore the Wunused-function warning */
-inline chop_circuit_t::chop_circuit_t()
-  :chop_circuit_t::chop_circuit_t(true)
-{
-  //MEANT_TO_BE_UNUSED
-  
-}
+namespace chop_protocol {
 
 chop_circuit_t::chop_circuit_t(bool retransmit)
   : tx_queue(retransmit), avg_desirable_size(0), avg_available_size(0),
@@ -755,7 +72,7 @@ chop_circuit_t::close()
        i != downstreams.end(); i++) {
     chop_conn_t *conn = *i;
     conn->upstream = NULL;
-    conn_do_flush(conn);
+    do_flush();
   }
   downstreams.clear();
 
@@ -826,11 +143,11 @@ chop_circuit_t::drop_downstream(chop_conn_t *conn)
   // to enable further transmissions from the server.
   if (downstreams.empty()) {
     if (sent_fin && received_fin) {
-      circuit_do_flush(this);
+      do_flush();
     } else if (config->mode == LSN_SIMPLE_SERVER) {
-      circuit_arm_axe_timer(this, axe_interval());
+      arm_axe_timer(axe_interval());
     } else {
-      circuit_arm_flush_timer(this, flush_interval());
+      arm_flush_timer(flush_interval());
     }
   }
 }
@@ -841,10 +158,58 @@ chop_circuit_t::drop_downstream(conn_t *cn)
   drop_downstream(dynamic_cast<chop_conn_t *>(cn));
 }
 
+uint32_t
+chop_circuit_t::axe_interval() {
+    // This function must always return a number which is larger than
+    // the maximum possible number that *our peer's* flush_interval()
+    // could have returned; otherwise, we might axe the connection when
+    // it was just that there was nothing to say for a while.
+    // For simplicity's sake, right now we hardwire this to be 30 minutes.
+
+    //However, this approach expose server to a simple and powerful
+    //DoS attack: do 10^10 times: asks for 1GB file drop the upstream connection,
+    //soon the server is out of memory cause it keeps the content in the evbuff
+    //This should depends on global state of memory but as a simple rule of thumb, 
+    //for now under 
+    // 0        30 min
+    // 100K     29 min
+    // 1MB      5  min
+    // 10MB     1  min
+    // However this should be only applied when we get enough dead cycle that
+    // indicates the client is no longer interested in the content
+    // 30min - rng(log(size(0), cycles)
+    const static unsigned int max_idle_min = 30;
+    if (!dead_cycles)
+      return max_idle_min * 60 * 1000;
+
+    //Anti dos measures
+    size_t memory_consumed = evbuffer_get_length(bufferevent_get_input(up_buffer));
+
+    unsigned int max_penalty_mins = std::min(max_idle_min-1, ui64_log2(memory_consumed)) + 2;
+    unsigned int penalty_mins = rng_range_geom(max_penalty_mins, std::min((unsigned int)(max_penalty_mins - 1), dead_cycles));
+    //dead_cycles > 0 and this never become equal to max_penalty 
+
+    return std::max((unsigned int)(max_idle_min - penalty_mins) * 60 * 1000, 100u);
+
+}
+  
+uint32_t
+chop_circuit_t::flush_interval() {
+    // 10*60*1000 lies between 2^19 and 2^20.
+    uint32_t shift = std::max(1u, std::min(19u, dead_cycles));
+    uint32_t xv = std::max(1u, std::min(10u * 60 * 1000, 1u << shift));
+    //TODO: this needs to be formalised but the original formula sometimes gives 1min
+    //that is t otally unacceptable
+    if (dead_cycles == 0)
+      return 100;
+
+    return rng_range_geom(20 * 60 * 1000, xv) + 100;
+  }
+
 int
 chop_circuit_t::send()
 {
-  circuit_disarm_flush_timer(this);
+  disarm_flush_timer();
 
   //First we check if there's steg data that we need to send
   if (send_all_steg_data())
@@ -953,7 +318,7 @@ chop_circuit_t::send()
         circuit_reopen_downstreams(this);
       else {
         log_debug(this,"no more connection available at this time");
-        circuit_arm_axe_timer(this, axe_interval());
+        arm_axe_timer(axe_interval());
       }
     }
   }
@@ -1093,8 +458,12 @@ chop_circuit_t::send_eof()
     if (send()) {
       log_info(this, "error during transmit");
       this->close();
+      return -1;
     }
   }
+
+  return 0;
+  
 }
 
 //TODO check if send_special can be used steg data communication
@@ -1186,7 +555,7 @@ chop_circuit_t::send_special(opcode_t f, struct evbuffer *payload)
     dead_cycles = 0;
     //vmon: We are making progress, there is no reason to keep the supposedly scheduled
     //death hour for this circuit. It might connected and working for hours.
-    circuit_disarm_axe_timer(this);
+    disarm_axe_timer();
   }
   
   return 0;
@@ -1422,7 +791,7 @@ chop_circuit_t::send_targeted(chop_conn_t *conn, size_t d, size_t p, opcode_t f,
     dead_cycles = 0;
     //vmon: We are making progress, there is no reason to keep the supposedly scheduled
     //death hour for this circuit. It might connected and working for hours.
-    circuit_disarm_axe_timer(this);
+    disarm_axe_timer();
   }
   return 0;
 }
@@ -1636,7 +1005,7 @@ chop_circuit_t::recv_block(uint32_t seqno, opcode_t op,
   case op_RST:
     // Remote signaled a protocol error.  Disconnect.
     log_info(this, "received RST; disconnecting circuit");
-    circuit_recv_eof(this);
+    recv_eof();
     evbuffer_free(data);
     goto zap;
 
@@ -1705,7 +1074,7 @@ chop_circuit_t::process_queue()
             dead_cycles = 0;
             //vmon: We are making progress, there is no reason to keep the supposedly scheduled
             //death hour for this circuit. It might connected and working for hours.
-            circuit_disarm_axe_timer(this);
+            disarm_axe_timer();
           }
 
           log_debug(this, "writing into upstream buffer");
@@ -1754,7 +1123,7 @@ chop_circuit_t::process_queue()
     evbuffer_free(blk.data);
 
     if (pending_fin && !received_fin) {
-      circuit_recv_eof(this);
+      recv_eof();
       received_fin = true;
     }
     if (pending_error && !sent_error) {
@@ -1789,13 +1158,13 @@ chop_circuit_t::check_for_eof()
   // if necessary.
   if (sent_fin && received_fin) {
     log_debug(this, "sent and received FIN");
-    circuit_disarm_flush_timer(this);
+    disarm_flush_timer();
     for (unordered_set<chop_conn_t *>::iterator i = downstreams.begin();
          i != downstreams.end(); i++) {
       chop_conn_t *conn = *i;
       if (conn->must_send_p())
         conn->send();
-      conn_send_eof(conn);
+      send_eof();
     }
   }
 
@@ -1807,7 +1176,7 @@ chop_circuit_t::check_for_eof()
               received_fin ? " (received FIN)": "");
     uint32_t next_try_interval = flush_interval();
     log_debug(this, "next try to connect to server in %u msecs", next_try_interval);
-    circuit_arm_flush_timer(this, next_try_interval);
+    arm_flush_timer(next_try_interval);
   }
 
   return 0;
@@ -1886,525 +1255,12 @@ chop_config_t::conn_create(size_t index)
   return conn;
 }
 
-chop_conn_t::chop_conn_t()
-  :upstream(NULL), must_send_timer(NULL), sent_handshake(false)
-{
-}
+} // namespace
 
-chop_conn_t::~chop_conn_t()
-{
-  if (this->must_send_timer)
-    event_free(this->must_send_timer);
-  if (steg)
-    delete steg;
-  evbuffer_free(recv_pending);
-}
-
-void
-chop_conn_t::close()
-{
-  //delete the timer and tell upstream to drop me
-  emancipate_from_upstream();
-  
-  conn_t::close();
-}
-
-/**
-   In case the connection is handled to the transparent proxy
-   then chop circuit/protocol should no longer influence the
-   status of the connection
- */
-void
-chop_conn_t::emancipate_from_upstream()
-{
-  if (this->must_send_timer) {
-    event_del(this->must_send_timer);
-    must_send_timer = NULL;
-  }
-
-  if (upstream)
-    upstream->drop_downstream(this);
-
-}
-
-circuit_t *
-chop_conn_t::circuit() const
-{
-  return upstream;
-}
-
-int
-chop_conn_t::maybe_open_upstream()
-{
-  // We can't open the upstream until we have a circuit ID.
-  return 0;
-}
-
-int
-chop_conn_t::send(struct evbuffer *block)
-{
-  if (!sent_handshake && config->mode != LSN_SIMPLE_SERVER) {
-    if (!upstream || upstream->circuit_id == 0)
-      log_abort(this, "handshake: can't happen: up%c cid=%u",
-                upstream ? '+' : '-',
-                upstream ? upstream->circuit_id : 0);
-    /*hear we need to cook the handshake */
-    uint8_t conn_handshake[HANDSHAKE_LEN];
-    ChopHandshaker handshaker(upstream->circuit_id);
-    handshaker.generate(conn_handshake, *(config->handshake_encryptor));
-    
-    if (evbuffer_prepend(block, (void *)conn_handshake,
-                         HANDSHAKE_LEN)) {
-      log_warn(this, "failed to prepend handshake to first block");
-      return -1;
-    }
-  }
-
-  int transmission_size = steg->transmit(block);
-  if (transmission_size < 0) {
-    log_warn(this, "failed to transmit block");
-    return -1;
-  }
-
-  config->total_transmited_cover_bytes += transmission_size;
-  sent_handshake = true;
-  if (must_send_timer) {
-    evtimer_del(must_send_timer);
-    must_send_timer = NULL;
-  }
-  return 0;
-}
-
-int
-chop_conn_t::handshake()
-{
-  // The actual handshake is generated in chop_conn_t::send so that it
-  // can be merged with a block if possible; however, we use this hook
-  // to ensure that the client sends _something_ ASAP after each new
-  // connection, because the server can't forward traffic, or even
-  // open a socket to its own upstream, until it knows which circuit
-  // to associate this new connection with.  Note that in some cases
-  // it's possible for us to have _already_ sent something on this
-  // connection by the time we get called back!  Don't do it twice.
-  if (config->mode != LSN_SIMPLE_SERVER && !sent_handshake)
-    send();
-  return 0;
-}
-
-/**
- checks if the handshake is correctly authenticated
-
- @return 0 success
-         1 failed, transparentized the connection
-        -1 failed, unrecoverable, please close the connection
-*/
-int
-chop_conn_t::recv_handshake()
-{
-  log_assert(!upstream);
-  log_assert(config->mode == LSN_SIMPLE_SERVER);
-
-  uint32_t circuit_id;
-  ChopHandshaker handshaker;
-  uint8_t conn_handshake[HANDSHAKE_LEN];
-
-  if (evbuffer_remove(recv_pending, (void *)conn_handshake,
-                      HANDSHAKE_LEN) != (signed) HANDSHAKE_LEN)
-    return -1;
-
-  if (!handshaker.verify_and_extract(conn_handshake, *(config->handshake_decryptor))) {
-    //invalid handshake, if we have a transparent proxy we 
-    //we'll act as one for this connection
-    log_warn("handshake authentication faild.");
-
-    //so we need to axe the must send timer as the connection will be
-    //managed by the transparent proxy and also drop the connection from
-    //upstream circuit but not close it
-    emancipate_from_upstream();
-    
-    if (config->transparent_proxy) {
-      log_debug("stegotorus turning into a transparent proxy.");
-      config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
-      return 1;
-    }
-    
-    return -1;
-  }
-
-  circuit_id = handshaker.circuit_id;
-
-  chop_circuit_table::value_type in(circuit_id, (chop_circuit_t *)0);
-  std::pair<chop_circuit_table::iterator, bool> out
-    = this->config->circuits.insert(in);
-  chop_circuit_t *ck;
-
-  if (!out.second) { // element already exists
-    if (!out.first->second) {
-      log_debug(this, "stale circuit");
-      return 0;
-    }
-    ck = out.first->second;
-    log_debug(this, "found circuit to %s", ck->up_peer);
-  } else {
-    ck = dynamic_cast<chop_circuit_t *>(circuit_create(this->config, 0));
-    if (!ck) {
-      log_warn(this, "failed to create new circuit");
-      return -1;
-    }
-    if (circuit_open_upstream(ck)) {
-      log_warn(this, "failed to begin upstream connection");
-      ck->close();
-      return -1;
-    }
-    log_debug(this, "created new circuit to %s", ck->up_peer);
-    ck->circuit_id = circuit_id;
-    out.first->second = ck;
-  }
-
-  ck->add_downstream(this);
-  return 0;
-}
-
-int
-chop_conn_t::recv()
-{
-  //TODO: This is too slow, we need to do it more cleverly.
-  //we keep a copy of value of recv_pending, in case we need to
-  //transparentize the connection
-  if (config->mode == LSN_SIMPLE_SERVER && config->transparent_proxy) {
-    received_length = evbuffer_get_length(bufferevent_get_input(buffer));
-    originally_received = new uint8_t[received_length];
-    log_assert(originally_received);
-    if (evbuffer_copyout(bufferevent_get_input(buffer), originally_received, received_length) != (ssize_t) received_length)
-      log_abort("was not able to make a copy of received data");
-  }
-
-  if (steg->receive(recv_pending)) {
-    if ((config->mode == LSN_SIMPLE_SERVER ) && config->transparent_proxy) {
-      //If steg fails in recovering the data
-      //then maybe it wasn't an steg data to begin with
-      //so we have transparent proxy we will become 
-      //transparent at this moment
-      log_debug("stegotorus turning into a transparent proxy.");
-      config->transparent_proxy->transparentize_connection(this, originally_received, received_length);
-
-      delete[] originally_received;
-      return 0;
-    }
-    else
-      return -1;
-  }
-  // If that succeeded but did not copy anything into recv_pending,
-  // wait for more data.
-  if (evbuffer_get_length(recv_pending) == 0)
-    return 0;
-
-  if (!upstream) {
-    if (config->mode != LSN_SIMPLE_SERVER) {
-      // We're the client.  Client connections start out attached to a
-      // circuit; therefore this is a server-to-client message that
-      // crossed with the teardown of the circuit it belonged to, and
-      // we don't have the decryption keys for it anymore.
-      // By construction it must be chaff, so just throw it away.
-      log_debug(this, "discarding chaff after circuit closed");
-      log_assert(!must_send_p());
-      conn_do_flush(this);
-      return 0;
-    }
-
-    // We're the server. Try to receive a handshake.
-    int handshake_result = recv_handshake();
-    if (config->transparent_proxy) 
-      delete [] originally_received; //done with this
-
-    switch(handshake_result) 
-      {
-      case 1:
-        //this connection was transparentized return 0 and don't 
-        //worry about it any more
-        return 0;
-      case -1:
-        //unrecoverable error, close the connection
-        return -1;
-      }
-
-    // If we get here and ->upstream is not set, this is a connection
-    // for a stale circuit: that is, a new connection made by the
-    // client (to draw more data down from the server) that crossed
-    // with a server-to-client FIN, the client-to-server FIN already
-    // having been received and processed.  We no longer have the keys
-    // to decrypt anything after the handshake, but it's either chaff
-    // or a protocol error.  Either way, we can just drop the
-    // connection, possibly sending a response if the cover protocol
-    // requires one.
-    if (!upstream) {
-      if (must_send_p())
-        send();
-      conn_do_flush(this);
-      return 0;
-    }
-  }
-
-  log_debug(this, "circuit to %s", upstream->up_peer);
-  for (;;) {
-    size_t avail = evbuffer_get_length(recv_pending);
-    if (avail == 0)
-      break;
-
-    log_debug(this, "%lu bytes available", (unsigned long)avail);
-    if (avail < MIN_BLOCK_SIZE) {
-      log_debug(this, "incomplete block framing");
-      break;
-    }
-
-    uint8_t ciphr_hdr[HEADER_LEN];
-    if (evbuffer_copyout(recv_pending, ciphr_hdr, HEADER_LEN) !=
-        (ssize_t)HEADER_LEN) {
-      log_warn(this, "failed to copy out %lu bytes (header)",
-               (unsigned long)HEADER_LEN);
-      break;
-    }
-
-    header hdr(ciphr_hdr, *upstream->recv_hdr_crypt,
-               upstream->recv_queue.window());
-    if (!hdr.valid()) {
-      uint8_t c[HEADER_LEN];
-      upstream->recv_hdr_crypt->decrypt(c, ciphr_hdr);
-      char fallbackbuf[4];
-      log_info(this, "invalid block header: "
-               "%02x%02x%02x%02x|%02x%02x|%02x%02x|%s|%02x|"
-               "%02x%02x%02x%02x%02x%02x",
-               c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
-               opname(c[8], fallbackbuf),
-               c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
-
-      if (config->trace_packets)
-        fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv-error "
-                "%02x%02x%02x%02x <d=%02x%02x p=%02x%02x f=%s r=%02x "
-                "c=%02x%02x%02x%02x%02x%02x>\n",
-                log_get_timestamp(), upstream->serial,
-                upstream->recv_queue.window(),
-                (unsigned long)evbuffer_get_length(
-                                  bufferevent_get_input(upstream->up_buffer)),
-                c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
-                opname(c[8], fallbackbuf),
-                c[9], c[10], c[11], c[12], c[13], c[14], c[15]);
-
-      return -1;
-    }
-    if (avail < hdr.total_len()) {
-      log_debug(this, "incomplete block (need %lu bytes)",
-                (unsigned long)hdr.total_len());
-      break;
-    }
-
-    uint8_t decodebuf[MAX_BLOCK_SIZE];
-    if (evbuffer_drain(recv_pending, HEADER_LEN) ||
-        evbuffer_remove(recv_pending, decodebuf, hdr.total_len() - HEADER_LEN)
-        != (ssize_t)(hdr.total_len() - HEADER_LEN)) {
-      log_warn(this, "failed to copy block to decode buffer");
-      return -1;
-    }
-    if (upstream->recv_crypt->decrypt(decodebuf,
-                                      decodebuf, hdr.total_len() - HEADER_LEN,
-                                      ciphr_hdr, HEADER_LEN)) {
-      log_warn("MAC verification failure");
-      return -1;
-    }
-
-    char fallbackbuf[4];
-    log_debug(this, "receiving block %u <d=%lu p=%lu f=%s r=%u>",
-              hdr.seqno(), (unsigned long)hdr.dlen(), (unsigned long)hdr.plen(),
-              opname(hdr.opcode(), fallbackbuf),
-              hdr.rcount());
-
-    if (config->trace_packets) {
-      fprintf(stderr, "T:%.4f: ckt %u <ntp %u outq %lu>: recv %lu <d=%lu p=%lu f=%s r=%u>\n",
-              log_get_timestamp(), upstream->serial,
-              upstream->recv_queue.window(),
-              (unsigned long)evbuffer_get_length(bufferevent_get_input(upstream->up_buffer)),
-              (unsigned long)hdr.seqno(),
-              (unsigned long)hdr.dlen(),
-              (unsigned long)hdr.plen(),
-              opname(hdr.opcode(), fallbackbuf),
-              hdr.rcount());
-
-         // vmon: I need the content of the packet as well.
-        if (config->trace_packet_data && hdr.dlen())
-          {
-            char data_4_log[hdr.dlen() + 1];
-            memcpy(data_4_log, decodebuf, hdr.dlen());
-            data_4_log[hdr.dlen()] = '\0';
-            log_debug("Data received: %s",  data_4_log);
-            
-          }
-      }
-    
-    evbuffer *data = evbuffer_new();
-    if (!data || (hdr.dlen() && evbuffer_add(data, decodebuf, hdr.dlen()))) {
-      log_warn(this, "failed to extract data from decode buffer");
-      evbuffer_free(data);
-      return -1;
-    }
-
-    if (upstream->recv_block(hdr.seqno(), hdr.opcode(), data, this->steg->cfg())) {
-      log_warn(this, "failed to insert the data in recv queue");
-      return -1; // insert() logs an error
-    }
-  }
-
-  return upstream->process_queue();
-}
-
-int
-chop_conn_t::recv_eof()
-{
-  // Consume any not-yet-processed incoming data.  It's possible for
-  // us to get here before we've processed _any_ data -- including the
-  // handshake! -- from a new connection, so we have to do this before
-  // we look at ->upstream.  */
-  if (evbuffer_get_length(inbound()) > 0) {
-    if (recv())
-      return -1;
-    // If there's anything left in the buffer at this point, it's a
-    // protocol error.
-    if (evbuffer_get_length(inbound()) > 0)
-      return -1;
-  }
-
-  // We should only drop the connection from the circuit if we're no
-  // longer sending covert data in the opposite direction _and_ the
-  // cover protocol does not need us to send a reply (i.e. the
-  // must_send_timer is not pending).
-  if (upstream && (upstream->sent_fin || no_more_transmissions) &&
-      !must_send_p() && evbuffer_get_length(outbound()) == 0)
-    upstream->drop_downstream(this);
-
-  return 0;
-}
-
-void
-chop_conn_t::expect_close()
-{
-  read_eof = true;
-}
-
-void
-chop_conn_t::cease_transmission()
-{
-  no_more_transmissions = true;
-  if (must_send_timer) {
-    evtimer_del(must_send_timer);
-    must_send_timer = NULL;
-  }
-  
-  conn_do_flush(this);
-}
-
-void
-chop_conn_t::transmit_soon(unsigned long milliseconds)
-{
-  struct timeval tv;
-
-  log_debug(this, "must send within %lu milliseconds", milliseconds);
-
-  tv.tv_sec = milliseconds / 1000;
-  tv.tv_usec = (milliseconds % 1000) * 1000;
-
-  if (!must_send_timer)
-    must_send_timer = evtimer_new(config->base, must_send_timeout, this);
-  evtimer_add(must_send_timer, &tv);
-}
-
-void
-chop_conn_t::send()
-{
-  if (must_send_timer) {
-    evtimer_del(must_send_timer);
-    must_send_timer = NULL;
-  }
-
-  if (!steg) {
-    log_warn(this, "send() called with no steg module available");
-    conn_do_flush(this);
-    return;
-  }
-
-  if (write_eof) {
-    log_warn(this, "send() called while connection buffer is shut down to write.");
-    //conn_do_flush(this);
-    return;
-  }
-
-  // When this happens, we must send _even if_ we have no upstream to
-  // provide us with data.  For instance, to preserve the cover
-  // protocol, we must send an HTTP reply to each HTTP query that
-  // comes in for a stale circuit.
-  if (upstream) {
-    log_debug(this, "must send");
-    if (upstream->send_targeted(this)) {
-      upstream->drop_downstream(this);
-      conn_do_flush(this);
-    }
-
-  } else {
-    log_debug(this, "must send (no upstream)");
-
-    size_t room = steg->transmit_room(MIN_BLOCK_SIZE, MIN_BLOCK_SIZE,
-                                      MAX_BLOCK_SIZE);
-    if (room < MIN_BLOCK_SIZE || room >= MAX_BLOCK_SIZE)
-      log_abort(this, "steg size request (%lu) out of range [%lu, %lu]",
-                (unsigned long)room,
-                (unsigned long)MIN_BLOCK_SIZE,
-                (unsigned long)MAX_BLOCK_SIZE);
-
-    // Since we have no upstream, we can't encrypt anything; instead,
-    // generate random bytes and feed them straight to steg_transmit.
-    struct evbuffer *chaff = evbuffer_new();
-    struct evbuffer_iovec v;
-    if (!chaff || evbuffer_reserve_space(chaff, room, &v, 1) != 1 ||
-        v.iov_len < room) {
-      log_warn(this, "memory allocation failed");
-      if (chaff)
-        evbuffer_free(chaff);
-      conn_do_flush(this);
-      return;
-    }
-    v.iov_len = room;
-    rng_bytes((uint8_t *)v.iov_base, room);
-    if (evbuffer_commit_space(chaff, &v, 1)) {
-      log_warn(this, "evbuffer_commit_space failed");
-      if (chaff)
-        evbuffer_free(chaff);
-      conn_do_flush(this);
-      return;
-    }
-    
-    int transmission_size = steg->transmit(chaff);
-    if (transmission_size < 0)
-      conn_do_flush(this);
-    else
-      config->total_transmited_cover_bytes += transmission_size;
-
-    evbuffer_free(chaff);
-  }
-}
-
-bool
-chop_conn_t::must_send_p() const
-{
-  return must_send_timer && evtimer_pending(must_send_timer, 0);
-}
-
-/* static */ void
-chop_conn_t::must_send_timeout(evutil_socket_t, short, void *arg)
-{
-  static_cast<chop_conn_t *>(arg)->send();
-}
-
-} // anonymous namespace
+using namespace chop_protocol;
 
 PROTO_DEFINE_MODULE(chop);
+
 
 // Local Variables:
 // mode: c++

@@ -155,13 +155,13 @@ extern const proto_module *const supported_protos[];
     #mod, mod##_config_create, mod##_config_create              \
     /* intelligent casting based on the type of pointer */      \
   } /* deliberate absence of semicolon */                       
-                                                                \
+                                                                
 #define CONFIG_DECLARE_METHODS(mod)                             \
   mod##_config_t();                                             \
   virtual ~mod##_config_t();                                    \
   virtual const char *name() const;                             \
   virtual bool init(unsigned int n_opts, const char *const *opts); \
-virtual bool init(const YAML::Node& protocols_node);               \
+  virtual bool init(const YAML::Node& protocols_node);               \
   virtual evutil_addrinfo *get_listen_addrs(size_t n) const;    \
   virtual evutil_addrinfo *get_target_addrs(size_t n) const;    \
   virtual const steg_config_t *get_steg(size_t n) const;        \
@@ -203,6 +203,6 @@ virtual bool init(const YAML::Node& protocols_node);               \
   virtual void add_downstream(conn_t *);        \
   virtual void drop_downstream(conn_t *);       \
   virtual int  send();                          \
-  virtual int  send_eof();
+  virtual int send_eof();
 
 #endif
