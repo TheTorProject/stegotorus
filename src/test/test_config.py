@@ -58,20 +58,23 @@ class TimelineTest(TestCase):
         if errors != "":
             self.fail("\n" + errors)
 
-    def test_empty_config_null(self):
+    def no_test_empty_config_null(self):
         #pdb.set_trace()
         print self.reftl
         self.doTest("null-cl",
            ("--config-file="+ self.testdir + "/test_conf.d/empty.yaml", "null", "server", "127.0.0.1:5000",
             "127.0.0.1:5001", "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
-    def test_null_config(self):
+    def no_test_null_config(self):
         self.doTest("null", ("--config-file="+ self.testdir + "/test_conf.d/null-client-server.yaml"))
 
-    def test_chop_nosteg_config(self):
+    def no_test_chop_nosteg_config(self):
         self.doTest("chop-nosteg", ("--config-file="+ self.testdir + "/test_conf.d/chop-nosteg-client-server.yaml"))
 
-    def no_ntest_chop_http_config(self):
+    def no_test_chop_nosteg_rr_config(self):
+        self.doTest("chop-nosteg", ("--config-file="+ self.testdir + "/test_conf.d/chop-nosteg-rr-client-server.yaml"))
+
+    def no_test_chop_http_config(self):
         #pdb.set_trace()
         #print "<<<<<<START>>>>>>"
         #print self.http_reftl

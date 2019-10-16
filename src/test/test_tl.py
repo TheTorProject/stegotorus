@@ -44,12 +44,12 @@ class TimelineTest(object):
         if errors != "":
             self.fail("\n" + errors)
 
-    def no_test_null(self):
+    def test_null(self):
         self.doTest("null",
            ("null", "server", "127.0.0.1:5000", "127.0.0.1:5001",
             "null", "client", "127.0.0.1:4999", "127.0.0.1:5000"))
 
-    def no_test_chop_nosteg(self):
+    def test_chop_nosteg(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
             "nosteg", "127.0.0.1:5010",
@@ -57,7 +57,7 @@ class TimelineTest(object):
             "nosteg", "127.0.0.1:5010",
             ))
 
-    def no_test_chop_nosteg_2_channels(self):
+    def test_chop_nosteg_2_channels(self):
         self.doTest("chop",
            ("chop", "server", "127.0.0.1:5001",
             "nosteg","127.0.0.1:5010", "nosteg", "127.0.0.1:5011",
@@ -122,7 +122,7 @@ class TimelineTest(object):
             "http", "127.0.0.1:5010","http","127.0.0.1:5011",
             ))
 
-    def test_http_apache(self):
+    def no_ntest_http_apache(self):
         self.doTest("chop",
            ("chop", "server", "--disable-retransmit", "127.0.0.1:5001",
             "http_apache", "127.0.0.1:5010",

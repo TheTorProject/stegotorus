@@ -72,7 +72,7 @@ chop_circuit_t::close()
        i != downstreams.end(); i++) {
     chop_conn_t *conn = *i;
     conn->upstream = NULL;
-    do_flush();
+    conn->do_flush();
   }
   downstreams.clear();
 
@@ -1164,7 +1164,7 @@ chop_circuit_t::check_for_eof()
       chop_conn_t *conn = *i;
       if (conn->must_send_p())
         conn->send();
-      send_eof();
+      conn->send_eof();
     }
   }
 
