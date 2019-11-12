@@ -60,7 +60,6 @@ int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity)
   int cnt = 0;
   int r;
   pentry_header* p;
-  char* msgbuf;
   int cap;
   int mode;
 
@@ -75,11 +74,12 @@ int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity)
       continue;
     }
 
-    msgbuf = pl.payloads[r];
+    vector<uint8_t> msgbuf(pl.payloads[r].begin(), pl.payloads[r].end());
+    JSSteg jsSteg_capacity_computer_engine;
 
-    mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_JAVASCRIPT);
+    mode = has_eligible_HTTP_content(reinterpret_cast<char*>(msgbuf.data()), p->length, HTTP_CONTENT_JAVASCRIPT);
     if (mode == CONTENT_JAVASCRIPT) {
-      cap = JSSteg::static_capacity(msgbuf, p->length);
+      cap = jsSteg_capacity_computer_engine.capacity(msgbuf);
       if (cap == 0)
         continue;
 

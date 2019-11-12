@@ -9,6 +9,11 @@
 {
 
  protected:
+  //this buffer is a helper buffer for compression/deflation
+  //it is at class scope to avoid the penaltiy of allocation
+  //delocation during process of each payload
+  std::vector<uint8_t> outbuf2;
+
   /**
      this function carry the only major part that is different between a
      js file and html file. As such html file will re-implement it accordingly
@@ -43,6 +48,8 @@
   static unsigned int js_code_block_preliminary_capacity(char* buf, size_t len);
 
 public:
+  int isxString(char *str);
+
   int isGzipContent (char *msg);
 
   int findContentType (char *msg);
@@ -53,9 +60,9 @@ public:
 
   JSSteg(PayloadServer* payload_provider, double noise2signal = 0, int content_type = HTTP_CONTENT_JAVASCRIPT); 
 
-  virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len);
+  virtual int encode(std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload);
   
-  virtual ssize_t decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
+  virtual ssize_t decode(const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& data);
 
   /**
      compute the capcaity of the cover by getting a pointer to the
@@ -63,12 +70,8 @@ public:
 
      @param cover_body pointer to the begiing of the body
      @param body_length the total length of message body
-  */
-  virtual ssize_t headless_capacity(char *cover_body, int body_length);
-  static unsigned int static_headless_capacity(char *buf, size_t len);
-
-  virtual ssize_t capacity(const uint8_t *cover_payload, size_t len);
-  static unsigned int static_capacity(char *cover_payload, int body_length);
+ */
+    virtual ssize_t headless_capacity(std::vector<uint8_t>& cover_body);
 
 
   /*int decode (char *jData, char *dataBuf, unsigned int jdlen,
