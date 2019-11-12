@@ -35,7 +35,7 @@ struct payloads {
   unsigned int max_PDF_capacity;
 
   pentry_header payload_hdrs[MAX_PAYLOADS];
-  char* payloads[MAX_PAYLOADS];
+  std::string payloads[MAX_PAYLOADS];
   int payload_count;
 };
 
@@ -61,7 +61,10 @@ class TracePayloadServer: public PayloadServer
   /**virtual functions */
   unsigned int find_client_payload(char* buf, int len, int type);
 
-  int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal = 0, std::string* payload_id_hash = NULL);
+  /**
+     Implementation of the abstract function PayloadServer::get_payload
+  */
+  int get_payload (int contentType, int cap, const std::vector<uint8_t>* buf, double noise2signal = 0, std::string* payload_id_hash = NULL);
 
   /** Moved untouched from payloads.c */
   int init_JS_payload_pool(int len, int type, int minCapacity);

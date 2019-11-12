@@ -59,18 +59,18 @@ class ApachePayloadServer: public PayloadServer
   //Cache stuff
   static const size_t c_PAYLOAD_CACHE_ELEMENT_CAPACITY = 500;
   /**
-     LRU cache to prevent out of memory when there are lots of payload
-     on the server, for now we work with number of payload and can 
+     LRU cache to prevent running out of memory when there are lots of 
+     payload on the server, for now we work with number of payload and can 
      be improved to the limit by total size
    */
-  PayloadLRUCache<std::string, std::string, ApachePayloadServer, unordered_map> _payload_cache;
+  PayloadLRUCache<std::string, std::vector<uint8_t>, ApachePayloadServer, unordered_map> _payload_cache;
   /**
      This function is supposed to be given to the cache class to be used to retrieve the
      the element when it isn't in the hash table
 
      @param url_hash the sha-1 hash of the url
   */
-  std::string fetch_hashed_url(const std::string& url_hash);
+  std::vector<uint8_t> fetch_hashed_url(const std::string& url_hash);
 
  public:
   enum PayloadChoiceStrategy {
@@ -127,7 +127,11 @@ class ApachePayloadServer: public PayloadServer
 
   /** virtual functions */
   virtual unsigned int find_client_payload(char* buf, int len, int type);
-  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal = 0, std::string* payload_id_hash = NULL);
+
+  /**
+     Implementation of the abstract function PayloadServer::get_payload
+  */
+  virtual int get_payload (int contentType, int cap, const std::vector<uint8_t>* buf, double noise2signal = 0, std::string* payload_id_hash = NULL);
 
   /**
      Gets \0 ended uri char* and determines its type based on

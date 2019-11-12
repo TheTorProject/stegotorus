@@ -14,6 +14,7 @@ lookup_peer_name_from_ip(const char* p_ip, char* p_name);
   struct http_steg_config_t : steg_config_t
   {
     bool is_clientside : 1;
+    //TODO: Make the payload server not a proper self destructing object not a pointer
     PayloadServer* payload_server;
 
     //list of user config for http steg

@@ -15,8 +15,6 @@
 #define FRAME_HUFFMAN 0xC4
 #define FRAME_SKIP 0x00
 
-#define SWAP(X) ( (((X) & 0xFF) << 8) + (((X) & 0xFF00) >> 8 ) )
-
 #ifdef DEBUG
 #define LOG(X,...) printf(X, ##__VA_ARGS__);
 #else
@@ -26,7 +24,7 @@
 class JPGSteg : public FileStegMod
 {
 protected:
- 	static int starting_point(const uint8_t *raw, int len);
+  static int starting_point(const std::vector<uint8_t>& raw_data);
 
 	int modify_huffman_table(uint8_t *raw, int len);
 
@@ -40,29 +38,16 @@ public:
        @param cover_body pointer to the begiing of the body
        @param body_length the total length of message body
     */
-    virtual ssize_t headless_capacity(char *cover_body, int body_length);
-    static unsigned int static_headless_capacity(char *cover_body, int body_length);
-
-    /**
-       returns the capacity of the data you can store in jpeg response
-       given the jpeg file content in 
-
-       @param buffer: the buffer containing the payload
-       @param len: the buffer's length
-
-       @return the capacity that the buffer can cover or < 0 in case of error
-     */
-	virtual ssize_t capacity(const uint8_t *buffer, size_t len);
-	static unsigned int static_capacity(char *buffer, int len);
+    virtual ssize_t headless_capacity(const std::vector<uint8_t>& cover_body);
 
     /**
        constructor just to call parent constructor
     */
-    JPGSteg(PayloadServer* payload_provider, double noise2signal = 0);
+    JPGSteg(PayloadServer& payload_provider, double noise2signal = 0);
 
-    virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len);
+    virtual ssize_t encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload);
     
-	virtual ssize_t decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data);
+  virtual ssize_t decode(const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& data);
 
 };
 

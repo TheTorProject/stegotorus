@@ -276,13 +276,20 @@ class PayloadServer
   virtual unsigned int find_client_payload(char* buf, int len, int type) = 0;
 
   /**
-     @param payload_id_hash if payload_id_has is not NULL, then the function
-            copy the payload identifier hash into for further reference like
+     try to find a payload with the requested property and store a pointer to into buf
+
+     @param contentType the integer identifier of the cover content type requested.
+     @param cap         the required available capacity the cover must provide
+     @param buf         the function stores a pointer to the string object containing
+                        the cover
+     @param noise2signal the minimum require noise to available capacity ratio
+     @param payload_id_hash if payload_id_hash is not NULL, then the function
+            copy the payload identifier hash into it for further reference like
             disqualifiying the payload
 
      @return 1 if succeed to find an suitable payload otherwise 0
    */
-  virtual int get_payload (int contentType, int cap, char** buf, int* size, double noise2signal=0, std::string* payload_id_hash = NULL) = 0;
+  virtual int get_payload (int contentType, int cap, const std::vector<uint8_t>* buf, double noise2signal=0, std::string* payload_id_hash = NULL) = 0;
 
   /**
      turn on the corrupted flag for the payload identified by payload_id_hash

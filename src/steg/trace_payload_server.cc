@@ -336,7 +336,7 @@ TracePayloadServer::init_SWF_payload_pool(int len, int type, int /*unused */)
 }
 
 
-int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* size, double noise2signal, string* payload_id_hash) {
+int TracePayloadServer::get_payload (int contentType, int cap, const std::vector<uint8_t>* buf, double noise2signal, string* payload_id_hash) {
   int r, i, cnt, found = 0, numCandidate = 0, first, best, current;
 
   (void) payload_id_hash; //TracePayloadServer doesn't support disqualification
@@ -394,7 +394,7 @@ int TracePayloadServer::get_payload (int contentType, int cap, char** buf, int* 
       pl.payload_hdrs[pl.typePayload[contentType][first]].length,
       pl.payload_hdrs[pl.typePayload[contentType][best]].length,
       numCandidate);
-    *buf = pl.payloads[pl.typePayload[contentType][best]];
+    buf = pl.payloads[pl.typePayload[contentType][best]];
     *size = pl.payload_hdrs[pl.typePayload[contentType][best]].length;
     return 1;
   } else {
@@ -458,11 +458,7 @@ void TracePayloadServer::load_payloads(const char* fname)
     r = -1;
     if (pentry.ptype == TYPE_HTTP_RESPONSE) {
       r = fixContentLen (buf, pentry.length, buf2, HTTP_PAYLOAD_BUF_SIZE);
-      // log_debug("for payload_count %d, fixContentLen returns %d", payload_count, r);
     }
-    // else {
-    // log_debug("for payload_count %d, pentry.ptype = %d", payload_count, pentry.ptype);
-    // }
 
     if (r < 0) {
       pl.payloads[pl.payload_count] = (char *)xmalloc(pentry.length + 1);

@@ -4,6 +4,8 @@
 #define SWF_SAVE_HEADER_LEN 1500
 #define SWF_SAVE_FOOTER_LEN 1500
 
+#include <memory>
+#include <algorithm>
 #include <list>
 #include <math.h>
 
@@ -27,13 +29,18 @@ protected:
   const int RESPONSE_INCOMPLETE = -1;
   const int RESPONSE_BAD = -2;
 
-  PayloadServer* _payload_server;
+  //the payload server will be passed to us by the http steg mod
+  //we are going to share the payload server with other file steg mods
+  //Ultimately it is the http steg mod who is the owner.
+  PayloadServer& _payload_server;
   double noise2signal; //making sure that the cover is bigger enough than the 
                        //the data to protect against statistical analysis
   const int c_content_type; //The inheriting class will set the type
 
-  uint8_t* outbuf; //this is where the payload sit after being injected by the
+  std::vector<uint8_t> outbuf; //this is where the payload sit after being injected by the
   //the message. it is define as class member to avoid allocation and delocation
+  //we always keep the ownership of this when we transmit the data then we can keep the memory
+  //for next transmission. so nobody's else business to deal with the pointer.
 
   //const int pgenflag; //tells us whether we are dealing with a payload taken from the database (0) or a generated on the fly one (1, for SWF only atm) 
   //not clear if we need this at all
@@ -46,8 +53,7 @@ protected:
 
      @return payload size or < 0 in case of error
   */
-  ssize_t pick_appropriate_cover_payload(size_t data_len, char** payload_buf, string& cover_id_hash);
-  
+  ssize_t pick_appropriate_cover_payload(size_t data_len, const std::vector<uint8_t>* payload_buf, string& cover_id_hash);
 
   /**
      Encapsulate the repetative task of checking for the respones of content_type
@@ -55,14 +61,13 @@ protected:
 
      @param data_len: the length of data being embed should be < capacity
      @param payload_buf: the http response (header+body) corresponding going to cover the data
-     @param payload_size: the size of the payload_buf
 
      @return the offset of the body content of payload_buf or < 0 in case of
              error, that is RESPONSE_INCOMPLETE (<0) if it is incomplete (can't
              find the start of body) or RESPONSE_BAD (<0) in case of other
              errors
   */
-  static ssize_t extract_appropriate_respones_body(char* payload_buf, size_t payload_size);
+  static ssize_t extract_appropriate_respones_body(const std::vector<uint8_t>& payload_buf);
 
   /**
      The overloaded version with evbuffer
@@ -72,9 +77,17 @@ protected:
 
   /**
      changes the size of Content Length in HTTTP response header, in case
-     the steg module changes  the size of the coverafter emebedding data
+     the steg module changes  the size of the cover after emebedding data
+
+     @param payload_with_original_header payload with header indicating the old
+                                         content length
+     @param new_content_length           new content length to be embeded in the header
+
+     @param new_header                   the vector which will contains the new header. it is
+                                         more efficient if the memory is allocated in advance 
+
    */
-  size_t alter_length_in_response_header(uint8_t* original_header, size_t original_header_length, ssize_t new_content_length, uint8_t new_header[]);
+  void alter_length_in_response_header(const vector<uint8_t>& payload_with_original_header, ssize_t new_content_length, vector<uint8_t>& new_header);
 
  public:
   static const size_t c_HTTP_PAYLOAD_BUF_SIZE = HTTP_PAYLOAD_BUF_SIZE; //TODO: one constant //maximum
@@ -86,7 +99,7 @@ protected:
   //or it is just simpler to limit ourselves to 4G per message
   typedef uint32_t message_size_t;
   static const  size_t c_NO_BYTES_TO_STORE_MSG_SIZE = sizeof(message_size_t);
-  static const size_t c_HIGH_BYTES_DISCARDER; //pow(2, c_NO_BYTES_TO_STORE_MSG_SIZE * 8);
+  static const size_t c_HIGH_BYTES_DISCARDER = pow(2, c_NO_BYTES_TO_STORE_MSG_SIZE * 8);
 
   /** 
    * indicates if the steg mod is cover length preserving which is true 
@@ -97,18 +110,20 @@ protected:
    */
   virtual bool cover_lenght_preserving() { return true; };
 
+  //list of file extensions/suffix which are representing files of type
+  //handled by the module (e.g.: *.jpg *.jpeg etc)
+  const list<string> extensions;
+  
   /**
      embed the data in the cover buffer, the assumption is that
      the function doesn't expand the buffer size
 
      @param data: the data to be embeded
-     @param data_len: the length of the data
      @param cover_payload: the cover to embed the data into
-     @param cover_len: cover size in byte
 
      @return < 0 in case of error or length of the cover with embedded dat at success
    */
-  virtual int encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len) = 0;
+  virtual ssize_t encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload) = 0;
 
   /**
      Embed the data in the cover buffer, need to be implemented by the
@@ -116,26 +131,41 @@ protected:
      that the data is not larger than _MAX_MSG_BUF_SIZE
 
      @param data: the pointer to the buffer that is going to contain the
-            data
+            data, it need to be raw pointer as it is comming dircetly from
+            libevent
      @param cover_payload: the cover to embed the data into
      @param cover_len: cover size in byte
 
      @return the length of recovered data or < 0 in case of error
    */
-  virtual ssize_t decode(const uint8_t *cover_payload, size_t cover_len, uint8_t* data) = 0;
-  
-  const list<string> extensions;
+  virtual ssize_t decode(const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& data) = 0;
 
   /**
-     Returns the capacity which can be encoded in the buffer
-     assuming that the buffer starts with the  HTTP response header
+     simply finding the starting of the body of http response after header
+     and then calls headless_capacity
+
+     @param cover_payload the vector containing the payload with the response
+            header
+
+     @return the capacity of the payload as cover or negative value
+     in case of error or corrupted payload 
   */
-  virtual ssize_t capacity(const uint8_t* buffer, size_t len) = 0;
+  virtual ssize_t capacity(const std::vector<uint8_t>& cover_payload)
+  {
+    ssize_t body_offset = extract_appropriate_respones_body(cover_payload);
+    if (body_offset == -1) //couldn't find the end of header
+      return 0; //useless payload
 
-  /**
-     Returns the capacity which can be encoded in the cover_body
-     when cover_body does not include the HTTP response header */
-   virtual ssize_t headless_capacity(char *cover_body, int body_length) = 0;
+    //extracting a subvector: this is inefficient due to copying but
+    //bare in mind capacity function is only called during initilization
+    //and never during the transmission.
+    std::vector<uint8_t>cover_body(cover_payload.begin() + body_offset, cover_payload.end());
+ 
+    return headless_capacity(cover_body);
+
+  };
+  
+  virtual ssize_t headless_capacity(const std::vector<uint8_t>& cover_body) = 0;
 
   /**
      Find appropriate payload calls virtual embed to embed it appropriate
@@ -168,12 +198,14 @@ protected:
             to this module.
      @child_type?
   */
-  FileStegMod(PayloadServer* payload_provider, double noise2signal, int child_type);
-  /** 
-      Destructor, just releases the http buffer 
-  */
-  virtual ~FileStegMod();
+  FileStegMod(PayloadServer& payload_provider, double noise2signal, int child_type);
 
+  /** 
+      Destructor, mandated by:
+      [-Werror=delete-non-virtual-dtorjust]:
+      deleting object of abstract class type ‘FileStegMod’ which has non-virtual destructor will cause undefined behavior  
+  */
+  virtual ~FileStegMod() {}
 
   
 };

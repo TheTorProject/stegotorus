@@ -28,13 +28,13 @@ using namespace std;
 #include "b64cookies.h"
 
 #include "http_steg_mods/file_steg.h"
-#include "http_steg_mods/swfSteg.h"
-#include "http_steg_mods/pdfSteg.h"
-#include "http_steg_mods/jsSteg.h"
+// #include "http_steg_mods/swfSteg.h"
+// #include "http_steg_mods/pdfSteg.h"
+// #include "http_steg_mods/jsSteg.h"
 #include "http_steg_mods/jpgSteg.h"
-#include "http_steg_mods/pngSteg.h"
-#include "http_steg_mods/gifSteg.h"
-#include "http_steg_mods/htmlSteg.h"
+// #include "http_steg_mods/pngSteg.h"
+// #include "http_steg_mods/gifSteg.h"
+// #include "http_steg_mods/htmlSteg.h"
 
 #include "http.h"
 
@@ -153,16 +153,14 @@ http_steg_config_t::init_file_steg_mods()
 
   //if the steg_mod option has set by the user, only those steg mods
   //will be activated otherwise, all other steg mods will be activated
-  
-  //TODO: for now the first modules are set to void till their codes be
-  //transformed into a FileStegMod child
-  file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_HTML] = new HTMLSteg(payload_server, noise2signal);
+
+  file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(*payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(*payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(*payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(*payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(*payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(*payload_server, noise2signal);
+  // file_steg_mods[HTTP_CONTENT_HTML] = new HTMLSteg(*payload_server, noise2signal);
 
 
   //TODO: for now only one steg module can be mentioned for testing.

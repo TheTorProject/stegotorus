@@ -135,15 +135,10 @@ ApachePayloadServer::find_client_payload(char* buf, int len, int type)
 }
 
 int
-ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* size, double noise2signal, std::string* payload_id_hash)
+ApachePayloadServer::get_payload( int contentType, int cap, const std::vector<uint8_t>* buf, double noise2signal, std::string* payload_id_hash)
 {
-
   for(unsigned int search_tries = 0; search_tries < c_MAX_SEARCH_TRIES; search_tries++) /* each payload which is found but is corrupted */ {
     int found = 0, numCandidate = 0;
-
-    //log_debug("contentType = %d, initTypePayload = %d, typePayloadCount = %d",
-    //            contentType, pl.initTypePayload[contentType],
-    //          pl.typePayloadCount[contentType]);
 
     //get payload is not supposed to act like this but for the sake 
     //of testing and compatibility we are simulating the original 
@@ -209,8 +204,7 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
           //if curl fails the size will be zero. we disqualify the resource because it might be
           //removed from the cover server and try again
           if (!best_payload.empty() != 0) {
-            *buf = (char*)best_payload.c_str();
-            *size = best_payload.length();
+            buf = &best_payload;
             if (payload_id_hash)
               *payload_id_hash = itr_best->url_hash;
 
@@ -246,10 +240,13 @@ ApachePayloadServer::get_payload( int contentType, int cap, char** buf, int* siz
 
    @param url_hash the sha-1 hash of the url
  */
-string
+vector<uint8_t>
 ApachePayloadServer::fetch_hashed_url(const string& url)
 {
-  stringstream tmp_stream_buf;
+  stringstream tmp_stream_buf; // It is stringstream instead of vector<uint8_t>
+                               //due to convenience of stringstream::write
+                               // and the fact that curl_read_data_cb fill up the
+                               //buffer in multiple calls.
   string payload_uri = url;
 
   log_debug("asking cover server for payload %s", payload_uri.c_str());
@@ -257,10 +254,13 @@ ApachePayloadServer::fetch_hashed_url(const string& url)
   if (payload_size == 0) {
     log_warn("Failed fetch the url %s", payload_uri.c_str()); //here we should signal that we failed
     //to retreieve the file and mark it as unacceptable
-    return string();
+    return vector<uint8_t>;
   }
 
-  return tmp_stream_buf.str();
+  //converting to vector<uint8_t>
+  std::string temp_str_buf = tmp_stream_buf.str();
+  std::vector<char> response_body(temp_str_buf.begin(), temp_str_buf.end());
+  return response_body;
 
 }
 
