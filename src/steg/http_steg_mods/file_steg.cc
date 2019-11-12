@@ -317,7 +317,7 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 {
   unsigned int response_len = 0;
   int content_len = 0, outbuflen;
-  uint8_t *httpHdr, *httpBody;
+  uint8_t *httpHdr;
 
   log_debug("Entering CLIENT receive");
 
@@ -361,10 +361,10 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
     return RECV_BAD;
   }
 
-  httpBody = httpHdr + hdrLen;
+  vector<uint8_t> httpBody(httpHdr + hdrLen, httpHdr + response_len);
   log_debug("CLIENT unwrapping data out of type %d payload", c_content_type);
 
-  outbuflen = decode(httpBody, content_len, outbuf);
+  outbuflen = decode(httpBody, outbuf);
   if (outbuflen < 0) {
     log_warn("CLIENT ERROR: FileSteg fails\n");
     return RECV_BAD;

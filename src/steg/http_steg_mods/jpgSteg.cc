@@ -109,7 +109,7 @@ ssize_t JPGSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& 
 ssize_t JPGSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& data)
 {
 	// TODO: There may be FFDA in the data
-    ssize_t from = starting_point(cover_payload, cover_len);
+    ssize_t from = starting_point(cover_payload);
     if (from < 0) {
       log_warn("invalid jpg payload, corrupted?");
       return -1;
@@ -123,7 +123,7 @@ ssize_t JPGSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<u
     }
 
     //We assume the enough mem is allocated for the data
-    log_debug("recovering %zu from %zd of cover size %zu", s, from, cover_len);
+    log_debug("recovering %zu from %zd of cover size %zu", s, from, cover_payload.size());
 
     auto data_start = cover_payload.begin()+from+c_NO_BYTES_TO_STORE_MSG_SIZE;
 	data.insert(data.begin(), data_start, data_start+s);
