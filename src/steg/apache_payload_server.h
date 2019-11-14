@@ -11,7 +11,6 @@
 
 class PayloadScraper; /* Just tell ApachePayloadServer that such a
                         class exists */
-
 class URIEntry
 {
   public:

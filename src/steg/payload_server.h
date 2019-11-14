@@ -371,8 +371,35 @@ class PayloadServer
       
 };
 
+/**
+ * Dummy payload server to initiate file steg modules 
+ * when we don't want to actually serve any payload.
+ * but use them for capacity computation and encode/decode 
+ * purpose.
+ * 
+ * It panics if it is used to get payload
+ */
+class DummyPayloadServer: public PayloadServer {
+  virtual unsigned int find_client_payload([[maybe_unused]] char* buf, [[maybe_unused]] int len, [[maybe_unused]] int type) {
+    log_abort("Dummy payload server can not be used to find a payload");
+  }
 
-  /** Moved from payloads.c without a touch. needs clean up */
+  virtual int get_payload ([[maybe_unused]] int contentType, [[maybe_unused]] int cap, [[maybe_unused]] const std::vector<uint8_t>* buf, [[maybe_unused]] double noise2signal=0, [[maybe_unused]] std::string* payload_id_hash = NULL) {
+    log_abort("Dummy payload server can not be used to get a payload");
+  }
+
+public:
+    /** 
+   * adding default constructor because PayloadServer doesn't have one
+   */ 
+  DummyPayloadServer()
+    :  PayloadServer(client_side)//we just randomly initiate the side of the payload serve because we are not
+       //actually using it.
+  { };
+
+};
+
+/** Moved from payloads.c without a touch. needs clean up */
   char * strInBinary (const char *pattern, unsigned int patternLen,
                       const char *blob, unsigned int blobLen);
   int find_content_length (char *hdr, int hlen);
@@ -382,7 +409,7 @@ class PayloadServer
   void gen_rfc_1123_date(char* buf, int buf_size);
   void gen_rfc_1123_expiry_date(char* buf, int buf_size);
   int parse_client_headers(char* inbuf, char* outbuf, int len);
-  int skipJSPattern (char *cp, int len);
+  int skipJSPattern (const char *cp, int len);
   int isalnum_ (char c);
   int offset2Alnum_ (char *p, int range);
   int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,

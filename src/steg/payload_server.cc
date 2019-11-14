@@ -589,7 +589,7 @@ parse_client_headers(char* inbuf, char* outbuf, int len) {
 
 
 int
-skipJSPattern(char *cp, int len) {
+skipJSPattern(const char *cp, int len) {
   int i,j;
 
 

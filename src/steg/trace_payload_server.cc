@@ -2,10 +2,10 @@
 
 #include "trace_payload_server.h"
 #include "file_steg.h"
-#include "http_steg_mods/swfSteg.h"
-#include "http_steg_mods/pdfSteg.h"
+// // #include "http_steg_mods/swfSteg.h"
+// // #include "http_steg_mods/pdfSteg.h"
 #include "http_steg_mods/jsSteg.h"
-#include "http_steg_mods/htmlSteg.h"
+// //#include "http_steg_mods/htmlSteg.h"
 
 
 TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
@@ -75,11 +75,12 @@ int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity)
     }
 
     vector<uint8_t> msgbuf(pl.payloads[r].begin(), pl.payloads[r].end());
-    JSSteg jsSteg_capacity_computer_engine;
+    DummyPayloadServer  dummy_payload_server;
+    JSSteg jssteg_capacity_computer_engine(dummy_payload_server);
 
     mode = has_eligible_HTTP_content(reinterpret_cast<char*>(msgbuf.data()), p->length, HTTP_CONTENT_JAVASCRIPT);
     if (mode == CONTENT_JAVASCRIPT) {
-      cap = jsSteg_capacity_computer_engine.capacity(msgbuf);
+      cap = jssteg_capacity_computer_engine.capacity(msgbuf);
       if (cap == 0)
         continue;
 
@@ -123,7 +124,9 @@ int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity)
   return 1;
 }
 
-
+/* Temperory commenting out stuff related to HTML, PDF and SWF covers till we 
+ * move their class to new model
+ * >>>>>>
 int  TracePayloadServer::init_HTML_payload_pool(int len, int type, int minCapacity) {
 
   // stat for usable payload
@@ -137,7 +140,6 @@ int  TracePayloadServer::init_HTML_payload_pool(int len, int type, int minCapaci
   int cnt = 0;
   int r;
   pentry_header* p;
-  char* msgbuf;
   int cap;
   int mode;
 
@@ -152,9 +154,9 @@ int  TracePayloadServer::init_HTML_payload_pool(int len, int type, int minCapaci
       continue;
     }
 
-    msgbuf = pl.payloads[r];
+    vector<uint8_t> msgbuf(pl.payloads[r].begin(), pl.payloads[r].end());
 
-    mode = has_eligible_HTTP_content(msgbuf, p->length, HTTP_CONTENT_HTML);
+    mode = has_eligible_HTTP_content(reinterpret_cast<char*>(msgbuf.data()), p->length, HTTP_CONTENT_HTML);
     if (mode == CONTENT_HTML_JAVASCRIPT) {
       cap = HTMLSteg::static_capacity(msgbuf, p->length);
 
@@ -277,7 +279,7 @@ TracePayloadServer::init_PDF_payload_pool(int len, int type, int minCapacity)
 }
 
 int
-TracePayloadServer::init_SWF_payload_pool(int len, int type, int /*unused */)
+TracePayloadServer::init_SWF_payload_pool(int len, int type, int )
 {
   // stat for usable payload
   int minPayloadSize = 0, maxPayloadSize = 0; 
@@ -524,3 +526,4 @@ unsigned int TracePayloadServer::find_client_payload(char* buf, int len, int typ
   return parse_client_headers(inbuf, buf, len);
 }
 
+*/

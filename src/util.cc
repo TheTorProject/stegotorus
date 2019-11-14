@@ -778,8 +778,8 @@ isalnum_ (char c) {
 }
 
 int
-offset2Alnum_ (char *p, int range) {
-  char *cp = p;
+offset2Alnum_ (const char *p, int range) {
+  const char *cp = p;
 
   while ((cp < (p+range)) && !isalnum_(*cp)) {
     cp++;

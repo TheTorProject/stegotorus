@@ -5,7 +5,7 @@
 #ifndef _JSSTEG_H
 #define _JSSTEG_H
 
- class JSSteg : public FileStegMod
+class JSSteg : public FileStegMod
 {
 
  protected:
@@ -45,7 +45,7 @@
   virtual int decode_http_body(const char *jData, const char *dataBuf, unsigned int jdlen,
                        unsigned int dataBufSize, int *fin );
   
-  static unsigned int js_code_block_preliminary_capacity(char* buf, size_t len);
+  static unsigned int js_code_block_preliminary_capacity(const char* buf, const size_t len);
 
 public:
   int isxString(char *str);
@@ -58,21 +58,14 @@ public:
   /*int encode(char *data, char *jTemplate, char *jData,
            unsigned int dlen, unsigned int jtlen, unsigned int jdlen );*/
 
-  JSSteg(PayloadServer* payload_provider, double noise2signal = 0, int content_type = HTTP_CONTENT_JAVASCRIPT); 
+  JSSteg(PayloadServer& payload_provider, double noise2signal = 0, int content_type = HTTP_CONTENT_JAVASCRIPT); 
 
-  virtual int encode(std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload);
+  virtual ssize_t encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload);
+
   
   virtual ssize_t decode(const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& data);
 
-  /**
-     compute the capcaity of the cover by getting a pointer to the
-     beginig of the body in the response
-
-     @param cover_body pointer to the begiing of the body
-     @param body_length the total length of message body
- */
-    virtual ssize_t headless_capacity(std::vector<uint8_t>& cover_body);
-
+  virtual ssize_t headless_capacity(const std::vector<uint8_t>& cover_body);
 
   /*int decode (char *jData, char *dataBuf, unsigned int jdlen,
             unsigned int dlen, unsigned int dataBufSize );*/
@@ -97,7 +90,7 @@ public:
    *           between p and (p+range), if it exists; otherwise, it 
    *           returns -1
    */
-  static int offset2Hex (char *p, int range, int isLastCharHex);
+  static int offset2Hex (const char *p, int range, int isLastCharHex);
 
 };
 

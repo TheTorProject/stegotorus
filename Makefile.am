@@ -28,6 +28,7 @@ STEGANOGRAPHERS = \
 	src/steg/http_apache.cc \
 	src/steg/http_apache.cc \
 	src/steg/http_steg_mods/file_steg.cc \
+ 	src/steg/http_steg_mods/jsSteg.cc \
 	src/steg/http_steg_mods/jpgSteg.cc \
 	src/steg/nosteg.cc \
 	src/steg/nosteg_rr.cc \
@@ -35,10 +36,8 @@ STEGANOGRAPHERS = \
 	src/steg/trace_payload_server.cc \
 	src/steg/payload_scraper.cc \
 	src/steg/apache_payload_server.cc 
-
 # 	src/steg/http_steg_mods/pdfSteg.cc 
 # 	src/steg/http_steg_mods/swfSteg.cc 
-# 	src/steg/http_steg_mods/jsSteg.cc 
 # 	src/steg/http_steg_mods/htmlSteg.cc 
 # 	src/steg/http_steg_mods/pngSteg.cc 
 # 	src/steg/http_steg_mods/gifSteg.cc 

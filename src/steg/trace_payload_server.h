@@ -35,7 +35,7 @@ struct payloads {
   unsigned int max_PDF_capacity;
 
   pentry_header payload_hdrs[MAX_PAYLOADS];
-  std::string payloads[MAX_PAYLOADS];
+  std::vector<uint8_t> payloads[MAX_PAYLOADS];
   int payload_count;
 };
 

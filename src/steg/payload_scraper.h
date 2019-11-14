@@ -4,15 +4,7 @@
 #ifndef PAYLOADSCRAPER_H
 #define PAYLOADSCRAPER_H
 
-//TODO: This structure should be depricated as the FileSteg as
-//parent type should replace it
-struct steg_type
-{
-   int type;
-   std::string  extension;
-   unsigned int (*capacity_function)(char* payload, int len);
-
-};
+#include <map>
 
 class PayloadScraperTest;
 /**
@@ -29,18 +21,14 @@ protected:
   std::string _database_filename;
   std::ofstream _payload_db;
 
-  steg_type* _available_stegs;
-  FileStegMod* _available_file_stegs[c_no_of_steg_protocol+1]; //Later when all stegs
-               //were converted to this
-               //we don't need _available_stegs type. At the moment I have to 
-               //actually instantiate because the capacity function is virtual
-               //from this
+  DummyPayloadServer dummy_payload_server; //needed for instantiating 
+
+  std::map<size_t, FileStegMod*> _available_file_stegs;
                                       
-    
-    std::string _cover_server;
-    std::string _cover_list;  //List of url of the covers on _cover_server
-    std::string _apache_conf_filename;
-    std::string _apache_doc_root; /* the directory that apache serve where
+  std::string _cover_server;
+  std::string _cover_list;  //List of url of the covers on _cover_server
+  std::string _apache_conf_filename;
+  std::string _apache_doc_root; /* the directory that apache serve where
                                the html doc*/
     
     CURL* capacity_handle;    /* We use this auxiliary curl handle
@@ -56,7 +44,7 @@ protected:
        
        @return space separated string of hash, capacity, length
     */
-    const std::string scrape_url(const std::string& cur_url, steg_type* cur_steg, bool absolute_url = false);
+    const std::string scrape_url(const std::string& cur_url, size_t cur_steg, bool absolute_url = false);
 
     /**
        Scrapes list of urls of cover filename
@@ -91,12 +79,12 @@ public:
        
        @param payload_url The relative (to the apache_root) filename of the 
                           payload
-       @param cur_steg    The steg correspond to the type of the file to 
+       @param cur_steg    The steg mode correspond to the type of the file to 
                           to compute the capacity
        @param absolute_url true if the url has the scheme and the server name
                           false if it is just an address on the server
    */
-   pair<unsigned long, unsigned long>  compute_capacity(std::string payload_url, steg_type* cur_steg, bool absolute_url = false);
+   pair<unsigned long, unsigned long>  compute_capacity(std::string payload_url, FileStegMod* cur_steg, bool absolute_url = false);
 
    /**
       The constructor, calls the scraper by default
@@ -111,13 +99,9 @@ public:
    */
    int scrape();
 
-   virtual ~PayloadScraper()
-     {
-       for(unsigned int i = 0; i < c_no_of_steg_protocol; i++)
-         delete _available_file_stegs[i];
-       
-       delete[] _available_stegs;
-     }
+   // virtual ~PayloadScraper()
+   //   {
+   //   }
      
 
 };

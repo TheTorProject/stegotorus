@@ -50,7 +50,7 @@ using namespace std;
    @return space separated string of hash, capacity, length
 */
 const string
-PayloadScraper::scrape_url(const string& cur_url, steg_type* cur_steg, bool absolute_url)
+PayloadScraper::scrape_url(const string& cur_url, size_t cur_steg, bool absolute_url)
 {
   char url_hash[20];
   char url_hash64[40];
@@ -61,7 +61,7 @@ PayloadScraper::scrape_url(const string& cur_url, steg_type* cur_steg, bool abso
   base64::encoder url_hash_encoder;
   url_hash_encoder.encode(url_hash, 20, url_hash64);
                         
-  pair<unsigned long, unsigned long> fileinfo = compute_capacity(cur_url, cur_steg, absolute_url);
+  pair<unsigned long, unsigned long> fileinfo = compute_capacity(cur_url, _available_file_stegs[cur_steg], absolute_url);
   unsigned long cur_filelength = fileinfo.first;
   unsigned long capacity = fileinfo.second;
 
@@ -113,17 +113,21 @@ PayloadScraper::scrape_dir(const string dir_string_path)
         itr != end_itr;
         ++itr, total_file_count++)
     {
-      for(steg_type* cur_steg = _available_stegs; cur_steg->type!= 0; cur_steg++)
-        if (cur_steg->extension == itr->path().extension().string())
-          {
-            string cur_filename(itr->path().generic_string());
-            log_debug("checking %s for capacity...", cur_filename.c_str());
-            string cur_url(cur_filename.substr(_apache_doc_root.length(), cur_filename.length() -  _apache_doc_root.length()));
+      for(auto cur_steg = _available_file_stegs.begin(); cur_steg != _available_file_stegs.end(); cur_steg++) { //0 is not associated with any steg module
+          bool cur_steg_mod_supports_extension =
+            (std::find(cur_steg->second->extensions.begin(), cur_steg->second->extensions.end(), itr->path().extension().string()) != cur_steg->second->extensions.end());
+          
+          if (cur_steg_mod_supports_extension)
+            {
+              string cur_filename(itr->path().generic_string());
+              log_debug("checking %s for capacity...", cur_filename.c_str());
+              string cur_url(cur_filename.substr(_apache_doc_root.length(), cur_filename.length() -  _apache_doc_root.length()));
 
-            string scrape_result = scrape_url(cur_url, cur_steg);
-            if (!scrape_result.empty())
-              _payload_db << total_file_count << " " << cur_steg->type << " " << scrape_result  << " " << cur_url << " " << 0 << " " << cur_url << "\n"; //absolute_url false
-          }
+              string scrape_result = scrape_url(cur_url, cur_steg->second->content_type_id());
+              if (!scrape_result.empty())
+                _payload_db << total_file_count << " " << itr->path().extension().string()  << " " << scrape_result  << " " << cur_url << " " << 0 << " " << cur_url << "\n"; //absolute_url false
+            }
+        }
     }
 
 #else
@@ -181,13 +185,16 @@ PayloadScraper::scrape_url_list(const string list_filename)
     else
       cur_url_ext = filename.substr(last_dot);
 
-    for(steg_type* cur_steg = _available_stegs; cur_steg->type!= 0; cur_steg++) {
-      if (cur_steg->extension == cur_url_ext) {
-        string scrape_result = scrape_url(file_url, cur_steg, true);
-        if (!scrape_result.empty()) {
-            _payload_db << total_file_count << " " << cur_steg->type << " " << scrape_result  << " " << relativize_url(file_url) << " " << 1 << " " << file_url << "\n"; //absolute_url = true
+    for(size_t cur_steg = 1; cur_steg <= c_no_of_steg_protocol; cur_steg++) {
+      if (_available_file_stegs[cur_steg]) {//if it is initiated
+        bool cur_steg_mod_supports_extension =
+          (std::find(_available_file_stegs[cur_steg]->extensions.begin(), _available_file_stegs[cur_steg]->extensions.end(), cur_url_ext) != _available_file_stegs[cur_steg]->extensions.end());
+        if (cur_steg_mod_supports_extension) {
+          string scrape_result = scrape_url(file_url, cur_steg, true);
+          if (!scrape_result.empty()) {
+            _payload_db << total_file_count << " " << cur_url_ext << " " << scrape_result  << " " << relativize_url(file_url) << " " << 1 << " " << file_url << "\n"; //absolute_url = true
+          }
         }
-        
       }
     }
 
@@ -206,9 +213,8 @@ PayloadScraper::scrape_url_list(const string list_filename)
     @param database_filename the name of the file to store the payload list   
 */
 PayloadScraper::PayloadScraper(string  database_filename, string cover_server,const string& cover_list, string apache_conf)
-  : _available_stegs(),
-    _available_file_stegs(), 
-   _cover_list(cover_list),
+  : _available_file_stegs(), 
+    _cover_list(cover_list),
    capacity_handle(curl_easy_init())
 {
   /* curl initiation */
@@ -221,37 +227,31 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
   _database_filename = database_filename;
   _cover_server = cover_server;
   _apache_conf_filename  = apache_conf;
+  
+  _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(dummy_payload_server);
 
-  /** This is hard coded */
-  _available_stegs = new steg_type[c_no_of_steg_protocol+1]; //one to be zero
-  //memset(_available_file_stegs[0], (int)NULL, sizeof(FileStegMod*)*(c_no_of_steg_protocol+1)); 
+  //Commented out till migrating other types to new model 
+ //  _available_file_stegs[HTTP_CONTENT_PDF] = new PDFSteg(NULL);
+ //  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PDFSteg::static_capacity;
 
-  _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(NULL);
-  _available_stegs[0].type = HTTP_CONTENT_JAVASCRIPT; _available_stegs[0].extension = ".js";  _available_stegs[0].capacity_function = JSSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
+ // _available_file_stegs[HTTP_CONTENT_SWF] = new SWFSteg(NULL);
+ //  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = SWFSteg::static_capacity;  //Temp measure, later we don't need to do such acrobatics
 
-  _available_file_stegs[HTTP_CONTENT_PDF] = new PDFSteg(NULL);
-  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PDFSteg::static_capacity;
-
- _available_file_stegs[HTTP_CONTENT_SWF] = new SWFSteg(NULL);
-  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = SWFSteg::static_capacity;  //Temp measure, later we don't need to do such acrobatics
-
-  _available_file_stegs[HTTP_CONTENT_HTML] = new HTMLSteg(NULL); 
-  _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html";  _available_stegs[3].capacity_function = HTMLSteg::static_capacity;
+ //  _available_file_stegs[HTTP_CONTENT_HTML] = new HTMLSteg(NULL); 
+ //  _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html";  _available_stegs[3].capacity_function = HTMLSteg::static_capacity;
 
   //in new model, extensions are stored in list so one type can have more ext.
-  
-  _available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  _available_stegs[4].capacity_function = JSSteg::static_capacity;
 
-  _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(NULL); //We are only using the capacity function so we don't need a payload server
-  _available_stegs[5].type = HTTP_CONTENT_JPEG; _available_stegs[5].extension = ".jpg"; _available_stegs[5].capacity_function = JPGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
+  //_available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  
 
-  _available_file_stegs[HTTP_CONTENT_PNG] = new PNGSteg(NULL); //We are only using the capacity function so we don't need a payload server
-  _available_stegs[6].type = HTTP_CONTENT_PNG; _available_stegs[6].extension = ".png"; _available_stegs[6].capacity_function = PNGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
+  _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(dummy_payload_server); //We are only using the capacity function so we don't need a payload server
 
-  _available_file_stegs[HTTP_CONTENT_GIF] = new GIFSteg(NULL); //We are only using the capacity function so we don't need a payload server
-  _available_stegs[7].type = HTTP_CONTENT_GIF; _available_stegs[7].extension = ".gif"; _available_stegs[7].capacity_function = GIFSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
+  //Commented out till migrating other types to new model 
+  // _available_file_stegs[HTTP_CONTENT_PNG] = new PNGSteg(NULL); //We are only using the capacity function so we don't need a payload server
+  // _available_stegs[6].type = HTTP_CONTENT_PNG; _available_stegs[6].extension = ".png"; _available_stegs[6].capacity_function = PNGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
 
-  _available_stegs[8].type = 0;
+  // _available_file_stegs[HTTP_CONTENT_GIF] = new GIFSteg(NULL); //We are only using the capacity function so we don't need a payload server
+  // _available_stegs[7].type = HTTP_CONTENT_GIF; _available_stegs[7].extension = ".gif"; _available_stegs[7].capacity_function = GIFSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
 
 }
 
@@ -403,8 +403,9 @@ int PayloadScraper::apache_conf_parser()
 
 }
 
-pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string payload_url, steg_type* cur_steg, bool absolute_url)
+pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string payload_url, FileStegMod* cur_steg, bool absolute_url)
 {
+  log_assert(cur_steg);
   unsigned long test_cur_filelength;
   stringstream  payload_buf;
 
@@ -414,22 +415,21 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
   
   if (apache_size <= 0) //just invalidate the url
     return pair<unsigned long, unsigned long>(0, 0);
-    
-  char* buf = new char[apache_size];
-  payload_buf.read(buf, apache_size);
+
+  std::string temp_str_buf = payload_buf.str();
+  std::vector<uint8_t> response_head_and_body(temp_str_buf.begin(), temp_str_buf.end());
 
   //compute the size
-  const char* hend = strstr(buf, "\r\n\r\n");
-  if (hend == NULL || (hend - buf + 4) > (ssize_t)apache_size) {
+  
+  const ssize_t hend = cur_steg->extract_appropriate_respones_body(response_head_and_body);
+  if (hend <= 0 || (static_cast<size_t>(hend) > response_head_and_body.size())) {
     log_warn("unable to find end of header in the HTTP template");
-    delete [] buf;
     return pair<unsigned long, unsigned long>(0, 0);
   }
   
-  unsigned long cur_filelength = apache_size - (hend - buf + 4);
+  unsigned long cur_filelength = apache_size - hend;
   if (cur_filelength == 0) {
     log_warn("The HTTP body seems to be empty");
-    delete [] buf;
     return pair<unsigned long, unsigned long>(0, 0);
   }
 
@@ -438,18 +438,13 @@ pair<unsigned long, unsigned long> PayloadScraper::compute_capacity(string paylo
     assert(test_cur_filelength == cur_filelength);
   }
   
-  long capacity = cur_steg->capacity_function(buf, apache_size);
+  ssize_t capacity = cur_steg->capacity(response_head_and_body);
   log_debug("capacity: %lu", capacity);
   if (capacity < 0){ 
     log_warn("error occurd during capacity computation");
-    capacity = 0;//zero capacity files are dropped
+    capacity = 0; //zero capacity files are dropped
   }
 
-  //no delete need for buf because new is overloaded to handle that
-  //TODO:or is it? i see a relative huge memory consumption when the payload 
-  //scraperneeds to recompute the db
-  delete[] buf; //needs further investigation
-  buf = NULL;
   return pair<unsigned long, unsigned long>(cur_filelength, capacity);
 
 }

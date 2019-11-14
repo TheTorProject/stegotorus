@@ -135,7 +135,7 @@ ApachePayloadServer::find_client_payload(char* buf, int len, int type)
 }
 
 int
-ApachePayloadServer::get_payload( int contentType, int cap, const std::vector<uint8_t>* buf, double noise2signal, std::string* payload_id_hash)
+ApachePayloadServer::get_payload( int contentType, int cap, [[maybe_unused]] const std::vector<uint8_t>* buf, double noise2signal, std::string* payload_id_hash)
 {
   for(unsigned int search_tries = 0; search_tries < c_MAX_SEARCH_TRIES; search_tries++) /* each payload which is found but is corrupted */ {
     int found = 0, numCandidate = 0;
@@ -200,7 +200,7 @@ ApachePayloadServer::get_payload( int contentType, int cap, const std::vector<ui
         std::string url_to_resource = (itr_best->absolute_url_is_absolute ? "" : "http://" + _apache_host_name + "/") + (itr_best->absolute_url);
         for(unsigned int fetch_tries = 0; fetch_tries < c_MAX_FETCH_TRIES; fetch_tries++) {
           log_debug("attempt %i to fetch %s", fetch_tries + 1, url_to_resource.c_str());
-          string& best_payload = _payload_cache(url_to_resource); //this is a permanent object in cache so it is ok to get a reference to it.
+          vector<uint8_t>& best_payload = _payload_cache(url_to_resource); //this is a permanent object in cachxe so it is ok to get a reference to it.
           //if curl fails the size will be zero. we disqualify the resource because it might be
           //removed from the cover server and try again
           if (!best_payload.empty() != 0) {
@@ -254,12 +254,12 @@ ApachePayloadServer::fetch_hashed_url(const string& url)
   if (payload_size == 0) {
     log_warn("Failed fetch the url %s", payload_uri.c_str()); //here we should signal that we failed
     //to retreieve the file and mark it as unacceptable
-    return vector<uint8_t>;
+    return vector<uint8_t>();
   }
 
   //converting to vector<uint8_t>
   std::string temp_str_buf = tmp_stream_buf.str();
-  std::vector<char> response_body(temp_str_buf.begin(), temp_str_buf.end());
+  std::vector<uint8_t> response_body(temp_str_buf.begin(), temp_str_buf.end());
   return response_body;
 
 }

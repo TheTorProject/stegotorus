@@ -56,20 +56,6 @@ protected:
   ssize_t pick_appropriate_cover_payload(size_t data_len, const std::vector<uint8_t>* payload_buf, string& cover_id_hash);
 
   /**
-     Encapsulate the repetative task of checking for the respones of content_type
-     choosing one with appropriate size and extracting the body from header
-
-     @param data_len: the length of data being embed should be < capacity
-     @param payload_buf: the http response (header+body) corresponding going to cover the data
-
-     @return the offset of the body content of payload_buf or < 0 in case of
-             error, that is RESPONSE_INCOMPLETE (<0) if it is incomplete (can't
-             find the start of body) or RESPONSE_BAD (<0) in case of other
-             errors
-  */
-  static ssize_t extract_appropriate_respones_body(const std::vector<uint8_t>& payload_buf);
-
-  /**
      The overloaded version with evbuffer
   */
   ssize_t 
@@ -90,6 +76,21 @@ protected:
   void alter_length_in_response_header(const vector<uint8_t>& payload_with_original_header, ssize_t new_content_length, vector<uint8_t>& new_header);
 
  public:
+  /**
+     Encapsulate the repetative task of checking for the respones of content_type
+     choosing one with appropriate size and extracting the body from header
+
+     @param data_len: the length of data being embed should be < capacity
+     @param payload_buf: the http response (header+body) corresponding going to cover the data
+
+     @return the offset of the body content of payload_buf or < 0 in case of
+             error, that is RESPONSE_INCOMPLETE (<0) if it is incomplete (can't
+             find the start of body) or RESPONSE_BAD (<0) in case of other
+             errors
+  */
+  static ssize_t extract_appropriate_respones_body(const std::vector<uint8_t>& payload_buf);
+
+  size_t content_type_id() { return c_content_type;}
   static const size_t c_HTTP_PAYLOAD_BUF_SIZE = HTTP_PAYLOAD_BUF_SIZE; //TODO: one constant //maximum
   //size of buffer which stores the whole http response
   static const  size_t c_MAX_MSG_BUF_SIZE = 131103; //max size of the message to be embeded
@@ -165,6 +166,15 @@ protected:
 
   };
   
+  /**
+   * Computes the capacity of the cover, i.e. the amount of data it can store,
+   * expecting that the cover is given without http header 
+   * 
+   * @return the capacity of the cover or negative value in case of error or 
+   *         corrupted payload 
+   *      
+   *
+   */
   virtual ssize_t headless_capacity(const std::vector<uint8_t>& cover_body) = 0;
 
   /**

@@ -450,7 +450,7 @@ isalnum_ (char c);
  *
 */
 int
-offset2Alnum_(char *p, int range);
+offset2Alnum_(const char *p, int range);
 
 /**
  * checks if a file exists

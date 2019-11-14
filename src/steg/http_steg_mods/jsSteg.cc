@@ -22,15 +22,15 @@
 
 void buf_dump(unsigned char* buf, int len, FILE *out);
 
-ssize_t JSSteg::headless_capacity(uint8_t *cover_body, size_t body_length)
+ssize_t JSSteg::headless_capacity(const std::vector<uint8_t>& cover_body)
 {
-  return max(0, (static_cast<int>(js_code_block_preliminary_capacity(buf,len)) - JS_DELIMITER_SIZE)/2);
+  return max(0, (static_cast<int>(js_code_block_preliminary_capacity(reinterpret_cast<const char*>(cover_body.data()), cover_body.size())) - JS_DELIMITER_SIZE)/2);
 
 }
 
 unsigned int
-JSSteg::js_code_block_preliminary_capacity(char* buf, size_t len) {
-  char *bp;
+JSSteg::js_code_block_preliminary_capacity(const char* buf, const size_t len) {
+  const char *bp;
   int cnt=0;
   int j;  
 
@@ -154,8 +154,8 @@ int JSSteg::isGzipContent (char *msg) {
  *
  */
 int
-JSSteg::offset2Hex (char *p, int range, int isLastCharHex) {
-  char *cp = p;
+JSSteg::offset2Hex (const char *p, int range, int isLastCharHex) {
+  const char *cp = p;
   int i,j;
   int isFirstWordChar = 1;
 
@@ -320,7 +320,7 @@ int JSSteg::findContentType (char *msg) {
  *
  * output:
  *   - jData  : result of encoding data in jTemplate
- *
+ */
 /*** int encode(char *data, char *jTemplate, char *jData,
            unsigned int dlen, unsigned int jtlen, unsigned int jdlen )
 {
@@ -379,24 +379,23 @@ ssize_t JSSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<ui
   int k, fin;
 
   if (gzipMode) {
-    char buf2[HTTP_PAYLOAD_BUF_SIZE];
+    vector<uint8_t> buf2(HTTP_PAYLOAD_BUF_SIZE); 
     log_debug("gzip content encoding detected");
 
-    ssize_t buf2len = decompress((const uint8_t *)cover_payload, cover_len,
-                         (uint8_t *)buf2, HTTP_PAYLOAD_BUF_SIZE);
+    //TODO: perhapse we can change decompress to use vectors
+    ssize_t buf2len = decompress(const_cast<const uint8_t *>(cover_payload.data()), cover_payload.size(),
+                                 buf2.data(), HTTP_PAYLOAD_BUF_SIZE);
     if (buf2len <= 0) {
       log_warn("gzInflate for httpBody fails");
       return RECV_BAD;
     }
 
     buf2[buf2len] = 0;
-    cover_payload = (uint8_t*)buf2;
-    cover_len = buf2len;
+    cover_payload.push_back(buf2.begin(), buf2.begin()+buf2len );
 
   }
 
-  decCnt = decode_http_body((const char*)cover_payload, (char*)data, cover_len, HTTP_PAYLOAD_BUF_SIZE,
-                                  &fin);
+  decCnt = decode_http_body((const char*)cover_payload.data(), (char*)data.data(), cover_payload.size(), HTTP_PAYLOAD_BUF_SIZE, &fin);
 
   data[decCnt] = 0;
 
@@ -408,7 +407,7 @@ ssize_t JSSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<ui
     return -1;
   }
 
-  if (!isxString((char*)data)) {
+  if (!isxString((char*)data.data())) {
     log_debug("CLIENT ERROR: Data received not hex");
     return -1;
   }
@@ -468,7 +467,7 @@ ssize_t JSSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<ui
  *    @return < 0 in case of error or length of the cover with embedded dat at success
  *  
  */
-int  JSSteg::encode(std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload) /* char *data,  char *jData,
+int  nJSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload) /* char *data,  char *jData,
              unsigned int dlen, unsigned int jtlen,
              unsigned int jdlen, int *fin*/
 {
@@ -536,7 +535,9 @@ int  JSSteg::encode(std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payl
    js file and html file. As such html file will re-implement it accordingly
    As the result encode and decode function for both types remains the same.
 */
-int JSSteg::encode_http_body(std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload)
+int JSSteg::encode_http_body(const char *data, char *jTemplate, char *jData,
+                   unsigned int dlen, unsigned int jtlen,
+                             unsigned int jdlen)
 {
   int fin;
   ssize_t r = encode_in_single_js_block(data, cover_payload, 0 ,&fin);
@@ -669,7 +670,6 @@ ssize_t  JSSteg::encode_in_single_js_block(vector<uint8_t>& data, vector<uint8_t
 
 }
 
-/*
 /* LEGACY DOCS:
  * int decode(char *jData, char *dataBuf,
  *            unsigned int jdlen, unsigned int dlen, unsigned int dataBufSize)
@@ -768,8 +768,6 @@ int JSSteg::decode_single_js_block(const std::vector<uint8_t> cover_and_data, co
   return decCnt;
 }
 
-
-<<<<<<< variant A
 int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
                     unsigned int dataBufSize, int *fin, int mode )
 {
@@ -1313,7 +1311,7 @@ http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, str
   return RECV_GOOD;
 }
 
-JSSteg::JSSteg(PayloadServer* payload_provider, double noise2signal, int content_type)
+JSSteg::JSSteg(PayloadServer& payload_provider, double noise2signal, int content_type)
  :FileStegMod(payload_provider, noise2signal, content_type)
 {
 
