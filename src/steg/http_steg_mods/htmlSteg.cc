@@ -79,6 +79,7 @@ HTMLSteg::static_headless_capacity (char* buf, size_t len) {
    this is the overloaded version for htmlsteg variety where js code
    is scattered int th html file
 */
+//TODO: move to memory safe model
 int HTMLSteg::encode_http_body(const char *data, char *jTemplate, char *jData,
                                unsigned int dlen, unsigned int jtlen,
                                unsigned int jdlen)

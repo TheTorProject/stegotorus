@@ -390,7 +390,7 @@ std::string relativize_url(const std::string& absolute_url);
  *  @param hexed_data should be initialized of double length of data_len 
  *         and will contained the hex representation of the data.
 */
-void encode_data_to_hex(std::vector<uint8_t>& data, std::vector<uint8_t>& hexed_data);
+void encode_data_to_hex(const std::vector<uint8_t>& data, std::vector<uint8_t>& hexed_data);
 
 
 /*

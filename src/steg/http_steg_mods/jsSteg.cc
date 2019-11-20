@@ -377,25 +377,25 @@ ssize_t JSSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<ui
   int gzipMode = JS_GZIP_RESP;
   ssize_t decCnt;
   int k, fin;
+  vector<uint8_t> decompressed_payload(HTTP_PAYLOAD_BUF_SIZE); 
 
   if (gzipMode) {
-    vector<uint8_t> buf2(HTTP_PAYLOAD_BUF_SIZE); 
     log_debug("gzip content encoding detected");
 
     //TODO: perhapse we can change decompress to use vectors
-    ssize_t buf2len = decompress(const_cast<const uint8_t *>(cover_payload.data()), cover_payload.size(),
-                                 buf2.data(), HTTP_PAYLOAD_BUF_SIZE);
-    if (buf2len <= 0) {
+    ssize_t decompressed_payload_len = decompress(const_cast<const uint8_t *>(cover_payload.data()), cover_payload.size(),
+                                 decompressed_payload.data(), HTTP_PAYLOAD_BUF_SIZE);
+    if (decompressed_payload_len <= 0) {
       log_warn("gzInflate for httpBody fails");
       return RECV_BAD;
     }
 
-    buf2[buf2len] = 0;
-    cover_payload.push_back(buf2.begin(), buf2.begin()+buf2len );
+    //shrink the vecotor to the actual used size
+    decompressed_payload.resize(decompressed_payload_len);
 
   }
 
-  decCnt = decode_http_body((const char*)cover_payload.data(), (char*)data.data(), cover_payload.size(), HTTP_PAYLOAD_BUF_SIZE, &fin);
+  decCnt = decode_http_body((const char*)decompressed_payload.data(), (char*)data.data(), decompressed_payload.size(), HTTP_PAYLOAD_BUF_SIZE, &fin);
 
   data[decCnt] = 0;
 
@@ -467,9 +467,8 @@ ssize_t JSSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<ui
  *    @return < 0 in case of error or length of the cover with embedded dat at success
  *  
  */
-int  nJSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload) /* char *data,  char *jData,
-             unsigned int dlen, unsigned int jtlen,
-             unsigned int jdlen, int *fin*/
+ssize_t
+JSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload)
 {
   unsigned int cLen, outbuf2len;  /* num of data encoded in jData */
 
@@ -479,23 +478,25 @@ int  nJSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cov
    *  insanity checks
    */
   //if (jdlen < jtlen) { return INVALID_BUF_SIZE; }
-  if (cover_len > SIZE_T_CEILING || data_len > SIZE_T_CEILING ||
-      HTTP_PAYLOAD_BUF_SIZE > SIZE_T_CEILING) //remove last condition?
+  log_assert(HTTP_PAYLOAD_BUF_SIZE > SIZE_T_CEILING);
+
+  if (cover_payload.size() > SIZE_T_CEILING || data.size() > SIZE_T_CEILING)
     return -1;
 
   cLen = headless_capacity(cover_payload);
-  if (cLen <  data_len) {
+  if (cLen <  data.size()) {
     log_warn("not enough cover capacity to embed data");
     return -1; //not enough capacity is an error because you should have check before requesting
     //However when one use a real time cover server covers might change
   }
 
-  size_t hexed_datalen = 2*data_len;
+  size_t hexed_datalen = 2*data.size();
   std::vector<uint8_t> hexed_data(hexed_datalen);
 
   encode_data_to_hex(data, hexed_data);
 
-  ssize_t r = encode_http_body(hexed_data, cover_payload);
+  ssize_t r = encode_http_body(hexed_data.data(), cover_payload.data(),);
+
   
   if (r < 0 || ((unsigned int) r < hexed_datalen)) {
     log_warn("SERVER ERROR: in data encoding");
@@ -535,12 +536,10 @@ int  nJSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cov
    js file and html file. As such html file will re-implement it accordingly
    As the result encode and decode function for both types remains the same.
 */
-int JSSteg::encode_http_body(const char *data, char *jTemplate, char *jData,
-                   unsigned int dlen, unsigned int jtlen,
-                             unsigned int jdlen)
+ssize_t JSSteg::encode_http_body(const std::vector<uint8_t>& data, const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& cover_and_data, unsigned int maximum_cover_size)
 {
   int fin;
-  ssize_t r = encode_in_single_js_block(data, cover_payload, 0 ,&fin);
+  ssize_t r = encode_in_single_js_block(data, cover_payload, cover_and_data, ,&fin);
 
   if (r < 0 || ((unsigned int) r < data.size()) || fin == 0) {
     log_warn("SERVER ERROR: Incomplete data encoding");

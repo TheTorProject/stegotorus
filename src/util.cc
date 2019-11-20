@@ -707,7 +707,7 @@ int timeval_subtract(struct timeval *x, struct timeval *y,
   @param data the buffer which contains the raw data
   @param hexed_data will contained the hex representation of the data.
 */
-void encode_data_to_hex(std::vector<uint8_t>& data, std::vector<uint8_t>& hexed_data)
+void encode_data_to_hex(const std::vector<uint8_t>& data, std::vector<uint8_t>& hexed_data)
 {
   for(size_t cnt = 0; cnt < data.size(); cnt++) {
     hexed_data[cnt*2] = "0123456789abcdef"[(data[cnt] & 0xF0) >> 4]; //does this need to change to 8, I don't think so, just hex encoding, this function is present elsewhere too

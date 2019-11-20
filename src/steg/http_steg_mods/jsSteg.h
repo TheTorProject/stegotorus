@@ -21,21 +21,17 @@ class JSSteg : public FileStegMod
      
      @param data the to be encoded data which is converted to hex characters 
             (two character represents an original binary byte)
-     @param the original jTemplate the javascript cover which is supposed to
+     @param cover_payload the original jTemplate the javascript cover which is supposed to
      contains the js data.
 
-     @param the buffer which will contains the the new js script which hides
+     @param cover_and_data the buffer which will contains the the new js script which hides
             the data in itself.
 
-     @param dlen size of the data buffer.
-     @param jtlen size of jTemplate buffer
      @param maximum jdlen size of jData
 
-     @return 
+     @return the size of the new js cover which contains the data
    */
-  virtual int encode_http_body(const char *data, char *jTemplate, char *jData,
-                   unsigned int dlen, unsigned int jtlen,
-                             unsigned int jdlen);
+  virtual ssize_t encode_http_body(const std::vector<uint8_t>& data, const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& cover_and_data, unsigned int maximum_cover_size);
 
   /**
      this function carry the only major part of decoding that is different between a
@@ -60,8 +56,7 @@ public:
 
   JSSteg(PayloadServer& payload_provider, double noise2signal = 0, int content_type = HTTP_CONTENT_JAVASCRIPT); 
 
-  virtual ssize_t encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload);
-
+  virtual ssize_t encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payloadw);
   
   virtual ssize_t decode(const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& data);
 
