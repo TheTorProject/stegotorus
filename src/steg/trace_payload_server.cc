@@ -7,7 +7,6 @@
 #include "http_steg_mods/jsSteg.h"
 // //#include "http_steg_mods/htmlSteg.h"
 
-
 TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
   : PayloadServer(init_side), c_max_buffer_size(1000000)
 {
@@ -17,16 +16,17 @@ TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
   init_JS_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
   _payload_database.type_detail[HTTP_CONTENT_JAVASCRIPT] =  TypeDetail(pl.max_JS_capacity, pl.typePayloadCount[HTTP_CONTENT_JAVASCRIPT]);
 
-  init_HTML_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
-  _payload_database.type_detail[HTTP_CONTENT_HTML] =  TypeDetail(pl.max_HTML_capacity, pl.typePayloadCount[HTTP_CONTENT_HTML]);
+  //Disabling HTML, PDF and SWF till they get migrated to new model
+  //init_HTML_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
+  //_payload_database.type_detail[HTTP_CONTENT_HTML] =  TypeDetail(pl.max_HTML_capacity, pl.typePayloadCount[HTTP_CONTENT_HTML]);
 
-  init_PDF_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE); //should we continue to use PDF_MIN_AVAIL_SIZE?
+  //init_PDF_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE); //should we continue to use PDF_MIN_AVAIL_SIZE?
 
-  _payload_database.type_detail[HTTP_CONTENT_PDF] =  TypeDetail(pl.max_PDF_capacity, pl.typePayloadCount[HTTP_CONTENT_PDF]); //deprecating use of pl.max_PDF_capacity ASAP
+  //_payload_database.type_detail[HTTP_CONTENT_PDF] =  TypeDetail(pl.max_PDF_capacity, pl.typePayloadCount[HTTP_CONTENT_PDF]); //deprecating use of pl.max_PDF_capacity ASAP
 
-  init_SWF_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
+  //init_SWF_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, 0);
 
-  _payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(c_MAX_MSG_BUF_SIZE, pl.typePayloadCount[HTTP_CONTENT_SWF]);
+  //_payload_database.type_detail[HTTP_CONTENT_SWF] = TypeDetail(c_MAX_MSG_BUF_SIZE, pl.typePayloadCount[HTTP_CONTENT_SWF]);
 
   //DONE (for SWF?): Add FileTypeSteg Capability to trace server
 }
@@ -337,8 +337,8 @@ TracePayloadServer::init_SWF_payload_pool(int len, int type, int )
   return 1;
 }
 
-
-int TracePayloadServer::get_payload (int contentType, int cap, const std::vector<uint8_t>* buf, double noise2signal, string* payload_id_hash) {
+*/
+int TracePayloadServer::get_payload (int contentType, int cap, [[maybe_unused]] const std::vector<uint8_t>* buf, double noise2signal, string* payload_id_hash) {
   int r, i, cnt, found = 0, numCandidate = 0, first, best, current;
 
   (void) payload_id_hash; //TracePayloadServer doesn't support disqualification
@@ -396,8 +396,7 @@ int TracePayloadServer::get_payload (int contentType, int cap, const std::vector
       pl.payload_hdrs[pl.typePayload[contentType][first]].length,
       pl.payload_hdrs[pl.typePayload[contentType][best]].length,
       numCandidate);
-    buf = pl.payloads[pl.typePayload[contentType][best]];
-    *size = pl.payload_hdrs[pl.typePayload[contentType][best]].length;
+    buf = &pl.payloads[pl.typePayload[contentType][best]];
     return 1;
   } else {
     log_warn("couldn't find payload with desired capacity: r=%d, checked %d payloads\n", r, i);
@@ -463,12 +462,12 @@ void TracePayloadServer::load_payloads(const char* fname)
     }
 
     if (r < 0) {
-      pl.payloads[pl.payload_count] = (char *)xmalloc(pentry.length + 1);
-      memcpy(pl.payloads[pl.payload_count], buf, pentry.length);
+      pl.payloads[pl.payload_count].resize(pentry.length + 1);
+      memcpy(pl.payloads[pl.payload_count].data(), buf, pentry.length);
     } else {
       pentry.length = r;
-      pl.payloads[pl.payload_count] = (char *)xmalloc(pentry.length + 1);
-      memcpy(pl.payloads[pl.payload_count], buf2, pentry.length);
+      pl.payloads[pl.payload_count].resize(pentry.length + 1);
+      memcpy(pl.payloads[pl.payload_count].data(), buf2, pentry.length);
     }
     pl.payload_hdrs[pl.payload_count] = pentry;
     pl.payloads[pl.payload_count][pentry.length] = 0;
@@ -491,7 +490,7 @@ unsigned int TracePayloadServer::find_client_payload(char* buf, int len, int typ
   while (1) {
     pentry_header* p = &pl.payload_hdrs[r];
     if (p->ptype == type) {
-      inbuf = pl.payloads[r];
+      inbuf = reinterpret_cast<char*>(pl.payloads[r].data());
       int requested_uri_type = find_uri_type(inbuf, p->length);
       //we also need to check if the user has restricted the type,
       //empty active type list means no restriciton
@@ -526,4 +525,4 @@ unsigned int TracePayloadServer::find_client_payload(char* buf, int len, int typ
   return parse_client_headers(inbuf, buf, len);
 }
 
-*/
+

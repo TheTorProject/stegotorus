@@ -725,9 +725,9 @@ void encode_data_to_hex(const std::vector<uint8_t>& data, std::vector<uint8_t>& 
  *   return 0 otherwise
  *
  */
-int isxString(char *str) {
+int isxString(const char *str) {
   unsigned int i;
-  char *dp = str;
+  const char *dp = str;
   for (i=0; i<strlen(str); i++) {
     if (! isxdigit(*dp) ) {
       return 0;

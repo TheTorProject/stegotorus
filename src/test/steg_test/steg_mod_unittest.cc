@@ -91,9 +91,9 @@ class StegModTest : public testing::Test {
     
     EXPECT_EQ((signed)(strlen(test_phrase)+1), test_steg_mod->decode(cover_payload, cover_len, recovered_phrase));
     
-   EXPECT_FALSE(memcmp(test_phrase,recovered_phrase, data_len));
-   //  cout << test_phrase << endl;
-   //  cout << recovered_phrase << endl;
+    EXPECT_FALSE(memcmp(test_phrase,recovered_phrase, data_len));
+    //  cout << test_phrase << endl;
+    //  cout << recovered_phrase << endl;
   }
 
   virtual void SetUp()
