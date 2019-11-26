@@ -37,7 +37,6 @@
 
 #include <event2/buffer.h>
 
-#include "util.h"
 #include "connections.h"
 #include "util.h"
 #include "crypt.h"
@@ -56,89 +55,81 @@
 
 using namespace std;
 
-class PayloadScraperTest : public testing::Test {
- protected:
-  friend PayloadScraper;
-  ssize_t cover_len;
-  uint8_t* cover_payload;
+// class PayloadScraperTest : public StegModeTest {
+//  protected:
+//   friend PayloadScraper;
+//   // ssize_t cover_len;
+//   // uint8_t* cover_payload;
 
-  char* short_message;
-  char* long_message;
+//   // char* short_message;
+//   // char* long_message;
 
-  void read_cover(const char* cover_file_name) {
-    std::ifstream test_cover(cover_file_name, ios::binary | ios::ate);
-    ASSERT_TRUE(test_cover.is_open());
-  
-   //read the whole file
-   cover_len = test_cover.tellg();
-   cover_payload = new uint8_t[cover_len];
+//   // void read_cover(const char* cover_file_name) {
+//   //   std::ifstream test_cover(cover_file_name, ios::binary | ios::ate);
+//   //   ASSERT_TRUE(test_cover.is_open());
 
-   ASSERT_TRUE(cover_payload);
+//   //   std::istream_iterator<double> start(test_cover), end;
+//   //   std::vector<double> numbers(start, end);
+//   //   std::cout << "Read " << numbers.size() << " numbers" << std::endl;
 
-   test_cover.seekg(0, ios::beg);
-   test_cover.read((char*)cover_payload, cover_len);
-   test_cover.close();
-  }
+//   //  //read the whole file
+//   //  cover_len = test_cover.tellg();
+//   //  cover_payload = new uint8_t[cover_len];
 
-  void encode_decode(const char* cover_file_name, const char* test_phrase, FileStegMod* test_steg_mod) {
+//   //  ASSERT_TRUE(cover_payload);
 
-    read_cover(cover_file_name);
+//   //  test_cover.seekg(0, ios::beg);
+//   //  test_cover.read((char*)cover_payload, cover_len);
+//   //  test_cover.close();
+//   // }
 
-    ssize_t data_len = strlen(test_phrase)+1;
-    uint8_t recovered_phrase[FileStegMod::c_MAX_MSG_BUF_SIZE];
+//   void encode_decode(const char* cover_file_name, const char* test_phrase, FileStegMod* test_steg_mod) {
 
-    ASSERT_TRUE(test_steg_mod->headless_capacity((char*)cover_payload, cover_len) >= data_len);
+//     read_cover(cover_file_name);ppp
+
+//     ssize_t data_len = strlen(test_phrase)+1;
+//     uint8_t recovered_phrase[FileStegMod::c_MAX_MSG_BUF_SIZE];
+
+//     ASSERT_TRUE(test_steg_mod->headless_capacity((char*)cover_payload, cover_len) >= data_len);
     
-    EXPECT_EQ(cover_len, test_steg_mod->encode((uint8_t*)test_phrase, data_len, cover_payload, cover_len));
+//     EXPECT_EQ(cover_len, test_steg_mod->encode((uint8_t*)test_phrase, data_len, cover_payload, cover_len));
     
-    EXPECT_EQ((signed)(strlen(test_phrase)+1), test_steg_mod->decode(cover_payload, cover_len, recovered_phrase));
-   EXPECT_FALSE(memcmp(test_phrase,recovered_phrase, data_len));
-   //  cout << test_phrase << endl;
-   //  cout << recovered_phrase << endl;
-  }
+//     EXPECT_EQ((signed)(strlen(test_phrase)+1), test_steg_mod->decode(cover_payload, cover_len, recovered_phrase));
+//     EXPECT_FALSE(memcmp(test_phrase,recovered_phrase, data_len));
+//    //  cout << test_phrase << endl;
+//    //  cout << recovered_phrase << endl;
+//   }
 
-  virtual void SetUp()
-  {
+//   virtual void SetUp()
+//   {
 
-    char local_short[] = "There are 10 types of people in the world: those who understand binary, and those who don't.";
+/*//     char local_short[] = "There are 10 types of people in the world: those who understand binary, and those who don't.";
 
-    char local_long[] = "Au jour finissant de cinq heures dont l'ombre obscurcit le vaste \
-appartement de l'avenue de Messine, c'est mélancolique, ce désordre     \
-qui survit à la fête nuptiale. Dans les salons aux meubles épars, que   \
-tout à l'heure animait la rumeur d'une foule parée, et où flotte la \
-poussière des tapis foulés longuement, vont se flétrissant les gerbes \
-de lilas, de lis, de tubéreuses, blanches fleurs d'hyménée ennuagées \
-de tulle. Et leurs parfums violents se font âcres en s'exaspérant de \
-la chaleur lourde qui épaissit l'air.";
+//     char local_long[] = "Au jour finissant de cinq heures dont l'ombre obscurcit le vaste \
+// appartement de l'avenue de Messine, c'est mélancolique, ce désordre     \
+// qui survit à la fête nuptiale. Dans les salons aux meubles épars, que   \
+// tout à l'heure animait la rumeur d'une foule parée, et où flotte la \
+// poussière des tapis foulés longuement, vont se flétrissant les gerbes \
+// de lilas, de lis, de tubéreuses, blanches fleurs d'hyménée ennuagées \
+// de tulle. Et leurs parfums violents se font âcres en s'exaspérant de \
+// la chaleur lourde qui épaissit l'air.";
+*/
+//     short_message = new char[strlen(local_short)+1];
+//     long_message = new char[strlen(local_long)+1];
 
-    short_message = new char[strlen(local_short)+1];
-    long_message = new char[strlen(local_long)+1];
-
-    strcpy(short_message, local_short);
-    strcpy(long_message, local_long);
+//     strcpy(short_message, local_short);
+//     strcpy(long_message, local_long);
     
-    cover_payload = NULL;
+//     cover_payload = NULL;
 
-  }
+//   }
 
-  virtual void TearDown()
-  {
-    delete short_message;
-    delete long_message;
-    delete cover_payload;
-  }
+//   virtual void TearDown()
+//   {
+//     delete short_message;
+//     delete long_message;
+//     delete cover_payload;
+//   }
 
-};
-
-//GIF not found
-TEST_F(PayloadScraperTest, nonexistance_capacity) {
-  steg_type gif_test_steg;
-
-  gif_test_steg.type = HTTP_CONTENT_GIF; gif_test_steg.extension = ".gif"; gif_test_steg.capacity_function = GIFSteg::static_capacity; //Temp measur
-  PayloadScraper test_scraper("/tmp/test.txt", "127.0.0.1");
-  
-  pair<unsigned long, unsigned long> result = test_scraper.compute_capacity("mit.edu/doesntexist.gif", &gif_test_steg, true);
-  EXPECT_TRUE(result.first == 0 && result.second  == 0 );
-
-}
+// };
 
