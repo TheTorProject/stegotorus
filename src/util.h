@@ -470,4 +470,10 @@ bool file_exists_with_name(const std::string& filename);
  */
 ssize_t file_size(const std::string& filename);
 
+//le utilities
+typedef uint32_t  int_t;
+std::vector<uint8_t> le_encode(int_t value);
+int_t le_decode(std::vector<uint8_t>& input);
+
 #endif
+

@@ -75,9 +75,9 @@ ssize_t JPGSteg::headless_capacity(const std::vector<uint8_t>& cover_body)
   if (from < 0) //invalid format 
     return 0;
     
-  ssize_t hypothetical_capacity = ((ssize_t)cover_body.size()) - from - 2 - (ssize_t)c_NO_BYTES_TO_STORE_MSG_SIZE;
+  ssize_t hypothetical_capacity = ((ssize_t)cover_body.size()) - from - 2 - (ssize_t)c_NO_BYTES_TO_STORE_MSG_SIZE; // 2 for FFD9, 4 for len
 
-  return max(hypothetical_capacity, (ssize_t)0); // 2 for FFD9, 4 for len
+  return max(hypothetical_capacity, (ssize_t)0); 
 
 }
 
@@ -96,12 +96,22 @@ ssize_t JPGSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& 
     return -1;
   }
 
-  log_debug("embeding %zu at %i of cover size %zu", data.size(),from, cover_payload.size());
+  log_debug("embeding %zu at %i of jpeg cover size %zu", data.size(),from, cover_payload.size());
 
   ssize_t data_len = data.size();
-  cover_payload[from] = data_len / 256;
-  cover_payload[from+1] = data_len % 256;
-  cover_payload.insert(cover_payload.begin()+from+c_NO_BYTES_TO_STORE_MSG_SIZE, data.begin(), data.end());
+  vector<uint8_t> encoded_data_len = le_encode(data_len);
+
+  //Sanity check
+  log_assert(encoded_data_len.size() == c_NO_BYTES_TO_STORE_MSG_SIZE);
+
+  //embeding the encoded length
+  std::copy(encoded_data_len.begin(), encoded_data_len.end(), cover_payload.begin()+from);
+  
+  //Sanity check in case capacity function is insane
+  log_assert(data_len < static_cast<ssize_t>(cover_payload.size() - (from + c_NO_BYTES_TO_STORE_MSG_SIZE)));
+  
+  std::copy(data.begin(), data.end(), cover_payload.begin()+from+c_NO_BYTES_TO_STORE_MSG_SIZE);
+
   return cover_payload.size();
     
 }
@@ -114,13 +124,10 @@ ssize_t JPGSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<u
       log_warn("invalid jpg payload, corrupted?");
       return -1;
     }
-      
-    size_t s = *(reinterpret_cast<const message_size_t*>(cover_payload.data()+from));
-    s %= c_HIGH_BYTES_DISCARDER;
-    if (s > c_MAX_MSG_BUF_SIZE) {
-      log_warn("too much embeded data, corrupted?");
-      return -1;
-    }
+
+    vector<uint8_t> encoded_data_len(cover_payload.data()+from,  cover_payload.data()+from + c_NO_BYTES_TO_STORE_MSG_SIZE);
+
+    size_t s = static_cast<size_t>(le_decode(encoded_data_len));
 
     //We assume the enough mem is allocated for the data
     log_debug("recovering %zu from %zd of cover size %zu", s, from, cover_payload.size());

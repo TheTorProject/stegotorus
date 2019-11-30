@@ -61,7 +61,7 @@ class StegModTest : public testing::Test {
   char* short_message = nullptr;
   char* long_message = nullptr;
 
-  string repo_root_path = testing::repo_root_path + "/";
+  string repo_root_path = (testing::repo_root_path != "") ? testing::repo_root_path + "/" : "./"; //Otherwise assume that the tests are being run from the repo root path.
 
   DummyPayloadServer mock_payload_server;
 
@@ -71,11 +71,11 @@ class StegModTest : public testing::Test {
     //make sure cover_payload is not being reused without releasing
     ASSERT_FALSE(cover_payload);
     
-    ifstream test_cover(cover_file_name, ios::binary | ios::ate);
+    ifstream test_cover(cover_file_name, ios::binary);
     ASSERT_TRUE(test_cover.is_open());
   
-   //read the whole file
-   std::istream_iterator<double> start(test_cover), end;
+   //read the whole file into a new vector
+   std::istream_iterator<char> start(test_cover), end;
    cover_payload = new std::vector<uint8_t>(start, end);
 
    ASSERT_TRUE(cover_payload);
@@ -84,7 +84,7 @@ class StegModTest : public testing::Test {
   }
 
   void encode_decode(const string cover_file_name, const string test_phrase, FileStegMod* test_steg_mod) {
-   
+    
     //if() test for SWFSteg here?
     read_cover(cover_file_name);
 
@@ -102,9 +102,17 @@ class StegModTest : public testing::Test {
     
     EXPECT_EQ((signed)test_vector.size(), test_steg_mod->decode(*cover_payload, recovered_vector));
     
-    EXPECT_FALSE(test_vector == recovered_vector);
+    EXPECT_TRUE(test_vector == recovered_vector);
     //  cout << test_phrase << endl;
     //  cout << recovered_phrase << endl;
+  }
+
+   
+  void empty_cover(FileStegMod* test_steg_mod) {
+    //empty cover should have zero capacity
+    vector<uint8_t> empty_cover_payload;
+    EXPECT_EQ(test_steg_mod->headless_capacity(empty_cover_payload), 0);
+    
   }
 
   virtual void SetUp()
@@ -228,10 +236,14 @@ TEST_F(StegModTest, pdf_gracefully_invalid) {
 // }
 
 //JPG
+TEST_F(StegModTest, jpg_empty_cover_capacity) {
+  JPGSteg jpg_test_steg(mock_payload_server);
+  empty_cover(&jpg_test_steg);
+}
+
 TEST_F(StegModTest, jpg_encode_decode_small) {
   JPGSteg jpg_test_steg(mock_payload_server);
   encode_decode(repo_root_path + "src/test/steg_test/test1.jpg", short_message, &jpg_test_steg);
-
 }
 
 TEST_F(StegModTest, jpg_encode_decode_large) {

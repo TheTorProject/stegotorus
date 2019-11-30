@@ -1,21 +1,24 @@
-
-/* Copyright 2011 Nick Mathewson, George Kadianakis
+/* Copyright 2015 Uli Koehler (CC0 1.0 Universal)
+ * Copyright 2011 Nick Mathewson, George Kadianakis
  * Copyright 2011, 2012 SRI International
  * See LICENSE for other credits and copying information
  */
+
 #include <string>
 #include <sstream>
 #include <fstream>
-
-#include "util.h"
-#include "connections.h"
-#include "strncasestr.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <cstdint>
+
 #include <event2/buffer.h>
+
+#include "util.h"
+#include "connections.h"
+#include "strncasestr.h"
 
 using namespace std;
 #ifdef _WIN32
@@ -819,4 +822,41 @@ ssize_t file_size(const std::string& filename) {
   }
             
   return cur_file.tellg();
+}
+
+//universal little endian enocding
+//This is necessary as we can not be sure
+//that both client and server machines are
+//running little endian based processore
+/**
+ * Encodes an unsigned integer into a vector using little endian
+ * @param value The input value.
+ *
+ * @return vector of size size_of(value) length
+ *        storing the little endian encoding of value
+ */
+vector<uint8_t> le_encode(int_t value) {
+  vector<uint8_t> output(sizeof(value));
+
+  for(size_t cur_byte = sizeof(value); cur_byte > 0; cur_byte--) {
+    output[cur_byte - 1] = value % 0x100;
+    value /=  0x100;
+  }
+
+  return output;
+}
+    
+/**
+ * Decodes an le encoded value in a vector as int_t integer
+ * @param input a vector containing a little endian unsigned integer
+ * 
+ * @return an int_t equal to the decoded unsigned integer of input
+ */
+int_t le_decode(vector<uint8_t>& input) {
+  log_assert(input.size() <= sizeof(int_t));
+  int_t value = 0;
+  for (size_t i = 0; i < input.size(); i++) {
+    value = value * 0x100 + input[i];
+  }
+  return value;
 }
