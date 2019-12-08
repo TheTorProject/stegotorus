@@ -18,7 +18,7 @@ using namespace std;
 
 #define NO_NEXT_STATE -1
 
-#define MAX_PAYLOADS 10000
+#define MAX_PAYLOADS 10000 //maximum number of payloads all type accumulated
 #define MAX_RESP_HDR_SIZE 8192
 
 // max number of payloads that have enough capacity from which
@@ -182,16 +182,6 @@ class TypeDetail
 
 class PayloadDatabase{
  public:
-  //int initTypePayload[MAX_CONTENT_TYPE];
-  //int typePayloadCount[MAX_CONTENT_TYPE];
-  //int typePayload[MAX_CONTENT_TYPE][MAX_PAYLOADS];
-  //int typePayloadCap[MAX_CONTENT_TYPE][MAX_PAYLOADS];
-
-  //unsigned int max_JS_capacity;
-  //unsigned int max_HTML_capacity;
-  //unsigned int max_PDF_capacity;
-
-  //pentry_header payload_hdrs[MAX_PAYLOADS];
   PayloadDict payloads;
   list<EfficiencyIndicator> sorted_payloads;
 
@@ -206,7 +196,6 @@ class PayloadDatabase{
   {
     return type_detail[type].max_capacity;
 
-    /*TODO: I need to look at TracePayloadServer::typed_maximum_capacity to figure out the morale behind the strange division in computing the capacity*/
   }
 
   /**

@@ -30,7 +30,7 @@ using namespace std;
 #include "http_steg_mods/file_steg.h"
 // #include "http_steg_mods/swfSteg.h"
 // #include "http_steg_mods/pdfSteg.h"
-// #include "http_steg_mods/jsSteg.h"
+#include "http_steg_mods/jsSteg.h"
 #include "http_steg_mods/jpgSteg.h"
 // #include "http_steg_mods/pngSteg.h"
 // #include "http_steg_mods/gifSteg.h"
@@ -154,14 +154,15 @@ http_steg_config_t::init_file_steg_mods()
   //if the steg_mod option has set by the user, only those steg mods
   //will be activated otherwise, all other steg mods will be activated
 
+  //TODO:: re-enable when all other Steg mods are migrated to vector<uint_16>
+  //coverpayload model.
   file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(*payload_server, noise2signal);
   // file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(*payload_server, noise2signal);
   // file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(*payload_server, noise2signal);
   // file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(*payload_server, noise2signal);
   // file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(*payload_server, noise2signal);
-  // file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(*payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(*payload_server, noise2signal);
   // file_steg_mods[HTTP_CONTENT_HTML] = new HTMLSteg(*payload_server, noise2signal);
-
 
   //TODO: for now only one steg module can be mentioned for testing.
   //It should be that a comma separated list should be able to
@@ -327,8 +328,10 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
     //type = HTTP_CONTENT_JAVASCRIPT;
     log_debug(conn, "checking available capacity for type %u", type);
     hi = config->payload_server->_payload_database.typed_maximum_capacity(type);
-    // switch (type)
-    //   {
+    switch (type)
+      {
+        //TDOD: SWF HTM PDF are disabled till they are migrated to
+        //vector<uint16_t>
     //     //TODO: This needs to be handle by the SWFSteg i.e. the
     //     //default case but because there is no pre-generated
     //     //swf payloads it needs a bit of tweak
@@ -337,10 +340,10 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
     //        //hi = 1024;
     //        //break;
 
-    //   case HTTP_CONTENT_JAVASCRIPT:
-    //     if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2)
-    //       hi = config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2;
-    //     break;
+      case HTTP_CONTENT_JAVASCRIPT:
+        if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2)
+          hi = config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT) / 2;
+        break;
 
     //   case HTTP_CONTENT_HTML:
     //     if (hi >= config->payload_server->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML) / 2)
@@ -357,7 +360,7 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
 
     //   default:
     //     hi = config->payload_server->_payload_database.typed_maximum_capacity(type);
-    //   }
+      }
         
   }
 
@@ -848,28 +851,6 @@ http_steg_t::http_client_receive(evbuffer *source, evbuffer *dest)
   //gracefully
   log_debug(conn, "receiving a payload of type %i", type);
   rval = config->file_steg_mods[type]->http_client_receive(conn, dest, source);
-
-  // type = HTTP_CONTENT_HTML;
-  // switch(type) {
-  // //case HTTP_CONTENT_SWF:
-  //   //rval = http_handle_client_SWF_receive(this, conn, dest, source);
-  //   //break;
-
-  // //case HTTP_CONTENT_JAVASCRIPT:
-  // case HTTP_CONTENT_HTML:
-  //   rval = http_handle_client_JS_receive(this, conn, dest, source);
-  //   break;
-
-  // //case HTTP_CONTENT_PDF:
-  //   //rval = http_handle_client_PDF_receive(this, conn, dest, source);
-  //  // break;
-
-  // default:
-  //   log_debug(conn, "receiving a payload of type %i", type);
-  //   rval = config->file_steg_mods[type]->http_client_receive(conn, dest, source);
-  //   break;
-     
-  // }
 
   if (rval == RECV_GOOD) have_received = 1;
   return rval;

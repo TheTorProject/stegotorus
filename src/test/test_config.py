@@ -24,7 +24,7 @@ class TimelineTest(TestCase):
         # Run tltester once in "internal" mode to get the reference
         # for comparison.  This will throw an exception if something
         # goes wrong, and the whole set will then be skipped.
-        import pdb
+        # import pdb
         #pdb.set_trace()
         cls.testdir = os.path.dirname(__file__)
 
@@ -39,8 +39,8 @@ class TimelineTest(TestCase):
             "http", "127.0.0.1:5000").check_completion(cls.__name__)
 
     def doTest(self, label, st_args, reftl = None):
-        import pdb
-        #pdb.set_trace()
+        #import pdb
+        pdb.set_trace()
         errors = ""
         st = Stegotorus(st_args)
         try:
@@ -58,8 +58,9 @@ class TimelineTest(TestCase):
         if errors != "":
             self.fail("\n" + errors)
 
-    def no_test_empty_config_null(self):
-        #pdb.set_trace()
+    def test_empty_config_null(self):
+        print "we are here"
+        pdb.set_trace()
         print self.reftl
         self.doTest("null-cl",
            ("--config-file="+ self.testdir + "/test_conf.d/empty.yaml", "null", "server", "127.0.0.1:5000",
@@ -93,6 +94,7 @@ class TimelineTest(TestCase):
         raise NotImplementedError
 
          
-if __name__ == '__main__':
+if __name__ == '__main__':    
     from unittest import main
+    pdb.set_trace()
     main()

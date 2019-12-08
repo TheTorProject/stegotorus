@@ -24,6 +24,11 @@ struct service_state {
   int dir;
 };
 
+/**
+   This struct keeps global information about all payloads
+   across types as well as information about each payload 
+   and the payload body. 
+ */
 struct payloads {
   int initTypePayload[MAX_CONTENT_TYPE];
   int typePayloadCount[MAX_CONTENT_TYPE];
@@ -34,7 +39,7 @@ struct payloads {
   unsigned int max_HTML_capacity;
   unsigned int max_PDF_capacity;
 
-  pentry_header payload_hdrs[MAX_PAYLOADS];
+  pentry_header payload_hdrs[MAX_PAYLOADS]; //stores properties of each payload such as type and size.
   std::vector<uint8_t> payloads[MAX_PAYLOADS];
   int payload_count;
 };

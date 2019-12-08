@@ -1,0 +1,20 @@
+####################################
+# processg options
+####################################
+log-min-severity:  debug
+timestamp-logs: true
+
+####################################
+# protocol specification for server 
+####################################
+
+protocols:
+  - name: "chop"
+    mode: server
+    up-address: 127.0.0.1:5001
+    trace-packets: true
+    disable-retransmit: true
+    stegs:
+      - name: "http"
+        down-address: 127.0.0.1:5000
+        steg-mod: "js"

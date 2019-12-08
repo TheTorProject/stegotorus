@@ -68,6 +68,9 @@ int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity)
     return 0;
   }
 
+  DummyPayloadServer  dummy_payload_server;
+  JSSteg jssteg_capacity_computer_engine(dummy_payload_server);
+
   for (r = 0; r < pl.payload_count; r++) {
     p = &pl.payload_hdrs[r];
     if (p->ptype != type || p->length > len) {
@@ -75,8 +78,6 @@ int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity)
     }
 
     vector<uint8_t> msgbuf(pl.payloads[r].begin(), pl.payloads[r].end());
-    DummyPayloadServer  dummy_payload_server;
-    JSSteg jssteg_capacity_computer_engine(dummy_payload_server);
 
     mode = has_eligible_HTTP_content(reinterpret_cast<char*>(msgbuf.data()), p->length, HTTP_CONTENT_JAVASCRIPT);
     if (mode == CONTENT_JAVASCRIPT) {
@@ -353,12 +354,13 @@ int TracePayloadServer::get_payload (int contentType, int cap, [[maybe_unused]] 
   if ((!is_activated_valid_content_type(contentType)) ||
       pl.initTypePayload[contentType] == 0 ||
       pl.typePayloadCount[contentType] == 0
-      )
+      ) {
     //|| (cap <= 0) //why should you ask for no or negative capacity?
     //Aparently negative capacity means your cap doesn't matter
     //I'll stuff as much as I can in it. This is in the case of
     //swf format.
     return 0;
+  }
 
   cnt = pl.typePayloadCount[contentType];
   r = rand() % cnt;
@@ -402,14 +404,14 @@ int TracePayloadServer::get_payload (int contentType, int cap, [[maybe_unused]] 
     log_warn("couldn't find payload with desired capacity: r=%d, checked %d payloads\n", r, i);
     return 0;
   }
-  }
 
+}
 
 void TracePayloadServer::load_payloads(const char* fname)
 {
   FILE* f;
-  char buf[HTTP_PAYLOAD_BUF_SIZE];
-  char buf2[HTTP_PAYLOAD_BUF_SIZE];
+  vector<uint8_t> buf(HTTP_PAYLOAD_BUF_SIZE, 0);
+  vector<uint8_t>buf2(HTTP_PAYLOAD_BUF_SIZE, 0);
   pentry_header pentry;
   int pentryLen;
   int r;
@@ -431,9 +433,8 @@ void TracePayloadServer::load_payloads(const char* fname)
     }
    
     pentryLen = ntohl(pentry.length);
-    if((unsigned int) pentryLen > sizeof(buf)) {
+    if((unsigned int) pentryLen > HTTP_PAYLOAD_BUF_SIZE) {
 #ifdef DEBUG
-      // fprintf(stderr, "pentry too big %d %d\n", pentry.length, ntohl(pentry.length));
       fprintf(stderr, "pentry too big %d\n", pentryLen);
 #endif
       // skip to the next pentry
@@ -441,13 +442,12 @@ void TracePayloadServer::load_payloads(const char* fname)
         fprintf(stderr, "skipping to next pentry fails\n");
       }
       continue;
-      // exit(0);
     }
 
     pentry.length = pentryLen;
     pentry.ptype = ntohs(pentry.ptype);
 
-    if (fread(buf, 1, pentry.length, f) < (unsigned int) pentry.length)
+    if (fread(buf.data(), 1, pentry.length, f) < (unsigned int) pentry.length)
       break;
 
     // todo:
@@ -458,19 +458,17 @@ void TracePayloadServer::load_payloads(const char* fname)
 
     r = -1;
     if (pentry.ptype == TYPE_HTTP_RESPONSE) {
-      r = fixContentLen (buf, pentry.length, buf2, HTTP_PAYLOAD_BUF_SIZE);
+      r = fixContentLen (reinterpret_cast<char*>(buf.data()), pentry.length, reinterpret_cast<char*>(buf2.data()), HTTP_PAYLOAD_BUF_SIZE);
     }
 
     if (r < 0) {
-      pl.payloads[pl.payload_count].resize(pentry.length + 1);
-      memcpy(pl.payloads[pl.payload_count].data(), buf, pentry.length);
+      pl.payloads[pl.payload_count].assign(buf.begin(), buf.begin()+pentry.length);
     } else {
       pentry.length = r;
-      pl.payloads[pl.payload_count].resize(pentry.length + 1);
-      memcpy(pl.payloads[pl.payload_count].data(), buf2, pentry.length);
+      pl.payloads[pl.payload_count].assign(buf2.begin(), buf2.begin()+pentry.length);
     }
     pl.payload_hdrs[pl.payload_count] = pentry;
-    pl.payloads[pl.payload_count][pentry.length] = 0;
+    pl.payloads[pl.payload_count].push_back(0);
     pl.payload_count++;
   } // while
 
@@ -479,7 +477,6 @@ void TracePayloadServer::load_payloads(const char* fname)
 
   fclose(f);
 }
-
 
 unsigned int TracePayloadServer::find_client_payload(char* buf, int len, int type) {
   int r = rand() % pl.payload_count;
