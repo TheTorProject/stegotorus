@@ -245,6 +245,10 @@ class PayloadServer
   /** TODO: either change the name (no _) or the access */
   PayloadDatabase _payload_database;
 
+  //A reference to this vector is returned  to signal that we failed to find
+  //a payload as requested
+  static const std::vector<uint8_t> c_empty_payload; 
+
   /** Construtor needs to init the side the least */
   PayloadServer(MachineSide init_side)
     {
@@ -269,16 +273,16 @@ class PayloadServer
 
      @param contentType the integer identifier of the cover content type requested.
      @param cap         the required available capacity the cover must provide
-     @param buf         the function stores a pointer to the string object containing
-                        the cover
      @param noise2signal the minimum require noise to available capacity ratio
      @param payload_id_hash if payload_id_hash is not NULL, then the function
             copy the payload identifier hash into it for further reference like
             disqualifiying the payload
 
-     @return 1 if succeed to find an suitable payload otherwise 0
+     @return  if successful to find a buffer with the required criteria, returns
+              a constant a reference to the vector object containing the cover
+              otherwise returns a reference to c_empty_payload
    */
-  virtual int get_payload (int contentType, int cap, const std::vector<uint8_t>* buf, double noise2signal=0, std::string* payload_id_hash = NULL) = 0;
+  virtual const std::vector<uint8_t>& get_payload (int contentType, int cap, double noise2signal=0, std::string* payload_id_hash = NULL) = 0;
 
   /**
      turn on the corrupted flag for the payload identified by payload_id_hash
@@ -373,8 +377,10 @@ class DummyPayloadServer: public PayloadServer {
     log_abort("Dummy payload server can not be used to find a payload");
   }
 
-  virtual int get_payload ([[maybe_unused]] int contentType, [[maybe_unused]] int cap, [[maybe_unused]] const std::vector<uint8_t>* buf, [[maybe_unused]] double noise2signal=0, [[maybe_unused]] std::string* payload_id_hash = NULL) {
+  virtual const std::vector<uint8_t>& get_payload ([[maybe_unused]] int contentType, [[maybe_unused]] int cap, [[maybe_unused]] double noise2signal=0, [[maybe_unused]] std::string* payload_id_hash = NULL) {
     log_abort("Dummy payload server can not be used to get a payload");
+
+    return PayloadServer::c_empty_payload;
   }
 
 public:

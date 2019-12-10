@@ -100,42 +100,35 @@ FileStegMod::extract_appropriate_respones_body(evbuffer* payload_buf)
 
 /**
    Finds a payload of approperiate type and size and copy it into payload_buf
-
-   @param data_len: the payload should be able to accomodate this length
-   @param payload_buf: the buff that is going to contain the chosen payload
-
-   @return payload size or < 0 in case of error
 */
-ssize_t FileStegMod::pick_appropriate_cover_payload(size_t data_len, const std::vector<uint8_t>* payload_buf, string& cover_id_hash)
+const std::vector<uint8_t>& FileStegMod::pick_appropriate_cover_payload(size_t data_len, string& cover_id_hash)
 {
   size_t max_capacity = _payload_server._payload_database.typed_maximum_capacity(c_content_type);
 
   if (max_capacity <= 0) {
     log_abort("SERVER ERROR: No payload of appropriate type=%d was found\n", (int) c_content_type);
-    return -1;
+    return PayloadServer::c_empty_payload;
   }
 
   if (data_len > (size_t) max_capacity) {
     log_abort("SERVER ERROR: type %d cannot accommodate data %d",
              (int) c_content_type, (int) data_len);
-    return -1;
+    return PayloadServer::c_empty_payload;
   }
 
-  do {
-    if (_payload_server.get_payload(c_content_type, data_len, payload_buf, noise2signal, &cover_id_hash) == 1) {
-      log_debug("SERVER found the next HTTP response template with size %d",
-                (int)payload_buf->size());
-    } else { //we can't do much here anymore, we need to add payload to payload
-      //database unless if the payload_server is serving randomly which means
-      //next time probably won't serve a corrupted payload
-      log_warn("SERVER couldn't find the next HTTP response template, enrich payload database and restart Stegotorus");
-      return -1;
-    }
-  } while(payload_buf->size() == 0); //if the payload size is zero it means that we have failed
-  //in retrieving the file and it might be helpful to try to download it again.
+  const vector<uint8_t>& payload_buf = _payload_server.get_payload(c_content_type, data_len, noise2signal, &cover_id_hash);
+  if (payload_buf != PayloadServer::c_empty_payload) {
+    log_debug("SERVER found the next HTTP response template with size %zu",
+              payload_buf.size());
+  } else { //we can't do much here anymore, we need to add payload to payload
+    //database unless if the payload_server is serving randomly which means
+    //next time probably won't serve a corrupted payload
+    log_warn("SERVER couldn't find the next HTTP response template, enrich payload database and restart Stegotorus");
+    return PayloadServer::c_empty_payload;
+  }
 
-  return payload_buf->size();
-
+  return payload_buf;
+  
 }
 
 /**
@@ -162,7 +155,6 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   ssize_t body_offset = 0;
   vector<uint8_t> newHdr;
   ssize_t newHdrLen = 0;
-  ssize_t cnt = 0;
   size_t body_len = 0;
   size_t hLen = 0;
 
@@ -179,23 +171,23 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
   }
 
   //now we need to choose a payload. If a cover failed we through it out and try again
-  const std::vector<uint8_t>* cover_payload = nullptr;
   string payload_id_hash;
   do  {
-    cnt = pick_appropriate_cover_payload(sbuflen, cover_payload, payload_id_hash);
-    if (cnt < 0) {
+    
+    const vector<uint8_t>& cover_payload = pick_appropriate_cover_payload(sbuflen, payload_id_hash);
+
+    if (cover_payload == PayloadServer::c_empty_payload) {
       log_warn("Failed to aquire approperiate payload."); //if there is no approperiate cover of this type
       //then we can't continue :(
       return -1;
     }
 
-    //we reached here so we must have a valid cover
-    log_assert(cover_payload != nullptr);
+    ssize_t cnt = cover_payload.size();
 
     //we shouldn't touch the cover as there is only one copy of it in the
     //the cache
     //log_debug("cover body: %s",cover_payload);
-    body_offset =  extract_appropriate_respones_body(*cover_payload);
+    body_offset =  extract_appropriate_respones_body(cover_payload);
     if (body_offset < 0) {
       log_warn("Failed to aquire approperiate payload.");
       _payload_server.disqualify_payload(payload_id_hash);
@@ -210,7 +202,7 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
       _payload_server.disqualify_payload(payload_id_hash);
       return -1;
     }
-    outbuf.insert(outbuf.begin(), cover_payload->begin() + body_offset, cover_payload->end());
+    outbuf.assign(cover_payload.begin() + body_offset, cover_payload.end());
 
     //int hLen = body_offset - (size_t)cover_payload - 4 + 1;
     //extrancting the body part of the payload
@@ -218,93 +210,82 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
     outbuflen = encode(data_to_be_transferred, outbuf);
 
     ///End of steg test!!
-    if (outbuflen < 0) {
+    if (outbuflen < 0) { //something went wrong in the emebeding we should
+      //disqualify the cover and try another cover
       log_warn("SERVER embedding fails");
       _payload_server.disqualify_payload(payload_id_hash);
       
-    }
-  } while(outbuflen < 0); //If we fail to embed, it is probably because
-    //the cover had problem, we try again with different cover
+    } else { //we have successfully embeded the data in the cover
+             //we can go ahead and prepare it to be sent as an
+             //http respose
     
-  //At this point body_len isn't valid anymore
-  //we should only use outbuflen, cause the stegmodule might
-  //have changed the original body_len
+      //At this point body_len isn't valid anymore
+      //we should only use outbuflen, cause the stegmodule might
+      //have changed the original body_len
 
-  //If everything seemed to be fine, New steg module test:
-  if (!(LOG_SEV_DEBUG < log_get_min_severity())) { //only perform this during debug
-    std::vector<uint8_t> recovered_data_for_test; //this is the size we have promised to decode func
-    decode(outbuf, recovered_data_for_test);
+      //If everything seemed to be fine, if we are at the debug mode
+      //We are going to test if we can decode the cover, just to be sure:
+      if (!(LOG_SEV_DEBUG < log_get_min_severity())) { //only perform this during debug
+        std::vector<uint8_t> recovered_data_for_test; //this is the size we have promised to decode func
+        decode(outbuf, recovered_data_for_test);
 
-    if ((data_to_be_transferred.size() != recovered_data_for_test.size()) ||
-        (!std::equal(data_to_be_transferred.begin(), data_to_be_transferred.end(), recovered_data_for_test.begin()))) { //barf!!
-      //keep the evidence for testing
-     // if(pgenflag == FILE_PAYLOAD)
-     //{
-      	ofstream failure_evidence_file("fail_cover.log", ios::binary | ios::out);
-      	failure_evidence_file.write(reinterpret_cast<const char*>(cover_payload->data() + body_offset), body_len);
-      	failure_evidence_file.write(reinterpret_cast<const char*>(cover_payload->data() + body_offset), body_len);
-      	failure_evidence_file.close();
-     //}
-      ofstream failure_embed_evidence_file("failed_embeded_cover.log", ios::binary | ios::out);
-      failure_embed_evidence_file.write(reinterpret_cast<const char*>(outbuf.data()), outbuflen);
-      failure_embed_evidence_file.close();
-      log_warn("decoding cannot recovers the encoded data consistantly for type %d", c_content_type);
-      goto error;
-    }
-  }
+        if ((data_to_be_transferred.size() != recovered_data_for_test.size()) ||
+            (!std::equal(data_to_be_transferred.begin(), data_to_be_transferred.end(), recovered_data_for_test.begin()))) { //barf!!
 
-  log_debug("SERVER FileSteg sends resp with hdr len %zu body len %zd",
-            body_offset, outbuflen);
- 
-  //Update: we can't assert this anymore, SWFSteg changes the size
-  //so this equality doesn't hold anymore
-  //assert((size_t)outbuflen == body_len); //changing length is not supported yet
-  //instead we need to check if SWF or PDF, the payload length is changed
-  //and in that case we need to update the header
-  
-	/*if( c_content_type == HTTP_CONTENT_JAVASCRIPT) {
-	  //TODO instead of generating the header we should just manipulate
-  //it
-  //The only possible problem is length but we are not changing 
-  //the length for now
-   newHdrLen = gen_response_header((char*) "application/x-javascript", gzipMode, outbuflen, (char *)newHdr, sizeof((char*)newHdr));
-  if (newHdrLen < 0) {
-    log_warn("SERVER ERROR: gen_response_header fails for JSSteg");
-    return -1;
-    }
-   }
-  //I'm not crazy, these are filler for later change*/
+          //keep the evidence for testing
+          ofstream failure_evidence_file("fail_cover.log", ios::binary | ios::out);
+          failure_evidence_file.write(reinterpret_cast<const char*>(cover_payload.data() + body_offset), body_len);
+          failure_evidence_file.write(reinterpret_cast<const char*>(cover_payload.data() + body_offset), body_len);
+          failure_evidence_file.close();
 
-  if ((size_t)outbuflen == body_len) {
-    log_assert(hLen < MAX_RESP_HDR_SIZE);
-    newHdr.assign(cover_payload->begin(), cover_payload->begin()+hLen);
-    newHdrLen = hLen;
+          ofstream failure_embed_evidence_file("failed_embeded_cover.log", ios::binary | ios::out);
+          failure_embed_evidence_file.write(reinterpret_cast<const char*>(outbuf.data()), outbuflen);
+          failure_embed_evidence_file.close();
+          log_warn("decoding cannot recovers the encoded data consistantly for type %d", c_content_type);
+          goto error;
+        }
+      } //end of cover test
+
+      log_debug("SERVER FileSteg sends resp with hdr len %zu body len %zd",
+                body_offset, outbuflen);
+
+      if ((size_t)outbuflen == body_len) {
+        log_assert(hLen < MAX_RESP_HDR_SIZE);
+        newHdr.assign(cover_payload.begin(), cover_payload.begin()+hLen);
+        newHdrLen = hLen;
      
-  }
-  else { //if the length is different, then we need to update the header
-   alter_length_in_response_header(*cover_payload, outbuflen, newHdr);
-   newHdrLen = newHdr.size();
-    if (!newHdrLen) {
-      log_warn("SERVER ERROR: failed to alter length field in response headerr");
-      _payload_server.disqualify_payload(payload_id_hash);
-      goto error;
+      }
+      else { //if the length is different, then we need to update the header
+        alter_length_in_response_header(cover_payload, outbuflen, newHdr);
+        newHdrLen = newHdr.size();
+
+        if (!newHdrLen) {
+          log_warn("SERVER ERROR: failed to alter length field in response headerr");
+          _payload_server.disqualify_payload(payload_id_hash);
+          goto error;
+        }
+      }
+
+      //All is good. send it off
+      dest = conn->outbound();
+      if (evbuffer_add(dest, newHdr.data(), newHdrLen)) {
+        log_warn("SERVER ERROR: evbuffer_add() fails for newHdr");
+        goto error;
+      }
+
+      if (evbuffer_add(dest, outbuf.data(), outbuflen)) {
+        log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
+        goto error;
+        return -1;
+      }
+
+      evbuffer_drain(source, sbuflen);
+      return outbuflen;
     }
-  }
 
-  dest = conn->outbound();
-  if (evbuffer_add(dest, newHdr.data(), newHdrLen)) {
-    log_warn("SERVER ERROR: evbuffer_add() fails for newHdr");
-    goto error;
-    }
-
-  if (evbuffer_add(dest, outbuf.data(), outbuflen)) {
-    log_warn("SERVER ERROR: evbuffer_add() fails for outbuf");
-    goto error;
-    return -1;
-  }
-
-  evbuffer_drain(source, sbuflen);
-  return outbuflen;
+  } while(outbuflen < 0); //If we have failed reached this point it means that
+  //we failed to embed, it is probably because the cover had problem,
+  //we try again with different cover
 
  error:
   return -1;

@@ -393,11 +393,13 @@ ssize_t JSSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<ui
     //shrink the vecotor to the actual used size
     decompressed_payload.resize(decompressed_payload_len);
 
+  } else {
+    decompressed_payload = cover_payload;
   }
 
   decCnt = decode_http_body(decompressed_payload, data, fin);
 
-  data[decCnt] = 0;
+  data.push_back(0);
 
   log_debug("After decodeHTTPBody; decCnt: %zd\n", decCnt);
 
@@ -422,7 +424,11 @@ ssize_t JSSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<ui
     data[j] = (uint8_t)c;
   }
 
-  return decCnt / 2;
+  //resize data to the actual length
+  decCnt /= 2;
+  data.resize(decCnt);
+
+  return decCnt;
 
 }
 
@@ -478,7 +484,7 @@ JSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_pay
    *  insanity checks
    */
   //if (jdlen < jtlen) { return INVALID_BUF_SIZE; }
-  log_assert(HTTP_PAYLOAD_BUF_SIZE > SIZE_T_CEILING);
+  log_assert(HTTP_PAYLOAD_BUF_SIZE < SIZE_T_CEILING);
 
   if (cover_payload.size() > SIZE_T_CEILING || data.size() > SIZE_T_CEILING)
     return -1;
@@ -522,6 +528,7 @@ JSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_pay
   }
   //encCnt isn't really needed any more except for debugging and tracking, but return value outbuf2len is needed for new header
   //return encCnt;
+  cover_payload = cover_with_data;
   return cover_with_data.size();
 
 }
@@ -602,6 +609,9 @@ JSSteg::encode_in_single_js_block(const vector<uint8_t>& data, const vector<uint
   /* handling boundary case: dlen == 0 */
   if (data.size() < 1) { return 0; }
 
+  //we know that cover_and_data will be of the cover size
+  cover_and_data.reserve(cover.size());
+  
   i = offset2Hex(reinterpret_cast<const char*>(cover.data()) + jtp, end_of_block_pos - jtp, 0);
   while (encCnt < data.size() && i != -1) {
     // copy next i char from jtp to jdp,
@@ -610,14 +620,14 @@ JSSteg::encode_in_single_js_block(const vector<uint8_t>& data, const vector<uint
     j = 0;
     while (j < i) {
       if (cover[jtp] == JS_DELIMITER) {
-        cover_and_data[jtp] = JS_DELIMITER_REPLACEMENT;
+        cover_and_data.push_back(JS_DELIMITER_REPLACEMENT);
       } else {
-        cover_and_data[jtp] = cover[jtp];
+        cover_and_data.push_back(cover[jtp]);
       }
       jtp = jtp + 1; j++;
     }
 
-    cover_and_data[jtp] = data[dp];
+    cover_and_data.push_back(data[dp]);
     encCnt++;
     dp = dp + 1; jtp = jtp + 1;
 
@@ -637,7 +647,7 @@ JSSteg::encode_in_single_js_block(const vector<uint8_t>& data, const vector<uint
   if (encCnt == data.size()) {
     // replace the next char in jTemplate by JS_DELIMITER
     if (jtp < (end_of_block_pos)) {
-      cover_and_data[jtp] = JS_DELIMITER;
+      cover_and_data.push_back(JS_DELIMITER);
     }
     jtp = jtp+1;
     fin = 1;
@@ -646,9 +656,9 @@ JSSteg::encode_in_single_js_block(const vector<uint8_t>& data, const vector<uint
   while (jtp < end_of_block_pos) {
     if (cover[jtp] == JS_DELIMITER) {
       if (encCnt < data.size()) {
-        cover_and_data[jtp] = JS_DELIMITER_REPLACEMENT;
+        cover_and_data.push_back(JS_DELIMITER_REPLACEMENT);
       } else {
-        cover_and_data[jtp] = cover[jtp];
+        cover_and_data.push_back(cover[jtp]);
       }
       // else if (isxdigit(*jtp)) {
       //   if (encCnt < data.size() && *fin == 0) {
@@ -659,7 +669,7 @@ JSSteg::encode_in_single_js_block(const vector<uint8_t>& data, const vector<uint
       //   }
       // }
     } else {
-        cover_and_data[jtp] = cover[jtp];
+      cover_and_data.push_back(cover[jtp]);
     }
     jtp++;
   }
@@ -727,7 +737,7 @@ JSSteg::encode_in_single_js_block(const vector<uint8_t>& data, const vector<uint
            negative values of INVALID_BUF_SIZE or INVALID_DATA_CHAR in
            case of error
  */
-ssize_t JSSteg::decode_single_js_block(const std::vector<uint8_t> cover_and_data, std::vector<uint8_t> data, size_t cover_offset, size_t data_offset, size_t js_block_size, int& fin )
+ssize_t JSSteg::decode_single_js_block(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, size_t cover_offset, size_t data_offset, size_t js_block_size, int& fin )
 {
   unsigned int decCnt = 0;  /* num of data decoded */
   size_t dp = data_offset, jdp = cover_offset; /* current pointers for dataBuf and jData */
@@ -748,7 +758,7 @@ ssize_t JSSteg::decode_single_js_block(const std::vector<uint8_t> cover_and_data
     }
     // copy hex data from jdp to dp
 
-    data[dp] = cover_and_data[jdp];
+    data.push_back(cover_and_data[jdp]);
     jdp = jdp+1;
     dp = dp+1;
     decCnt++;
@@ -769,60 +779,7 @@ ssize_t JSSteg::decode_single_js_block(const std::vector<uint8_t> cover_and_data
   return decCnt;
 }
 
-// int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
-//                     unsigned int dataBufSize, int *fin, int mode )
-// {
-//   char *jsStart, *jsEnd;
-//   char *dp, *jdp; // current pointers for data and jData
-//   int scriptLen;
-//   int decCnt = 0;
-//   int n;
-//   int dlen = jdlen; //gets rud of unused warning, useless tho
-//   dp = dataBuf; jdp = jData;
-
-//   /*if (mode == CONTENT_JAVASCRIPT) {
-//     decCnt = decode(jData, dataBuf, jdlen, dataBufSize, fin);
-//     if (*fin == 0) {
-//       log_warn("Unable to find JS_DELIMITER");
-//     }
-//   }
-//   else */if (mode == CONTENT_HTML_JAVASCRIPT) {
-//     *fin = 0;
-//     dlen = dataBufSize; 
-//     while (*fin == 0) {
-//       jsStart = strstr(jdp, startScriptTypeJS);
-//       if (jsStart == NULL) {
-// #ifdef DEBUG
-//         printf("Can't find startScriptType for decoding data inside script type JS\n");
-// #endif
-//         return decCnt;
-//       }
-//       jdp = jsStart+strlen(startScriptTypeJS);
-//       jsEnd = strstr(jdp, endScriptTypeJS);
-//       if (jsEnd == NULL) {
-// #ifdef DEBUG
-//         printf("Can't find endScriptType for decoding data inside script type JS\n");
-// #endif
-//         return decCnt;
-//       }
-
-//       // the JS for decoding data is between jsStart and jsEnd
-//       scriptLen = jsEnd - jdp;
-//       n = decode_single_js_block(jdp, dp, scriptLen, dlen, fin);
-//       if (n > 0) {
-//         decCnt = decCnt+n; dlen=dlen-n; dp=dp+n;
-//       }
-//       jdp = jsEnd+strlen(endScriptTypeJS);
-//     } // while (*fin==0)
-//   } else {
-//     log_warn("Unknown mode (%d) for decode()", mode);
-//     return 0;
-//   }
-
-//   return decCnt;
-// }
-
-void printerr(int err_no) /* name errno had conflict with other vars so I changed it to err_no */
+void JSSteg::printerr(int err_no) /* name errno had conflict with other vars so I changed it to err_no */
  {
   if (err_no == INVALID_BUF_SIZE) {
     printf ("Error: Output buffer too small\n");
@@ -835,558 +792,9 @@ void printerr(int err_no) /* name errno had conflict with other vars so I change
   }
 }
 
-
-/**int testEncode(char *data, char *js, char *outBuf, unsigned int dlen, unsigned int jslen,
-               unsigned int outBufLen, int testNum) {
-  int r;
-
-  printf ("***** Start of testEncode (%i) *****\n", testNum);
-  printf ("Input:\n");
-  printf ("data         = %s\n", data);
-  printf ("data len     = %i\n", dlen);
-  printf ("js           = %s\n", js);
-  printf ("js len       = %i\n", jslen);
-  r = encode (data, js, outBuf, dlen, jslen, outBufLen);
-  if (r < 0) {
-    printerr(r); 
-  } else {
-    printf ("\nOutput:\n");
-    printf ("%i char of data embedded in outBuf\n", r);
-    outBuf[jslen]    = '\0';
-    printf ("outBuf       = %s\n", outBuf);
-  }
-  printf ("***** End of testEncode (%i) *****\n", testNum);
-  return r;
-}
-
-int testDecode(char *inBuf, char *outBuf, unsigned int inBufSize, unsigned int dlen,
-               unsigned int outBufSize, int testNum) {
-
-  int r;
-
-  printf ("***** Start of testDecode (%i) *****\n", testNum);
-  printf ("Input:\n");
-  printf ("inBuf       = %s\n", inBuf);
-  printf ("inBuf size  = %i\n", inBufSize);
-  printf ("data len    = %i\n", dlen);
-  printf ("outBuf size = %i\n", outBufSize);
-  r = decode(inBuf, outBuf, inBufSize, dlen, outBufSize);
-  if (r < 0) {
-    printerr(r);
-  } else {
-    printf ("\nOutput:\n");
-    printf ("%i char of data recovered from inBuf (to outBuf)\n", r);
-    outBuf[r] = '\0';
-    printf ("outBuf   = %s\n", outBuf);
-  }
-  printf ("***** End of testDecode (%i) *****\n", testNum);
-  return r;
-}
-
-
-int testEncode2(char *data, char *js, char *outBuf,
-                unsigned int dlen, unsigned int jslen, unsigned int outBufLen,
-                int mode, int testNum) {
-  int r;
-  // int fin;
-
-  printf ("***** Start of testEncode2 (%i) *****\n", testNum);
-  printf ("Input:\n");
-  printf ("data         = %s\n", data);
-  printf ("data len     = %i\n", dlen);
-  printf ("js           = %s\n", js);
-  printf ("js len       = %i\n", jslen);
-  // r = encode2(data, js, outBuf, dlen, jslen, outBufLen, &fin);
-  r = encodeHTTPBody(data, js, outBuf, dlen, jslen, outBufLen, mode);
-
-  if (r < 0) {
-    printerr(r);
-  }
-  else {
-    printf ("\nOutput:\n");
-    printf ("%i char of data embedded in outBuf\n", r);
-    //    printf ("fin          = %d\n", fin);
-    outBuf[jslen]    = '\0';
-    printf ("outBuf       = %s\n", outBuf);
-
-    if ((unsigned int) r < dlen) {
-      printf ("Incomplete data encoding\n");
-    }
-  }
-  printf ("***** End of testEncode (%i) *****\n", testNum);
-  return r;
-}
-
-
-
-
-int testDecode2(char *inBuf, char *outBuf,
-             unsigned int inBufSize, unsigned int outBufSize,
-             int mode, int testNum) {
-  int r;
-  int fin;
-
-  printf ("***** Start of testDecode2 (%i) *****\n", testNum);
-  printf ("Input:\n");
-  printf ("inBuf       = %s\n", inBuf);
-  printf ("inBuf size  = %i\n", inBufSize);
-  printf ("outBuf size = %i\n", outBufSize);
-  r = decodeHTTPBody(inBuf, outBuf, inBufSize, outBufSize, &fin, mode);
-  if (r < 0) {
-    printerr(r);
-  } else {
-    printf ("\nOutput:\n");
-    printf ("%i char of data recovered from inBuf (to outBuf)\n", r);
-    outBuf[r] = '\0';
-    printf ("outBuf   = %s\n", outBuf);
-  }
-  printf ("***** End of testDecode2 (%i) *****\n", testNum);
-  return r;
-}**/
-
-
-
-
-// int
-// http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source, conn_t *conn,
-//                          unsigned int content_type)
-// {
-//   struct evbuffer_iovec *iv;
-
-//   int nv;
-//   struct evbuffer *dest = conn->outbound();
-//   size_t sbuflen = evbuffer_get_length(source);
-//   char *hend, *jsTemplate = NULL, *outbuf, *outbuf2;
-//   char data[(int) sbuflen*2];
-//   char newHdr[MAX_RESP_HDR_SIZE];
-//   unsigned int datalen = 0, cnt = 0, mjs = 0;
-//   int r, i, mode, jsLen, hLen, cLen, newHdrLen = 0, outbuf2len;
-
-//   int gzipMode = JS_GZIP_RESP;
-
-//   log_debug("sbuflen = %d\n", (int) sbuflen);
-
-//   if (/*content_type != HTTP_CONTENT_JAVASCRIPT &&*/
-//       content_type != HTTP_CONTENT_HTML) {
-//     log_warn("SERVER ERROR: Unknown content type (%d)", content_type);
-//     return -1;
-//   }
-
-//   // log_debug("SERVER: dumping data with length %d:", (int) sbuflen);
-//   // evbuffer_dump(source, stderr);
-//   nv = evbuffer_peek(source, sbuflen, NULL, NULL, 0);
-//   iv = (evbuffer_iovec *)xzalloc(sizeof(struct evbuffer_iovec) * nv);
-
-//   if (evbuffer_peek(source, sbuflen, NULL, iv, nv) != nv) {
-//     free(iv);
-//     return -1;
-//   }
-
-//   /*if (content_type == HTTP_CONTENT_JAVASCRIPT) {
-//     mjs = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_JAVASCRIPT);
-//   } else */if (content_type == HTTP_CONTENT_HTML) {
-//     mjs = pl->_payload_database.typed_maximum_capacity(HTTP_CONTENT_HTML);
-//   }
-
-//   if (mjs <= 0) {
-//     log_warn("SERVER ERROR: No JavaScript found in jsTemplate");
-//     return -1;
-//   }
-
-//   if (sbuflen > (size_t) mjs) {
-//     log_warn("SERVER ERROR: jsTemplate cannot accommodate data %d %dn",
-//              (int) sbuflen, (int) mjs);
-//     return -1;
-//   }
-
-//   // Convert data in 'source' to hexadecimal and write it to data
-//   cnt = 0;
-//   for (i = 0; i < nv; i++) {
-//     const unsigned char *p = (const unsigned char *)iv[i].iov_base;
-//     const unsigned char *limit = p + iv[i].iov_len;
-//     char c;
-
-//     while (p < limit && cnt < sbuflen) {
-//       c = *p++;
-//       data[datalen] = "0123456789abcdef"[(c & 0xF0) >> 4];
-//       data[datalen+1] = "0123456789abcdef"[(c & 0x0F) >> 0];
-//       datalen += 2;
-//       cnt++;
-//     }
-//   }
-
-//   free(iv);
-
-//   //log_debug("SERVER encoded data in hex string (len %d):", datalen);
-//   //    buf_dump((unsigned char*)data, datalen, stderr);
-
-//   if (pl->get_payload(content_type, datalen, &jsTemplate, &jsLen) == 1) {
-//     log_debug("SERVER found the applicable HTTP response template with size %d", jsLen);
-//   } else {
-//     log_warn("SERVER couldn't find the applicable HTTP response template");
-//     return -1;
-//   }
-
-//   // log_debug("MJS %d %d", datalen, mjs);
-//   if (jsTemplate == NULL) {
-//     log_warn("NO suitable payload found %d %d", datalen, mjs);
-//     return -1;
-//   }
-
-//   // assumption: jsTemplate is null-terminated
-//   hend = strstr(jsTemplate, "\r\n\r\n");
-//   if (hend == NULL) {
-//     log_warn("Unable to find end of header in the HTTP template");
-//     return -1;
-//   }
-
-//   mode = has_eligible_HTTP_content (jsTemplate, jsLen, HTTP_CONTENT_JAVASCRIPT);
-
-//   // log_debug("SERVER: using HTTP resp template of length = %d", jsLen);
-//   // log_debug("HTTP resp tempmlate:");
-//   // buf_dump((unsigned char*)jsTemplate, jsLen, stderr);
-
-//   hLen = hend+4-jsTemplate;
-//   cLen = jsLen - hLen;
-//   outbuf = (char *)xmalloc(cLen);
-
-//   r = encodeHTTPBody(data, hend+4, outbuf, datalen, cLen, cLen, mode);
-
-//   if (r < 0 || ((unsigned int) r < datalen)) {
-//     log_warn("SERVER ERROR: Incomplete data encoding");
-//     return -1;
-//   }
-
-//   // work in progress
-//   if (gzipMode == 1) {
-//     // conservative estimate:
-//     // sizeof outbuf2 = cLen + 10-byte for gzip header + 8-byte for crc
-//     outbuf2 = (char *)xmalloc(cLen+18);
-
-//     outbuf2len = compress((const uint8_t *)outbuf, cLen,
-//                           (uint8_t *)outbuf2, cLen+18, c_format_gzip);
-
-//     if (outbuf2len <= 0) {
-//       log_warn("gzDeflate for outbuf fails");
-//       free(outbuf2);
-//       return -1;
-//     }
-//     free(outbuf);
-
-//   } else {
-//     outbuf2 = outbuf;
-//     outbuf2len = cLen;
-//   }
-
-//   // outbuf2 points to the HTTP payload (of length outbuf2len) to be sent
-
-//   //if (mode == CONTENT_JAVASCRIPT) { // JavaScript in HTTP body
-//   //  newHdrLen = gen_response_header((char*) "application/x-javascript", gzipMode,
-//   //                                  outbuf2len, newHdr, sizeof(newHdr)); }
-//   if (mode == CONTENT_HTML_JAVASCRIPT) { // JavaScript(s) embedded in HTML doc
-//     newHdrLen = gen_response_header((char*) "text/html", gzipMode,
-//                                     outbuf2len, newHdr, sizeof(newHdr));
-//   } else { // unknown mode
-//     log_warn("SERVER ERROR: unknown mode for creating the HTTP response header");
-//     free(outbuf2);
-//     return -1;
-//   }
-//   if (newHdrLen < 0) {
-//     log_warn("SERVER ERROR: gen_response_header fails for jsSteg");
-//     free(outbuf2);
-//     return -1;
-//   }
-
-//   // newHdr points to the HTTP header (of length newHdrLen) to be sent
-
-//   if (evbuffer_add(dest, newHdr, newHdrLen)) {
-//     log_warn("SERVER ERROR: evbuffer_add() fails for newHdr");
-//     free(outbuf2);
-//     return -1;
-//   }
-
-//   if (evbuffer_add(dest, outbuf2, outbuf2len)) {
-//     log_warn("SERVER ERROR: evbuffer_add() fails for outbuf2");
-//     free(outbuf2);
-//     return -1;
-//   }
-
-//   evbuffer_drain(source, sbuflen);
-
-//   free(outbuf2);
-//   return 0;
-// }
-
-
-// // int
-// // http_handle_client_JS_receive(steg_t *, conn_t *conn, struct evbuffer *dest, struct evbuffer* source) {
-// //   struct evbuffer_ptr s2;
-// //   int response_len = 0;
-// //   unsigned int content_len = 0;
-// //   unsigned int hdrLen;
-// //   char buf[10];
-// //   char respMsg[HTTP_PAYLOAD_BUF_SIZE];
-// //   char data[c_MAX_MSG_BUF_SIZE];
-// //   char buf2[HTTP_PAYLOAD_BUF_SIZE];
-
-// //   unsigned char *field, *fieldStart, *fieldEnd, *fieldValStart;
-// //   char *httpBody;
-
-// //   int decCnt, fin, i, j, k, gzipMode=0, httpBodyLen, buf2len, contentType = 0;
-// //   ev_ssize_t r;
-// //   struct evbuffer * scratch;
-// //   char c;
-
-// //   s2 = evbuffer_search(source, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
-// //   if (s2.pos == -1) {
-// //     log_debug("CLIENT Did not find end of HTTP header %d", (int) evbuffer_get_length(source));
-// //     //      evbuffer_dump(source, stderr);
-// //     return RECV_INCOMPLETE;
-// //     }
-
-// //   log_debug("CLIENT received response header with len %d", (int)s2.pos);
-// //   char* buf2print = new char[s2.pos+2];
-// //   evbuffer_copyout(source, (void*) buf2print, sizeof(char)* (s2.pos+1));
-// //   buf2print[s2.pos+1] = '\0';
-// //   log_debug("header: %s", buf2print);
-// //   delete[] buf2print;
-
-// //   response_len = 0;
-// //   hdrLen = s2.pos + strlen("\r\n\r\n");
-// //   response_len += hdrLen;
-
-// //   // get content length, e.g., Content-Length: 22417
-// //   field = evbuffer_pullup(source, s2.pos);
-// //   if (field == NULL) {
-// //     log_debug("CLIENT unable to pullup the complete HTTP header");
-// //     return RECV_BAD;
-// //   }
-
-// //   fieldStart = (unsigned char*) strstr((char*) field, "Content-Length: ");
-// //   if (fieldStart == NULL) {
-// //     log_debug("CLIENT unable to find Content-Length in the header");
-// //     return RECV_BAD;
-// //   }
-
-// //   fieldEnd = (unsigned char*) strstr((char *)fieldStart, "\r\n");
-// //   if (fieldEnd == NULL) {
-// //     log_debug("CLIENT unable to find end of line for Content-Length");
-// //     return RECV_BAD;
-// //   }
-
-// //   fieldValStart = fieldStart+strlen("Content-Length: ");
-// //   if ((unsigned int) (fieldEnd-fieldValStart) > (sizeof(buf)-1)) {
-// //     log_debug("CLIENT: Value of Content-Length too large");
-// //     return RECV_BAD;
-// //   }
-// //   memcpy(buf, fieldValStart, fieldEnd-fieldValStart);
-// //   buf[fieldEnd-fieldValStart] = 0;
-
-// //   content_len = atoi(buf);
-// //   log_debug("CLIENT received Content-Length = %d\n", content_len);
-
-// //   response_len += content_len;
-
-// //   if (response_len > (int) evbuffer_get_length(source))
-// //     return RECV_INCOMPLETE;
-
-// //   // read the entire HTTP resp
-// //   if (response_len < HTTP_PAYLOAD_BUF_SIZE) {
-// //     r = evbuffer_copyout(source, respMsg, response_len);
-// //     log_debug("CLIENT %d char copied from source to respMsg (expected %d)", (int)r, response_len);
-// //     if (r < 0) {
-// //       log_debug("CLIENT ERROR: evbuffer_copyout fails");
-// //       return RECV_INCOMPLETE;
-// //     }
-// //     if (r < response_len) {
-// //       log_debug("CLIENT: evbuffer_copyout incomplete; got %d instead of %d", (int)r, response_len);
-// //       return RECV_INCOMPLETE;
-// //     }
-// //     respMsg[response_len] = 0;
-// //   } else {
-// //     log_debug("CLIENT: HTTP response too large to handle");
-// //     return RECV_BAD;
-// //   }
-
-// //   log_debug("CLIENT received HTTP response with length %d\n", response_len);
-// //   // buf_dump((unsigned char*)respMsg, response_len, stderr);
-// //   // log_debug("HTTP response header:");
-// //   // buf_dump((unsigned char*)respMsg, hdrLen+80, stderr);
-
-// //   contentType = findContentType (respMsg);
-// //   if (/*contentType != HTTP_CONTENT_JAVASCRIPT && */contentType != HTTP_CONTENT_HTML) {
-// //     log_warn("ERROR: Invalid content type (%d)", contentType);
-// //     return RECV_BAD;
-// //   }
-
-// //   httpBody = respMsg + hdrLen;
-// //   httpBodyLen = response_len - hdrLen;
-
-// //   gzipMode = isGzipContent(respMsg);
-// //   if (gzipMode) {
-// //     log_debug("gzip content encoding detected");
-// //     buf2len = decompress((const uint8_t *)httpBody, httpBodyLen,
-// //                          (uint8_t *)buf2, HTTP_PAYLOAD_BUF_SIZE);
-// //     if (buf2len <= 0) {
-// //       log_warn("gzInflate for httpBody fails");
-// //       return RECV_BAD;
-// //     }
-// //     buf2[buf2len] = 0;
-// //     httpBody = buf2;
-// //     httpBodyLen = buf2len;
-// //   }
-
-// //   /*if (contentType == HTTP_CONTENT_JAVASCRIPT) {
-// //     decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, HTTP_PAYLOAD_BUF_SIZE,
-// //                             &fin, CONTENT_JAVASCRIPT);
-//   } else {*/
-//     decCnt = decodeHTTPBody(httpBody, data, httpBodyLen, c_MAX_MSG_BUF_SIZE,
-//                             &fin, CONTENT_HTML_JAVASCRIPT);
-//   //}
-//   data[decCnt] = 0;
-
-//   log_debug("After decodeHTTPBody; decCnt: %d\n", decCnt);
-
-//   // decCnt is an odd number or data is not a hex string
-//   if (decCnt % 2) {
-//     log_debug("CLIENT ERROR: An odd number of hex characters received\n");
-//     return RECV_BAD;
-//   }
-
-//   if (!isxString(data)) {
-//     log_debug("CLIENT ERROR: Data received not hex");
-//     return RECV_BAD;
-//   }
-
-//   // log_debug("Hex data received:");
-//   //    buf_dump ((unsigned char*)data, decCnt, stderr);
-
-//   // get a scratch buffer
-//   scratch = evbuffer_new();
-//   if (!scratch) return RECV_BAD;
-
-//   if (evbuffer_expand(scratch, decCnt/2)) {
-//     log_warn("CLIENT ERROR: Evbuffer expand failed \n");
-//     evbuffer_free(scratch);
-//     return RECV_BAD;
-//   }
-
-//   // convert hex data back to binary
-//   for (i=0, j=0; i< decCnt; i=i+2, ++j) {
-//     sscanf(&data[i], "%2x", (unsigned int*) &k);
-//     c = (char)k;
-//     evbuffer_add(scratch, &c, 1);
-//   }
-
-//   // log_debug("CLIENT Done converting hex data to binary:\n");
-//   // evbuffer_dump(scratch, stderr);
-
-
-//   // add the scratch buffer (which contains the data) to dest
-
-//   if (evbuffer_add_buffer(dest, scratch)) {
-//     evbuffer_free(scratch);
-//     log_warn("CLIENT ERROR: Failed to transfer buffer");
-//     return RECV_BAD;
-//   }
-//   log_debug("Added scratch (buffer) to dest\n");
-
-//   evbuffer_free(scratch);
-
-
-//   if (response_len <= (int) evbuffer_get_length(source)) {
-//     if (evbuffer_drain(source, response_len) == -1) {
-//       log_warn("CLIENT ERROR: Failed to drain source");
-//       return RECV_BAD;
-//     }
-//   }
-//   else {
-//     log_warn("response_len > buffer size... can't drain");
-//     exit(-1);
-//   }
-
-
-//   log_debug("Drained source for %d char\n", response_len);
-
-//   //  downcast_steg(s)->have_received = 1;
-//   conn->expect_close();
-//   return RECV_GOOD;
-// }
-
 JSSteg::JSSteg(PayloadServer& payload_provider, double noise2signal, int content_type)
  :FileStegMod(payload_provider, noise2signal, content_type)
 {
 
 }
 
-/*****
-      int
-      main() {
-      int jDataSize = 1000;
-      char jData[jDataSize];
-      int outDataBufSize = 1000;
-      char outDataBuf[outDataBufSize];
-
-      int r;
-      // test case 1: data embedded in javascript
-      r = testEncode2(data1, js1, jData, strlen(data1), strlen(js1), jDataSize,
-      CONTENT_JAVASCRIPT, 1);
-      if (r > 0) { testDecode2(jData, outDataBuf, strlen(js1), outDataBufSize, CONTENT_JAVASCRIPT, 1); }
-
-      // test case 4: data embedded in one script type javascript
-      r = testEncode2(data1, js4, jData, strlen(data1), strlen(js4), jDataSize,
-      CONTENT_HTML_JAVASCRIPT, 4);
-      if (r > 0) { testDecode2(jData, outDataBuf, strlen(js4), outDataBufSize, CONTENT_HTML_JAVASCRIPT, 4); }
-
-      // test case 5: data embedded in one script type javascript
-      r = testEncode2(data1, js5, jData, strlen(data1), strlen(js5), jDataSize,
-      CONTENT_HTML_JAVASCRIPT, 5);
-      if (r > 0) { testDecode2(jData, outDataBuf, strlen(js5), outDataBufSize, CONTENT_HTML_JAVASCRIPT, 5); }
-
-
-      return 0;
-      }
-*****/
-
-/*****
-      int
-      main() {
-      int jDataSize = 1000;
-      char jData[jDataSize];
-      int jDataSmallSize = 5;
-      char jDataSmall[jDataSmallSize];
-
-      int outDataBufSize = 1000;
-      char outDataBuf[outDataBufSize];
-      int outDataSmallSize = 5;
-      char outDataSmall[outDataSmallSize];
-
-      int r;
-
-      // test case 1: data embedded in javascript
-      r = testEncode(data1, js1, jData, strlen(data1), strlen(js1), jDataSize, 1);
-      if (r > 0) { testDecode(jData, outDataBuf, strlen(js1), r, outDataBufSize, 1); }
-
-      // test case 2: data embedded in javascript
-      r = testEncode(data1, js2, jData, strlen(data1), strlen(js2), jDataSize, 2);
-      if (r > 0) { testDecode(jData, outDataBuf, strlen(js2), r, outDataBufSize, 2); }
-
-      // test case 3: data partially embedded in javascript; num of hex char in js < data len
-      r = testEncode(data1, js3, jData, strlen(data1), strlen(js3), jDataSize, 3);
-      if (r > 0) { testDecode(jData, outDataBuf, strlen(js3), r, outDataBufSize, 3); }
-
-      // test case 4: data embedded in javascript; larger data
-      r = testEncode(data2, js1, jData, strlen(data2), strlen(js1), jDataSize, 4);
-      if (r > 0) { testDecode(jData, outDataBuf, strlen(js1), r, outDataBufSize, 4); }
-
-      // test case 5 (for encode): err for non-hex data
-      testEncode(nonhexstr, js1, jData, strlen(nonhexstr), strlen(js1), jDataSize, 5);
-
-      // test case 6 (for encode): err for small output buf
-      testEncode(data1, js1, jDataSmall, strlen(data1), strlen(js1), jDataSmallSize, 6);
-
-      // test case 7 (for decode): err for small output buf
-      r = testEncode(data1, js1, jData, strlen(data1), strlen(js1), jDataSize, 7);
-      if (r > 0) { testDecode(jData, outDataSmall, strlen(js1), r, outDataSmallSize, 7); }
-      }
-*****/

@@ -1,5 +1,6 @@
 #include "util.h"
 
+#include "payload_server.h"
 #include "trace_payload_server.h"
 #include "file_steg.h"
 // // #include "http_steg_mods/swfSteg.h"
@@ -68,7 +69,7 @@ int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity)
     return 0;
   }
 
-  DummyPayloadServer  dummy_payload_server;
+  DummyPayloadServer dummy_payload_server;
   JSSteg jssteg_capacity_computer_engine(dummy_payload_server);
 
   for (r = 0; r < pl.payload_count; r++) {
@@ -339,7 +340,8 @@ TracePayloadServer::init_SWF_payload_pool(int len, int type, int )
 }
 
 */
-int TracePayloadServer::get_payload (int contentType, int cap, [[maybe_unused]] const std::vector<uint8_t>* buf, double noise2signal, string* payload_id_hash) {
+const std::vector<uint8_t>&
+TracePayloadServer::get_payload (int contentType, int cap, double noise2signal, string* payload_id_hash) {
   int r, i, cnt, found = 0, numCandidate = 0, first, best, current;
 
   (void) payload_id_hash; //TracePayloadServer doesn't support disqualification
@@ -359,7 +361,7 @@ int TracePayloadServer::get_payload (int contentType, int cap, [[maybe_unused]] 
     //Aparently negative capacity means your cap doesn't matter
     //I'll stuff as much as I can in it. This is in the case of
     //swf format.
-    return 0;
+    return PayloadServer::c_empty_payload;
   }
 
   cnt = pl.typePayloadCount[contentType];
@@ -398,11 +400,10 @@ int TracePayloadServer::get_payload (int contentType, int cap, [[maybe_unused]] 
       pl.payload_hdrs[pl.typePayload[contentType][first]].length,
       pl.payload_hdrs[pl.typePayload[contentType][best]].length,
       numCandidate);
-    buf = &pl.payloads[pl.typePayload[contentType][best]];
-    return 1;
+    return pl.payloads[pl.typePayload[contentType][best]];
   } else {
     log_warn("couldn't find payload with desired capacity: r=%d, checked %d payloads\n", r, i);
-    return 0;
+    return PayloadServer::c_empty_payload;
   }
 
 }
@@ -492,7 +493,7 @@ unsigned int TracePayloadServer::find_client_payload(char* buf, int len, int typ
       //we also need to check if the user has restricted the type,
       //empty active type list means no restriciton
       if (!is_activated_valid_content_type(requested_uri_type)) {
-        log_debug("type %d of payload %d is not actived trying next payload", requested_uri_type, r);
+        log_debug("type %d of payload %d is not activated trying next payload", requested_uri_type, r);
         goto next;
       }
 

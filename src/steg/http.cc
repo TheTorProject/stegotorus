@@ -178,9 +178,9 @@ http_steg_config_t::init_file_steg_mods()
 
   //Actually I checked at least in case of http steg it is the payload server which dedicdes which type to
   //serve. So perhapse we give the task to the payload server. In case of http_apache it is even easier
-  //because the server doesn't even transmit any file name whose type isn't in the steg list
-  if (http_steg_user_configs.find("steg_mod") != http_steg_user_configs.end()) {
-    payload_server->set_active_steg_mods(http_steg_user_configs["steg_mod"]);
+  //because the server doesn't even transmit any file name whose type isn't in the steg list  
+  if (http_steg_user_configs.find("steg-mod") != http_steg_user_configs.end()) {
+    payload_server->set_active_steg_mods(http_steg_user_configs["steg-mod"]);
   }
 }
 
@@ -325,7 +325,7 @@ http_steg_t::transmit_room(size_t pref, size_t lo, size_t hi)
     }
 
     //for test
-    //type = HTTP_CONTENT_JAVASCRIPT;
+    // type = HTTP_CONTENT_JAVASCRIPT;
     log_debug(conn, "checking available capacity for type %u", type);
     hi = config->payload_server->_payload_database.typed_maximum_capacity(type);
     switch (type)
@@ -579,6 +579,11 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
     }
   }
 
+// #define HTTP_CONTENT_JAVASCRIPT         1
+// #define HTTP_CONTENT_HTML               2
+// #define HTTP_CONTENT_PDF                3
+// #define HTTP_CONTENT_SWF                4
+
   switch(rand()%4){
   case 1:
     memcpy(uri+so_far, ".htm ", 6);
@@ -592,7 +597,6 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
   case 0:
     memcpy(uri+so_far, ".swf ", 6);
     break;
-
   }
 
   return strlen(uri);

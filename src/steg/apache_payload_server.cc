@@ -134,8 +134,8 @@ ApachePayloadServer::find_client_payload(char* buf, int len, int type)
   return 0;
 }
 
-int
-ApachePayloadServer::get_payload( int contentType, int cap, [[maybe_unused]] const std::vector<uint8_t>* buf, double noise2signal, std::string* payload_id_hash)
+const std::vector<uint8_t>&
+ApachePayloadServer::get_payload( int contentType, int cap, double noise2signal, std::string* payload_id_hash)
 {
   for(unsigned int search_tries = 0; search_tries < c_MAX_SEARCH_TRIES; search_tries++) /* each payload which is found but is corrupted */ {
     int found = 0, numCandidate = 0;
@@ -203,12 +203,11 @@ ApachePayloadServer::get_payload( int contentType, int cap, [[maybe_unused]] con
           vector<uint8_t>& best_payload = _payload_cache(url_to_resource); //this is a permanent object in cachxe so it is ok to get a reference to it.
           //if curl fails the size will be zero. we disqualify the resource because it might be
           //removed from the cover server and try again
-          if (!best_payload.empty() != 0) {
-            buf = &best_payload;
+          if (!best_payload.empty() != 0) {            
             if (payload_id_hash)
               *payload_id_hash = itr_best->url_hash;
 
-            return 1;
+            return best_payload;
           } else {
             //drop the empty string from the cache, force
             //retriving
@@ -225,11 +224,11 @@ ApachePayloadServer::get_payload( int contentType, int cap, [[maybe_unused]] con
       }
   
     /*not found, no use to try again*/
-    return 0;
+    return PayloadServer::c_empty_payload;
   }
 
   /* found but failed to fetch */
-  return 0;
+  return PayloadServer::c_empty_payload;
 
 }
 

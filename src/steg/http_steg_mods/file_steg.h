@@ -49,11 +49,12 @@ protected:
      Finds a payload of approperiate type and size
 
      @param data_len: the payload should be able to accomodate this length
-     @param payload_buf: the evbuffer that is going to contain the chosen payload
 
-     @return payload size or < 0 in case of error
+     @return if successful return a constant reference to the vector which 
+             contains the payload. It returns a reference to 
+             PayloadServer::c_empty_vector if it fails or there is an error.
   */
-  ssize_t pick_appropriate_cover_payload(size_t data_len, const std::vector<uint8_t>* payload_buf, string& cover_id_hash);
+  const std::vector<uint8_t>& pick_appropriate_cover_payload(size_t data_len, string& cover_id_hash);
 
   /**
      The overloaded version with evbuffer

@@ -130,7 +130,7 @@ class ApachePayloadServer: public PayloadServer
   /**
      Implementation of the abstract function PayloadServer::get_payload
   */
-  virtual int get_payload (int contentType, int cap, const std::vector<uint8_t>* buf, double noise2signal = 0, std::string* payload_id_hash = NULL);
+  virtual const std::vector<uint8_t>& get_payload (int contentType, int cap, double noise2signal = 0, std::string* payload_id_hash = NULL);
 
   /**
      Gets \0 ended uri char* and determines its type based on

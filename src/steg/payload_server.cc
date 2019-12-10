@@ -12,6 +12,8 @@
 #include <ctype.h>
 #include <time.h>
 
+const vector<uint8_t> PayloadServer::c_empty_payload;
+
 bool operator< (const EfficiencyIndicator &lhs, const EfficiencyIndicator& rhs) {
     return (lhs.length < rhs.length);
 }

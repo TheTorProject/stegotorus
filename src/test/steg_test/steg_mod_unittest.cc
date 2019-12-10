@@ -47,6 +47,7 @@
 #include "jpgSteg.h"
 #include "gifSteg.h"
 #include "swfSteg.h"
+#include "jsSteg.h"
 
 #include "payload_scraper.h"
 
@@ -234,6 +235,27 @@ TEST_F(StegModTest, pdf_gracefully_invalid) {
 //   EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
 
 // }
+
+//JS
+TEST_F(StegModTest, js_empty_cover_capacity) {
+  JSSteg js_test_steg(mock_payload_server);
+  empty_cover(&js_test_steg);
+}
+
+TEST_F(StegModTest, js_encode_decode_small_synthetic) {
+  JSSteg js_test_steg(mock_payload_server);
+  encode_decode(repo_root_path + "src/test/steg_test/test1_synthetic.js", short_message, &js_test_steg);
+}
+
+TEST_F(StegModTest, js_encode_decode_small) {
+  JSSteg js_test_steg(mock_payload_server);
+  encode_decode(repo_root_path + "src/test/steg_test/test2.js", short_message, &js_test_steg);
+}
+
+TEST_F(StegModTest, js_encode_decode_large) {
+  JSSteg js_test_steg(mock_payload_server);
+  encode_decode(repo_root_path + "src/test/steg_test/test3.js", long_message, &js_test_steg);
+}
 
 //JPG
 TEST_F(StegModTest, jpg_empty_cover_capacity) {

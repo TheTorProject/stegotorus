@@ -68,7 +68,7 @@ class JSSteg : public FileStegMod
            negative values of INVALID_BUF_SIZE or INVALID_DATA_CHAR in
            case of error
  */
-  ssize_t decode_single_js_block(const std::vector<uint8_t> cover_and_data, const std::vector<uint8_t> data, size_t cover_offset, size_t data_offset, size_t js_block_size, int& fin );
+  ssize_t decode_single_js_block(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, size_t cover_offset, size_t data_offset, size_t js_block_size, int& fin );
 
 
 public:

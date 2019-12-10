@@ -12,6 +12,7 @@ protocols:
   - name: "chop"
     mode: client
     up-address: 127.0.0.1:4999
+    disable-encryption: true
     disable-retransmit: true
     trace-packets: true
     stegs:

@@ -13,6 +13,7 @@ protocols:
     mode: server
     up-address: 127.0.0.1:5001
     trace-packets: true
+    disable-encryption: true
     disable-retransmit: true
     stegs:
       - name: "http"
