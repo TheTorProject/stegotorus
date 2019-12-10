@@ -25,7 +25,7 @@ using namespace std;
 #include "payload_scraper.h"
 #include "base64.h"
 
-#include "protocol/chop_blk.h" //We need this to no what's the minimum 
+#include "protocol/chop_blk.h" //We need this to know what's the minimum 
 
 #if HAVE_BOOST == 1
 #include <boost/filesystem.hpp>

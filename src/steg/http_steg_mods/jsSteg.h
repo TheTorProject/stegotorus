@@ -70,6 +70,7 @@ class JSSteg : public FileStegMod
  */
   ssize_t decode_single_js_block(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, size_t cover_offset, size_t data_offset, size_t js_block_size, int& fin );
 
+  static int skipJSPattern(const char *cp, int len);
 
 public:
   int isGzipContent (char *msg);
@@ -113,65 +114,5 @@ public:
   static int offset2Hex (const char *p, int range, int isLastCharHex);
 
 };
-
-int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
-                   unsigned int jtlen, unsigned int jdlen, int mode);
-
-
-
-int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
-                    unsigned int dataBufSize, int *fin, int mode);
-
-int isGzipContent (char *msg);
-
-int findContentType (char *msg);
-
-/*int testEncode(char *data, char *js, char *outBuf,
-               unsigned int dlen, unsigned int jslen,
-               unsigned int outBufLen, int testNum);
-
-int testDecode(char *inBuf, char *outBuf, unsigned int inBufSize,
-               unsigned int dlen,
-               unsigned int outBufSize, int testNum);*/
-
-/**These now correspond to current encode and decode
-int testEncode2(char *data, char *js, char *outBuf,
-                unsigned int dlen, unsigned int jslen, unsigned int outBufLen,
-                int mode, int testNum);
-
-int testDecode2(char *inBuf, char *outBuf,
-             unsigned int inBufSize, unsigned int outBufSize,
-                int mode, int testNum);**/
-
-  /**
-   Embed the data in  a single block of java script code. JSSteg calls it only 
-   once html steg should call it multiple times.
-   
-   @param data the entire data to be embedded (possibly in multiple block)
-          must be encoded in hex.
-   @param cover the buffer which contains the virgin cover
-   @param cover_and_data the buffer which eventually will contains the cover 
-          with data embeded inside it.
-   @param data_offset the index of first unembeded data byte
-   @param cover_offset the index of first unused cover byte
-   @param js_block_size the size of the js code block, we need to encode the 
-          data from data_offset till js_block_size
-   @param fin actually a second return value indicating that ?
-
-
-   @return the number data bytes successfully embeded or
-           negative values of INVALID_BUF_SIZE or INVALID_DATA_CHAR in
-           case of error
- */
-
-int
-http_server_JS_transmit (PayloadServer* pl, struct evbuffer *source,
-                         conn_t *conn, unsigned int content_type);
-
-int
-http_handle_client_JS_receive(steg_t *s, conn_t *conn,
-                              struct evbuffer *dest, struct evbuffer* source);
-
-
 
 #endif

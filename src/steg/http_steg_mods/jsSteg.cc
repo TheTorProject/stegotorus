@@ -20,11 +20,22 @@
 // controlling content gzipping for jsSteg
 #define JS_GZIP_RESP             0
 
+// jsSteg-specific defines
+#define JS_DELIMITER '?'
+// a JavaScript delimiter is used to signal the end of encoding
+// to facilitate the decoding process
+#define JS_DELIMITER_REPLACEMENT '!'
+// JS_DELIMITER that exists in the JavaScript before the end of
+// data encoding will be replaced by JS_DELIMITER_REPLACEMENT
+#define JS_DELIMITER_SIZE 1
+
 void buf_dump(unsigned char* buf, int len, FILE *out);
 
 ssize_t JSSteg::headless_capacity(const std::vector<uint8_t>& cover_body)
 {
   return max(0, (static_cast<int>(js_code_block_preliminary_capacity(reinterpret_cast<const char*>(cover_body.data()), cover_body.size())) - JS_DELIMITER_SIZE)/2);
+  // because we use 2 hex char to encode every data byte, the available
+  // capacity for encoding data is divided by 2
 
 }
 
@@ -798,3 +809,56 @@ JSSteg::JSSteg(PayloadServer& payload_provider, double noise2signal, int content
 
 }
 
+/*
+ * skipJSPattern returns the number of characters to skip when
+ * the input pointer matches the start of a common JavaScript
+ * keyword 
+ *
+ * todo: 
+ * Use a more efficient regular expression matching algo
+ */
+
+
+
+int
+JSSteg::skipJSPattern(const char *cp, int len) {
+  int i,j;
+
+
+  char keywords [21][10]= {"function", "return", "var", "int", "random", "Math", "while",
+			   "else", "for", "document", "write", "writeln", "true",
+			   "false", "True", "False", "window", "indexOf", "navigator", "case", "if"};
+
+
+  if (len < 1) return 0;
+
+  // change the limit to 21 to enable if as a keyword
+  for (i=0; i < 20; i++) {
+    char* word = keywords[i];
+    
+    if (len <= (int) strlen(word))
+      continue;
+
+    if (word[0] != cp[0])
+      continue;
+
+    for (j=1; j < (int) strlen(word); j++) {
+      if (isxdigit(word[j])) {
+	if (!isxdigit(cp[j]))
+	  goto next_word;
+	else
+	  continue;
+      }
+      
+      if (cp[j] != word[j])
+	goto next_word;
+    }
+    if (!isalnum(cp[j]) && cp[j] != JS_DELIMITER && cp[j] != JS_DELIMITER_REPLACEMENT)
+      return strlen(word)+1;
+      
+  next_word:
+    continue;
+  }
+
+  return 0;
+}

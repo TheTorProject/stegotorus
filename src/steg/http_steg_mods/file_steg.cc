@@ -300,6 +300,8 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
   int content_len = 0, outbuflen;
   uint8_t *httpHdr;
 
+  outbuf.clear(); //make sure we start with an empty buffer but don't release the memory
+  
   log_debug("Entering CLIENT receive");
 
   ssize_t body_offset = extract_appropriate_respones_body(source);

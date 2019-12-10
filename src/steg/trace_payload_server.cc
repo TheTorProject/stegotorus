@@ -8,13 +8,15 @@
 #include "http_steg_mods/jsSteg.h"
 // //#include "http_steg_mods/htmlSteg.h"
 
+#include "protocol/chop_blk.h" //We need this to know what's the minimum block size
+
 TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
   : PayloadServer(init_side), c_max_buffer_size(1000000)
 {
 
   load_payloads(fname.c_str());
 
-  init_JS_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, JS_MIN_AVAIL_SIZE);
+  init_JS_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, chop_blk::MIN_BLOCK_SIZE);
   _payload_database.type_detail[HTTP_CONTENT_JAVASCRIPT] =  TypeDetail(pl.max_JS_capacity, pl.typePayloadCount[HTTP_CONTENT_JAVASCRIPT]);
 
   //Disabling HTML, PDF and SWF till they get migrated to new model

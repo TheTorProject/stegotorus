@@ -25,30 +25,16 @@ using namespace std;
 // we choose the best fit
 #define MAX_CANDIDATE_PAYLOADS 100
 
-// jsSteg-specific defines
-#define JS_DELIMITER '?'
-// a JavaScript delimiter is used to signal the end of encoding
-// to facilitate the decoding process
-#define JS_DELIMITER_REPLACEMENT '!'
-// JS_DELIMITER that exists in the JavaScript before the end of
-// data encoding will be replaced by JS_DELIMITER_REPLACEMENT
-#define JS_DELIMITER_SIZE 1
-
-// #define JS_MIN_AVAIL_SIZE 2050
-#define JS_MIN_AVAIL_SIZE 1026
-// JS_MIN_AVAIL_SIZE should reflect the min number of data bytes
-// a JavaScript may encapsulate
-
-#define HTML_MIN_AVAIL_SIZE 1026
+//#define HTML_MIN_AVAIL_SIZE 1026
 
 #define HTTP_PAYLOAD_BUF_SIZE 500000
 static const  size_t c_MAX_MSG_BUF_SIZE = 131103; //(65536*2 -1 +16+16) see chop_blk.h for rational
 
-#define SWF_HYPO_CAPACITY HTTP_PAYLOAD_BUF_SIZE - MAX_RESP_HDR_SIZE - (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512)
+//#define SWF_HYPO_CAPACITY HTTP_PAYLOAD_BUF_SIZE - MAX_RESP_HDR_SIZE - (SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8 + 512)
 
-#define PDF_DELIMITER_SIZE 2
-#define PDF_MIN_AVAIL_SIZE 10240
-#define PDF_MAX_AVAIL_SIZE 100000 //added from SRI build...just for testing for now
+//#define PDF_DELIMITER_SIZE 2
+//#define PDF_MIN_AVAIL_SIZE 10240
+//#define PDF_MAX_AVAIL_SIZE 100000 //added from SRI build...just for testing for now
 // PDF_MIN_AVAIL_SIZE should reflect the min number of data bytes
 // a pdf doc can encode...ignoring this for now.
 
