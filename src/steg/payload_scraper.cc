@@ -230,6 +230,8 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
   
   _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(dummy_payload_server);
 
+  _available_file_stegs[HTTP_CONTENT_HTML] = new HTMLSteg(dummy_payload_server); 
+
   //Commented out till migrating other types to new model 
  //  _available_file_stegs[HTTP_CONTENT_PDF] = new PDFSteg(NULL);
  //  _available_stegs[1].type = HTTP_CONTENT_PDF; _available_stegs[1].extension = ".pdf"; _available_stegs[1].capacity_function = PDFSteg::static_capacity;
@@ -237,8 +239,6 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
  // _available_file_stegs[HTTP_CONTENT_SWF] = new SWFSteg(NULL);
  //  _available_stegs[2].type = HTTP_CONTENT_SWF; _available_stegs[2].extension = ".swf";  _available_stegs[2].capacity_function = SWFSteg::static_capacity;  //Temp measure, later we don't need to do such acrobatics
 
- //  _available_file_stegs[HTTP_CONTENT_HTML] = new HTMLSteg(NULL); 
- //  _available_stegs[3].type = HTTP_CONTENT_HTML; _available_stegs[3].extension = ".html";  _available_stegs[3].capacity_function = HTMLSteg::static_capacity;
 
   //in new model, extensions are stored in list so one type can have more ext.
 

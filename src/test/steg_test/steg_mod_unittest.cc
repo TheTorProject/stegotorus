@@ -74,6 +74,7 @@ class StegModTest : public testing::Test {
     ASSERT_FALSE(cover_payload);
     
     ifstream test_cover(cover_file_name, ios::binary | ios::in|ios::ate);
+    
     ASSERT_TRUE(test_cover.is_open());
 
     auto filesize = test_cover.tellg();
@@ -81,13 +82,10 @@ class StegModTest : public testing::Test {
     test_cover.seekg (0, ios::beg);
 
     test_cover.read(reinterpret_cast<char*>(cover_payload->data()), filesize);
-   //read the whole file into a new vector
-   //std::istream_iterator<char> start(test_cover), end;
-   //cover_payload = new std::vector<uint8_t>(start, end);
 
-   ASSERT_TRUE(cover_payload);
+    ASSERT_TRUE(cover_payload);
 
-   test_cover.close();
+    test_cover.close();
   }
 
   void encode_decode(const string cover_file_name, const string test_phrase, FileStegMod* test_steg_mod) {

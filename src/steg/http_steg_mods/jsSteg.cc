@@ -49,7 +49,10 @@ JSSteg::js_code_block_preliminary_capacity(std::vector<uint8_t>::const_iterator 
     j = offset2Hex(&(*(block_start + cur_offset)), block_len - cur_offset, 1);
   }
 
+#ifdef DEBUG
   log_debug("code block has capacity %d", cnt);
+#endif
+  
   return cnt;
 }
 

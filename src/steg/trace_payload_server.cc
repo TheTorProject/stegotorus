@@ -6,7 +6,7 @@
 // // #include "http_steg_mods/swfSteg.h"
 // // #include "http_steg_mods/pdfSteg.h"
 #include "http_steg_mods/jsSteg.h"
-// //#include "http_steg_mods/htmlSteg.h"
+#include "http_steg_mods/htmlSteg.h"
 
 #include "protocol/chop_blk.h" //We need this to know what's the minimum block size
 
@@ -19,10 +19,10 @@ TracePayloadServer::TracePayloadServer(MachineSide init_side, string fname)
   init_JS_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, chop_blk::MIN_BLOCK_SIZE);
   _payload_database.type_detail[HTTP_CONTENT_JAVASCRIPT] =  TypeDetail(pl.max_JS_capacity, pl.typePayloadCount[HTTP_CONTENT_JAVASCRIPT]);
 
-  //Disabling HTML, PDF and SWF till they get migrated to new model
-  //init_HTML_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
-  //_payload_database.type_detail[HTTP_CONTENT_HTML] =  TypeDetail(pl.max_HTML_capacity, pl.typePayloadCount[HTTP_CONTENT_HTML]);
+  init_HTML_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, HTML_MIN_AVAIL_SIZE);
+  _payload_database.type_detail[HTTP_CONTENT_HTML] =  TypeDetail(pl.max_HTML_capacity, pl.typePayloadCount[HTTP_CONTENT_HTML]);
 
+  //Disabling PDF and SWF till they get migrated to new vector model
   //init_PDF_payload_pool(HTTP_PAYLOAD_BUF_SIZE, TYPE_HTTP_RESPONSE, PDF_MIN_AVAIL_SIZE); //should we continue to use PDF_MIN_AVAIL_SIZE?
 
   //_payload_database.type_detail[HTTP_CONTENT_PDF] =  TypeDetail(pl.max_PDF_capacity, pl.typePayloadCount[HTTP_CONTENT_PDF]); //deprecating use of pl.max_PDF_capacity ASAP
@@ -128,9 +128,6 @@ int TracePayloadServer::init_JS_payload_pool(int len, int type, int minCapacity)
   return 1;
 }
 
-/* Temperory commenting out stuff related to HTML, PDF and SWF covers till we 
- * move their class to new model
- * >>>>>>
 int  TracePayloadServer::init_HTML_payload_pool(int len, int type, int minCapacity) {
 
   // stat for usable payload
@@ -152,6 +149,10 @@ int  TracePayloadServer::init_HTML_payload_pool(int len, int type, int minCapaci
     return 0;
   }
 
+  DummyPayloadServer dummy_payload_server;
+  HTMLSteg htmlsteg_capacity_computer_engine(dummy_payload_server);
+
+
   for (r = 0; r < pl.payload_count; r++) {
     p = &pl.payload_hdrs[r];
     if (p->ptype != type || p->length > len) {
@@ -162,7 +163,7 @@ int  TracePayloadServer::init_HTML_payload_pool(int len, int type, int minCapaci
 
     mode = has_eligible_HTTP_content(reinterpret_cast<char*>(msgbuf.data()), p->length, HTTP_CONTENT_HTML);
     if (mode == CONTENT_HTML_JAVASCRIPT) {
-      cap = HTMLSteg::static_capacity(msgbuf, p->length);
+      cap = htmlsteg_capacity_computer_engine.capacity(msgbuf);
 
       if (cap == 0)
         continue;
@@ -207,6 +208,9 @@ int  TracePayloadServer::init_HTML_payload_pool(int len, int type, int minCapaci
   return 1;
 }
 
+/* Temperory commenting out stuff related to
+    PDF and SWF covers till we 
+ * move their class to new model
 int
 TracePayloadServer::init_PDF_payload_pool(int len, int type, int minCapacity)
 {

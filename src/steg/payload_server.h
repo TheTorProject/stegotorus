@@ -25,7 +25,7 @@ using namespace std;
 // we choose the best fit
 #define MAX_CANDIDATE_PAYLOADS 100
 
-//#define HTML_MIN_AVAIL_SIZE 1026
+#define HTML_MIN_AVAIL_SIZE 1026
 
 #define HTTP_PAYLOAD_BUF_SIZE 500000
 static const  size_t c_MAX_MSG_BUF_SIZE = 131103; //(65536*2 -1 +16+16) see chop_blk.h for rational
