@@ -16,9 +16,12 @@
 
 class HTMLSteg : public JSSteg
 {
-
+protected:
+  static const std::string c_js_block_start_tag;
+  static const std::string c_js_block_end_tag;
+  
 public:
-    HTMLSteg(PayloadServer* payload_provider, double noise2signal = 0); 
+    HTMLSteg(PayloadServer& payload_provider, double noise2signal = 0); 
 
     /**
        compute the capcaity of the cover by getting a pointer to the
@@ -27,31 +30,22 @@ public:
        @param cover_body pointer to the begiing of the body
        @param body_length the total length of message body
     */
-    virtual ssize_t headless_capacity(char *cover_body, int body_length);
-    static unsigned int static_headless_capacity(char *buf, size_t len);
-
-    virtual ssize_t capacity(const uint8_t *cover_payload, size_t len);
-    static unsigned int static_capacity(char *cover_payload, int body_length);
+    virtual ssize_t headless_capacity(const std::vector<uint8_t>& cover_body);
 
     /**
      this function carry the only major part of encoding that is different between a
      js file and html file. As such html file will re-implement it accordingly
      As the result encode and decode function for both types remains the same.
     */
-    virtual int encode_http_body(const char *data, char *jTemplate, char *jData,
-                   unsigned int dlen, unsigned int jtlen,
-                             unsigned int jdlen);
+    virtual ssize_t encode_http_body(const std::vector<uint8_t>& data, const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& cover_and_data);
 
     /**
        this function carry the only major part of decoding that is different between a
        js file and html file. As such html file will re-implement it accordingly
        As the result encode and decode function for both types remains the same.
     */
-    virtual int decode_http_body(const char *jData, const char *dataBuf, unsigned int jdlen,
-                       unsigned int dataBufSize, int *fin );
+  virtual ssize_t decode_http_body(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, int& fin);
 
 };
-
-
 
 #endif

@@ -404,3 +404,34 @@ FileStegMod::alter_length_in_response_header(const std::vector<uint8_t>& payload
 }
  	
 
+int
+FileStegMod::find_content_length (char *hdr, int /*hlen*/) {
+  char *clStart;
+  char* clEnd;
+  char *clValStart;
+  int valLen;
+  int contentLen;
+  char buf[10];
+
+  clStart = strstr(hdr, "Content-Length: ");
+  if (clStart == NULL) {
+    log_debug("Unable to find Content-Length in the header");
+    return -1;
+  }
+
+  clEnd = strstr((char *)clStart, "\r\n");
+  if (clEnd == NULL) {
+    log_debug("Unable to find end of line for Content-Length");
+    return -1;
+  }
+
+  // clValStart = clStart+strlen("Content-Length: ");
+  clValStart = clStart+16;
+
+  valLen = clEnd-clValStart;
+  if (valLen > 9) return -1;
+  memcpy(buf, clValStart, valLen);
+  buf[valLen] = 0;
+  contentLen = atoi(buf);
+  return contentLen;
+}

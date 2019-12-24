@@ -24,8 +24,6 @@
 #include "protocol.h"
 #include "steg.h"
 
-#include "transparent_proxy.h"
-
 #include "chop_conn.h"
 #include "chop_config.h"
 #include "chop_circuit.h"

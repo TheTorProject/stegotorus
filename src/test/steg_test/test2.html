@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <!-- iframe close (part 2).  Called by /wwscripts/iframeclose -->
+        <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+        <script type="text/javascript">
+            (function () {
+                var POST_MESSAGE_TIMEOUT = 600;
+
+                var slot = window.location.search.substring(1).split('slot=')[1];
+                var success = false;
+
+                /**
+                 * Close the slot using either the postMessage method or the legacy method
+                 */
+                var closeSlot = function () {
+                    postMessageClose();
+                    setTimeout(legacyClose, POST_MESSAGE_TIMEOUT);
+                };
+
+
+                /**
+                 * Utility function to add event listener for good browser and old IE
+                 */
+                var addEventListener = function addEventListener(el, event, handler) {
+                    if (el.addEventListener) {
+                        el.addEventListener(event, handler, false);
+                    } else {
+                        el.attachEvent('on' + event, function() {
+                            return handler.call(el, window.event);
+                        });
+                    }
+                };
+
+                /**
+                 * Utility function to check for the presence of nested object properties.
+                 *
+                 * Lifted and tweaked from https://github.com/TheNodeILs/lodash-contrib
+                 */
+                var getPath = function getPath(obj, keys) {
+                    if (typeof keys === 'string') keys = keys.split('.');
+                    if (obj === undefined) return void 0;
+                    if (keys.length === 0) return obj;
+                    if (obj === null) return void 0;
+                    return getPath(obj[keys[0]], keys.slice(1));
+                };
+
+                /**
+                 * Setup a listener for cross window messages and post a message to the parent
+                 * window instructing it to close the given slot.
+                 *
+                 * This is called in browsers which support addEventListener and the native JSON library.
+                 */
+                var postMessageClose = function () {
+                    addEventListener(window, 'message', function(event) {
+                        var re = /(www|m)\.{0,1}(test|int|stage){0,1}\.bbc\.com$/;
+                        if (
+                            (
+                            re.exec(event.origin) === null &&
+                            event.origin !== "http://pal.sandbox.dev.bbc.com" &&
+                            event.origin !== "http://m.sandbox.dev.bbc.com"
+                            ) &&
+                            typeof event.data.success !== 'undefined' &&
+                            event.data.success === true
+                        ) {
+                            // Not from a valid origin, return
+                            return;
+                        }
+
+                        var data;
+                        try {
+                            data = JSON.parse(event.data);
+                        } catch (e) {
+                            // Not valid JSON - do nothing
+                            return;
+                        }
+
+                        if (typeof data.success !== 'undefined' && data.success === true) {
+                            success = true;
+                        }
+                    });
+                    window.top.postMessage(JSON.stringify({ slot: slot }), '*');
+                };
+
+                /**
+                 * Find the top window element and call directly up to the bbcdotcom (or BBC) object
+                 * on that page to close the slot.
+                 *
+                 * This is called in all browsers after a timeout as a fallback. If the postMessage method
+                 * has already succeeded, this function does nothing.
+                 *
+                 * This method will not work on test as the window.top access is blocked by cross domain policy.
+                 */
+                var legacyClose = function () {
+                    if (success === true) {
+                        // Modern method works, do nothing
+                        return;
+                    }
+
+                    if (getPath(window, 'top.BBC.adverts')) {
+                        window.top.BBC.adverts.close(slot);
+
+                    } else if (getPath(window, 'top.bbcdotcom.adverts.adRegister')) {
+                        window.top.bbcdotcom.adverts.adRegister.getAd(slot).close();
+                    }
+                };
+
+                closeSlot();
+
+            })();
+        </script>
+    </head>
+    <body style="background-color:transparent">
+    </body>
+</html>

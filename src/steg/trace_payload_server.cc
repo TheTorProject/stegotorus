@@ -526,3 +526,177 @@ unsigned int TracePayloadServer::find_client_payload(char* buf, int len, int typ
 }
 
 
+/*
+ * fixContentLen corrects the Content-Length for an HTTP msg that
+ * has been ungzipped, and removes the "Content-Encoding: gzip"
+ * field from the header.
+ *
+ * The function returns -1 if no change to the HTTP msg has been made,
+ * when the msg wasn't gzipped or an error has been encountered
+ * If fixContentLen changes the msg header, it will put the new HTTP
+ * msg in buf and returns the length of the new msg
+ *
+ * Input:
+ * payload - pointer to the (input) HTTP msg
+ * payloadLen - length of the (input) HTTP msg
+ *
+ * Ouptut:
+ * buf - pointer to the buffer containing the new HTTP msg
+ * bufLen - length of buf
+ * 
+ */
+int
+TracePayloadServer::fixContentLen (char* payload, int payloadLen, char *buf, int bufLen) {
+
+  int gzipFlag=0, clFlag=0, clZeroFlag=0;
+  char* ptr = payload;
+  char* clPtr = payload;
+  char* gzipPtr = payload;
+  char* end;
+
+
+  char *cp, *clEndPtr;
+  int hdrLen, bodyLen, r, len;
+
+
+
+
+
+  // note that the ordering between the Content-Length and the Content-Encoding
+  // in an HTTP msg may be different for different msg 
+
+  // if payloadLen is larger than the size of our buffer,
+  // stop and return -1
+  if (payloadLen > bufLen) { return -1; }
+
+  while (1) {
+    end = strstr(ptr, "\r\n");
+    if (end == NULL) {
+      // log_debug("invalid header %d %d %s \n", payloadLen, (int) (ptr - payload), payload);
+      return -1;
+    }
+
+    if (!strncmp(ptr, "Content-Encoding: gzip\r\n", 24)) {
+        gzipFlag = 1;
+        gzipPtr = ptr;     
+    } else if (!strncmp(ptr, "Content-Length: 0", 17)) {
+        clZeroFlag = 1;
+    } else if (!strncmp(ptr, "Content-Length:", 15)) {
+        clFlag = 1;
+        clPtr = ptr;
+    }
+
+    if (!strncmp(end, "\r\n\r\n", 4)){
+      break;
+    }
+    ptr = end+2;
+  }
+
+  // stop if zero Content-Length or Content-Length not found
+  if (clZeroFlag || ! clFlag) return -1;
+  
+  // end now points to the end of the header, before "\r\n\r\n"
+  cp=buf;
+  bodyLen = (int)(payloadLen - (end+4-payload));
+
+  clEndPtr = strstr(clPtr, "\r\n");
+  if (clEndPtr == NULL) {
+    log_debug("unable to find end of line for Content-Length");
+    return -1;
+  }
+  if (gzipFlag && clFlag) {
+    if (gzipPtr < clPtr) { // Content-Encoding appears before Content-Length
+
+      // copy the part of the header before Content-Encoding
+      len = (int)(gzipPtr-payload);
+      memcpy(cp, payload, len);
+      cp = cp+len;
+
+      // copy the part of the header between Content-Encoding and Content-Length
+      // skip 24 char, the len of "Content-Encoding: gzip\r\n"
+      // *** this is temporary; we'll remove this after the obfsproxy can perform gzip
+      len = (int)(clPtr-(gzipPtr+24));  
+      memcpy(cp, gzipPtr+24, len);
+      cp = cp+len;
+
+      // put the new Content-Length
+      memcpy(cp, "Content-Length: ", 16);
+      cp = cp+16;
+      r = sprintf(cp, "%d\r\n", bodyLen);
+      if (r < 0) {
+        log_debug("sprintf fails");
+        return -1;
+      }
+      cp = cp+r;
+
+      // copy the part of the header after Content-Length, if any
+      if (clEndPtr != end) { // there is header info after Content-Length
+        len = (int)(end-(clEndPtr+2));
+        memcpy(cp, clEndPtr+2, len);
+        cp = cp+len;
+        memcpy(cp, "\r\n\r\n", 4);
+        cp = cp+4;
+      } else { // Content-Length is the last hdr field
+        memcpy(cp, "\r\n", 2);
+        cp = cp+2;
+      }
+
+      hdrLen = cp-buf;
+
+/****
+log_debug("orig: hdrLen = %d, bodyLen = %d, payloadLen = %d", (int)(end+4-payload), bodyLen, payloadLen);
+log_debug("new: hdrLen = %d, bodyLen = %d, payloadLen = %d", hdrLen, bodyLen, hdrLen+bodyLen);
+ ****/
+
+      // copy the HTTP body
+      memcpy(cp, end+4, bodyLen);
+      return (hdrLen+bodyLen);
+
+    } else { // Content-Length before Content-Encoding
+      // copy the part of the header before Content-Length
+      len = (int)(clPtr-payload);
+      memcpy(cp, payload, len);
+      cp = cp+len;
+
+      // put the new Content-Length
+      memcpy(cp, "Content-Length: ", 16);
+      cp = cp+16;
+      r = sprintf(cp, "%d\r\n", bodyLen);
+      if (r < 0) {
+        log_debug("sprintf fails");
+        return -1;
+      }
+      cp = cp+r;
+
+      // copy the part of the header between Content-Length and Content-Encoding
+      len = (int)(gzipPtr-(clEndPtr+2));
+      memcpy(cp, clEndPtr+2, len);
+      cp = cp+len;
+      
+      // copy the part of the header after Content-Encoding
+      // skip 24 char, the len of "Content-Encoding: gzip\r\n"
+      // *** this is temporary; we'll remove this after the obfsproxy can perform gzip
+      if (end > (gzipPtr+24)) { // there is header info after Content-Encoding
+        len = (int)(end-(gzipPtr+24));
+        memcpy(cp, gzipPtr+24, len);
+        cp = cp+len;
+        memcpy(cp, "\r\n\r\n", 4);
+        cp = cp+4;
+      } else { // Content-Encoding is the last field in the hdr
+        memcpy(cp, "\r\n", 2);
+        cp = cp+2;
+      }
+      hdrLen = cp-buf;
+
+/****
+log_debug("orig: hdrLen = %d, bodyLen = %d, payloadLen = %d", (int)(end+4-payload), bodyLen, payloadLen);
+log_debug("new: hdrLen = %d, bodyLen = %d, payloadLen = %d", hdrLen, bodyLen, hdrLen+bodyLen);
+ ****/
+
+      // copy the HTTP body
+      memcpy(cp, end+4, bodyLen);
+      return (hdrLen+bodyLen);
+    }
+  }
+  return -1;
+}

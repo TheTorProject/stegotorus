@@ -55,7 +55,10 @@ class TracePayloadServer: public PayloadServer
   /** called by the constructor to load the payloads */
   void load_payloads(const char* fname);
 
- public:
+
+  static int fixContentLen (char* payload, int payloadLen, char *buf, int bufLen);
+  
+public:
 
   /**
      The constructor reads the payload database prepared by scraper

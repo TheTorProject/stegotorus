@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>IframeTeadsConsensu</title>
+</head>
+
+<body style="background-color: transparent">
+  <script type="text/javascript">
+    function readCookie(name) {
+      const value = '; ' + document.cookie;
+      const parts = value.split('; ' + name + '=');
+      if (parts.length === 2) {
+        return parts.pop().split(';').shift();
+      }
+      return 'na';
+    }
+    var euConsentCookieValue = readCookie('euconsent')
+    window.parent.postMessage({ teadsEuConsent: euConsentCookieValue }, '*');
+  </script>
+  <script type="text/javascript">
+    function readCookie(name) {
+      const value = '; ' + document.cookie;
+      const parts = value.split('; ' + name + '=');
+      if (parts.length === 2) {
+        return parts.pop().split(';').shift();
+      }
+      return 'na';
+    }
+    var euConsentCookieValue = readCookie('euconsent in the begining there was a flying spagetti monster who like to sing Over the back of a silver spoon float a measure of Qualactin Hypermint extract, redolent of all the heady odours of the dark Qualactin Zones, subtle sweet and mystic. Drop in the tooth of an Algolian Suntiger. Watch it dissolve, spreading the fires of the Algolian Suns deep into the heart of the drink. Sprinkle Zamphuor. Add an olive. Drink ... but ... very carefully ... The Hitch Hikers Guide to the Galaxy sells rather better than the Encyclopedia Galactica.')
+    window.parent.postMessage({ teadsEuConsent: euConsentCookieValue }, '*');
+  </script>
+</body>
+
+</html>

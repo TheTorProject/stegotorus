@@ -1,6 +1,10 @@
 /* Copyright 2011, 2012 SRI International
  * See LICENSE for other credits and copying information
+ * 
+ * jsSteg: A Javascript-based steganography module
+ *
  */
+
 
 #include "util.h"
 #include "../payload_server.h"
@@ -13,66 +17,42 @@
 
 #include <event2/buffer.h>
 
-// error codes
-#define INVALID_BUF_SIZE	-1
-#define INVALID_DATA_CHAR	-2
-
-// controlling content gzipping for jsSteg
-#define JS_GZIP_RESP             0
-
-// jsSteg-specific defines
-#define JS_DELIMITER '?'
-// a JavaScript delimiter is used to signal the end of encoding
-// to facilitate the decoding process
-#define JS_DELIMITER_REPLACEMENT '!'
-// JS_DELIMITER that exists in the JavaScript before the end of
-// data encoding will be replaced by JS_DELIMITER_REPLACEMENT
-#define JS_DELIMITER_SIZE 1
 
 void buf_dump(unsigned char* buf, int len, FILE *out);
 
 ssize_t JSSteg::headless_capacity(const std::vector<uint8_t>& cover_body)
 {
-  return max(0, (static_cast<int>(js_code_block_preliminary_capacity(reinterpret_cast<const char*>(cover_body.data()), cover_body.size())) - JS_DELIMITER_SIZE)/2);
+  return max(0, (static_cast<int>(js_code_block_preliminary_capacity(cover_body.begin(), cover_body.size())) - JS_DELIMITER_SIZE)/2);
   // because we use 2 hex char to encode every data byte, the available
   // capacity for encoding data is divided by 2
 
 }
 
-unsigned int
-JSSteg::js_code_block_preliminary_capacity(const char* buf, const size_t len) {
-  const char *bp;
+size_t
+JSSteg::js_code_block_preliminary_capacity(std::vector<uint8_t>::const_iterator block_start, const size_t block_len)
+{
+  
   int cnt=0;
-  int j;  
+  int j;
 
-  // jump to the beginning of the body of the HTTP message
-  /*hEnd = strstr(buf, "\r\n\r\n");
-  if (hEnd == NULL) {
-    // cannot find the separator between HTTP header and HTTP body
-    return 0;
-  }*/
-  bp = buf;
+  auto cur_offset = 0;
 
-  //if (mode == CONTENT_JAVASCRIPT) {
-  j = offset2Hex(bp, (buf+len)-bp, 0);
+  j = offset2Hex(&(*block_start), block_len, 0);
   while (j != -1) {
     cnt++;
     if (j == 0) {
-      bp = bp+1;
+      cur_offset += 1;
     } else {
-      bp = bp+j+1;
+       cur_offset += j+1;
     }
 
-    j = offset2Hex(bp, (buf+len)-bp, 1);
-  } // while
+    j = offset2Hex(&(*(block_start + cur_offset)), block_len - cur_offset, 1);
+  }
 
   log_debug("code block has capacity %d", cnt);
   return cnt;
 }
-/*
- * jsSteg: A Javascript-based steganography module
- *
- */
+
 
 
 /*
@@ -142,7 +122,6 @@ int JSSteg::isGzipContent (char *msg) {
 
 
 /*
-<<<<<<< variant A
  * offset2Hex returns the offset to the next usable hex char.
  * usable here refer to char that our steg module can use to encode
  * data. in particular, words that correspond to common JavaScript keywords
@@ -165,8 +144,8 @@ int JSSteg::isGzipContent (char *msg) {
  *
  */
 int
-JSSteg::offset2Hex (const char *p, int range, int isLastCharHex) {
-  const char *cp = p;
+JSSteg::offset2Hex (const unsigned char *p, int range, int isLastCharHex) {
+  const unsigned char *cp = p;
   int i,j;
   int isFirstWordChar = 1;
 
@@ -509,7 +488,9 @@ JSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_pay
 
   size_t hexed_datalen = 2*data.size();
   std::vector<uint8_t> hexed_data(hexed_datalen);
-  vector<uint8_t> cover_with_data;
+
+  //we know that cover_and_data will be of the cover size
+  vector<uint8_t> cover_with_data(cover_payload.size());
 
   encode_data_to_hex(data, hexed_data);
 
@@ -549,12 +530,18 @@ JSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_pay
    js file and html file. As such html file will re-implement it accordingly
    As the result encode and decode function for both types remains the same.
 */
-ssize_t JSSteg::encode_http_body(const std::vector<uint8_t>& data, const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& cover_and_data)
+ssize_t
+JSSteg::encode_http_body(const std::vector<uint8_t>& data, const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& cover_and_data)
 {
+  //Sanity check: we assume that cover_and_data has reserved enough memory
+  // to contain cover_paylaoad
+  log_assert(cover_and_data.size() >= cover_payload.size());
+  log_assert(isxString(reinterpret_cast<const char*>(data.data())));
+
   int fin;
   //the whole file is a one giant js block so offset is 0 and block size is equal to cover size
   //and the data offset is also zero
-  ssize_t r = encode_in_single_js_block(data, cover_payload, cover_and_data,0 , 0, cover_payload.size(), fin);
+  ssize_t r = encode_in_single_js_block(cover_payload.begin(), cover_payload.end(), data.begin(), data.end(), cover_and_data.begin(), fin);
 
   if (r < 0 || ((unsigned int) r < data.size()) || fin == 0) {
     log_warn("SERVER ERROR: Incomplete data encoding");
@@ -577,214 +564,133 @@ ssize_t JSSteg::encode_http_body(const std::vector<uint8_t>& data, const std::ve
    @return length of recovered data
    
 */
-size_t
+ssize_t
 JSSteg::decode_http_body(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, int& fin) {
   //In case of js file the whole file is one gian single js block so offset is 0 and the length is the
   //the whole file and data starts from 0
-  return decode_single_js_block(cover_and_data, data, 0, 0, cover_and_data.size(), fin);
+  return decode_single_js_block(cover_and_data.begin(), cover_and_data.end(), data, fin);
 }
 
-/**
-   Embed the data in  a single block of java script code. JSSteg calls it only 
-   once html steg should call it multiple times.
-   
-   @param data the entire data to be embedded (possibly in multiple block)
-          must be encoded in hex.
-   @param cover the buffer which contains the virgin cover
-   @param cover_and_data the buffer which eventually will contains the cover 
-          with data embeded inside it.
-   @param data_offset the index of first unembeded data byte
-   @param cover_offset the index of first unused cover byte
-   @param js_block_size the size of the js code block, we need to encode the 
-          data from data_offset till js_block_size
-   @param fin actually a second return value indicating that ?
-
-
-   @return the number data bytes successfully embeded or
-           negative values of INVALID_BUF_SIZE or INVALID_DATA_CHAR in
-           case of error
- */
 ssize_t
-JSSteg::encode_in_single_js_block(const vector<uint8_t>& data, const vector<uint8_t>& cover, vector<uint8_t>& cover_and_data, size_t  data_offset, size_t cover_offset, size_t js_block_size, int& fin)
+JSSteg::encode_in_single_js_block(vector<uint8_t>::const_iterator cover_it, vector<uint8_t>::const_iterator  end_of_block, vector<uint8_t>::const_iterator  data_it, vector<uint8_t>::const_iterator  end_of_data, vector<uint8_t>::iterator cover_and_data_it, int& fin)
 {
   unsigned int encCnt = 0;  /* num of data encoded in jData */
-  size_t dp = data_offset, jtp = cover_offset, end_of_block_pos = cover_offset + js_block_size; /* current pointers for data, jTemplate, and jData */
   int i,j;
 
   //sanity checks which  must have been checked before
-  log_assert(cover_offset + js_block_size <= cover.size());
-  log_assert(cover_offset < cover.size());
-  log_assert(data_offset < data.size());
-  log_assert(isxString(reinterpret_cast<const char*>(data.data())));
+  log_assert(cover_it < end_of_block);
+  log_assert(data_it < end_of_data);
 
-  /* handling boundary case: dlen == 0 */
-  if (data.size() < 1) { return 0; }
-
-  //we know that cover_and_data will be of the cover size
-  cover_and_data.reserve(cover.size());
-  
-  i = offset2Hex(reinterpret_cast<const char*>(cover.data()) + jtp, end_of_block_pos - jtp, 0);
-  while (encCnt < data.size() && i != -1) {
+  i = offset2Hex(&(*cover_it), end_of_block - cover_it, 0);
+  while (data_it < end_of_data && i != -1) {
     // copy next i char from jtp to jdp,
     // except that if *jtp==JS_DELIMITER, copy
     // JS_DELIMITER_REPLACEMENT to jdp instead
     j = 0;
     while (j < i) {
-      if (cover[jtp] == JS_DELIMITER) {
-        cover_and_data.push_back(JS_DELIMITER_REPLACEMENT);
+      if (*cover_it == JS_DELIMITER) {
+        *cover_and_data_it = JS_DELIMITER_REPLACEMENT;
       } else {
-        cover_and_data.push_back(cover[jtp]);
+        *cover_and_data_it = *cover_it;
       }
-      jtp = jtp + 1; j++;
+      cover_and_data_it++;
+      cover_it++;
+      j++;
     }
 
-    cover_and_data.push_back(data[dp]);
+    *cover_and_data_it = *data_it;
     encCnt++;
-    dp = dp + 1; jtp = jtp + 1;
+    data_it++;
+    cover_it++;
+    cover_and_data_it++;
 
-    i = offset2Hex(reinterpret_cast<const char*>(cover.data()) + jtp, end_of_block_pos - jtp, 1);
+    i = offset2Hex(&(*cover_it), end_of_block - cover_it, 1);
   }
 
-  // copy the rest of jTemplate to jdata
+  // copy the rest of jTemplate to jdata upto end of
+  // the block
   // we have reached here either because we
   // ran out of the data or ran out of usable
   // cover.
   // if we've encoded all data, replace the first
   // char in jTemplate by JS_DELIMITER, if needed,
   // to signal the end of data encoding
-  log_debug("encode: encCnt = %d; dlen = %zu\n", encCnt, data.size());
+  log_debug("encode: encCnt = %d\n", encCnt);
 
-  fin = 0;
-  if (encCnt == data.size()) {
+  if (data_it < end_of_data) {
+    //we are still left with more data to encode
+    fin = 0;
+
+  } else {
+    //all data are encoded
     // replace the next char in jTemplate by JS_DELIMITER
-    if (jtp < (end_of_block_pos)) {
-      cover_and_data.push_back(JS_DELIMITER);
-    }
-    jtp = jtp+1;
-    fin = 1;
-  }
-
-  while (jtp < end_of_block_pos) {
-    if (cover[jtp] == JS_DELIMITER) {
-      if (encCnt < data.size()) {
-        cover_and_data.push_back(JS_DELIMITER_REPLACEMENT);
-      } else {
-        cover_and_data.push_back(cover[jtp]);
-      }
-      // else if (isxdigit(*jtp)) {
-      //   if (encCnt < data.size() && *fin == 0) {
-      //     *jdp = JS_DELIMITER;
-      //     *fin = 1;
-      //   } else {
-      //     *jdp = *jtp;
-      //   }
-      // }
+    if (cover_it < end_of_block) {
+      fin = 1;
+      *cover_and_data_it = JS_DELIMITER;
+      cover_it++;
+      cover_and_data_it++;
     } else {
-      cover_and_data.push_back(cover[jtp]);
+      //we finished with the data but we don't have a space
+      //to indicate that we did so, we set fin = 0 to tell
+      //the parent encoder to deal with it
+      fin = 0;
     }
-    jtp++;
   }
 
-  log_debug("encode: encCnt = %d; dlen = %zu\n", encCnt, data.size());
+  //so we
+  //copy the rest of the block 
+  while (cover_it < end_of_block) {
+    if ((fin == 0) && (*cover_it == JS_DELIMITER)) {
+      //and we make sure there is no/misleading delimiter is left on the way
+      *cover_and_data_it = JS_DELIMITER_REPLACEMENT;
+    } else {
+      *cover_and_data_it = *cover_it;
+    }
+    cover_it++;
+    cover_and_data_it++;
+  }
+
+  log_debug("encode: encCnt = %dhtml\n", encCnt);
   log_debug("encode: fin= %d\n", fin);
 
   return encCnt;
 
 }
 
-/* LEGACY DOCS:
- * int decode(char *jData, char *dataBuf,
- *            unsigned int jdlen, unsigned int dlen, unsigned int dataBufSize)
- *
- * description:
- *   extract hex char from Javascript embedded with data (jData)
- *   and put the result in dataBuf
- *   function returns the number of hex char extracted from jData
- *   to dataBuf, or returns one of the error codes
- *
- * input:
- *   - jData[]: Javascript embedded with hex-encoded data
- *   - jdlen  : size of jData
- *   - dlen   : size of data to recover
- *   - dataBufSize : size of output data buffer (dataBuf)
- *
- * output:
- *   - dataBuf[] : output buffer for recovered data
- *
- * assumptions:
- *   - data is hex-encoded
- *
- * exceptions:
- *   - if (dlen > dataBufSize) return INVALID_BUF_SIZE
- *
- * example:
- *   jData  = "01p_or2=M3th.r4n5om()*6789ABCDEF0000000; dfp_tile = 1;"
- *   jdlen  = 54
- *   dlen   = 16
- *   dataBufSize = 1000
- *   decode() returns 16
- *   dataBuf= "0123456789ABCDEF"
- *
- 
- * decode2() is similar to decode(), but uses offset2Hex to look for
- * applicable hex char in JS for decoding. Also, the decoding process
- * stops when JS_DELIMITER is encountered.
- */
-/*
-  for a single block of js code, this could be an entire js script file or 
-  a block of js script inside an html file, it decode the data embeded into
-  it.
-
-   @param cover_and_data the buffer which contains the cover with data embeded inside it.
-   @param data the buffer which will contain the extracted data
-   @param cover_offset the index of first untreated cover byte
-   @param data_offset the index of where to store data in data buffer
-   @param js_block_size the size of the js code block, we need to decode the 
-          data from cover_offset till js_block_size
-   @param fin actually a second return value indicating that ?
-
-
-   @return the number data bytes successfully embeded or
-           negative values of INVALID_BUF_SIZE or INVALID_DATA_CHAR in
-           case of error
- */
-ssize_t JSSteg::decode_single_js_block(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, size_t cover_offset, size_t data_offset, size_t js_block_size, int& fin )
+ssize_t JSSteg::decode_single_js_block(std::vector<uint8_t>::const_iterator cover_and_data_it, const std::vector<uint8_t>::const_iterator end_of_block_pos, std::vector<uint8_t>& data, int& fin)
 {
-  unsigned int decCnt = 0;  /* num of data decoded */
-  size_t dp = data_offset, jdp = cover_offset; /* current pointers for dataBuf and jData */
+  size_t decCnt = 0;  /* num of data decoded */
   int i,j;
-  size_t end_of_block_pos = cover_offset + js_block_size;
-
+  
   fin = 0;
 
-  i = offset2Hex(reinterpret_cast<const char*>(cover_and_data.data()) + jdp, end_of_block_pos - jdp, 0);
+  i = offset2Hex(&(*cover_and_data_it), end_of_block_pos - cover_and_data_it, 0);
   while (i != -1 ) {
     // return if JS_DELIMITER exists between jdp and jdp+i
     for (j=0; j<i; j++) {
-      if (cover_and_data[jdp] == JS_DELIMITER) {
+      if (*cover_and_data_it == JS_DELIMITER) {
         fin = 1;
         return decCnt;
       }
-      jdp = jdp+1;
+      cover_and_data_it++;
     }
+    
     // copy hex data from jdp to dp
-
-    data.push_back(cover_and_data[jdp]);
-    jdp = jdp+1;
-    dp = dp+1;
+    data.push_back(*cover_and_data_it);
+    cover_and_data_it++;
     decCnt++;
 
     // find the next hex char
-    i = offset2Hex(reinterpret_cast<const char*>(cover_and_data.data()) + jdp, end_of_block_pos - jdp, 1);
+    i = offset2Hex(&(*cover_and_data_it), end_of_block_pos - cover_and_data_it, 1);
   }
 
   // look for JS_DELIMITER between jdp to jData+jdlen
-  while (jdp < end_of_block_pos) {
-    if (cover_and_data[jdp] == JS_DELIMITER) {
+  while (cover_and_data_it < end_of_block_pos) {
+    if (*cover_and_data_it == JS_DELIMITER) {
       fin = 1;
       break;
     }
-    jdp = jdp+1;
+    cover_and_data_it++;
   }
 
   return decCnt;
@@ -821,7 +727,7 @@ JSSteg::JSSteg(PayloadServer& payload_provider, double noise2signal, int content
 
 
 int
-JSSteg::skipJSPattern(const char *cp, int len) {
+JSSteg::skipJSPattern(const uint8_t *cp, int len) {
   int i,j;
 
 

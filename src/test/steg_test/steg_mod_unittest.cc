@@ -48,6 +48,7 @@
 #include "gifSteg.h"
 #include "swfSteg.h"
 #include "jsSteg.h"
+#include "htmlSteg.h"
 
 #include "payload_scraper.h"
 
@@ -72,12 +73,17 @@ class StegModTest : public testing::Test {
     //make sure cover_payload is not being reused without releasing
     ASSERT_FALSE(cover_payload);
     
-    ifstream test_cover(cover_file_name, ios::binary);
+    ifstream test_cover(cover_file_name, ios::binary | ios::in|ios::ate);
     ASSERT_TRUE(test_cover.is_open());
-  
+
+    auto filesize = test_cover.tellg();
+    cover_payload = new std::vector<uint8_t>(filesize);
+    test_cover.seekg (0, ios::beg);
+
+    test_cover.read(reinterpret_cast<char*>(cover_payload->data()), filesize);
    //read the whole file into a new vector
-   std::istream_iterator<char> start(test_cover), end;
-   cover_payload = new std::vector<uint8_t>(start, end);
+   //std::istream_iterator<char> start(test_cover), end;
+   //cover_payload = new std::vector<uint8_t>(start, end);
 
    ASSERT_TRUE(cover_payload);
 
@@ -255,6 +261,32 @@ TEST_F(StegModTest, js_encode_decode_small) {
 TEST_F(StegModTest, js_encode_decode_large) {
   JSSteg js_test_steg(mock_payload_server);
   encode_decode(repo_root_path + "src/test/steg_test/test3.js", long_message, &js_test_steg);
+}
+
+//HTML
+TEST_F(StegModTest, html_empty_cover_capacity) {
+  HTMLSteg html_test_steg(mock_payload_server);
+  empty_cover(&html_test_steg);
+}
+
+TEST_F(StegModTest, html_encode_decode_small_two_block) {
+  HTMLSteg html_test_steg(mock_payload_server);
+  encode_decode(repo_root_path + "src/test/steg_test/test1.html", short_message, &html_test_steg);
+}
+
+TEST_F(StegModTest, html_encode_decode_small) {
+  HTMLSteg html_test_steg(mock_payload_server);
+  encode_decode(repo_root_path + "src/test/steg_test/test2.html", short_message, &html_test_steg);
+}
+
+TEST_F(StegModTest, html_encode_decode_many_small_blocks) {
+  HTMLSteg html_test_steg(mock_payload_server);
+  encode_decode(repo_root_path + "src/test/steg_test/test3.html", short_message, &html_test_steg);
+}
+
+TEST_F(StegModTest, html_encode_decode_large) {
+  HTMLSteg html_test_steg(mock_payload_server);
+  encode_decode(repo_root_path + "src/test/steg_test/test4.html", long_message, &html_test_steg);
 }
 
 //JPG

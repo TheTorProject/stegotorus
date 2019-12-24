@@ -226,6 +226,9 @@ class PayloadServer
 
   //list of active steg mod, if the list is empty everything is active
   std::vector<unsigned int> active_steg_mods;
+
+  static int has_eligible_HTTP_content (char* buf, int len, int type);
+  static int parse_client_headers(char* inbuf, char* outbuf, int len);
   
  public:
   /** TODO: either change the name (no _) or the access */
@@ -381,30 +384,26 @@ public:
 };
 
 /** Moved from payloads.c without a touch. needs clean up */
-  char * strInBinary (const char *pattern, unsigned int patternLen,
-                      const char *blob, unsigned int blobLen);
-  int find_content_length (char *hdr, int hlen);
+//   char * strInBinary (const char *pattern, unsigned int patternLen,
+//                       const char *blob, unsigned int blobLen);
 
-  int has_eligible_HTTP_content (char* buf, int len, int type);
-  int fixContentLen (char* payload, int payloadLen, char *buf, int bufLen);
-  void gen_rfc_1123_date(char* buf, int buf_size);
-  void gen_rfc_1123_expiry_date(char* buf, int buf_size);
-  int parse_client_headers(char* inbuf, char* outbuf, int len);
-  int skipJSPattern (const char *cp, int len);
-  int isalnum_ (char c);
-  int offset2Alnum_ (char *p, int range);
-  int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
-                   unsigned int jtlen, unsigned int jdlen, int mode);
+//   
+//   int fixContentLen (char* payload, int payloadLen, char *buf, int bufLen);
+//   void gen_rfc_1123_date(char* buf, int buf_size);
+//   void gen_rfc_1123_expiry_date(char* buf, int buf_size);
+//   int skipJSPattern (const char *cp, int len);
+//   int encodeHTTPBody(char *data, char *jTemplate, char *jData, unsigned int dlen,
+//                    unsigned int jtlen, unsigned int jdlen, int mode);
 
-int isxString(char *str);
+// int isxString(char *str);
 
-int isGzipContent (char *msg);
+// int isGzipContent (char *msg);
 
-int findContentType (char *msg);
+// int findContentType (char *msg);
 
-int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
-                    unsigned int dataBufSize, int *fin, int mode);
+// int decodeHTTPBody (char *jData, char *dataBuf, unsigned int jdlen,
+//                     unsigned int dataBufSize, int *fin, int mode);
 
-  int gen_response_header(char* content_type, int gzip, int length,
-                          char* buf, int buflen);
+//   int gen_response_header(char* content_type, int gzip, int length,
+//                           char* buf, int buflen);
 #endif

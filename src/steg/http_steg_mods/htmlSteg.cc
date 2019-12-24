@@ -1,6 +1,11 @@
-/* Copyright 2011, 2012 SRI International
+/* Copyright 2012-2020 The Tor Project Inc.
+ * Copyright 2011, 2012 SRI International
  * See LICENSE for other credits and copying information
  */
+
+#include <ctype.h>
+#include <event2/buffer.h>
+#include <iostream>
 
 #include "util.h"
 #include "../payload_server.h"
@@ -9,67 +14,35 @@
 #include "compression.h"
 #include "connections.h"
 
-#include <ctype.h>
+const std::string HTMLSteg::c_js_block_start_tag = "<script type=\"text/javascript\">";
+const std::string HTMLSteg::c_js_block_end_tag = "</script>";
 
-#include <event2/buffer.h>
-
-#define startScriptTypeJS "<script type=\"text/javascript\">"
-#define endScriptTypeJS "</script>"
-
-void buf_dump(unsigned char* buf, int len, FILE *out);
-
-ssize_t HTMLSteg::headless_capacity(char *cover_body, int body_length)
-{
-  return static_headless_capacity(cover_body,(size_t) body_length);
-}
-
-
-ssize_t HTMLSteg::capacity(const uint8_t *cover_payload, size_t len)
-{
-  return static_capacity((char *) cover_payload, (int) len);
-}
-
-unsigned int HTMLSteg::static_capacity(char *cover_payload, int body_length)
-{
-  ssize_t body_offset = extract_appropriate_respones_body(cover_payload, body_length);
-  if (body_offset == -1) {
-    return 0; //useless payload
-}
-   return static_headless_capacity(cover_payload + body_offset, (size_t) (body_length - body_offset));
-}
-
-unsigned int
-HTMLSteg::static_headless_capacity (char* buf, size_t len) {
-
-  // log_debug("at html static headless capacity");
-  char *bp, *jsStart, *jsEnd;
-  int cnt=0;
+ssize_t
+HTMLSteg::headless_capacity(const std::vector<uint8_t>& cover_body) {
+  ssize_t cnt=0;
 
   // jump to the beginning of the body of the HTTP message
-  bp = buf;
-  
-  while (bp < (buf+len)) {
-    jsStart = strstr(bp, "<script type=\"text/javascript\">");
-    if (jsStart == NULL) break;
-    bp = jsStart+31;
-    jsEnd = strstr(bp, "</script>");
-    if (jsEnd == NULL) break;
+  auto cur_pos{cover_body.begin()};
+
+  while ((cur_pos = std::search(cur_pos, cover_body.end(), c_js_block_start_tag.begin(), c_js_block_start_tag.end())) != cover_body.end()) {
+    auto jsStart{cur_pos + c_js_block_start_tag.length()};
+    auto jsEnd{std::search(jsStart, cover_body.end(), c_js_block_end_tag.begin(), c_js_block_end_tag.end())};
+    if (jsEnd == cover_body.end()) break;
+
+    // we have successfully found a block
     // count the number of usable hex char between jsStart+31 and jsEnd
+    size_t chunk_len = jsEnd-jsStart;
+    cnt += js_code_block_preliminary_capacity(jsStart, chunk_len);
 
-    size_t chunk_len = jsEnd-bp;
-    cnt += js_code_block_preliminary_capacity(bp, chunk_len);
+    cur_pos = jsEnd + c_js_block_end_tag.length(); //This does not goes over end of cover_body
+    //because we already has confirmed that it contains c_js_block_start_end_str QED
+  }
 
-    bp += 9;
-  } // while (bp < (buf+len))
-
-  int actual_capacity = max(0, (cnt -JS_DELIMITER_SIZE)/2);  
-  //log_debug("payload has capacity %d", actual_capacity);
+  size_t actual_capacity = max(static_cast<ssize_t>(0), (cnt - JS_DELIMITER_SIZE)/2);  
+  log_debug("html payload has capacity %lu", actual_capacity);
   return actual_capacity;
 
 }
-
-// #define JS_DELIMITER "?"
-// #define JS_DELIMITER_REPLACEMENT "."
 
 /**
    this function carry the only major part that is different between a
@@ -79,126 +52,134 @@ HTMLSteg::static_headless_capacity (char* buf, size_t len) {
    this is the overloaded version for htmlsteg variety where js code
    is scattered int th html file
 */
-//TODO: move to memory safe model
-int HTMLSteg::encode_http_body(const char *data, char *jTemplate, char *jData,
-                               unsigned int dlen, unsigned int jtlen,
-                               unsigned int jdlen)
+ssize_t
+HTMLSteg::encode_http_body(const std::vector<uint8_t>& data, const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& cover_and_data)
 {
-  const char *dp;
+  auto data_it = data.begin();
+  auto cover_it = cover_payload.begin();
+  auto cover_and_data_it = cover_and_data.begin();
 
-  char *jtp,*jdp; // current pointers for data, jTemplate, and jData
+  //Sanity check
+  log_assert(cover_and_data.size() >= cover_payload.size());
+  
+  log_debug("at htmlsteg encode-http trying to encode %lu", data.size());
+
   unsigned int encCnt = 0;  // num of data encoded in jData
-  int n; // tmp for updating encCnt
-  char *jsStart, *jsEnd;
-  int skip;
-  int scriptLen;
   int fin = 0;
 
-  log_debug("at htmlsteg encode-http trying to encode %d", dlen);
-  dp = data;
-  jtp = (char*)jTemplate;
-  jdp = jData;
-
-  size_t original_dlen = dlen;
+  size_t original_dlen = data.size();
 
   while (encCnt < original_dlen) {
-    jsStart = strstr(jtp, startScriptTypeJS);
-    if (jsStart == NULL) {
+    auto jsStart = std::search(cover_it, cover_payload.end(), c_js_block_start_tag.begin(), c_js_block_start_tag.end());
+    if (jsStart == cover_payload.end()) {
       log_warn("lack of usable JS; can't find startScriptType\n");
       return encCnt;
     }
 
-    skip = strlen(startScriptTypeJS)+jsStart-jtp;
+    //jump copy everything in between up to the beginnig of the js block,
+    //from original cover to the cover with data 
+    auto skip = jsStart - cover_it + c_js_block_start_tag.length();
 #ifdef DEBUG
     log_debug("copying %d (skip) char from jtp to jdp\n", skip);
 #endif
+    std::copy_n(cover_it, skip, cover_and_data_it);
+    cover_and_data_it += skip;
+    cover_it += skip;
 
-    memcpy(jdp, jtp, skip);
-    jtp = jtp+skip; jdp = jdp+skip;
-    jsEnd = strstr(jtp, endScriptTypeJS);
-    if (jsEnd == NULL) {
-      log_warn("lack of usable JS; can't find endScriptType\n");
+    auto jsEnd{std::search(jsStart, cover_payload.end(), c_js_block_end_tag.begin(), c_js_block_end_tag.end())};
+    if (jsEnd == cover_payload.end()) {
+      log_warn("lack of usable JS; can't find %s\n", c_js_block_start_tag.c_str());
       return encCnt;
-        
     }
-      
-    // the JS for encoding data is between jsStart and jsEnd
-    scriptLen = jsEnd - jtp;
+
+    // we need the size of the block so we can jump the iterator
+    //after being done with the block
+    auto block_size = jsEnd - cover_it;
+
     // n = encode2(dp, jtp, jdp, dlen, jtlen, jdlen, &fin);
-    n = encode_in_single_js_block((char*)dp, jtp, jdp, dlen, scriptLen, jdlen, &fin);
-    // update encCnt, dp, and dlen based on n
-    if (n > 0) {
-      encCnt = encCnt+n; dp = dp+n; dlen = dlen-n;
+    auto number_of_bytes_encoded_in_current_block = encode_in_single_js_block(cover_it, jsEnd, data_it, data.end(), cover_and_data_it, fin);
+
+    // update encCnt and other iterator
+    encCnt += number_of_bytes_encoded_in_current_block;
+    log_assert(encCnt <= original_dlen);
+    data_it += number_of_bytes_encoded_in_current_block;
+
+    cover_it += block_size;
+    cover_and_data_it += block_size;
+    
 #ifdef DEBUG
       log_debug("%d bytes encoded", encCnt);
 #endif      
+    //copy the js end tag
+    //because jsEnd is the result of matching c_js_block_start_tag length we are sure that we
+    //we at least have cover equal to c_js_block_start_tag length left QED
+    std::copy_n(jsEnd, c_js_block_end_tag.length(), cover_and_data_it);
 
-    }
-    // update jtp, jdp, jdlen
-    skip = jsEnd-jtp;
-    jtp = jtp+skip; jdp = jdp+skip; jdlen = jdlen-skip;
-    skip = strlen(endScriptTypeJS);
-    memcpy(jdp, jtp, skip);
-    jtp = jtp+skip; jdp = jdp+skip; jdlen = jdlen-skip;
+    // update the iterators
+    cover_and_data_it += c_js_block_end_tag.length();
+    cover_it += c_js_block_end_tag.length();
   }
 
-  // copy the rest of jTemplate to jdp
-  skip = jTemplate+jtlen-jtp;
-
+  //we are here because we consumed all data, otherwise it is a bug
+  log_assert(encCnt == original_dlen);
+  //if we have fin == 0 it is
+  //the follownig case:
   // handling the boundary case in which JS_DELIMITER hasn't been
   // added by encode()
-  if (fin == 0 && dlen == 0) {
-    if (skip > 0) {
-      *jtp = JS_DELIMITER;
-      jtp = jtp+1; jdp = jdp+1;
-      skip--;
+  if (fin == 0 && encCnt == original_dlen) { //this means that we consumed all data but we were not able to
+    //to stick in the DELIMINATOR because we ran out of space in our block so
+    //we can just stick it in current byte as long as we have still some cover
+    //left.
+    if (cover_it < cover_payload.end()) {
+      *cover_and_data_it = JS_DELIMITER;
+      cover_it++;
+      cover_and_data_it++;
+    } else {
+      log_debug("not enough room for the JS_DELIMITER so we do not need it");
     }
+
   }
 
-  memcpy(jdp, jtp, skip);
+  //now that we have encoded all the data then we can copy
+  //the rest of the cover even beyond the block.
+  std::copy(cover_it, cover_payload.end(), cover_and_data_it);
+
   log_debug("%d bytes encoded", encCnt);
 
   return encCnt;
   
 }
 
-int
-HTMLSteg::decode_http_body(const char *jData, const char *dataBuf, unsigned int jdlen,
-                       unsigned int dataBufSize, int *fin )
+ssize_t
+HTMLSteg::decode_http_body(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, int& fin)
 {
-  const char *jsStart, *jsEnd;
-  const char *dp, *jdp; // current pointers for data and jData
-  int scriptLen;
   int decCnt = 0;
-  int n;
-  int dlen = jdlen; //gets rud of unused warning, useless tho
-  dp = dataBuf; jdp = jData;
+  auto cover_it = cover_and_data.begin();
 
-  *fin = 0;
-  dlen = dataBufSize; 
-  while (*fin == 0) {
-    jsStart = strstr(jdp, startScriptTypeJS);
-    if (jsStart == NULL) {
-
+  fin = 0;
+  while (fin == 0) {
+    auto jsStart = std::search(cover_it, cover_and_data.end(), c_js_block_start_tag.begin(), c_js_block_start_tag.end());
+    if (jsStart == cover_and_data.end()) {
       log_warn("Can't find startScriptType for decoding data inside script type JS\n");
-
       return decCnt;
     }
 
-    jdp = jsStart+strlen(startScriptTypeJS);
-    jsEnd = strstr(jdp, endScriptTypeJS);
-    if (jsEnd == NULL) {
+    cover_it = jsStart + c_js_block_start_tag.length();
+
+    auto jsEnd{std::search(jsStart, cover_and_data.end(), c_js_block_end_tag.begin(), c_js_block_end_tag.end())};
+
+    if (jsEnd == cover_and_data.end()) {
       log_warn("Can't find endScriptType for decoding data inside script type JS\n");
       return decCnt;
     }
 
     // the JS for decoding data is between jsStart and jsEnd
-    scriptLen = jsEnd - jdp;
-    n = decode_single_js_block(jdp, dp, scriptLen, dlen, fin);
-    if (n > 0) {
-      decCnt = decCnt+n; dlen=dlen-n; dp=dp+n;
+    auto number_of_bytes_decoded_in_current_block = decode_single_js_block(cover_it, jsEnd, data, fin);
+    if (number_of_bytes_decoded_in_current_block > 0) {
+      decCnt += number_of_bytes_decoded_in_current_block;
     }
-    jdp = jsEnd+strlen(endScriptTypeJS);
+    
+    cover_it = jsEnd + c_js_block_end_tag.length();
   } // while (*fin==0)
 
   return decCnt;
@@ -208,7 +189,7 @@ HTMLSteg::decode_http_body(const char *jData, const char *dataBuf, unsigned int 
 /**
    constructor to steup the correct hard-coded type
  */
-HTMLSteg::HTMLSteg(PayloadServer* payload_provider, double noise2signal)
+HTMLSteg::HTMLSteg(PayloadServer& payload_provider, double noise2signal)
   :JSSteg(payload_provider, noise2signal, HTTP_CONTENT_HTML)
 {
   //correcting the type

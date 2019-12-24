@@ -450,7 +450,7 @@ isalnum_ (char c);
  *
 */
 int
-offset2Alnum_(const char *p, int range);
+offset2Alnum_(const uint8_t *p, int range);
 
 /**
  * checks if a file exists
@@ -469,6 +469,17 @@ bool file_exists_with_name(const std::string& filename);
  * @return return the file size in byte or -1 if failed
  */
 ssize_t file_size(const std::string& filename);
+
+/*
+ * strInBinary looks for char array pattern of length patternLen in a char array
+ * blob of length blobLen
+ *
+ * return a pointer for the first occurrence of pattern in blob, if found
+ * otherwise, return NULL
+ * 
+ */
+char* strInBinary (const char *pattern, unsigned int patternLen, 
+                   const char *blob, unsigned int blobLen);
 
 //le utilities
 typedef uint32_t  int_t;

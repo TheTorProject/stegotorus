@@ -76,6 +76,8 @@ protected:
    */
   void alter_length_in_response_header(const vector<uint8_t>& payload_with_original_header, ssize_t new_content_length, vector<uint8_t>& new_header);
 
+   static int find_content_length (char *hdr, int hlen);
+
  public:
   /**
      Encapsulate the repetative task of checking for the respones of content_type

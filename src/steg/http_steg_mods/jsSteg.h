@@ -5,6 +5,23 @@
 #ifndef _JSSTEG_H
 #define _JSSTEG_H
 
+// JS_DELIMITER that exists in the JavaScript before the end of
+// data encoding will be replaced by JS_DELIMITER_REPLACEMENT
+#define JS_DELIMITER_SIZE 1
+
+// error codes
+#define INVALID_BUF_SIZE	-1
+#define INVALID_DATA_CHAR	-2
+
+// controlling content gzipping for jsSteg
+#define JS_GZIP_RESP             0
+
+// jsSteg-specific defines
+#define JS_DELIMITER '?'
+// a JavaScript delimiter is used to signal the end of encoding
+// to facilitate the decoding process
+#define JS_DELIMITER_REPLACEMENT '!'
+
 class JSSteg : public FileStegMod
 {
 
@@ -43,34 +60,55 @@ class JSSteg : public FileStegMod
    @return length of recovered data
 
   */
-  virtual size_t decode_http_body(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, int& fin);
+  virtual ssize_t decode_http_body(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, int& fin);
                       
   
-  static unsigned int js_code_block_preliminary_capacity(const char* buf, const size_t len);
+  /**
+     compute the maximum size of data in bytes which can be embeded in a js code block/file
 
-    ssize_t  encode_in_single_js_block(const vector<uint8_t>& data, const vector<uint8_t>& cover, vector<uint8_t>& cover_and_data, size_t  data_offset, size_t cover_offset, size_t js_block_size, int& fin);
+     @param block_start an iterator to the beginning of the block.
+     @param block_len   the length of the block in bytes.
 
-  /*
-  for a single block of js code, this could be an entire js script file or 
-  a block of js script inside an html file, it decode the data embeded into
-  it.
+     @return the number of bytes can be embeded in the block (0 if none is possible or errornous block)
+   */
+  static size_t js_code_block_preliminary_capacity(std::vector<uint8_t>::const_iterator block_start, const size_t block_len);
 
-   @param cover_and_data the buffer which contains the cover with data embeded inside it.
-   @param data the buffer which will contain the extracted data
-   @param cover_offset the index of first untreated cover byte
-   @param data_offset the index of where to store data in data buffer
-   @param js_block_size the size of the js code block, we need to decode the 
-          data from cover_offset till js_block_size
-   @param fin actually a second return value indicating that ?
-
+  /**
+   Embed the data in  a single block of java script code. If all data are embeded it fill up the the rest of the payload with the original cover. JSSteg calls it only once html steg should call it multiple times.
+   
+   @param cover the buffer which contains the original cover
+   @param cover_it the iterator of first unconsumed cover byte
+   @param data_it the iterator pointing at the first unembeded data byte
+   @param end_of_data an iterator pointing at the end of the data to be embedded
+   @param cover_and_data_it an iterator to the place in the buffer which eventually will contains the cover 
+          with data embeded inside it. The vector should be of approperiate size
+   @param end_of_block an iterator to the place in the cover where current block ends
+   @param fin actually a second return value indicating that if we were able to encode all data given or not
 
    @return the number data bytes successfully embeded or
            negative values of INVALID_BUF_SIZE or INVALID_DATA_CHAR in
            case of error
- */
-  ssize_t decode_single_js_block(const std::vector<uint8_t>& cover_and_data, std::vector<uint8_t>& data, size_t cover_offset, size_t data_offset, size_t js_block_size, int& fin );
+  */
+  ssize_t encode_in_single_js_block(vector<uint8_t>::const_iterator cover_it, const vector<uint8_t>::const_iterator  end_of_block, vector<uint8_t>::const_iterator  data_it, vector<uint8_t>::const_iterator  end_of_data, vector<uint8_t>::iterator cover_and_data_it, int& fin);
 
-  static int skipJSPattern(const char *cp, int len);
+  /**
+     for a single block of js code, this could be an entire js script file or 
+     a block of js script inside an html file, it decode the data embeded into
+     it.
+
+     @param cover_and_data_it iterator pointing at the first byte of the block
+     @param end_of_block_pos iterator pointing at the end of the block
+     @param data the buffer which will grow to contain the extracted data
+     @param fin actually a second return value indicating that we read an the 
+            indicator that the all data has been read
+
+     @return the number data bytes successfully embeded or
+           negative values of INVALID_BUF_SIZE or INVALID_DATA_CHAR in
+           case of error
+ */
+  ssize_t decode_single_js_block(std::vector<uint8_t>::const_iterator cover_and_data_it, const std::vector<uint8_t>::const_iterator end_of_block_pos, std::vector<uint8_t>& data, int& fin);
+
+  static int skipJSPattern(const uint8_t *cp, int len);
 
 public:
   int isGzipContent (char *msg);
@@ -111,7 +149,7 @@ public:
    *           between p and (p+range), if it exists; otherwise, it 
    *           returns -1
    */
-  static int offset2Hex (const char *p, int range, int isLastCharHex);
+  static int offset2Hex (const unsigned char *p, int range, int isLastCharHex);
 
 };
 
