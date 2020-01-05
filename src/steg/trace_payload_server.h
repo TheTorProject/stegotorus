@@ -52,11 +52,36 @@ class TracePayloadServer: public PayloadServer
   payloads pl;
   const unsigned long c_max_buffer_size;
 
+
+  static int fixContentLen (char* payload, int payloadLen, char *buf, int bufLen);
+
   /** called by the constructor to load the payloads */
   void load_payloads(const char* fname);
 
+  /**
+     returns 1 check the validity of the payload as a usable HTTP response
 
-  static int fixContentLen (char* payload, int payloadLen, char *buf, int bufLen);
+ * has_eligible_HTTP_content() identifies if the input HTTP message 
+ * contains a specified type of content, used by a steg module to
+ * select candidate HTTP message as cover traffic
+ */
+
+// for JavaScript, there are two cases:
+// 1) If Content-Type: has one of the following values
+//       text/javascript 
+//       application/x-javascript
+//       application/javascript
+// 2) Content-Type: text/html and 
+//    HTTP body contains <script type="text/javascript"> ... </script>
+// #define CONTENT_JAVASCRIPT		1 (for case 1)
+// #define CONTENT_HTML_JAVASCRIPT	2 (for case 2)
+//
+// for pdf, we look for the msgs whose Content-Type: has one of the
+// following values
+// 1) application/pdf
+// 2) application/x-pdf
+// 
+  static int has_eligible_HTTP_content (char* buf, int len, int type);
   
 public:
 

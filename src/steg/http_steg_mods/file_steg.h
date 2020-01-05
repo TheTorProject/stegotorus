@@ -6,7 +6,6 @@
 
 #include <memory>
 #include <algorithm>
-#include <list>
 #include <math.h>
 
 using namespace std;
@@ -28,6 +27,10 @@ protected:
   const int RESPONSE_GOOD = 0 ;
   const int RESPONSE_INCOMPLETE = -1;
   const int RESPONSE_BAD = -2;
+
+  const string length_field_name = "Content-Length:";
+  const string end_of_field_indicator = "\r\n";
+  const string end_of_header_indicator = "\r\n\r\n";
 
   //the payload server will be passed to us by the http steg mod
   //we are going to share the payload server with other file steg mods
@@ -115,7 +118,7 @@ protected:
 
   //list of file extensions/suffix which are representing files of type
   //handled by the module (e.g.: *.jpg *.jpeg etc)
-  const list<string> extensions;
+  vector<string> extensions;
   
   /**
      embed the data in the cover buffer, the assumption is that

@@ -22,111 +22,110 @@ using namespace std;
 #include "file_steg.h"
 #include "pngSteg.h"
 
-ssize_t PNGSteg::capacity(const uint8_t *raw, size_t len)
+ssize_t
+PNGSteg::headless_capacity(const std::vector<uint8_t>& cover_body)
 {
-  return static_capacity((char*)raw, len);
-}
-
-ssize_t PNGSteg::headless_capacity(char *cover_body, int body_length)
-{
-  return static_headless_capacity((char*)cover_body, body_length);
-}
-
-/**
-   compute the capcaity of the cover by getting a pointer to the
-   beginig of the body in the response
-
-   @param cover_body pointer to the begiing of the body
-   @param body_length the total length of message body
- */
-unsigned int PNGSteg::static_headless_capacity(char *cover_body, int body_length)
-{
-  if (body_length <= 0)
+  if (cover_body.size() <= 0 || cover_body.size() <= PNGSteg::c_magic_header_length)
     return 0;
 
   size_t total_capacity = 0;
 
-  PNGChunkData cur_data_chunk((uint8_t*)cover_body + c_magic_header_length, (uint8_t*)cover_body + body_length), next_data_chunk;
-  if (not cur_data_chunk.chunk_offset) //corrupted or invalid format
+  vector<uint8_t>::const_iterator search_starting_point = cover_body.begin() + PNGSteg::c_magic_header_length;
+  PNGChunkData cur_data_chunk(search_starting_point, cover_body.end()), next_data_chunk;
+  if (cur_data_chunk.invalid_file_format) //corrupted or invalid format
     return 0;
   total_capacity = cur_data_chunk.length;
-  while(cur_data_chunk.get_next_IDAT_chunk(&next_data_chunk)) {
+  while(cur_data_chunk.get_next_IDAT_chunk(next_data_chunk)) {
       total_capacity += next_data_chunk.length;
       cur_data_chunk = next_data_chunk;
   }
 
-  return (total_capacity <= sizeof(uint32_t)) ? 0 : total_capacity - sizeof(uint32_t); //counting for the data length
+  return (total_capacity <= c_NO_BYTES_TO_STORE_MSG_SIZE) ? 0 : total_capacity - c_NO_BYTES_TO_STORE_MSG_SIZE; //counting for the data length
 }
 
-//Temp: should get rid of ASAP
-unsigned int PNGSteg::static_capacity(char *cover_payload, int cover_length)
+ssize_t PNGSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload)
 {
-  ssize_t body_offset = extract_appropriate_respones_body(cover_payload, cover_length);
-  if (body_offset == -1) //coulodn't find the end of header
-    return 0;  //useless payload
-
-  return static_headless_capacity(cover_payload + body_offset, cover_length - body_offset);
-
-}
-
-int PNGSteg::encode(uint8_t* data, size_t data_len, uint8_t* cover_payload, size_t cover_len)
-{
-
-  if (data_len > c_MAX_MSG_BUF_SIZE) {
-    log_warn("To much data to be fit into recovering buffer during the decode process");
+  if (cover_payload.size() > c_MAX_MSG_BUF_SIZE) {
+    log_warn("Too much data to be fit into recovering buffer during the decode process");
     return -1;
   }
     
   //Make a new block of data with data length attached
-  uint8_t lengthed_data[data_len + sizeof(uint32_t)]; //This is in stack I hope
-  uint32_t data_len_encode = (uint32_t)data_len;
-  memcpy(lengthed_data, &data_len_encode, sizeof(uint32_t));
-  memcpy(lengthed_data+sizeof(uint32_t), data, data_len * sizeof(uint8_t));
+  ssize_t data_len = data.size();
+  vector<uint8_t> encoded_data_len = le_encode(data_len);
 
-  uint8_t* end_of_data = lengthed_data + data_len + sizeof(uint32_t);
-  uint8_t* cur_data_offset = lengthed_data;
-  PNGChunkData next_data_chunk(cover_payload + c_magic_header_length, cover_payload + cover_len), cur_data_chunk;
+  //Sanity check
+  log_assert(encoded_data_len.size() == c_NO_BYTES_TO_STORE_MSG_SIZE);
+
+  vector<uint8_t> lengthed_data(c_NO_BYTES_TO_STORE_MSG_SIZE + data_len);
+
+  //embeding the encoded length and the rest of the data
+  std::copy(encoded_data_len.begin(), encoded_data_len.end(), lengthed_data.begin());
+  std::copy(data.begin(), data.end(), lengthed_data.begin() + c_NO_BYTES_TO_STORE_MSG_SIZE);
+
+  auto end_of_data = lengthed_data.end();
+  auto cur_data_offset = lengthed_data.begin();
+  PNGChunkData next_data_chunk(cover_payload.begin() + c_magic_header_length, cover_payload.end());
+
+  if (next_data_chunk.invalid_file_format)
+    return -1;
+  
+  PNGChunkData cur_data_chunk = next_data_chunk;
+  std::vector<uint8_t>::iterator mutable_chunk_offset = cover_payload.begin();
 
   do {
     cur_data_chunk = next_data_chunk;
     size_t length_to_embed = min(cur_data_chunk.length, (size_t) (end_of_data - cur_data_offset));
-    memcpy(cur_data_chunk.chunk_offset+ PNGChunkData::c_chunk_header_length, cur_data_offset, length_to_embed); 
+    //cur_data_chunk.chunk_offset is a const iterator
+    std::advance(mutable_chunk_offset, std::distance<std::vector<uint8_t>::const_iterator>(cover_payload.begin(), cur_data_chunk.chunk_offset));
+    std::copy_n(cur_data_offset, length_to_embed, mutable_chunk_offset + PNGChunkData::c_chunk_header_length); 
     cur_data_offset += length_to_embed;
 
-  }while((cur_data_offset < end_of_data) && (cur_data_chunk.get_next_IDAT_chunk(&next_data_chunk)));
+    cur_data_chunk.get_next_IDAT_chunk(next_data_chunk);
+
+  }while((cur_data_offset < end_of_data) && (!cur_data_chunk.invalid_file_format));
 
   if ((cur_data_offset < end_of_data)) {
     log_warn("Ran out of space while fiting the data into PNG cover");
     return -1;
   }
 
-  return cover_len;
+  return cover_payload.size();
 
 }
 
-ssize_t PNGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t* data)
+ssize_t PNGSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<uint8_t>& data)
 {
   //The assumption is that the data buffer can cantain the maximum size of the 
   //data
   //Make a new block of data with data length attached
-  PNGChunkData  next_data_chunk((uint8_t*)cover_payload + c_magic_header_length, (uint8_t*)cover_payload + cover_len),cur_data_chunk;
+  PNGChunkData  next_data_chunk(cover_payload.begin() + c_magic_header_length, cover_payload.end());
+  PNGChunkData  cur_data_chunk = next_data_chunk;
 
   //recovering data length
   size_t data_recovered_length = 0;
-  uint32_t data_length;
+  vector<uint8_t> encoded_data_len;
   size_t header_recovering_length;
+
+  if (next_data_chunk.invalid_file_format)
+    return -1;
+
+  //recovering the length of the data in case it is stored across multiple chunks
   do {
     cur_data_chunk = next_data_chunk;
-    header_recovering_length = min(cur_data_chunk.length, sizeof(uint32_t) - data_recovered_length);
-    memcpy((void*)((&data_length) + data_recovered_length), cur_data_chunk.chunk_offset+PNGChunkData::c_chunk_header_length, header_recovering_length);
+    header_recovering_length = min(cur_data_chunk.length, c_NO_BYTES_TO_STORE_MSG_SIZE - data_recovered_length);
+    encoded_data_len.insert(encoded_data_len.end(), cur_data_chunk.chunk_offset+PNGChunkData::c_chunk_header_length, cur_data_chunk.chunk_offset+PNGChunkData::c_chunk_header_length + header_recovering_length);
     data_recovered_length += header_recovering_length;
 
-  }while(data_recovered_length < sizeof(uint32_t) && (cur_data_chunk.get_next_IDAT_chunk(&next_data_chunk)));
+  }while(data_recovered_length < c_NO_BYTES_TO_STORE_MSG_SIZE && cur_data_chunk.get_next_IDAT_chunk(next_data_chunk));
 
-  if (data_recovered_length < sizeof(uint32_t)) {
-    log_warn("Ran out of PNG cover before reocovering the whole data, something is wrong :'(, probably corrupted cover");
+  if (data_recovered_length < c_NO_BYTES_TO_STORE_MSG_SIZE) {
+    log_warn("Ran out of PNG cover before reocovering the data length, something is wrong :'(, probably corrupted cover");
     return -1;
   }
+  
+  size_t data_length = static_cast<size_t>(le_decode(encoded_data_len));
+
   //now we know the exact length 
   if (data_length > c_MAX_MSG_BUF_SIZE) {
     log_warn("Data buffer too small to contains decoded data with length %u", (unsigned int) data_length);
@@ -135,47 +134,35 @@ ssize_t PNGSteg::decode(const uint8_t* cover_payload, size_t cover_len, uint8_t*
 
   //If the last chunk had any residue let's put them in data buffer
   size_t valid_data_in_chunk = min(cur_data_chunk.length-header_recovering_length, (size_t)data_length);
-  memcpy(data, cur_data_chunk.chunk_offset + PNGChunkData::c_chunk_header_length + header_recovering_length, valid_data_in_chunk);
+  auto data_start = cur_data_chunk.chunk_offset + PNGChunkData::c_chunk_header_length + header_recovering_length;
+  data.insert(data.end(), data_start, data_start + valid_data_in_chunk);
   data_recovered_length += valid_data_in_chunk;
 
-  //moving stuff
-  //memcpy(data, data + sizeof(uint32_t), data_recovered_length);
-  //you can't move stuff like that :(
-  
-  while(data_recovered_length < data_length + sizeof(uint32_t)) {
-    if (!cur_data_chunk.get_next_IDAT_chunk(&next_data_chunk)) {
+  //copy the rest of the data
+  while(data_recovered_length < data_length + c_NO_BYTES_TO_STORE_MSG_SIZE) {
+    if (!cur_data_chunk.get_next_IDAT_chunk(next_data_chunk)) {
       log_warn("Ran out of PNG cover before reocovering the whole data, something is wrong :'(, probably corrupted cover");
       return -1;
     }
     cur_data_chunk = next_data_chunk;
     valid_data_in_chunk = min(cur_data_chunk.length, data_length - data_recovered_length);
-    memcpy(data + data_recovered_length, cur_data_chunk.chunk_offset + PNGChunkData::c_chunk_header_length, valid_data_in_chunk);
+    auto data_start = cur_data_chunk.chunk_offset + PNGChunkData::c_chunk_header_length;
+    data.insert(data.end(), data_start, data_start + valid_data_in_chunk);
     data_recovered_length += valid_data_in_chunk;
   }
 
-  return (ssize_t)data_length;
+  return data.size();
 
 }
    
-//   ur_data_chunk = next_data_chunk;
-//     memcpy(cur_data_chunk.offset+8, cur_data_offset, cur_data_chunk.length);
-//     cur_data_offset += cur_data_chunk.length;
-
-//   }
-
-//   uint8_t lengthed_data = char[data_len + sizeof(data_len)];
-//   memcpy(lengthed_data, data_len, sizeof(data_len));
-//   memcpy(lengthed_data+sizeof(data_len), data, data_len * sizeof(uint8_t));
-
-//   uint8_t* end_of_data = lengthed_data + data_len + sizeof(data_len)
-//   uint8_t* cur_data_offset = lengthed_data;
-
-// }
-
 /**
    constructor just to call parent constructor
 */
-PNGSteg::PNGSteg(PayloadServer* payload_provider, double noise2signal)
+PNGSteg::PNGSteg(PayloadServer& payload_provider, double noise2signal)
   :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_PNG)
 {
+    //adding extensions this module support only if the type is JS (not being called by HTML CONST)
+  vector<string> supported_extension_list({"png"});
+  extensions = supported_extension_list;
+
 }

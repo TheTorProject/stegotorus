@@ -206,39 +206,40 @@ TEST_F(StegModTest, pdf_gracefully_invalid) {
 }*/
 
 //PNG
-//commented out temporarily till SWF steg mod moves to vector model.
-// TEST_F(StegModTest, png_encode_decode_small) {
-//   PNGSteg png_test_steg(NULL, 0);
-//   encode_decode(repo_root_path + "src/test/steg_test/test1.png", short_message, &png_test_steg);
-//   //ASSERT_TRUE(false);
+TEST_F(StegModTest, png_encode_decode_small) {
+  PNGSteg png_test_steg(mock_payload_server);
+  encode_decode(repo_root_path + "src/test/steg_test/test1.png", short_message, &png_test_steg);
 
-// }
+}
 
-// TEST_F(StegModTest, png_encode_decode_large) {
-//   PNGSteg png_test_steg(NULL, 0);
-//   encode_decode(repo_root_path + "src/test/steg_test/test2.png", long_message, &png_test_steg);
+TEST_F(StegModTest, png_encode_decode_large) {
+  PNGSteg png_test_steg(mock_payload_server);
+  encode_decode(repo_root_path + "src/test/steg_test/test2.png", long_message, &png_test_steg);
 
-// }
+}
 
-// TEST_F(StegModTest, png_gracefully_invalid) {
-//   PNGSteg png_test_steg(NULL, 0);
+TEST_F(StegModTest, png_gracefully_invalid) {
+  PNGSteg png_test_steg(mock_payload_server);
 
-//   read_cover(repo_root_path + "src/test/steg_test/test3.png");
-//   EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
-//   delete cover_payload;
+  read_cover(repo_root_path + "src/test/steg_test/test3.png");
+  EXPECT_FALSE(png_test_steg.headless_capacity(*cover_payload));
+  delete cover_payload;
+  cover_payload = nullptr;
 
-//   read_cover(repo_root_path + "src/test/steg_test/thegif.png");
-//   EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
-//   delete cover_payload;
+  read_cover(repo_root_path + "src/test/steg_test/thegif.png");
+  EXPECT_FALSE(png_test_steg.headless_capacity(*cover_payload));
+  delete cover_payload;
+  cover_payload = nullptr;
 
-//   read_cover(repo_root_path + "src/test/steg_test/trickycorrupt.png");
-//   EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
-//   delete cover_payload;
+  read_cover(repo_root_path + "src/test/steg_test/trickycorrupt.png");
+  EXPECT_FALSE(png_test_steg.headless_capacity(*cover_payload));
+  delete cover_payload;
+  cover_payload = nullptr;
+  
+  read_cover(repo_root_path + "src/test/steg_test/corner_case4.png");
+  EXPECT_FALSE(png_test_steg.headless_capacity(*cover_payload));
 
-//   read_cover(repo_root_path + "src/test/steg_test/corner_case4.png");
-//   EXPECT_FALSE(png_test_steg.headless_capacity((char*)cover_payload, cover_len));
-
-// }
+}
 
 //JS
 TEST_F(StegModTest, js_empty_cover_capacity) {

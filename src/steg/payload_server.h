@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <list>
+
 #include <algorithm>
 
 using namespace std; 
@@ -227,7 +228,6 @@ class PayloadServer
   //list of active steg mod, if the list is empty everything is active
   std::vector<unsigned int> active_steg_mods;
 
-  static int has_eligible_HTTP_content (char* buf, int len, int type);
   static int parse_client_headers(char* inbuf, char* outbuf, int len);
   
  public:
@@ -246,6 +246,9 @@ class PayloadServer
   
   virtual ~PayloadServer(){};
 
+  //map a file extension to the the numerical contstant representing the content type
+  map<string, int> extension_to_content_type_map;
+
   /**
    get the file extension and return the numerical contstant representing the content type
 
@@ -253,7 +256,7 @@ class PayloadServer
 
    @return content type constant or -1 if not found, a null extensions is considered as html type
   */
-  int extension_to_content_type(const char* extension);
+  int extension_to_content_type(const string& extension);
 
   virtual unsigned int find_client_payload(char* buf, int len, int type) = 0;
 

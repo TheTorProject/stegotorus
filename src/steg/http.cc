@@ -28,12 +28,12 @@ using namespace std;
 #include "b64cookies.h"
 
 #include "http_steg_mods/file_steg.h"
-// #include "http_steg_mods/swfSteg.h"
-// #include "http_steg_mods/pdfSteg.h"
 #include "http_steg_mods/jsSteg.h"
 #include "http_steg_mods/jpgSteg.h"
-// #include "http_steg_mods/pngSteg.h"
+#include "http_steg_mods/pngSteg.h"
 // #include "http_steg_mods/gifSteg.h"
+// #include "http_steg_mods/swfSteg.h"
+// #include "http_steg_mods/pdfSteg.h"
 #include "http_steg_mods/htmlSteg.h"
 
 #include "http.h"
@@ -154,16 +154,22 @@ http_steg_config_t::init_file_steg_mods()
   //if the steg_mod option has set by the user, only those steg mods
   //will be activated otherwise, all other steg mods will be activated
 
+  file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(*payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(*payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(*payload_server, noise2signal);
+  file_steg_mods[HTTP_CONTENT_HTML] = new HTMLSteg(*payload_server, noise2signal);
   //TODO:: re-enable when all other Steg mods are migrated to vector<uint_16>
   //coverpayload model.
-  file_steg_mods[HTTP_CONTENT_JPEG] = new JPGSteg(*payload_server, noise2signal);
-  // file_steg_mods[HTTP_CONTENT_PNG] = new PNGSteg(*payload_server, noise2signal);
   // file_steg_mods[HTTP_CONTENT_GIF] = new GIFSteg(*payload_server, noise2signal);
   // file_steg_mods[HTTP_CONTENT_SWF] = new SWFSteg(*payload_server, noise2signal);
   // file_steg_mods[HTTP_CONTENT_PDF] = new PDFSteg(*payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(*payload_server, noise2signal);
-  file_steg_mods[HTTP_CONTENT_HTML] = new HTMLSteg(*payload_server, noise2signal);
 
+  //initiate the supported extension list
+
+  for(auto cur_steg_mod : file_steg_mods)
+    for(auto cur_supported_extension: cur_steg_mod.second->extensions)
+      payload_server->extension_to_content_type_map[cur_supported_extension] = cur_steg_mod.second->content_type_id();
+  
   //TODO: for now only one steg module can be mentioned for testing.
   //It should be that a comma separated list should be able to
   //activate

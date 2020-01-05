@@ -8,9 +8,6 @@
 #include "crypt.h"
 #include "rng.h"
 #include "apache_payload_server.h"
-
-#include "http_steg_mods/file_steg.h"
-#include "http_steg_mods/jpgSteg.h"
 #include "payload_scraper.h"
 
 using namespace std;
@@ -52,7 +49,7 @@ ApachePayloadServer::ApachePayloadServer(MachineSide init_side, const string& da
         log_debug("payload database does not exists.");
         log_debug("scarping payloads to create the database...");
 
-        PayloadScraper my_scraper(_database_filename, _apache_host_name,  cover_list);
+        PayloadScraper my_scraper(_database_filename, _apache_host_name, cover_list);
         my_scraper.scrape();
 
       }

@@ -704,3 +704,127 @@ log_debug("new: hdrLen = %d, bodyLen = %d, payloadLen = %d", hdrLen, bodyLen, hd
   }
   return -1;
 }
+
+int 
+TracePayloadServer::has_eligible_HTTP_content (char* buf, int len, int type) {
+  char* ptr = buf;
+  char* matchptr;
+  int tjFlag=0, thFlag=0, ceFlag=0, teFlag=0, http304Flag=0, clZeroFlag=0, pdfFlag=0, swfFlag=0; //, gzipFlag=0; // compiler under Ubuntu complains about unused vars, so commenting out until we need it
+  char* end, *cp;
+
+#ifdef DEBUG
+  fprintf(stderr, "TESTING availabilty of js in payload ... \n");
+#endif
+
+  if (type != HTTP_CONTENT_JAVASCRIPT &&
+      type != HTTP_CONTENT_HTML &&
+      type != HTTP_CONTENT_PDF && type != HTTP_CONTENT_SWF)
+    return 0;
+
+  // assumption: buf is null-terminated
+  if (!strstr(buf, "\r\n\r\n"))
+    return 0;
+
+
+  while (1) {
+    end = strstr(ptr, "\r\n");
+    if (end == NULL) {
+      break;
+    }
+
+    if (!strncmp(ptr, "Content-Type:", 13)) {
+	
+      if (!strncmp(ptr+14, "text/javascript", 15) || 
+	  !strncmp(ptr+14, "application/javascript", 22) || 
+	  !strncmp(ptr+14, "application/x-javascript", 24)) {
+	tjFlag = 1;
+      }
+      if (!strncmp(ptr+14, "text/html", 9)) {
+	thFlag = 1;
+      }
+      if (!strncmp(ptr+14, "application/pdf", 15) || 
+	  !strncmp(ptr+14, "application/x-pdf", 17)) {
+	pdfFlag = 1;
+      }
+      if (!strncmp(ptr+14, "application/x-shockwave-flash", strlen("application/x-shockwave-flash"))) {
+	swfFlag = 1;
+      }
+
+    } else if (!strncmp(ptr, "Content-Encoding: gzip", 22)) {
+      //      gzipFlag = 1; // commented out as variable is set but never read and Ubuntu compiler complains
+    } else if (!strncmp(ptr, "Content-Encoding:", 17)) { // Content-Encoding that is not gzip
+      ceFlag = 1;
+    } else if (!strncmp(ptr, "Transfer-Encoding:", 18)) {
+      teFlag = 1;
+    } else if (!strncmp(ptr, "HTTP/1.1 304 ", 13)) {
+      http304Flag = 1;
+    } else if (!strncmp(ptr, "Content-Length: 0", 17)) {
+      clZeroFlag = 1;
+    }
+    
+    if (!strncmp(end, "\r\n\r\n", 4)){
+      break;
+    }
+    ptr = end+2;
+  }
+
+#ifdef DEBUG
+  printf("tjFlag=%d; thFlag=%d; gzipFlag=%d; ceFlag=%d; teFlag=%d; http304Flag=%d; clZeroFlag=%d\n", 
+    tjFlag, thFlag, gzipFlag, ceFlag, teFlag, http304Flag, clZeroFlag);
+#endif
+
+  // if (type == HTTP_CONTENT_JAVASCRIPT)
+  if (type == HTTP_CONTENT_JAVASCRIPT || type == HTTP_CONTENT_HTML) {
+    // empty body if it's HTTP not modified (304) or zero Content-Length
+    if (http304Flag || clZeroFlag) return 0; 
+
+    // for now, we're not dealing with Transfer-Encoding (e.g., chunked)
+    // or Content-Encoding that is not gzip
+    // if (teFlag) return 0;
+    if (teFlag || ceFlag) return 0;
+
+    if (tjFlag && ceFlag && end != NULL) {
+      log_debug("(JS) gzip flag detected with hdr len %d", (int)(end-buf+4));
+    } else if (thFlag && ceFlag && end != NULL) {
+      log_debug("(HTML) gzip flag detected with hdr len %d", (int)(end-buf+4));
+    }
+
+    // case 1
+    if (tjFlag) return 1; 
+
+    // case 2: check if HTTP body contains <script type="text/javascript">
+    if (thFlag) {
+      matchptr = strstr(ptr, "<script type=\"text/javascript\">");
+      if (matchptr != NULL) {
+        return 2;
+      }
+    }
+  }
+
+  if (type == HTTP_CONTENT_PDF && pdfFlag) {
+    // reject msg with empty body: HTTP not modified (304) or zero Content-Length
+    if (http304Flag || clZeroFlag) return 0; 
+
+    // for now, we're not dealing with Transfer-Encoding (e.g., chunked)
+    // or Content-Encoding that is not gzip
+    // if (teFlag) return 0;
+    if (teFlag || ceFlag) return 0;
+
+    // check if HTTP body contains "endstream";
+    // strlen("endstream") == 9
+    
+    cp = strInBinary("endstream", 9, ptr, buf+len-ptr);
+    if (cp != NULL) {
+      // log_debug("Matched endstream!");
+      return 1;
+    }
+  }
+  
+  //check if we need to update this for current SWF implementation
+  if (type == HTTP_CONTENT_SWF && swfFlag == 1 && 
+      ((len + buf - end) > SWF_SAVE_FOOTER_LEN + SWF_SAVE_HEADER_LEN + 8))
+    return 1;
+
+  return 0;
+}
+

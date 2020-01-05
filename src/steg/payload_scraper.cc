@@ -114,8 +114,10 @@ PayloadScraper::scrape_dir(const string dir_string_path)
         ++itr, total_file_count++)
     {
       for(auto cur_steg = _available_file_stegs.begin(); cur_steg != _available_file_stegs.end(); cur_steg++) { //0 is not associated with any steg module
+        auto undotted_extension = itr->path().extension().string();
+        undotted_extension = (!undotted_extension.empty()) ? undotted_extension.substr(1) : "";
           bool cur_steg_mod_supports_extension =
-            (std::find(cur_steg->second->extensions.begin(), cur_steg->second->extensions.end(), itr->path().extension().string()) != cur_steg->second->extensions.end());
+            (std::find(cur_steg->second->extensions.begin(), cur_steg->second->extensions.end(), undotted_extension) != cur_steg->second->extensions.end());
           
           if (cur_steg_mod_supports_extension)
             {
@@ -125,7 +127,8 @@ PayloadScraper::scrape_dir(const string dir_string_path)
 
               string scrape_result = scrape_url(cur_url, cur_steg->second->content_type_id());
               if (!scrape_result.empty())
-                _payload_db << total_file_count << " " << itr->path().extension().string()  << " " << scrape_result  << " " << cur_url << " " << 0 << " " << cur_url << "\n"; //absolute_url false
+                _payload_db << total_file_count << " " << cur_steg->second->content_type_id()  << " " << scrape_result  << " " << cur_url << " " << 0 << " " << cur_url << "\n"; //absolute_url false
+              break;
             }
         }
     }
@@ -152,13 +155,13 @@ PayloadScraper::scrape_url_list(const string list_filename)
   std::map<std::string, bool> scraped_tracker; //keeping track of url repetition
 
   if ( !file_exists_with_name( list_filename ) ) {
-    log_warn("cover list file does not exsits.");
+    log_warn("cover list file %s does not exsits.", list_filename.c_str());
     return -1;
   }
 
   std::ifstream url_list_stream(list_filename);
   if (!url_list_stream.is_open()) {
-    log_warn("Cannot open url list file.");
+    log_warn("Cannot open url list file %s", list_filename.c_str());
     return -1;
   }
   
@@ -181,20 +184,19 @@ PayloadScraper::scrape_url_list(const string list_filename)
     string filename = file_url.substr(last_slash+1);
     size_t last_dot = filename.rfind(".");
     if (last_dot == string::npos) 
-      cur_url_ext = ".html"; //no filename assume html
+      cur_url_ext = "html"; //no filename assume html
     else
-      cur_url_ext = filename.substr(last_dot);
+      cur_url_ext = filename.substr(last_dot+1);
 
-    for(size_t cur_steg = 1; cur_steg <= c_no_of_steg_protocol; cur_steg++) {
-      if (_available_file_stegs[cur_steg]) {//if it is initiated
-        bool cur_steg_mod_supports_extension =
-          (std::find(_available_file_stegs[cur_steg]->extensions.begin(), _available_file_stegs[cur_steg]->extensions.end(), cur_url_ext) != _available_file_stegs[cur_steg]->extensions.end());
-        if (cur_steg_mod_supports_extension) {
-          string scrape_result = scrape_url(file_url, cur_steg, true);
-          if (!scrape_result.empty()) {
-            _payload_db << total_file_count << " " << cur_url_ext << " " << scrape_result  << " " << relativize_url(file_url) << " " << 1 << " " << file_url << "\n"; //absolute_url = true
-          }
+    for(auto cur_steg : _available_file_stegs ) {
+      bool cur_steg_mod_supports_extension =
+        (std::find(cur_steg.second->extensions.begin(), cur_steg.second->extensions.end(), cur_url_ext) != cur_steg.second->extensions.end());
+      if (cur_steg_mod_supports_extension) {
+        string scrape_result = scrape_url(file_url, cur_steg.second->content_type_id(), true);
+        if (!scrape_result.empty()) {
+          _payload_db << total_file_count << " " << cur_steg.second->content_type_id() << " " << scrape_result  << " " << relativize_url(file_url) << " " << 1 << " " << file_url << "\n"; //absolute_url = true
         }
+        break;
       }
     }
 
@@ -227,10 +229,15 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
   _database_filename = database_filename;
   _cover_server = cover_server;
   _apache_conf_filename  = apache_conf;
-  
-  _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(dummy_payload_server);
 
+  //Inistantite the steg modules so we can pre-compute the capacity of the given
+  //payloads
+  //Note thatw we are only using the capacity function so we don't need an actual payload
+  //server
+  _available_file_stegs[HTTP_CONTENT_JAVASCRIPT] = new JSSteg(dummy_payload_server);
   _available_file_stegs[HTTP_CONTENT_HTML] = new HTMLSteg(dummy_payload_server); 
+  _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(dummy_payload_server); 
+  _available_file_stegs[HTTP_CONTENT_PNG] = new PNGSteg(dummy_payload_server); 
 
   //Commented out till migrating other types to new model 
  //  _available_file_stegs[HTTP_CONTENT_PDF] = new PDFSteg(NULL);
@@ -244,11 +251,8 @@ PayloadScraper::PayloadScraper(string  database_filename, string cover_server,co
 
   //_available_stegs[4].type = HTTP_CONTENT_HTML; _available_stegs[4].extension = ".htm";  
 
-  _available_file_stegs[HTTP_CONTENT_JPEG] = new JPGSteg(dummy_payload_server); //We are only using the capacity function so we don't need a payload server
 
   //Commented out till migrating other types to new model 
-  // _available_file_stegs[HTTP_CONTENT_PNG] = new PNGSteg(NULL); //We are only using the capacity function so we don't need a payload server
-  // _available_stegs[6].type = HTTP_CONTENT_PNG; _available_stegs[6].extension = ".png"; _available_stegs[6].capacity_function = PNGSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
 
   // _available_file_stegs[HTTP_CONTENT_GIF] = new GIFSteg(NULL); //We are only using the capacity function so we don't need a payload server
   // _available_stegs[7].type = HTTP_CONTENT_GIF; _available_stegs[7].extension = ".gif"; _available_stegs[7].capacity_function = GIFSteg::static_capacity; //Temp measure, later we don't need to do such acrobat
@@ -275,7 +279,7 @@ int PayloadScraper::scrape()
     //use it for scraping
     if (scrape_url_list(_cover_list) < 0)
     {
-      log_warn("error in retrieving payload urls: %s",strerror(errno));
+      log_warn("error in retrieving payload urls from giver cover list %s: %s",_cover_list.c_str(), strerror(errno));
       //fail to next scraping strategy
     }
     else {

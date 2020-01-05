@@ -88,13 +88,13 @@ ssize_t
 FileStegMod::extract_appropriate_respones_body(evbuffer* payload_buf)
 {
   //TODO: this need to be investigated, we might need two functions
-  const evbuffer_ptr hend = evbuffer_search(payload_buf, "\r\n\r\n", sizeof ("\r\n\r\n") -1 , NULL);
+  const evbuffer_ptr hend = evbuffer_search(payload_buf, end_of_header_indicator.c_str(), end_of_header_indicator.length() -1 , NULL);
   if (hend.pos == -1) {
     log_debug("unable to find end of header in the HTTP respose");
     return RESPONSE_INCOMPLETE;
   }
 
-  return hend.pos + strlen("\r\n\r\n");
+  return hend.pos + end_of_header_indicator.length();
 
 }
 
@@ -249,21 +249,19 @@ FileStegMod::http_server_transmit(evbuffer *source, conn_t *conn)
       log_debug("SERVER FileSteg sends resp with hdr len %zu body len %zd",
                 body_offset, outbuflen);
 
-      if ((size_t)outbuflen == body_len) {
-        log_assert(hLen < MAX_RESP_HDR_SIZE);
-        newHdr.assign(cover_payload.begin(), cover_payload.begin()+hLen);
-        newHdrLen = hLen;
-     
-      }
-      else { //if the length is different, then we need to update the header
-        alter_length_in_response_header(cover_payload, outbuflen, newHdr);
-        newHdrLen = newHdr.size();
+      //TODO: handle HTTP chunked transfer.
+      //We need to check if set the header has a Content-length field
 
-        if (!newHdrLen) {
-          log_warn("SERVER ERROR: failed to alter length field in response headerr");
-          _payload_server.disqualify_payload(payload_id_hash);
-          goto error;
-        }
+      log_assert(hLen < MAX_RESP_HDR_SIZE);
+      vector<uint8_t> original_header(cover_payload.begin(), cover_payload.begin()+hLen);
+      //now we update the header
+      alter_length_in_response_header(original_header, outbuflen, newHdr);
+      newHdrLen = newHdr.size();
+
+      if (!newHdrLen) {
+        log_warn("SERVER ERROR: failed to alter length field in response headerr");
+        _payload_server.disqualify_payload(payload_id_hash);
+        goto error;
       }
 
       //All is good. send it off
@@ -371,35 +369,47 @@ FileStegMod::http_client_receive(conn_t *conn, struct evbuffer *dest,
 }
 
 void
-FileStegMod::alter_length_in_response_header(const std::vector<uint8_t>& payload_with_original_header, ssize_t new_content_length, std::vector<uint8_t>& new_header)
+FileStegMod::alter_length_in_response_header(const std::vector<uint8_t>& original_header, ssize_t new_content_length, std::vector<uint8_t>& new_header)
 {
-  static const string length_field_name = "Content-Length:";
-  static const string end_of_field_indicator = "\r\n";
-
-  //TODO: replace these with vector search
-  auto length_field_start = std::search(payload_with_original_header.begin(), payload_with_original_header.end(), length_field_name.begin(), length_field_name.end());
-  if (length_field_start == payload_with_original_header.end()) {
-    log_warn("payload with bad header. unable to find the Content-Length field");
-    return;
-  }
-  
-  length_field_start += length_field_name.length();
-
-  auto length_field_end = std::search(length_field_start, payload_with_original_header.end(), end_of_field_indicator.begin(), end_of_field_indicator.end());
-  if (length_field_end ==  payload_with_original_header.end()) {
-    log_warn("payload with bad header. unable to find the end of Content-Length field.");
-    return;
-  }
-
-  
-  //copy the first part of the header
-  new_header.insert(new_header.end(), payload_with_original_header.begin(), length_field_start);
-  //memcpy(new_header, payload_with_original_header.data(), ((uint8_t*)length_field_start - original_header));
   string new_content_length_str(std::to_string(new_content_length));
+  vector<uint8_t>::const_iterator length_field_end;
 
+  auto length_field_start = std::search(original_header.begin(), original_header.end(), length_field_name.begin(), length_field_name.end());
+  if (length_field_start == original_header.end()) {
+    log_warn("unable to find the Content-Length field, adding the field...");
+
+    //TODO: this not the correct behavoir and can work as a descriminator.
+    //we need to add decocding length from chunk the client side instead
+    
+    //we are addining it at the end
+    length_field_end = original_header.end() - end_of_header_indicator.length();
+    new_header.insert(new_header.end(), original_header.begin(), length_field_end);
+    //insert an end of field
+    new_header.insert(new_header.end(), end_of_field_indicator.begin(), end_of_field_indicator.end());
+    //insert the content-length field
+    new_header.insert(new_header.end(), length_field_name.begin(), length_field_name.end());
+
+  } else {
+  
+    length_field_start += length_field_name.length();
+
+    length_field_end = std::search(length_field_start, original_header.end(), end_of_field_indicator.begin(), end_of_field_indicator.end());
+    if (length_field_end ==  original_header.end()) {
+      log_warn("payload with bad header. unable to find the end of Content-Length field.");
+      return;
+    }
+  
+    //copy the first part of the header
+    new_header.insert(new_header.end(), original_header.begin(), length_field_start);
+
+  }
+
+  //either way copy the new length after space
+  new_header.push_back(' ');
   new_header.insert(new_header.end(), new_content_length_str.begin(), new_content_length_str.end());
+  
   //copy the rest of the header
-  new_header.insert(new_header.end(), length_field_end,  payload_with_original_header.end());
+  new_header.insert(new_header.end(), length_field_end,  original_header.end());
 
 }
  	

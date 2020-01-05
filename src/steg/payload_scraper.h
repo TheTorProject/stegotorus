@@ -6,6 +6,8 @@
 
 #include <map>
 
+#include "file_steg.h"
+
 class PayloadScraperTest;
 /**
     We read the /etc/httpd/conf/httpd.conf (this need to be more dynamic)

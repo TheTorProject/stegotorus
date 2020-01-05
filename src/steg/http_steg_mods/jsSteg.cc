@@ -518,13 +518,15 @@ JSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_pay
       return -1;
     }
     
-    cover_with_data = outbuf2;
+    cover_payload = outbuf2;
 
-  }
+  } else {
   //encCnt isn't really needed any more except for debugging and tracking, but return value outbuf2len is needed for new header
   //return encCnt;
-  cover_payload = cover_with_data;
-  return cover_with_data.size();
+    cover_payload = cover_with_data;
+  }
+  
+  return cover_payload.size();
 
 }
 
@@ -715,6 +717,11 @@ void JSSteg::printerr(int err_no) /* name errno had conflict with other vars so 
 JSSteg::JSSteg(PayloadServer& payload_provider, double noise2signal, int content_type)
  :FileStegMod(payload_provider, noise2signal, content_type)
 {
+  //adding extensions this module support only if the type is JS (not being called by HTML CONST)
+  if (content_type == CONTENT_JAVASCRIPT) {
+    vector<string> supported_extension_list({"js", "JS"});
+    extensions = supported_extension_list;
+  }
 
 }
 

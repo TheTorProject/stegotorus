@@ -144,4 +144,8 @@ ssize_t JPGSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<u
 JPGSteg::JPGSteg(PayloadServer& payload_provider, double noise2signal)
   :FileStegMod(payload_provider, noise2signal, HTTP_CONTENT_JPEG)
 {
+    //adding extensions this module support only if the type is JS (not being called by HTML CONST)
+  vector<string> supported_extension_list({"jpg", "jpeg"});
+  extensions = supported_extension_list;
+
 }

@@ -19,4 +19,5 @@ protocols:
     stegs:
       - name: "http_apache"
         down-address: 127.0.0.1:5000
-        cover-list: "apache_payload/funnycatpix.csv"
+        cover-list: "apache_payload/cover_list_puppiesden.csv"
+#        cover-list: "apache_payload/funnycatpix.csv"

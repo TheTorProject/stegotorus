@@ -192,6 +192,8 @@ HTMLSteg::decode_http_body(const std::vector<uint8_t>& cover_and_data, std::vect
 HTMLSteg::HTMLSteg(PayloadServer& payload_provider, double noise2signal)
   :JSSteg(payload_provider, noise2signal, HTTP_CONTENT_HTML)
 {
-  //correcting the type
-
+  //adding extensions this module support
+  vector<string> supported_extension_list({"html", "htm", "shtml", "php"});
+  extensions = supported_extension_list;
+  
 }
