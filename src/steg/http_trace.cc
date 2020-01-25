@@ -23,8 +23,8 @@ using namespace std;
 #include "apache_payload_server.h"
 
 #include "cookies.h"
-#include "swfSteg.h"
-#include "pdfSteg.h"
+//#include "swfSteg.h"
+//#include "pdfSteg.h"
 #include "jsSteg.h"
 #include "base64.h"
 #include "b64cookies.h"

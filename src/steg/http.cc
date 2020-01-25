@@ -31,10 +31,10 @@ using namespace std;
 #include "http_steg_mods/jsSteg.h"
 #include "http_steg_mods/jpgSteg.h"
 #include "http_steg_mods/pngSteg.h"
+#include "http_steg_mods/htmlSteg.h"
 // #include "http_steg_mods/gifSteg.h"
 // #include "http_steg_mods/swfSteg.h"
 // #include "http_steg_mods/pdfSteg.h"
-#include "http_steg_mods/htmlSteg.h"
 
 #include "http.h"
 

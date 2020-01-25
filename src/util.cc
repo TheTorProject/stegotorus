@@ -62,7 +62,7 @@ die_oom(void)
 }
 
 void *
-xmalloc(size_t size)
+xmalloc(size_t size) noexcept
 {
   void *result;
 
@@ -86,7 +86,7 @@ xmalloc(size_t size)
 }
 
 void *
-xrealloc(void *ptr, size_t size)
+xrealloc(void *ptr, size_t size) noexcept
 {
   void *result;
   log_assert (size < SIZE_T_CEILING);
@@ -101,7 +101,7 @@ xrealloc(void *ptr, size_t size)
 }
 
 void *
-xzalloc(size_t size)
+xzalloc(size_t size) noexcept
 {
   void *result = xmalloc(size);
   memset(result, 0, size);
@@ -109,7 +109,7 @@ xzalloc(size_t size)
 }
 
 void *
-xmemdup(const void *ptr, size_t size)
+xmemdup(const void *ptr, size_t size)  noexcept
 {
   void *copy = xmalloc(size);
   memcpy(copy, ptr, size);
@@ -117,13 +117,13 @@ xmemdup(const void *ptr, size_t size)
 }
 
 char *
-xstrdup(const char *s)
+xstrdup(const char *s)  noexcept
 {
   return (char *)xmemdup(s, strlen(s) + 1);
 }
 
 char *
-xstrndup(const char *s, size_t maxsize)
+xstrndup(const char *s, size_t maxsize)  noexcept
 {
   char *copy;
   size_t size;
@@ -141,7 +141,7 @@ xstrndup(const char *s, size_t maxsize)
 /******************************** Mathematics ********************************/
 
 unsigned int
-ui64_log2(uint64_t u64)
+ui64_log2(uint64_t u64) noexcept
 {
   unsigned int r = 0;
   if (u64 >= (((uint64_t)1)<<32)) {
@@ -554,7 +554,7 @@ logpfx(int severity, const char *fn, conn_t *conn)
 #endif
 
 void
-(log_abort)(FNARG const char *format, ...)
+(log_abort)(FNARG const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_ERR, FN);
   logfmt(LOG_SEV_ERR, format);
@@ -562,7 +562,7 @@ void
 }
 
 void
-(log_abort)(FNARG circuit_t *ckt, const char *format, ...)
+(log_abort)(FNARG circuit_t *ckt, const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_ERR, FN, ckt);
   logfmt(LOG_SEV_ERR, format);
@@ -570,7 +570,7 @@ void
 }
 
 void
-(log_abort)(FNARG conn_t *conn, const char *format, ...)
+(log_abort)(FNARG conn_t *conn, const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_ERR, FN, conn);
   logfmt(LOG_SEV_ERR, format);
@@ -578,63 +578,63 @@ void
 }
 
 void
-(log_warn)(FNARG const char *format, ...)
+(log_warn)(FNARG const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_WARN, FN);
   logfmt(LOG_SEV_WARN, format);
 }
 
 void
-(log_warn)(FNARG circuit_t *ckt, const char *format, ...)
+(log_warn)(FNARG circuit_t *ckt, const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_WARN, FN, ckt);
   logfmt(LOG_SEV_WARN, format);
 }
 
 void
-(log_warn)(FNARG conn_t *cn, const char *format, ...)
+(log_warn)(FNARG conn_t *cn, const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_WARN, FN, cn);
   logfmt(LOG_SEV_WARN, format);
 }
 
 void
-(log_info)(FNARG const char *format, ...)
+(log_info)(FNARG const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_INFO, FN);
   logfmt(LOG_SEV_INFO, format);
 }
 
 void
-(log_info)(FNARG circuit_t *ckt, const char *format, ...)
+(log_info)(FNARG circuit_t *ckt, const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_INFO, FN, ckt);
   logfmt(LOG_SEV_INFO, format);
 }
 
 void
-(log_info)(FNARG conn_t *cn, const char *format, ...)
+(log_info)(FNARG conn_t *cn, const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_INFO, FN, cn);
   logfmt(LOG_SEV_INFO, format);
 }
 
 void
-(log_debug)(FNARG const char *format, ...)
+(log_debug)(FNARG const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_DEBUG, FN);
   logfmt(LOG_SEV_DEBUG, format);
 }
 
 void
-(log_debug)(FNARG circuit_t *ckt, const char *format, ...)
+(log_debug)(FNARG circuit_t *ckt, const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_DEBUG, FN, ckt);
   logfmt(LOG_SEV_DEBUG, format);
 }
 
 void
-(log_debug)(FNARG conn_t *cn, const char *format, ...)
+(log_debug)(FNARG conn_t *cn, const char *format, ...) noexcept
 {
   logpfx(LOG_SEV_DEBUG, FN, cn);
   logfmt(LOG_SEV_DEBUG, format);

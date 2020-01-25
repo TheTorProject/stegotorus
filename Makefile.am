@@ -36,7 +36,7 @@ STEGANOGRAPHERS = \
 	src/steg/trace_payload_server.cc \
 	src/steg/payload_scraper.cc \
 	src/steg/apache_payload_server.cc \
-	src/steg/http_steg_mods/htmlSteg.cc \ 
+	src/steg/http_steg_mods/htmlSteg.cc \
 	src/steg/http_steg_mods/pngSteg.cc 
 # 	src/steg/http_steg_mods/gifSteg.cc 
 # 	src/steg/http_steg_mods/pdfSteg.cc 

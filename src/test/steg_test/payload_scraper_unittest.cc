@@ -47,7 +47,8 @@
 #include "file_steg.h"
 #include "pngSteg.h"
 #include "jpgSteg.h"
-#include "gifSteg.h"
+
+//#include "gifSteg.h"
 
 #include "payload_scraper.h"
 

@@ -25,12 +25,12 @@ using namespace std;
 #include "base64.h"
 #include "b64cookies.h"
 #include "http_steg_mods/file_steg.h"
-#include "http_steg_mods/swfSteg.h"
-#include "http_steg_mods/pdfSteg.h"
 #include "http_steg_mods/jsSteg.h"
 #include "http_steg_mods/jpgSteg.h"
 #include "http_steg_mods/pngSteg.h"
-#include "http_steg_mods/gifSteg.h"
+//#include "http_steg_mods/gifSteg.h"
+//#include "http_steg_mods/swfSteg.h"
+//#include "http_steg_mods/pdfSteg.h"
 
 #include "http.h"
 

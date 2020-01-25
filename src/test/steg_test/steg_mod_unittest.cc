@@ -43,12 +43,12 @@
 #include "payload_server.h"
 
 #include "file_steg.h"
-#include "pngSteg.h"
 #include "jpgSteg.h"
-#include "gifSteg.h"
-#include "swfSteg.h"
 #include "jsSteg.h"
+#include "pngSteg.h"
 #include "htmlSteg.h"
+//#include "swfSteg.h"
+//#include "gifSteg.h"
 
 #include "payload_scraper.h"
 

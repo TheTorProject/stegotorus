@@ -39,8 +39,8 @@ using namespace std;
 FileStegMod::FileStegMod(PayloadServer& payload_provider, double noise2signal_from_cfg, int child_type = -1)
   :_payload_server(payload_provider), noise2signal(noise2signal_from_cfg), c_content_type(child_type), outbuf(c_HTTP_PAYLOAD_BUF_SIZE)
 {
-  log_debug("max storage size: %lu >= maxs preceived storage: %lu >= max no of bits needed for storge %f", sizeof(message_size_t),
-            c_NO_BYTES_TO_STORE_MSG_SIZE, log2(c_MAX_MSG_BUF_SIZE)/8.0);
+  log_debug("max storage size: %lu >= maxs preceived storage: %lu >= max no of bits needed for storge %f", static_cast<unsigned long>(sizeof(message_size_t)),
+            static_cast<unsigned long>(c_NO_BYTES_TO_STORE_MSG_SIZE), log2(c_MAX_MSG_BUF_SIZE)/8.0); //this is a clong vs gcc thing
             
   log_assert(sizeof(message_size_t) >= c_NO_BYTES_TO_STORE_MSG_SIZE);
   log_assert(c_NO_BYTES_TO_STORE_MSG_SIZE >= log2(c_MAX_MSG_BUF_SIZE)/8.0);

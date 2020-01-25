@@ -101,12 +101,12 @@ void print_trace (void);
    allocate-memory-or-crash functions "xwhatever". Also, at this time
    I do not see a need for a free() wrapper. */
 
-void *xmalloc(size_t size) ATTR_MALLOC ATTR_NOTHROW; /* does not clear memory */
-void *xzalloc(size_t size) ATTR_MALLOC ATTR_NOTHROW; /* clears memory */
-void *xrealloc(void *ptr, size_t size) ATTR_NOTHROW;
-void *xmemdup(const void *ptr, size_t size) ATTR_MALLOC ATTR_NOTHROW;
-char *xstrdup(const char *s) ATTR_MALLOC ATTR_NOTHROW;
-char *xstrndup(const char *s, size_t maxsize) ATTR_MALLOC ATTR_NOTHROW;
+void *xmalloc(size_t size) noexcept ATTR_MALLOC ATTR_NOTHROW; /* does not clear memory */
+void *xzalloc(size_t size) noexcept ATTR_MALLOC ATTR_NOTHROW; /* clears memory */
+void *xrealloc(void *ptr, size_t size) noexcept ATTR_NOTHROW;
+void *xmemdup(const void *ptr, size_t size) noexcept ATTR_MALLOC ATTR_NOTHROW;
+char *xstrdup(const char *s)  noexcept ATTR_MALLOC ATTR_NOTHROW;
+char *xstrndup(const char *s, size_t maxsize) noexcept ATTR_MALLOC ATTR_NOTHROW;
 
 /* Global operator new forwards to xzalloc (therefore, global operator
    delete must forward to free). Clearing everything on allocation may
@@ -147,7 +147,7 @@ inline void operator delete[](void *p, const std::nothrow_t &)
 
 /***** Math. *****/
 
-unsigned int ui64_log2(uint64_t u64) ATTR_NOTHROW;
+unsigned int ui64_log2(uint64_t u64) noexcept ATTR_NOTHROW;
 
 /***** Network types and functions. *****/
 
@@ -262,38 +262,38 @@ void log_close(void);
 #if  __GNUC__ >= 3
 
 /** Fatal errors: the program cannot continue and will exit. */
-void log_abort(const char *fn, const char *format, ...)
+void log_abort(const char *fn, const char *format, ...) noexcept
   ATTR_PRINTF_2 ATTR_NORETURN ATTR_NOTHROW;
-void log_abort(const char *fn, circuit_t *ckt, const char *format, ...)
+void log_abort(const char *fn, circuit_t *ckt, const char *format, ...) noexcept
   ATTR_PRINTF_3 ATTR_NORETURN ATTR_NOTHROW;
-void log_abort(const char *fn, conn_t *conn, const char *format, ...)
+void log_abort(const char *fn, conn_t *conn, const char *format, ...) noexcept
   ATTR_PRINTF_3 ATTR_NORETURN ATTR_NOTHROW;
 
 /** Warn-level severity: for messages that only appear when something
     has gone wrong. */
-void log_warn(const char *fn, const char *format, ...)
+void log_warn(const char *fn, const char *format, ...) noexcept
   ATTR_PRINTF_2 ATTR_NOTHROW;
-void log_warn(const char *fn, circuit_t *ckt, const char *format, ...)
+void log_warn(const char *fn, circuit_t *ckt, const char *format, ...) noexcept
   ATTR_PRINTF_3 ATTR_NOTHROW;
-void log_warn(const char *fn, conn_t *conn,const char *format, ...)
+void log_warn(const char *fn, conn_t *conn,const char *format, ...) noexcept
   ATTR_PRINTF_3 ATTR_NOTHROW;
 
 /** Info-level severity: for messages that should be sent to the user
     during normal operation. */
-void log_info(const char *fn, const char *format, ...)
+void log_info(const char *fn, const char *format, ...) noexcept
   ATTR_PRINTF_2 ATTR_NOTHROW;
-void log_info(const char *fn, circuit_t *ckt, const char *format, ...)
+void log_info(const char *fn, circuit_t *ckt, const char *format, ...) noexcept
   ATTR_PRINTF_3 ATTR_NOTHROW;
-void log_info(const char *fn, conn_t *conn,const char *format, ...)
+void log_info(const char *fn, conn_t *conn,const char *format, ...) noexcept
   ATTR_PRINTF_3 ATTR_NOTHROW;
 
 /** Debug-level severity: for hyper-verbose messages of no interest to
     anybody but developers. */
-void log_debug(const char *fn, const char *format, ...)
+void log_debug(const char *fn, const char *format, ...) noexcept
   ATTR_PRINTF_2 ATTR_NOTHROW;
-void log_debug(const char *fn, circuit_t *ckt, const char *format, ...)
+void log_debug(const char *fn, circuit_t *ckt, const char *format, ...) noexcept
   ATTR_PRINTF_3 ATTR_NOTHROW;
-void log_debug(const char *fn, conn_t *conn, const char *format, ...)
+void log_debug(const char *fn, conn_t *conn, const char *format, ...) noexcept
   ATTR_PRINTF_3 ATTR_NOTHROW;
 
 #define log_abort(...)     log_abort(__func__, __VA_ARGS__)

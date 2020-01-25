@@ -514,20 +514,20 @@ test_socks_socks4_request(void *data)
   tt_int_op(0, ==, evbuffer_drain(s->source, buffer_len));
 
   /* Sixth test:
-     Broken SOCKS4a req packet with a HUGE domain name. */
-  #define HUGE 256
+     Broken SOCKS4a req packet with a HUGE_DOMAIN_NAME. */
+  #define HUGE_DOMAIN_NAME 256
 
   req6[0] = 1;
   memcpy(req6+1,&port,2);
   memcpy(req6+3,&addr_4a,4);
   strcpy(req6+7,"iamalive");
-  memset(req6+16,'2', HUGE);
-  req6[16+HUGE] = '\x00';
+  memset(req6+16,'2', HUGE_DOMAIN_NAME);
+  req6[16+HUGE_DOMAIN_NAME] = '\x00';
 
-  evbuffer_add(s->source,req6,16+HUGE+1);
+  evbuffer_add(s->source,req6,16+HUGE_DOMAIN_NAME+1);
 
   tt_int_op(SOCKS_BROKEN, ==, socks4_read_request(s->source,s->state));
-  #undef HUGE
+  #undef HUGE_DOMAIN_NAME
 
  end:;
 }

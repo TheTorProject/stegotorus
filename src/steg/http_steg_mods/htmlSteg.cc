@@ -39,7 +39,7 @@ HTMLSteg::headless_capacity(const std::vector<uint8_t>& cover_body) {
   }
 
   size_t actual_capacity = max(static_cast<ssize_t>(0), (cnt - JS_DELIMITER_SIZE)/2);  
-  log_debug("html payload has capacity %lu", actual_capacity);
+  log_debug("html payload has capacity %lu", static_cast<unsigned long>(actual_capacity));
   return actual_capacity;
 
 }
@@ -62,7 +62,7 @@ HTMLSteg::encode_http_body(const std::vector<uint8_t>& data, const std::vector<u
   //Sanity check
   log_assert(cover_and_data.size() >= cover_payload.size());
   
-  log_debug("at htmlsteg encode-http trying to encode %lu", data.size());
+  log_debug("at htmlsteg encode-http trying to encode %lu", static_cast<unsigned long>(data.size()));
 
   unsigned int encCnt = 0;  // num of data encoded in jData
   int fin = 0;
