@@ -107,7 +107,7 @@ size_t curl_read_data_cb(void *buffer, size_t size, size_t nmemb, void *userp)
   //accumulate everything in a streamstring buffer
   size_t no_bytes_2_read = size * nmemb;
   log_debug("curl received %zu bytes", no_bytes_2_read);
-  ((stringstream*)userp)->write((char*) buffer, size * no_bytes_2_read);
+  ((stringstream*)userp)->write((char*) buffer, no_bytes_2_read);
   if( ((stringstream*)userp)->bad()){
     log_debug("Error reading data from curl");
     return 0;
