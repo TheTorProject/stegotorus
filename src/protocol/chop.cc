@@ -1243,11 +1243,13 @@ chop_config_t::conn_create(size_t index)
   chop_conn_t *conn = new chop_conn_t;
   conn->config = this;
   conn->steg = steg_targets.at(index)->steg_create(conn);
-  conn->steg->cfg()->noise2signal = noise2signal;
+
   if (!conn->steg) {
     free(conn);
     return 0;
   }
+
+  conn->steg->cfg()->noise2signal = noise2signal;
 
   conn->recv_pending = evbuffer_new();
   return conn;

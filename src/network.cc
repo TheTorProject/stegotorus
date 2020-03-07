@@ -729,11 +729,20 @@ create_one_outbound_connection(circuit_t *ckt, struct evutil_addrinfo *addr,
 
  success:
   conn = conn_create(cfg, index, buf, peername);
-  ckt->add_downstream(conn);
-  bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
-                    is_socks ? downstream_socks_connect_cb
-                    : downstream_connect_cb, conn);
-  return true;
+
+  if (conn) {
+    ckt->add_downstream(conn);
+    bufferevent_setcb(buf, downstream_read_cb, downstream_flush_cb,
+                      is_socks ? downstream_socks_connect_cb
+                      : downstream_connect_cb, conn);
+    return true;
+    
+  } else {
+    bufferevent_free(buf);
+    return false;
+
+  }
+    
 }
 
 static void
