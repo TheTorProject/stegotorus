@@ -143,10 +143,6 @@ g_unittests_LDADD = libstegotorus.a $(lib_LIBS) -lpthread \
 	$(BOOST_SYSTEM_LIB)
 endif
 
-#g_unittests_LDFLAGS = \
-#	-lgtest_main \
-#	-lgtest
-
 tltester_SOURCES = src/test/tltester.cc src/util.cc src/util-net.cc
 tltester_LDADD   = $(lib_LIBS)
 

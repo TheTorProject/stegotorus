@@ -144,7 +144,7 @@ PKG_CHECK_MODULES([libcurl], [libcurl >= 7.22.0])
 # configuration reader
 PKG_CHECK_MODULES([libyaml], [yaml-cpp >= 0.5.0])
 # configuration libssl
-# PKG_CHECK_MODULES([libssl], [libssl >= 1.1.1])
+PKG_CHECK_MODULES([libssl], [libssl >= 1.1.1])
 
 # the portable c++ library for manipulating filesystem (only server needs boost)
 AC_ARG_WITH(boost,
@@ -166,7 +166,7 @@ fi
 # libraries needed for tester proxy
 #PKG_CHECK_MODULES([libevent_openssl], [libevent_openssl >= 2.0])
 
-LIBS="$libevent_LIBS $libcrypto_LIBS $libz_LIBS $libcurl_LIBS $libyaml_LIBS "
+LIBS="$libcurl_LIBS $libevent_LIBS  $libssl_LIBS $libcrypto_LIBS -ldl $libz_LIBS  $libyaml_LIBS "
 # $libssl_LIBS"
 
 lib_CPPFLAGS="$libevent_CFLAGS $libcrypto_CFLAGS $libz_CFLAGS"

@@ -77,7 +77,7 @@ config-aux/lt~obsolete.m4
 /bench-*/
 /scripts/build/
 /scripts/build-windows/
-/scripts/build-android/
+/scripts/build-android-*/
 /scripts/build-linux/
 /scripts/releases/
 
