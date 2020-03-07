@@ -550,12 +550,25 @@ err:
 
 int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
   unsigned int so_far = 0;
+  static const size_t longest_extension = strlen(".html ");
+  static const size_t GET_opt_length = strlen("GET /");
+
+  if (uri_sz < GET_opt_length + longest_extension + 2) { //"GET /?.html "
+    log_warn("too small\n");
+    return 0;
+  }
+
   uri[0] = 0;
 
   strcat(uri, "GET /");
   so_far = 5;
 
   while (datalen > 0) {
+    if (so_far + (longest_extension+1) + 2 > uri_sz) { //we are adding either one or two char each round
+      log_warn("too small\n");
+      return 0;
+    }
+
     unsigned int r = rand() % 4;
 
     if (r == 1) {
@@ -578,11 +591,11 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 
     if (r == 2 && datalen > 0)
       uri[so_far++] = '_';
+  }
 
-    if (so_far > uri_sz - 6) {
+  if (so_far + (longest_extension+1) > uri_sz) {
       log_warn("too small\n");
       return 0;
-    }
   }
 
 // #define HTTP_CONTENT_JAVASCRIPT         1
