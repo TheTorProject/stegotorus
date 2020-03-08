@@ -23,7 +23,6 @@ PROTOCOLS = \
 STEGANOGRAPHERS = \
 	src/steg/b64cookies.cc \
 	src/steg/cookies.cc \
-	src/steg/embed.cc \
 	src/steg/http.cc \
 	src/steg/http_apache.cc \
 	src/steg/http_apache.cc \
@@ -41,6 +40,7 @@ STEGANOGRAPHERS = \
 # 	src/steg/http_steg_mods/gifSteg.cc 
 # 	src/steg/http_steg_mods/pdfSteg.cc 
 # 	src/steg/http_steg_mods/swfSteg.cc 
+#	src/steg/embed.cc
 
 libstegotorus_a_SOURCES = \
 	src/base64.cc \

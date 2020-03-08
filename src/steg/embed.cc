@@ -247,6 +247,10 @@ embed_steg_t::receive(struct evbuffer *dest)
   // if we are receiving the first packet of the trace, read the index
   if (cur_idx == -1) {
     if (evbuffer_remove(source, &cur_idx, 4) != 4) return -1;
+
+    if ((cur_idx < 0) || (cur_idx >= traces.size()) //invalid index
+        return -1;
+
     cur = &config->traces[cur_idx];
     cur_pkt = 0;
     pkt_size += 4;
