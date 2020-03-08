@@ -97,15 +97,16 @@ handle_signal_cb(evutil_socket_t fd, short, void *)
 */
 #ifndef _WIN32
 static void
-lethal_signal(int signum, siginfo_t *si, void *)
+lethal_signal([[maybe_unused]] int signum, [[maybe_unused]] siginfo_t *si, void *)
 {
-  char faultmsg[80];
 #ifdef HAVE_EXECINFO_H
   int n;
   void *backtracebuf[256];
 #endif
 
+#ifdef DEBUG
   /* Print a basic diagnostic first. */
+  char faultmsg[80];
   xsnprintf(faultmsg, sizeof faultmsg,
             sizeof(unsigned long) == 4
             ? "\n[error] %s at %08lx\n"
@@ -113,6 +114,7 @@ lethal_signal(int signum, siginfo_t *si, void *)
             strsignal(signum), (unsigned long)si->si_addr);
   /* we really, truly don't care about a short write here */
   if(write(2, faultmsg, strlen(faultmsg))) {}
+#endif
 
 #ifdef HAVE_EXECINFO_H
   /* Now do a backtrace if we can. */
