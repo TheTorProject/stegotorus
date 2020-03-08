@@ -445,3 +445,85 @@ FileStegMod::find_content_length (char *hdr, int /*hlen*/) {
   contentLen = atoi(buf);
   return contentLen;
 }
+
+int FileStegMod::isGzipContent (char *msg) {
+  char *ptr = msg, *end;
+  int gzipFlag = 0;
+
+  if (!strstr(msg, "\r\n\r\n"))
+    return 0;
+
+  while (1) {
+    end = strstr(ptr, "\r\n");
+    if (end == NULL) {
+      break;
+    }
+
+    if (!strncmp(ptr, "Content-Encoding: gzip", 22)) {
+      gzipFlag = 1;
+      break;
+    }
+
+    if (!strncmp(end, "\r\n\r\n", 4)){
+      break;
+    }
+    ptr = end+2;
+  }
+
+  return gzipFlag;
+}
+
+/*
+ * findContentType(char *msg)
+ *
+ * If the HTTP header of msg specifies that the content type:
+ * case (content type)
+ *   javascript: return HTTP_CONTENT_JAVASCRIPT
+ *   pdf:        return HTTP_CONTENT_PDF
+ *   shockwave:  return HTTP_CONTENT_SWF
+ *   html:       return HTTP_CONTENT_HTML
+ *   otherwise:  return 0
+ *
+ * Assumptions:
+ * msg is null terminated
+ *
+ */
+int FileStegMod::findContentType (char *msg) {
+  char *ptr = msg, *end;
+
+  if (!strstr(msg, "\r\n\r\n"))
+    return 0;
+
+  while (1) {
+    end = strstr(ptr, "\r\n");
+    if (end == NULL) {
+      break;
+    }
+
+    if (!strncmp(ptr, "Content-Type:", 13)) {
+
+      if (!strncmp(ptr+14, "text/javascript", 15) ||
+          !strncmp(ptr+14, "application/javascript", 22) ||
+          !strncmp(ptr+14, "application/x-javascript", 24)) {
+        return HTTP_CONTENT_JAVASCRIPT;
+      }
+      if (!strncmp(ptr+14, "text/html", 9)) {
+        return HTTP_CONTENT_HTML;
+      }
+      if (!strncmp(ptr+14, "application/pdf", 15) ||
+          !strncmp(ptr+14, "application/x-pdf", 17)) {
+        return HTTP_CONTENT_PDF;
+      }
+      if (!strncmp(ptr+14, "application/x-shockwave-flash", strlen("application/x-shockwave-flash"))) {
+        return HTTP_CONTENT_SWF;
+      }
+    }
+
+    if (!strncmp(end, "\r\n\r\n", 4)){
+      break;
+    }
+    ptr = end+2;
+  }
+
+  return 0;
+}

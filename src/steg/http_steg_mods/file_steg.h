@@ -81,6 +81,35 @@ protected:
 
    static int find_content_length (char *hdr, int hlen);
 
+  /*
+   * isGzipContent(char *msg)
+   *
+   * If the HTTP header of msg specifies that the content is gzipped,
+   * this function returns 1; otherwise, it returns 0
+   *
+   * Assumptions:
+   * msg is null terminated
+   *
+   */
+   static int isGzipContent (char *msg);
+
+/*
+ * findContentType(char *msg)
+ *
+ * If the HTTP header of msg specifies that the content type:
+ * case (content type)
+ *   javascript: return HTTP_CONTENT_JAVASCRIPT
+ *   pdf:        return HTTP_CONTENT_PDF
+ *   shockwave:  return HTTP_CONTENT_SWF
+ *   html:       return HTTP_CONTENT_HTML
+ *   otherwise:  return 0
+ *
+ * Assumptions:
+ * msg is null terminated
+ *
+ */
+   static int findContentType (char *msg);
+
  public:
   /**
      Encapsulate the repetative task of checking for the respones of content_type

@@ -111,10 +111,6 @@ class JSSteg : public FileStegMod
   static int skipJSPattern(const uint8_t *cp, int len);
 
 public:
-  int isGzipContent (char *msg);
-
-  int findContentType (char *msg);
-
   /*int encode(char *data, char *jTemplate, char *jData,
            unsigned int dlen, unsigned int jtlen, unsigned int jdlen );*/
 
