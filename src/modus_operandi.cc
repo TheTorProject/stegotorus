@@ -96,7 +96,7 @@ modus_operandi_t::process_command_line_config(const char* const* original_argv, 
 {
     //Dealing with command line option
     int next_option;
-    char* argv[argc]; //compatibility steps between c++11 and c
+    char* argv[argc + 1]; //compatibility steps between c++11 and c
     for(int i = 0; i < argc; i++) {
       argv[i] = new char[strlen(original_argv[i])+1];
       strcpy(argv[i], original_argv[i]);
