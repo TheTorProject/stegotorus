@@ -549,6 +549,7 @@ err:
 }
 
 int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
+  log_abort("this function has not been updated to the new StegFile structure");
   unsigned int so_far = 0;
   static const size_t longest_extension = strlen(".html ");
   static const size_t GET_opt_length = strlen("GET /");
@@ -625,6 +626,7 @@ int gen_uri_field(char* uri, unsigned int uri_sz, char* data, int datalen) {
 int
 http_steg_t::http_client_uri_transmit (evbuffer *source, conn_t *conn)
 {
+  log_abort("this function has not been updated to new stegfile structure");
   struct evbuffer *dest = conn->outbound();
   struct evbuffer_iovec *iv;
   int i, nv;
@@ -674,8 +676,9 @@ http_steg_t::http_client_uri_transmit (evbuffer *source, conn_t *conn)
     if (cnt++ == 10) return -1;
   }
 
+  string http_1_1_header_starter = "HTTP/1.1\r\nHost: ";
   if (evbuffer_add(dest, outbuf, datalen)  ||  // add uri field
-      evbuffer_add(dest, "HTTP/1.1\r\nHost: ", 19) ||
+      evbuffer_add(dest, http_1_1_header_starter.c_str(), http_1_1_header_starter.length()) ||
       evbuffer_add(dest, peer_dnsname, strlen(peer_dnsname)) ||
       evbuffer_add(dest, strstr(buf, "\r\n"), len - (unsigned int) (strstr(buf, "\r\n") - buf))  ||  // add everything but first line
       evbuffer_add(dest, "\r\n", 2)) {
