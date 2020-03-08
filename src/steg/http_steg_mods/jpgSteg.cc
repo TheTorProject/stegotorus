@@ -30,7 +30,7 @@ int JPGSteg::corrupt_reset_interval(uint8_t* raw_data, int len)
 
 int JPGSteg::starting_point(const std::vector<uint8_t>& raw_data)
 {
-	int lm = 0; // Last Marker
+	size_t lm = 0; // Last Marker
 	for (size_t i = 0; i < raw_data.size()-1; i++) {
 		if (raw_data[i] == FRAME && raw_data[i+1] == FRAME_SCAN) {
 			lm = i;
@@ -50,7 +50,7 @@ int JPGSteg::starting_point(const std::vector<uint8_t>& raw_data)
     }
  
 	const unsigned short flen = raw_data[lm+2]*256 + raw_data[lm+2+1]; // Frame length in big endian and + 2 for FFDA, and skip the header
-	log_debug("Size of the last DA frame: %hu at %06X\n", flen, lm);
+	log_debug("Size of the last DA frame: %hu at %lx\n", flen, lm);
 
     ssize_t start_point = lm + 2 + flen;
     if (start_point > (signed)(raw_data.size() - 2 - c_NO_BYTES_TO_STORE_MSG_SIZE)) start_point = -1;
