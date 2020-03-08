@@ -48,7 +48,6 @@ libstegotorus_a_SOURCES = \
 	src/connections.cc \
 	src/crypt.cc \
 	src/modus_operandi.cc \
-	src/mkem.cc \
 	src/network.cc \
 	src/protocol.cc \
 	src/rng.cc \
@@ -155,7 +154,6 @@ noinst_HEADERS = \
 	src/connections.h \
 	src/crypt.h \
 	src/listener.h \
-	src/mkem.h \
 	src/pgen.h \
 	src/protocol.h \
 	src/rng.h \
