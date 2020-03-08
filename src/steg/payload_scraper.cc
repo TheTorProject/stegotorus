@@ -52,14 +52,14 @@ using namespace std;
 const string
 PayloadScraper::scrape_url(const string& cur_url, size_t cur_steg, bool absolute_url)
 {
-  char url_hash[20];
-  char url_hash64[40];
+  vector<uint8_t> url_hash(20);
+  vector<uint8_t> url_hash64(40);
 
   string rel_url = absolute_url ? relativize_url(cur_url) : cur_url;
 
-  sha256((const unsigned char *)(rel_url.c_str()), rel_url.length(), (unsigned char*)url_hash);
+  sha1((const unsigned char *)(rel_url.c_str()), rel_url.length(), url_hash.data());
   base64::encoder url_hash_encoder;
-  url_hash_encoder.encode(url_hash, 20, url_hash64);
+  url_hash_encoder.encode(reinterpret_cast<const char*>(url_hash.data()), 20, reinterpret_cast<char*>(url_hash64.data()));
                         
   pair<unsigned long, unsigned long> fileinfo = compute_capacity(cur_url, _available_file_stegs[cur_steg], absolute_url);
   unsigned long cur_filelength = fileinfo.first;
@@ -83,7 +83,7 @@ PayloadScraper::scrape_url(const string& cur_url, size_t cur_steg, bool absolute
     capacity = chop_blk::MAX_BLOCK_SIZE;
 
   stringstream scraped_entry;
-  scraped_entry << url_hash64 << " " << capacity << " " << cur_filelength;
+  scraped_entry << url_hash64.data() << " " << capacity << " " << cur_filelength;
 
   return scraped_entry.str();
 
