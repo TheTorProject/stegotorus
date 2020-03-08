@@ -7,6 +7,7 @@
 #include <string>
 #include <sstream> 
 #include <stdio.h>
+#include <filesystem>
 
 using namespace std;
 
@@ -32,7 +33,7 @@ using namespace std;
 #endif
 //acceptable capacity
 
-#define TEMP_MOUNT_DIR "/tmp/remote_www"
+//#define TEMP_MOUNT_DIR_BASE "/tmp/remote_www"
 /** We read the /etc/httpd/conf/httpd.conf (this need to be more dynamic)
     but I'm testing it on my system which is running arch) find
     the DocumentRoot. Then it will check the directory recursively and
@@ -291,11 +292,13 @@ int PayloadScraper::scrape()
 #if HAVE_BOOST == 1
   if (!scrape_succeed) { //no url list is given, try to scrape file system only if we have
       //boost
+
+    auto temp_mount_dir = filesystem::temp_directory_path();
     // looking for doc root dir...
     // If the http server is localhost, then try read localy...
     bool remote_mount = false; //true if the doc_root is mounted from remote host
     string ftp_unmount_command_string = "fusermount -u ";
-    ftp_unmount_command_string += TEMP_MOUNT_DIR;
+    ftp_unmount_command_string += temp_mount_dir.u8string();
     
     if (_cover_server == "127.0.0.1")
       if (apache_conf_parser())
@@ -307,7 +310,7 @@ int PayloadScraper::scrape()
       //   and mount the www dir
       
       // we need to make directory to mount the remote www dir
-      boost::filesystem::path mount_dir(TEMP_MOUNT_DIR);  
+      boost::filesystem::path mount_dir(temp_mount_dir);  
       if (!(boost::filesystem::exists(mount_dir) ||
             boost::filesystem::create_directory(mount_dir))) {
         log_warn("Failed to create a temp dir to mount remote filesystem");
@@ -322,7 +325,7 @@ int PayloadScraper::scrape()
 
       
       string ftp_mount_command_string = "curlftpfs ftp://";
-      ftp_mount_command_string += _cover_server + " " + TEMP_MOUNT_DIR;
+      ftp_mount_command_string += _cover_server + " " + temp_mount_dir.u8string();
       
       int mount_result = system(ftp_mount_command_string.c_str());
       if (mount_result) {
@@ -332,7 +335,7 @@ int PayloadScraper::scrape()
       }
       
       remote_mount = true;
-      _apache_doc_root = TEMP_MOUNT_DIR;
+      _apache_doc_root = temp_mount_dir.u8string();
       
     }
     
