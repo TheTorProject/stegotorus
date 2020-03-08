@@ -248,7 +248,8 @@ ssize_t JSSteg::decode(const std::vector<uint8_t>& cover_payload, std::vector<ui
 ssize_t
 JSSteg::encode(const std::vector<uint8_t>& data, std::vector<uint8_t>& cover_payload)
 {
-  unsigned int cLen, outbuf2len;  /* num of data encoded in jData */
+  unsigned int cLen;  /* num of data encoded in jData */
+  ssize_t outbuf2len;
 
   log_debug("at jssteg encode");
   int gzipMode = JS_GZIP_RESP;
