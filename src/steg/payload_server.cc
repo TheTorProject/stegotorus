@@ -90,7 +90,6 @@ int
 PayloadServer::find_uri_type(const char* buf_orig, int buflen) {
 
   std::string buf(buf_orig, buflen);
-  buf[buflen] = 0; //make it a null terminated buffer for sake of strchr
 
   if (strncmp(buf.c_str(), "GET", 3) != 0
       && strncmp(buf.c_str(), "POST", 4) != 0) {
